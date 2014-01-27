@@ -1,0 +1,41 @@
+<assembly xmlns="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0 http://maven.apache.org/xsd/assembly-1.1.0.xsd">
+  <id>client</id>
+  <!-- All the dependencies (unpacked) necessary to run phoenix from a single, stand-alone jar -->
+  <formats>
+    <format>jar</format>
+  </formats>
+  <includeBaseDirectory>false</includeBaseDirectory>
+  
+  <componentDescriptors>
+    <componentDescriptor>src/build/components-minimal.xml</componentDescriptor>
+    <componentDescriptor>src/build/components-major-client.xml</componentDescriptor>
+  </componentDescriptors>
+
+  <!-- Unpack all the modules into the target jar -->
+  <moduleSets>
+    <moduleSet>
+      <useAllReactorProjects>true</useAllReactorProjects>
+      <binaries>
+      <outputDirectory>/</outputDirectory>
+        <unpack>true</unpack>
+      </binaries>
+    </moduleSet>
+  </moduleSets>
+
+  <dependencySets>
+    <dependencySet>
+      <!-- Unpack all the dependencies to class files, since java doesn't support 
+        jar of jars for running -->
+      <unpack>true</unpack>
+      <!-- save these dependencies to the top-level -->
+      <outputDirectory>/</outputDirectory>
+      <includes>
+        <include>jline:jline</include>
+        <include>sqlline:sqlline</include>
+        <include>org.apache.hbase:hbase*</include>
+      </includes>
+    </dependencySet>
+  </dependencySets>
+</assembly>

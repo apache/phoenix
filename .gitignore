@@ -5,6 +5,7 @@
 
 # eclipse stuffs
 .settings/*
+*/.settings/
 .classpath
 .project
 

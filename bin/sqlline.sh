@@ -23,7 +23,7 @@
 
 # Phoenix client jar. To generate new jars: $ mvn package -DskipTests
 current_dir=$(cd $(dirname $0);pwd)
-phoenix_jar_path="$current_dir/../target"
+phoenix_jar_path="$current_dir/../phoenix-assembly/target"
 phoenix_client_jar=$(find $phoenix_jar_path/phoenix-*-client.jar)
 
 
@@ -36,4 +36,4 @@ if [ "$2" ]
   then sqlfile="--run=$2";
 fi
 
-java -cp ".:$phoenix_client_jar" -Dlog4j.configuration=file:$current_dir/log4j.properties sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver -u jdbc:phoenix:$1 -n none -p none --color=true --fastConnect=false --silent=true --verbose=false --isolation=TRANSACTION_READ_COMMITTED $sqlfile
+java -cp ".:$phoenix_client_jar" -Dlog4j.configuration=file:$current_dir/log4j.properties sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver -u jdbc:phoenix:$1 -n none -p none --color=true --fastConnect=false --verbose=true --isolation=TRANSACTION_READ_COMMITTED $sqlfile

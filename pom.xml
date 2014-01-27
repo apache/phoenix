@@ -3,9 +3,32 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache</groupId>
   <artifactId>phoenix</artifactId>
-  <version>2.2.3</version>
-  <name>Phoenix</name>
+  <version>3.0.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
+
+  <licenses>
+      <license>
+          <name>The Apache Software License, Version 2.0</name>
+          <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+          <distribution>repo</distribution>
+          <comments />
+      </license>
+  </licenses>
+
+  <organization>
+      <name>Apache Software Foundation</name>
+      <url>http://www.apache.org</url>
+  </organization>
+
+  <modules>
+    <module>phoenix-core</module>
+    <module>phoenix-hadoop-compat</module>
+    <module>phoenix-flume</module>
+    <module>phoenix-pig</module>
+    <module>phoenix-assembly</module>
+  </modules>
 
   <repositories>
     <repository>
@@ -29,44 +52,21 @@
     </repository>
   </repositories>
 
-
-  <!-- Deploy to own hacked maven repo in github -->
-  <!-- Based on the directions here: http://cemerick.com/2010/08/24/hosting-maven-repos-on-github/ -->
-  <!-- this isn't the best, but until we get into the 'real' maven repos, this is
-    good enough. We really ought to use the release plugin and push to maven, but meh... -->
-  <!-- To publish a snapshot, have a checked out version of phoenix (in a folder called
-    'phoenix-maven') in the same directory as phoenix. For instance... ~/dev/ phoenix/
-    phoenix-maven/ Then switch to the 'maven-artifacts' branch in the other checkout.
-    Then from the root of this directory, run:
-     $ mvn -DaltDeploymentRepository=snapshot-repo::default::file:../phoenix-maven/snapshots clean deploy -DskipTests
-
-    And then, similarly, to do a release:
-     1. change the verion to the next version (remove the -SNAPSHOT identifier)
-     2. run:
-      $ mvn -DaltDeploymentRepository=release-repo::default::file:../phoenix-maven/releases clean deploy -DskipTests
-      -->
-  <distributionManagement>
-    <repository>
-      <id>repo</id>
-      <url>https://github.com/forcedotcom/phoenix/tree/maven-artifacts/raw/master/releases</url>
-    </repository>
-    <snapshotRepository>
-      <id>snapshot-repo</id>
-      <url>https://github.com/forcedotcom/phoenix/tree/maven-artifacts/raw/master/snapshots</url>
-    </snapshotRepository>
-  </distributionManagement>
-
   <properties>
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
     <antlr-output.dir>target/generated-sources/antlr3</antlr-output.dir>
     <test.output.tofile>true</test.output.tofile>
 
+    <!-- Hadoop Versions -->
+    <hadoop-one.version>1.0.4</hadoop-one.version>
+    <hadoop-two.version>2.0.4-alpha</hadoop-two.version>
+
     <!-- Dependency versions -->
     <hbase.version>0.94.12</hbase.version>
     <commons-cli.version>1.2</commons-cli.version>
     <hadoop.version>1.0.4</hadoop.version>
-    <pig.version>0.11.0</pig.version>
+    <pig.version>0.12.0</pig.version>
     <jackson.version>1.8.8</jackson.version>
     <antlr.version>3.5</antlr.version>
     <opencsv.version>2.3</opencsv.version>
@@ -81,6 +81,10 @@
     <sqlline.version>1.1.2</sqlline.version>
     <guava.version>12.0.1</guava.version>
     <jackson.version>1.8.8</jackson.version>
+    <flume.version>1.4.0</flume.version>
+    <findbugs.version>1.3.2</findbugs.version>
+    <jline.version>2.11</jline.version>
+    <snappy.version>1.0.3.2</snappy.version>
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
@@ -90,6 +94,7 @@
     <maven-eclipse-plugin.version>2.8</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>1.7</maven-build-helper-plugin.version>
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
+    <maven.assembly.version>2.4</maven.assembly.version>
 
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -97,16 +102,6 @@
   </properties>
 
   <build>
-    <resources>
-      <resource>
-        <directory>src/main/resources</directory>
-        <targetPath>META-INF/services</targetPath>
-        <includes>
-          <include>java.sql.Driver</include>
-        </includes>
-      </resource>
-    </resources>
-
     <pluginManagement>
       <plugins>
         <plugin>
@@ -118,8 +113,8 @@
             <target>1.6</target>
           </configuration>
         </plugin>
-        <!--This plugin's configuration is used to store Eclipse m2e settings only.
-          It has no influence on the Maven build itself. -->
+        <!--This plugin's configuration is used to store Eclipse m2e settings 
+          only. It has no influence on the Maven build itself. -->
         <plugin>
           <groupId>org.eclipse.m2e</groupId>
           <artifactId>lifecycle-mapping</artifactId>
@@ -128,98 +123,35 @@
             <lifecycleMappingMetadata>
               <pluginExecutions>
                 <pluginExecution>
-                	<pluginExecutionFilter>
-                		<groupId>org.antlr</groupId>
-                		<artifactId>antlr3-maven-plugin</artifactId>
-                		<versionRange>[3.5,)</versionRange>
-                		<goals>
-                			<goal>antlr</goal>
-                		</goals>
-                	</pluginExecutionFilter>
-                	<action>
-                		<ignore></ignore>
-                	</action>
+                  <pluginExecutionFilter>
+                    <groupId>org.antlr</groupId>
+                    <artifactId>antlr3-maven-plugin</artifactId>
+                    <versionRange>[3.5,)</versionRange>
+                    <goals>
+                      <goal>antlr</goal>
+                    </goals>
+                  </pluginExecutionFilter>
+                  <action>
+                    <ignore></ignore>
+                  </action>
                 </pluginExecution>
               </pluginExecutions>
             </lifecycleMappingMetadata>
           </configuration>
         </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-eclipse-plugin</artifactId>
+          <version>${maven-eclipse-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-assembly-plugin</artifactId>
+          <version>${maven.assembly.version}</version>
+        </plugin>
       </plugins>
     </pluginManagement>
 
     <plugins>
-      <!-- Add the ant-generated sources to the source path -->
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>build-helper-maven-plugin</artifactId>
-        <version>${maven-build-helper-plugin.version}</version>
-        <executions>
-          <execution>
-            <id>add-source</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>add-source</goal>
-            </goals>
-            <configuration>
-              <sources>
-                <source>${antlr-output.dir}</source>
-                <source>${antlr-input.dir}</source>
-              </sources>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <!-- Compile the antlr sources -->
-      <plugin>
-        <groupId>org.antlr</groupId>
-        <artifactId>antlr3-maven-plugin</artifactId>
-        <version>3.5</version>
-        <executions>
-          <execution>
-            <goals>
-              <goal>antlr</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-			<outputDirectory>${antlr-output.dir}/org/apache/phoenix/parse</outputDirectory>
-		</configuration>
-      </plugin>
-      <!-- Run with -Dmaven.test.skip.exec=true to build -tests.jar without running
-        tests (this is needed for upstream projects whose tests need this jar simply for
-        compilation) -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
-        <version>2.4</version>
-        <executions>
-          <execution>
-            <phase>prepare-package
-            </phase>
-            <goals>
-              <goal>test-jar</goal>
-            </goals>
-            <configuration>
-              <archive>
-                <manifest>
-                  <mainClass>org.apache.phoenix.util.GeneratePerformanceData</mainClass>
-                </manifest>
-              </archive>
-            </configuration>
-          </execution>
-        </executions>
-        <configuration>
-          <!-- Exclude these 2 packages, because their dependency _binary_ files
-            include the sources, and Maven 2.2 appears to add them to the sources to compile,
-            weird -->
-          <excludes>
-            <exclude>org/apache/jute/**</exclude>
-            <exclude>org/apache/zookeeper/**</exclude>
-            <exclude>**/*.jsp</exclude>
-            <exclude>log4j.properties</exclude>
-          </excludes>
-        </configuration>
-      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-source-plugin</artifactId>
@@ -231,62 +163,6 @@
             <goals>
               <goal>jar-no-fork</goal>
             </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <!-- Setup eclipse -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-eclipse-plugin</artifactId>
-        <version>${maven-eclipse-plugin.version}</version>
-        <configuration>
-          <buildcommands>
-            <buildcommand>org.jamon.project.templateBuilder</buildcommand>
-            <buildcommand>org.eclipse.jdt.core.javabuilder</buildcommand>
-          </buildcommands>
-        </configuration>
-      </plugin>
-      <!-- Build the final assembly for the phoenix-client jar -->
-      <plugin>
-        <artifactId>maven-assembly-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>client</id>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-              <archive>
-                <index>true</index>
-                <manifest>
-                  <addClasspath>true</addClasspath>
-                  <mainClass>org.apache.phoenix.util.PhoenixRuntime</mainClass>
-                  <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-                  <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
-                </manifest>
-              </archive>
-              <descriptors>
-                <descriptor>src/build/client.xml</descriptor>
-              </descriptors>
-            </configuration>
-          </execution>
-          <!-- to build the tarball, this assembly:single needs to be called from
-            the command line -->
-          <execution>
-            <id>package-to-tar</id>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-              <attach>false</attach>
-              <tarLongFileMode>gnu</tarLongFileMode>
-              <appendAssemblyId>false</appendAssemblyId>
-              <descriptors>
-                <descriptor>src/build/all.xml</descriptor>
-              </descriptors>
-            </configuration>
           </execution>
         </executions>
       </plugin>
@@ -302,240 +178,288 @@
         </configuration>
         <executions>
           <execution>
-          <id>attach-javadocs</id>
-          <goals>
-            <goal>jar</goal>
-	  </goals>
+            <id>attach-javadocs</id>
+            <goals>
+              <!-- TODO turn back on javadocs - disabled now for testing -->
+              <!-- <goal>jar</goal> -->
+            </goals>
           </execution>
         </executions>
       </plugin>
       <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-surefire-plugin</artifactId>
-          <version>2.16</version>
-          <configuration>
-              <argLine>-enableassertions -Xmx2000m -Djava.security.egd=file:/dev/./urandom</argLine>
-              <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-          </configuration>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>2.16</version>
+        <configuration>
+          <argLine>-enableassertions -Xmx2250m
+            -Djava.security.egd=file:/dev/./urandom</argLine>
+          <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+        </configuration>
       </plugin>
-    <plugin>
-      <groupId>org.apache.maven.plugins</groupId>
-      <artifactId>maven-site-plugin</artifactId>
-      <version>3.2</version>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.maven.doxia</groupId>
-          <artifactId>doxia-module-markdown</artifactId>
-          <version>1.3</version>
-        </dependency>
-        <dependency>
-          <groupId>lt.velykis.maven.skins</groupId>
-          <artifactId>reflow-velocity-tools</artifactId>
-          <version>1.0.0</version>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.velocity</groupId>
-          <artifactId>velocity</artifactId>
-          <version>1.7</version>
-        </dependency>
-      </dependencies>
-      <configuration>
-        <reportPlugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>findbugs-maven-plugin</artifactId>
-	        <version>2.5.2</version>
-          </plugin>
-        </reportPlugins>
-      </configuration>
-    </plugin>
-    <plugin>
-      <artifactId>exec-maven-plugin</artifactId>
-      <groupId>org.codehaus.mojo</groupId>
-      <version>1.2.1</version>
-      <executions>
-        <execution><!-- Run our version calculation script -->
-          <id>Merge Language Reference</id>
-          <phase>site</phase>
-          <goals>
-            <goal>exec</goal>
-          </goals>
-          <configuration>
-            <executable>${basedir}/src/site/bin/merge.sh</executable>
-          </configuration>
-        </execution>
-      </executions>
-    </plugin>
+      <!-- All projects create a test jar -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>2.4</version>
+        <executions>
+          <execution>
+            <phase>prepare-package
+                </phase>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-site-plugin</artifactId>
+        <version>3.2</version>
+        <configuration>
+          <reportPlugins>
+            <plugin>
+              <groupId>org.codehaus.mojo</groupId>
+              <artifactId>findbugs-maven-plugin</artifactId>
+              <version>2.5.2</version>
+            </plugin>
+          </reportPlugins>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 
-  <dependencies>
-    <!-- Make sure we have all the antlr dependencies -->
-    <dependency>
-      <groupId>org.antlr</groupId>
-      <artifactId>antlr</artifactId>
-      <version>${antlr.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.antlr</groupId>
-      <artifactId>antlr-runtime</artifactId>
-      <version>${antlr.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>net.sf.opencsv</groupId>
-      <artifactId>opencsv</artifactId>
-      <version>${opencsv.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.pig</groupId>
-      <artifactId>pig</artifactId>
-      <version>${pig.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase</artifactId>
-      <version>${hbase.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>com.google.guava</groupId>
-          <artifactId>guava</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>jline</groupId>
-      <artifactId>jline</artifactId>
-      <version>2.11</version>
-    </dependency>
-    <dependency>
-      <groupId>sqlline</groupId>
-      <artifactId>sqlline</artifactId>
-      <version>${sqlline.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <version>${guava.version}</version>
-    </dependency>
-    
-    <!-- Test Dependencies -->
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase</artifactId>
-      <version>${hbase.version}</version>
-      <type>test-jar</type>
-      <scope>test</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>com.google.guava</groupId>
-          <artifactId>guava</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <!-- Needed by HBase to run the minicluster -->
-    <dependency>
-      <groupId>org.codehaus.jackson</groupId>
-      <artifactId>jackson-core-asl</artifactId>
-      <version>${jackson.version}</version>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.codehaus.jackson</groupId>
-      <artifactId>jackson-mapper-asl</artifactId>
-      <version>${jackson.version}</version>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.codehaus.jackson</groupId>
-      <artifactId>jackson-jaxrs</artifactId>
-      <version>${jackson.version}</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.codehaus.jackson</groupId>
-      <artifactId>jackson-xc</artifactId>
-      <version>${jackson.version}</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <version>${junit.version}</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.mockito</groupId>
-      <artifactId>mockito-all</artifactId>
-      <version>${mockito-all.version}</version>
-      <scope>test</scope>
-    </dependency>
+  <dependencyManagement>
+    <dependencies>
+      <!-- Intra-project dependencies -->
+      <dependency>
+        <groupId>org.apache</groupId>
+        <artifactId>phoenix-core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache</groupId>
+        <artifactId>phoenix-core</artifactId>
+        <version>${project.version}</version>
+        <classifier>tests</classifier>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache</groupId>
+        <artifactId>phoenix-hadoop-compat</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache</groupId>
+        <artifactId>phoenix-hadoop-compat</artifactId>
+        <version>${project.version}</version>
+        <classifier>tests</classifier>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache</groupId>
+        <artifactId>${compat.module}</artifactId>
+        <version>${project.version}</version>
+        <classifier>tests</classifier>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache</groupId>
+        <artifactId>phoenix-flume</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache</groupId>
+        <artifactId>phoenix-pig</artifactId>
+        <version>${project.version}</version>
+      </dependency>
 
-    <!-- Findbugs Annotation -->
-    <dependency>
-      <groupId>net.sourceforge.findbugs</groupId>
-      <artifactId>annotations</artifactId>
-      <version>1.3.2</version>
-    </dependency>
+      <!-- General Dependencies -->
+      <!-- Make sure we have all the antlr dependencies -->
+      <dependency>
+        <groupId>org.antlr</groupId>
+        <artifactId>antlr</artifactId>
+        <version>${antlr.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.antlr</groupId>
+        <artifactId>antlr-runtime</artifactId>
+        <version>${antlr.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>net.sf.opencsv</groupId>
+        <artifactId>opencsv</artifactId>
+        <version>${opencsv.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.pig</groupId>
+        <artifactId>pig</artifactId>
+        <version>${pig.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase</artifactId>
+        <version>${hbase.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>jline</groupId>
+        <artifactId>jline</artifactId>
+        <version>2.11</version>
+      </dependency>
+      <dependency>
+        <groupId>sqlline</groupId>
+        <artifactId>sqlline</artifactId>
+        <version>${sqlline.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.google.guava</groupId>
+        <artifactId>guava</artifactId>
+        <version>${guava.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.flume</groupId>
+        <artifactId>flume-ng-core</artifactId>
+        <version>${flume.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>net.sourceforge.findbugs</groupId>
+        <artifactId>annotations</artifactId>
+        <version>${findbugs.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.xerial.snappy</groupId>
+        <artifactId>snappy-java</artifactId>
+        <version>${snappy.version}</version>
+      </dependency>
 
-  </dependencies>
+      <!-- Test Dependencies -->
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase</artifactId>
+        <version>${hbase.version}</version>
+        <type>test-jar</type>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <!-- Needed by HBase to run the minicluster -->
+      <dependency>
+        <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-core-asl</artifactId>
+        <version>${jackson.version}</version>
+        <scope>compile</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-mapper-asl</artifactId>
+        <version>${jackson.version}</version>
+        <scope>compile</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-jaxrs</artifactId>
+        <version>${jackson.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-xc</artifactId>
+        <version>${jackson.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>junit</groupId>
+        <artifactId>junit</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-all</artifactId>
+        <version>${mockito-all.version}</version>
+        <scope>test</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <profiles>
 
-    <!--
-      Profile for building against Hadoop 1. Active by default.
-      Not used if another Hadoop profile is specified with
-        mvn -Dhadoop.profile=foo
-    -->
+    <!-- Profile for building against Hadoop 1. Active by default. Not used 
+      if another Hadoop profile is specified with mvn -Dhadoop.profile=foo -->
     <profile>
       <id>hadoop-1</id>
       <activation>
         <property>
           <name>!hadoop.profile</name>
-	</property>
+        </property>
       </activation>
-      <dependencies>
-	<dependency>
-	  <groupId>org.apache.hadoop</groupId>
-	  <artifactId>hadoop-core</artifactId>
-	  <version>${hadoop.version}</version>
-	  <optional>true</optional>
-	  <exclusions>
-	    <exclusion>
-	      <groupId>hsqldb</groupId>
-	      <artifactId>hsqldb</artifactId>
-	    </exclusion>
-	    <exclusion>
-	      <groupId>net.sf.kosmosfs</groupId>
-	      <artifactId>kfs</artifactId>
-	    </exclusion>
-	    <exclusion>
-	      <groupId>org.eclipse.jdt</groupId>
-	      <artifactId>core</artifactId>
-	    </exclusion>
-	    <exclusion>
-	      <groupId>net.java.dev.jets3t</groupId>
-	      <artifactId>jets3t</artifactId>
-	    </exclusion>
-	    <exclusion>
-	      <groupId>oro</groupId>
-	      <artifactId>oro</artifactId>
-	    </exclusion>
-	  </exclusions>
-	</dependency>
-	<dependency>
-	  <groupId>org.apache.hadoop</groupId>
-	  <artifactId>hadoop-test</artifactId>
-	  <version>${hadoop.version}</version>
-	  <optional>true</optional>
-	  <scope>test</scope>
-	</dependency>
-      </dependencies>
+      <modules>
+        <module>phoenix-hadoop1-compat</module>
+      </modules>
+      <properties>
+        <hadoop.version>${hadoop-one.version}</hadoop.version>
+        <compat.module>phoenix-hadoop1-compat</compat.module>
+        <assembly.file>src/main/assembly/hadoop-one-compat.xml</assembly.file>
+      </properties>
+      <dependencyManagement>
+        <dependencies>
+          <!-- Intra-project dependency -->
+          <dependency>
+            <groupId>org.apache</groupId>
+            <artifactId>${compat.module}</artifactId>
+            <version>${project.version}</version>
+          </dependency>
+
+          <!-- Hadoop dependencies -->
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-core</artifactId>
+            <version>${hadoop.version}</version>
+            <optional>true</optional>
+            <exclusions>
+              <exclusion>
+                <groupId>hsqldb</groupId>
+                <artifactId>hsqldb</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>net.sf.kosmosfs</groupId>
+                <artifactId>kfs</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.eclipse.jdt</groupId>
+                <artifactId>core</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>net.java.dev.jets3t</groupId>
+                <artifactId>jets3t</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>oro</groupId>
+                <artifactId>oro</artifactId>
+              </exclusion>
+            </exclusions>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-test</artifactId>
+            <version>${hadoop.version}</version>
+            <optional>true</optional>
+            <scope>test</scope>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
     </profile>
 
-    <!--
-      Profile for building against Hadoop 2. Activate using:
-        mvn -Dhadoop.profile=2
-    -->
+    <!-- Profile for building against Hadoop 2. Activate using: mvn -Dhadoop.profile=2 -->
     <profile>
       <id>hadoop-2</id>
       <activation>
@@ -544,70 +468,70 @@
           <value>2</value>
         </property>
       </activation>
+      <modules>
+        <module>phoenix-hadoop2-compat</module>
+      </modules>
       <properties>
-        <hadoop.version>2.0.4-alpha</hadoop.version>
+        <hadoop.version>${hadoop-two.version}</hadoop.version>
+        <compat.module>phoenix-hadoop2-compat</compat.module>
+        <assembly.file>src/main/assembly/hadoop-two-compat.xml</assembly.file>
       </properties>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-common</artifactId>
-          <version>${hadoop.version}</version>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-annotations</artifactId>
-          <version>${hadoop.version}</version>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-mapreduce-client-core</artifactId>
-          <version>${hadoop.version}</version>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-minicluster</artifactId>
-          <version>${hadoop.version}</version>
-	  <optional>true</optional>
-	  <scope>test</scope>
-        </dependency>
-      </dependencies>
+      <dependencyManagement>
+        <dependencies>
+          <!-- Intra-project dependency -->
+          <dependency>
+            <groupId>org.apache</groupId>
+            <artifactId>${compat.module}</artifactId>
+            <version>${project.version}</version>
+          </dependency>
+
+          <!-- Hadoop dependencies -->
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+            <version>${hadoop.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-annotations</artifactId>
+            <version>${hadoop.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-mapreduce-client-core</artifactId>
+            <version>${hadoop.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-minicluster</artifactId>
+            <version>${hadoop.version}</version>
+            <optional>true</optional>
+            <scope>test</scope>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
       <build>
-	<plugins>
-          <plugin>
-            <artifactId>maven-dependency-plugin</artifactId>
-	    <version>${maven-dependency-plugin.version}</version>
-            <executions>
-              <execution>
-                <id>create-mrapp-generated-classpath</id>
-                <phase>generate-test-resources</phase>
-                <goals>
-                  <goal>build-classpath</goal>
-                </goals>
-                <configuration>
-                  <outputFile>${project.build.directory}/classes/mrapp-generated-classpath</outputFile>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-	</plugins>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <artifactId>maven-dependency-plugin</artifactId>
+              <version>${maven-dependency-plugin.version}</version>
+              <executions>
+                <execution>
+                  <id>create-mrapp-generated-classpath</id>
+                  <phase>generate-test-resources</phase>
+                  <goals>
+                    <goal>build-classpath</goal>
+                  </goals>
+                  <configuration>
+                    <outputFile>${project.build.directory}/classes/mrapp-generated-classpath</outputFile>
+                  </configuration>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+        </pluginManagement>
       </build>
-
     </profile>
-    
   </profiles>
-
-    <licenses>
-        <license>
-            <name>The Apache Software License, Version 2.0</name>
-            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-            <distribution>repo</distribution>
-            <comments />
-        </license>
-    </licenses>
-
-    <organization>
-        <name>Apache Software Foundation</name>
-        <url>http://www.apache.org</url>
-    </organization>
-
 </project>
