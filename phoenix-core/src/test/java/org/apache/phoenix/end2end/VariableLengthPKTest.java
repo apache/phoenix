@@ -43,10 +43,11 @@ import java.text.Format;
 import java.text.ParseException;
 import java.util.Properties;
 
+import org.junit.Test;
+
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.junit.Test;
 
 
 public class VariableLengthPKTest extends BaseClientManagedTimeTest {
@@ -1643,6 +1644,78 @@ public class VariableLengthPKTest extends BaseClientManagedTimeTest {
             "abc",
         };
         assertEquals(query.length,result.length);
+        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            initTableValues(null, ts);
+            for (int i = 0; i < query.length; i++) {
+                PreparedStatement statement = conn.prepareStatement(query[i]);
+                ResultSet rs = statement.executeQuery();
+                assertTrue(rs.next());
+                assertEquals(query[i],result[i], rs.getString(1));
+                assertFalse(rs.next());
+            }
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testUpperFunction() throws Exception {
+        long ts = nextTimestamp();
+        String query[] = {
+                "SELECT upper('abc') FROM BTABLE LIMIT 1",
+                "SELECT upper('Abc') FROM BTABLE LIMIT 1",
+                "SELECT upper('ABC') FROM BTABLE LIMIT 1",
+                "SELECT upper('ĎďĒ') FROM BTABLE LIMIT 1",
+                "SELECT upper('ß') FROM BTABLE LIMIT 1",
+        };
+        String result[] = {
+                "ABC",
+                "ABC",
+                "ABC",
+                "ĎĎĒ",
+                "SS",
+        };
+        assertEquals(query.length, result.length);
+        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            initTableValues(null, ts);
+            for (int i = 0; i < query.length; i++) {
+                PreparedStatement statement = conn.prepareStatement(query[i]);
+                ResultSet rs = statement.executeQuery();
+                assertTrue(rs.next());
+                assertEquals(query[i],result[i], rs.getString(1));
+                assertFalse(rs.next());
+            }
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testLowerFunction() throws Exception {
+        long ts = nextTimestamp();
+        String query[] = {
+                "SELECT lower('abc') FROM BTABLE LIMIT 1",
+                "SELECT lower('Abc') FROM BTABLE LIMIT 1",
+                "SELECT lower('ABC') FROM BTABLE LIMIT 1",
+                "SELECT lower('ĎďĒ') FROM BTABLE LIMIT 1",
+                "SELECT lower('ß') FROM BTABLE LIMIT 1",
+                "SELECT lower('SS') FROM BTABLE LIMIT 1",
+        };
+        String result[] = {
+                "abc",
+                "abc",
+                "abc",
+                "ďďē",
+                "ß",
+                "ss",
+        };
+        assertEquals(query.length, result.length);
         String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
