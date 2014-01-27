@@ -1247,6 +1247,19 @@ public class QueryCompileTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testInvalidArrayElemRefInUpsert() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k VARCHAR PRIMARY KEY, a INTEGER[10], B INTEGER[10])");
+        try {
+            conn.createStatement().execute("UPSERT INTO t(k,a[2]) VALUES('A', 5)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
+        }
+        conn.close();
+    }
+
+    @Test
     public void testInvalidNextValueFor() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE SEQUENCE alpha.zeta");

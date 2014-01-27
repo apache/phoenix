@@ -43,7 +43,6 @@ import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.primitives.Floats;
@@ -435,52 +434,6 @@ public class ArrayTest extends BaseClientManagedTimeTest {
             if (conn != null) {
                 conn.close();
             }
-        }
-    }
-
-    @Ignore //TODO: Ram to fix
-    @Test
-    public void testUpsertSelectWithSelectAsSubQuery3() throws Exception {
-        long ts = nextTimestamp();
-        String tenantId = getOrganizationId();
-        createTableWithArray(BaseConnectedQueryTest.getUrl(),
-                getDefaultSplits(tenantId), null, ts - 2);
-        //initTablesWithArrays(tenantId, null, ts, false);
-        try {
-            createSimpleTableWithArray(BaseConnectedQueryTest.getUrl(),
-                    getDefaultSplits(tenantId), null, ts - 2);
-            initSimpleArrayTable(tenantId, null, ts, false);
-            Properties props = new Properties(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                    Long.toString(ts + 2)); // Execute at timestamp 2
-            Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL,
-                    props);
-            // TODO: this is invalid, as you can't have an array reference in upsert
-            String query = "upsert into table_with_array(ORGANIZATION_ID,ENTITY_ID,a_double_array[3]) values('"
-                + tenantId + "','00A123122312312',2.0d)";
-            PreparedStatement statement = conn.prepareStatement(query);
-            int executeUpdate = statement.executeUpdate();
-            assertEquals(1, executeUpdate);
-            conn.commit();
-            statement.close();
-            conn.close();
-            // create another connection
-            props = new Properties(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                    Long.toString(ts + 4));
-            conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
-            query = "SELECT ARRAY_ELEM(a_double_array,3) FROM table_with_array";
-            statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            // Need to support primitive
-            Double[] doubleArr = new Double[1];
-            doubleArr[0] = 2.0d;
-            conn.createArrayOf("DOUBLE", doubleArr);
-            Double result = rs.getDouble(1);
-            assertEquals(result, doubleArr[0]);
-
-        } finally {
         }
     }
 
