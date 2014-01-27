@@ -1,0 +1,25 @@
+<html>
+<body>
+This document is for the JDBC implementation of Phoenix, targeting those who are interested in extending the level of SQL support.
+For users of Phoenix, the programmatic API is <a href="http://docs.oracle.com/javase/1.4.2/docs/api/java/sql/package-summary.html">JDBC</a>.
+For example, the following snippet demonstrates how to query a table:
+
+<pre>
+        Properties props = new Properties();
+        // Ensure the driver is on classpath
+        // Connect through Phoenix to the zookeeper quorum with a host name of myServer
+        Connection conn = DriverManager.getConnection("jdbc:phoenix:myServer", props);
+        try {
+            PreparedStatement statement = conn.prepareStatement("SELECT count(1) FROM product_metrics WHERE organization_id=?");
+            statement.setString(1, orgId);
+            ResultSet rs = statement.executeQuery();
+            if (rs.next()) {
+                System.out.println("Row count of orgId='" + orgId + "' is " + rs.getLong(1));
+            }
+        } finally {
+            conn.close();
+        }
+</pre>
+
+</body>
+</html>

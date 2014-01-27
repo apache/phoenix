@@ -1,0 +1,16 @@
+#general java
+*.class
+*.war
+*.jar
+
+# eclipse stuffs
+.settings/*
+.classpath
+.project
+
+# intellij stuff
+.idea/
+*.iml
+
+#maven stuffs
+target/

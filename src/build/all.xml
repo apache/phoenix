@@ -1,0 +1,118 @@
+<assembly xmlns="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0 http://maven.apache.org/xsd/assembly-1.1.0.xsd">
+  <!--This 'all' id is not appended to the produced bundle because we do this: http://maven.apache.org/plugins/maven-assembly-plugin/faq.html#required-classifiers -->
+  <id>all</id>
+  <formats>
+    <format>tar.gz</format>
+  </formats>
+  <includeBaseDirectory>true</includeBaseDirectory>
+
+  <files>
+    <file>
+      <source>pom.xml</source>
+      <outputDirectory>/</outputDirectory>
+      <fileMode>0644</fileMode>
+    </file>
+  </files>
+
+  <fileSets>
+    <fileSet>
+      <!--Get misc project files -->
+      <directory>${project.basedir}</directory>
+      <outputDirectory>/</outputDirectory>
+      <includes>
+        <include>*.txt</include>
+        <include>*.md</include>
+      </includes>
+    </fileSet>
+    <fileSet>
+      <!-- Add all the built phoenix jars to the top-level of the tarball -->
+      <directory>target</directory>
+      <outputDirectory>/</outputDirectory>
+      <includes>
+          <include>${project.build.finalName}.jar</include>
+          <include>${project.build.finalName}-tests.jar</include>
+          <include>${project.build.finalName}-client.jar</include>
+          <include>${project.build.finalName}-sources.jar</include>
+      </includes>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+    </fileSet>
+    <fileSet>
+      <!-- Needs to be removed when we move the dir layout -->
+      <directory>java</directory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+    </fileSet>
+    <fileSet>
+      <directory>src</directory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+    </fileSet>
+    <fileSet>
+      <directory>docs</directory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+    </fileSet>
+    <fileSet>
+      <directory>conf</directory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+    </fileSet>
+    <fileSet>
+      <directory>conf</directory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+    </fileSet>
+    <fileSet>
+      <directory>examples</directory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+    </fileSet>
+    <fileSet>
+      <directory>bin</directory>
+      <fileMode>0755</fileMode>
+      <directoryMode>0755</directoryMode>
+    </fileSet>
+  </fileSets>
+
+  <!-- And add all of our dependencies -->
+  <dependencySets>
+    <dependencySet>
+      <!-- Unpack all the dependencies to class files, since java doesn't support 
+        jar of jars for running -->
+      <unpack>false</unpack>
+      <outputDirectory>/lib</outputDirectory>
+      <includes>
+        <include>commons-configuration:commons-configuration</include>
+        <include>commons-io:commons-io</include>
+        <include>commons-lang:commons-lang</include>
+        <include>commons-logging:commons-logging</include>
+        <include>com.google.guava:guava</include>
+        <include>org.apache.hadoop:hadoop*</include>
+
+        <include>com.google.protobuf:protobuf-java</include>
+        <include>org.slf4j:slf4j-api</include>
+        <include>org.slf4j:slf4j-log4j12</include>
+        <include>org.apache.zookeeper:zookeeper</include>
+        <include>log4j:log4j</include>
+        <include>org.apache.hbase:hbase*</include>
+        <include>net.sf.opencsv:opencsv</include>
+        <include>org.antlr:antlr</include>
+      </includes>
+    </dependencySet>
+    <!-- Separate dependency set to just pull in the jackson stuff since its test 
+      scoped and we only include 'runtime' scoped (which includes compile) dependencies -->
+    <dependencySet>
+      <unpack>false</unpack>
+      <scope>test</scope>
+      <!-- save these dependencies to the top-level -->
+      <outputDirectory>/lib</outputDirectory>
+      <includes>
+        <include>org.codehaus.jackson:jackson-core-asl</include>
+        <include>org.codehaus.jackson:jackson-mapper-asl</include>
+      </includes>
+    </dependencySet>
+  </dependencySets>
+</assembly>

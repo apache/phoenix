@@ -1,0 +1,85 @@
+<assembly xmlns="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0 http://maven.apache.org/xsd/assembly-1.1.0.xsd">
+  <id>client</id>
+  <formats>
+    <format>jar</format>
+  </formats>
+  <includeBaseDirectory>false</includeBaseDirectory>
+  <dependencySets>
+    <dependencySet>
+      <!-- Unpack all the dependencies to class files, since java doesn't support 
+        jar of jars for running -->
+      <unpack>true</unpack>
+      <!-- save these dependencies to the top-level -->
+      <outputDirectory>/</outputDirectory>
+      <!-- Maybe a blacklist is easier? -->
+      <includes>
+        <include>commons-configuration:commons-configuration</include>
+        <include>commons-io:commons-io</include>
+        <include>commons-lang:commons-lang</include>
+        <include>commons-logging:commons-logging</include>
+	<include>commons-cli:commons-cli</include>
+        <include>com.google.guava:guava</include>
+        <include>org.apache.hadoop:hadoop*</include>
+        <include>com.google.protobuf:protobuf-java</include>
+        <include>org.slf4j:slf4j-api</include>
+        <include>org.slf4j:slf4j-log4j12</include>
+        <include>org.apache.zookeeper:zookeeper</include>
+        <include>log4j:log4j</include>
+        <include>org.apache.hbase:hbase*</include>
+        <include>net.sf.opencsv:opencsv</include>
+        <include>org.antlr:antlr*</include>
+        <include>jline:jline</include>
+        <include>sqlline:sqlline</include>
+	<include>org.codehaus.jackson:jackson-mapper-asl</include>
+	<include>org.codehaus.jackson:jackson-core-asl</include>
+        <include>org.xerial.snappy:snappy-java</include>
+            
+        <!-- <include>*:jar:*</include> -->
+      </includes>
+    </dependencySet>
+
+    <dependencySet>
+        <outputDirectory>/</outputDirectory>
+        <unpack>true</unpack>
+        <scope>system</scope>
+    </dependencySet>
+  </dependencySets>
+
+  <fileSets>
+    <!-- Add the compiled classes so we can just run the jar immediately -->
+    <fileSet>
+      <directory>${project.build.directory}/classes/com</directory>
+      <outputDirectory>/com</outputDirectory>
+      <fileMode>0755</fileMode>
+      <directoryMode>0755</directoryMode>
+    </fileSet>
+    <fileSet>
+      <!--Get application resources -->
+      <directory>src/main/external_resources</directory>
+      <outputDirectory>/</outputDirectory>
+    </fileSet>
+    <fileSet>
+    <!--Get misc project files -->
+      <directory>${project.basedir}</directory>
+      <outputDirectory>/</outputDirectory>
+      <includes>
+        <include>*.txt*</include>
+        <include>*.md</include>
+        <include>NOTICE*</include>
+      </includes>
+      <excludes>
+        <exclude>build.txt</exclude>
+      </excludes>
+    </fileSet>
+    <fileSet>
+    <!--Get map-red-config properties files -->
+      <directory>${project.basedir}/src/main/config</directory>
+      <outputDirectory>/</outputDirectory>
+      <includes>
+	<include>csv-bulk-load-config.properties</include>
+      </includes>
+    </fileSet>
+  </fileSets>
+</assembly>
