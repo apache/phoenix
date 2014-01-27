@@ -25,31 +25,17 @@ import static org.junit.Assert.assertTrue;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.Date;
-import java.util.Calendar;
-import java.util.GregorianCalendar;
-import java.util.List;
+import java.util.*;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.expression.function.FunctionArgumentType;
-import org.apache.phoenix.expression.function.LTrimFunction;
-import org.apache.phoenix.expression.function.LengthFunction;
-import org.apache.phoenix.expression.function.RTrimFunction;
-import org.apache.phoenix.expression.function.RegexpReplaceFunction;
-import org.apache.phoenix.expression.function.RegexpSubstrFunction;
-import org.apache.phoenix.expression.function.RoundFunction;
-import org.apache.phoenix.expression.function.SqlTypeNameFunction;
-import org.apache.phoenix.expression.function.SubstrFunction;
-import org.apache.phoenix.expression.function.ToCharFunction;
-import org.apache.phoenix.expression.function.ToDateFunction;
-import org.apache.phoenix.expression.function.ToNumberFunction;
-import org.apache.phoenix.expression.function.TrimFunction;
-import org.apache.phoenix.schema.ColumnModifier;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.util.DateUtil;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
+import org.apache.phoenix.expression.function.*;
+import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.util.DateUtil;
 
 /**
  * @author simontoens
@@ -93,6 +79,18 @@ public class DescColumnSortOrderExpressionTest {
     public void rtrim() throws Exception {
         List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah    ", PDataType.CHAR));
         evaluateAndAssertResult(new RTrimFunction(args), "blah");
+    }
+    
+    @Test
+    public void lower() throws Exception {
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("BLAH", PDataType.CHAR));
+        evaluateAndAssertResult(new LowerFunction(args), "blah");        
+    }
+    
+    @Test
+    public void upper() throws Exception {
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PDataType.CHAR));
+        evaluateAndAssertResult(new UpperFunction(args), "BLAH");        
     }
     
     @Test
