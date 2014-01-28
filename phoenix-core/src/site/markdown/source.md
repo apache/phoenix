@@ -1,9 +1,13 @@
 # Source Repository
 
-Source will be moved over to Apache SVN soon! In meanwhile it is available at:
+Apache Phoenix source is available on Apache Git server:
+
+https://git-wip-us.apache.org/repos/asf/incubator-phoenix.git
 
 <hr/>
 
-https://github.com/forcedotcom/phoenix
+Mirror on Github: https://github.com/apache/incubator-phoenix
 
 <hr/>
+
+Related: [Using > Building](building.html)
