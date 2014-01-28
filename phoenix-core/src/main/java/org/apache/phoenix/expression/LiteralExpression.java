@@ -26,7 +26,6 @@ import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
@@ -205,7 +204,7 @@ public class LiteralExpression extends BaseTerminalExpression {
     
     @Override
     public String toString() {
-        return type != null && type.isCoercibleTo(PDataType.VARCHAR) ? "'" + value + "'" : "" + value;
+        return value == null ? "null" : type.toStringLiteral(byteValue, null);
     }
 
     @Override
