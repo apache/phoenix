@@ -674,4 +674,81 @@ public class MutableIndexTest extends BaseMutableIndexTest {
         assertEquals("3", rs.getString(3));
         assertFalse(rs.next());
     }
+    
+    @Test
+    public void testIndexWithCaseSensitiveCols() throws Exception {
+        String query;
+        ResultSet rs;
+        
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            conn.createStatement().execute("CREATE TABLE cs (k VARCHAR NOT NULL PRIMARY KEY, \"V1\" VARCHAR, \"v2\" VARCHAR)");
+            query = "SELECT * FROM cs";
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+
+            conn.createStatement().execute("CREATE INDEX ics ON cs (\"v2\") INCLUDE (\"V1\")");
+            query = "SELECT * FROM ics";
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO cs VALUES(?,?,?)");
+            stmt.setString(1,"a");
+            stmt.setString(2, "x");
+            stmt.setString(3, "1");
+            stmt.execute();
+            stmt.setString(1,"b");
+            stmt.setString(2, "y");
+            stmt.setString(3, "2");
+            stmt.execute();
+            conn.commit();
+
+            query = "SELECT * FROM cs WHERE \"v2\" = '1'";
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER ICS ['1']", QueryUtil.getExplainPlan(rs));
+
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("a",rs.getString(1));
+            assertEquals("x",rs.getString(2));
+            assertEquals("1",rs.getString(3));
+            assertEquals("a",rs.getString("k"));
+            assertEquals("x",rs.getString("V1"));
+            assertEquals("1",rs.getString("v2"));
+            assertFalse(rs.next());
+
+            query = "SELECT \"V1\", \"V1\" as foo1, \"v2\" as foo, \"v2\" as \"Foo1\", \"v2\" FROM cs ORDER BY foo";
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER ICS", QueryUtil.getExplainPlan(rs));
+
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("x",rs.getString(1));
+            assertEquals("x",rs.getString("V1"));
+            assertEquals("x",rs.getString(2));
+            assertEquals("x",rs.getString("foo1"));
+            assertEquals("1",rs.getString(3));
+            assertEquals("1",rs.getString("Foo"));
+            assertEquals("1",rs.getString(4));
+            assertEquals("1",rs.getString("Foo1"));
+            assertEquals("1",rs.getString(5));
+            assertEquals("1",rs.getString("v2"));
+            assertTrue(rs.next());
+            assertEquals("y",rs.getString(1));
+            assertEquals("y",rs.getString("V1"));
+            assertEquals("y",rs.getString(2));
+            assertEquals("y",rs.getString("foo1"));
+            assertEquals("2",rs.getString(3));
+            assertEquals("2",rs.getString("Foo"));
+            assertEquals("2",rs.getString(4));
+            assertEquals("2",rs.getString("Foo1"));
+            assertEquals("2",rs.getString(5));
+            assertEquals("2",rs.getString("v2"));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
 }

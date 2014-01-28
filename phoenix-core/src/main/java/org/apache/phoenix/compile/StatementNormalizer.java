@@ -95,7 +95,9 @@ public class StatementNormalizer extends ParseNodeRewriter {
                 && node.getAlias() != null 
                 && node.getTableName() != null
                 && SchemaUtil.normalizeIdentifier(node.getAlias()).equals(node.getName())) {
-            node = NODE_FACTORY.column(NODE_FACTORY.table(node.getSchemaName(), node.getTableName()), node.isCaseSensitive() ? '"' + node.getName() + '"' : node.getName(), node.getFullName());
+            node = NODE_FACTORY.column(NODE_FACTORY.table(node.getSchemaName(), node.getTableName()), 
+                    node.isCaseSensitive() ? '"' + node.getName() + '"' : node.getName(), 
+                    node.isCaseSensitive() ? '"' + node.getFullName() + '"' : node.getFullName());
         }
         return super.visit(node);
     }

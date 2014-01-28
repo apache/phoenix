@@ -49,6 +49,7 @@ public class CSVLoaderTest extends BaseHBaseManagedTimeTest {
 			"KEY1,A,2147483647,1.1,0,TRUE,9223372036854775807,0,1990-12-31 10:59:59,1999-12-31 23:59:59\n" + 
 			"KEY2,B,-2147483648,-1.1,2147483647,FALSE,-9223372036854775808,9223372036854775807,2000-01-01 00:00:01,2012-02-29 23:59:59\n";
 	private static final String STOCK_TABLE = "STOCK_SYMBOL";
+	private static final String STOCK_TABLE_CASESENSITIVE = "STOCK_SYMBOL_CASESENSITIVE";
 	private static final String STOCK_CSV_VALUES = 
 			"AAPL,APPLE Inc.\n" + 
 			"CRM,SALESFORCE\n" + 
@@ -61,6 +62,7 @@ public class CSVLoaderTest extends BaseHBaseManagedTimeTest {
 			"WMT,Walmart\n";
     private static final String[] STOCK_COLUMNS_WITH_BOGUS = new String[] {"SYMBOL", "BOGUS"};
     private static final String[] STOCK_COLUMNS = new String[] {"SYMBOL", "COMPANY"};
+    private static final String[] STOCK_COLUMNS_CASESENSITIVE = new String[] {"SYMBOL", "\"Company\""};
     private static final String STOCK_CSV_VALUES_WITH_HEADER =  STOCK_COLUMNS[0] + "," + STOCK_COLUMNS[1] + "\n" + STOCK_CSV_VALUES;
     private static final String STOCK_CSV_VALUES_WITH_DELIMITER = "APPL" + '\u0001' + '\u0002' + "APPLE\n" +
                                                                   " Inc" + '\u0002' + "\n" +
@@ -278,6 +280,63 @@ public class CSVLoaderTest extends BaseHBaseManagedTimeTest {
         	assertEquals(DateUtil.parseTime(csvData[8]), phoenixResultSet.getTime("CTIME"));
         	assertEquals(DateUtil.parseDate(csvData[9]), phoenixResultSet.getDate("CDATE"));
         }
+        assertFalse(phoenixResultSet.next());
+        conn.close();
+    }
+    
+    @Test
+    public void testCaseSensitiveCSVUpsertWithColumns() throws Exception {
+        // Create table
+        String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE_CASESENSITIVE + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, \"Company\" VARCHAR);";
+        PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
+        PhoenixRuntime.executeStatements(conn, new StringReader(statements), null);
+        
+        // Upsert CSV file
+        CSVLoader csvUtil = new CSVLoader(conn, STOCK_TABLE_CASESENSITIVE, Arrays.<String>asList(STOCK_COLUMNS_CASESENSITIVE), true);
+        CSVReader reader = new CSVReader(new StringReader(STOCK_CSV_VALUES));
+        csvUtil.upsert(reader);
+
+        // Compare Phoenix ResultSet with CSV file content
+        PreparedStatement statement = conn.prepareStatement("SELECT SYMBOL, \"Company\" FROM " + STOCK_TABLE_CASESENSITIVE);
+        ResultSet phoenixResultSet = statement.executeQuery();
+        reader = new CSVReader(new StringReader(STOCK_CSV_VALUES));
+        String[] csvData;
+        while ((csvData = reader.readNext()) != null) {
+            assertTrue (phoenixResultSet.next());
+            for (int i=0; i<csvData.length; i++) {
+                assertEquals(csvData[i], phoenixResultSet.getString(i+1));
+            }
+        }
+        
+        assertFalse(phoenixResultSet.next());
+        conn.close();
+    }
+    
+    
+    @Test
+    public void testCaseSensitiveCSVUpsertWithNoColumns() throws Exception {
+        // Create table
+        String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE_CASESENSITIVE + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, \"Company\" VARCHAR);";
+        PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
+        PhoenixRuntime.executeStatements(conn, new StringReader(statements), null);
+        
+        // Upsert CSV file
+        CSVLoader csvUtil = new CSVLoader(conn, STOCK_TABLE_CASESENSITIVE, null, true);
+        CSVReader reader = new CSVReader(new StringReader(STOCK_CSV_VALUES));
+        csvUtil.upsert(reader);
+
+        // Compare Phoenix ResultSet with CSV file content
+        PreparedStatement statement = conn.prepareStatement("SELECT SYMBOL, \"Company\" FROM " + STOCK_TABLE_CASESENSITIVE);
+        ResultSet phoenixResultSet = statement.executeQuery();
+        reader = new CSVReader(new StringReader(STOCK_CSV_VALUES));
+        String[] csvData;
+        while ((csvData = reader.readNext()) != null) {
+            assertTrue (phoenixResultSet.next());
+            for (int i=0; i<csvData.length; i++) {
+                assertEquals(csvData[i], phoenixResultSet.getString(i+1));
+            }
+        }
+        
         assertFalse(phoenixResultSet.next());
         conn.close();
     }
