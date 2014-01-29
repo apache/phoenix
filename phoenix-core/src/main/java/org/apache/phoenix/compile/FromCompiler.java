@@ -141,14 +141,9 @@ public class FromCompiler {
     public static ColumnResolver getResolver(SelectStatement statement, PhoenixConnection connection)
     		throws SQLException {
     	List<TableNode> fromNodes = statement.getFrom();
-    	if (fromNodes.size() > 1) { throw new SQLFeatureNotSupportedException("Joins not supported"); }
-    	SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, (NamedTableNode)fromNodes.get(0), false, false);
-    	return visitor;
-    }
-    
-    public static ColumnResolver getMultiTableResolver(SelectStatement statement, PhoenixConnection connection)
-            throws SQLException {
-        List<TableNode> fromNodes = statement.getFrom();
+        if (fromNodes.size() == 1)
+            return new SingleTableColumnResolver(connection, (NamedTableNode)fromNodes.get(0), false, false);
+
         MultiTableColumnResolver visitor = new MultiTableColumnResolver(connection);
         for (TableNode node : fromNodes) {
             node.accept(visitor);

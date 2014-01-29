@@ -332,10 +332,10 @@ public class UpsertCompiler {
             SelectStatement select = upsert.getSelect();
             assert(select != null);
             select = addTenantAndViewConstants(table, select, tenantId, addViewColumns);
-            TableRef selectTableRef = FromCompiler.getResolver(select, connection).getTables().get(0);
-            sameTable = tableRef.equals(selectTableRef);
+            sameTable = select.getFrom().size() == 1
+                && tableRef.equals(FromCompiler.getResolver(select, connection).getTables().get(0));
             /* We can run the upsert in a coprocessor if:
-             * 1) the into table matches from table
+             * 1) from has only 1 table and the into table matches from table
              * 2) the select query isn't doing aggregation
              * 3) autoCommit is on
              * 4) the table is not immutable, as the client is the one that figures out the additional

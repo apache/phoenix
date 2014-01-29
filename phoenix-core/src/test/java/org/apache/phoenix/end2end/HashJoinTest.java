@@ -1435,5 +1435,93 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             conn.close();
         }
     }
+    
+    @Test
+    public void testUpsertWithJoin() throws Exception {
+        String tempTable = "TEMP_JOINED_TABLE";
+        String upsertQuery1 = "UPSERT INTO " + tempTable + "(order_id, item_name, supplier_name, quantity, date) " 
+            + "SELECT order_id, i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
+            + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id LEFT JOIN "
+            + JOIN_SUPPLIER_TABLE + " s ON i.supplier_id = s.supplier_id";
+        String upsertQuery2 = "UPSERT INTO " + tempTable + "(order_id, item_name, quantity) " 
+            + "SELECT 'ORDER_SUM', i.name, sum(quantity) FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
+            + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id GROUP BY i.name ORDER BY i.name";
+        String query = "SELECT * FROM " + tempTable;
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn.setAutoCommit(true);
+        try {
+            conn.createStatement().execute("CREATE TABLE " + tempTable 
+                    + "   (order_id varchar not null, " 
+                    + "    item_name varchar not null, " 
+                    + "    supplier_name varchar, "
+                    + "    quantity integer, "
+                    + "    date timestamp " 
+                    + "    CONSTRAINT pk PRIMARY KEY (order_id, item_name))");
+            conn.createStatement().execute(upsertQuery1);
+            conn.createStatement().execute(upsertQuery2);
+            
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertEquals(rs.getString(2), "T1");
+            assertEquals(rs.getString(3), "S1");
+            assertEquals(rs.getInt(4), 1000);
+            assertNotNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertEquals(rs.getString(2), "T6");
+            assertEquals(rs.getString(3), "S6");
+            assertEquals(rs.getInt(4), 2000);
+            assertNotNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertEquals(rs.getString(2), "T2");
+            assertEquals(rs.getString(3), "S1");
+            assertEquals(rs.getInt(4), 3000);
+            assertNotNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertEquals(rs.getString(2), "T6");
+            assertEquals(rs.getString(3), "S6");
+            assertEquals(rs.getInt(4), 4000);
+            assertNotNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertEquals(rs.getString(2), "T3");
+            assertEquals(rs.getString(3), "S2");
+            assertEquals(rs.getInt(4), 5000);
+            assertNotNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "ORDER_SUM");
+            assertEquals(rs.getString(2), "T1");
+            assertNull(rs.getString(3));
+            assertEquals(rs.getInt(4), 1000);
+            assertNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "ORDER_SUM");
+            assertEquals(rs.getString(2), "T2");
+            assertNull(rs.getString(3));
+            assertEquals(rs.getInt(4), 3000);
+            assertNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "ORDER_SUM");
+            assertEquals(rs.getString(2), "T3");
+            assertNull(rs.getString(3));
+            assertEquals(rs.getInt(4), 5000);
+            assertNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "ORDER_SUM");
+            assertEquals(rs.getString(2), "T6");
+            assertNull(rs.getString(3));
+            assertEquals(rs.getInt(4), 6000);
+            assertNull(rs.getDate(5));
+
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
 
 }
