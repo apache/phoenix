@@ -83,8 +83,8 @@ abstract public class NumberSumAggregator extends BaseAggregator {
             }
             initBuffer();
         }
+        getDataType().getCodec().encodeLong(sum, buffer, 0);
         ptr.set(buffer);
-        getDataType().getCodec().encodeLong(sum, ptr);
         return true;
     }
 

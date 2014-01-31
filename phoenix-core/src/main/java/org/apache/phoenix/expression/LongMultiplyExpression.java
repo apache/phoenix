@@ -52,8 +52,8 @@ public class LongMultiplyExpression extends MultiplyExpression {
             finalResult *= childvalue;
         }
         byte[] resultPtr=new byte[getDataType().getByteSize()];
+        getDataType().getCodec().encodeLong(finalResult, resultPtr, 0);
         ptr.set(resultPtr);
-        getDataType().getCodec().encodeLong(finalResult, ptr);
         return true;
     }
 

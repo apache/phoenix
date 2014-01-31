@@ -1439,14 +1439,6 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     @Test
     public void testUpsertWithJoin() throws Exception {
         String tempTable = "TEMP_JOINED_TABLE";
-        String upsertQuery1 = "UPSERT INTO " + tempTable + "(order_id, item_name, supplier_name, quantity, date) " 
-            + "SELECT order_id, i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
-            + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id LEFT JOIN "
-            + JOIN_SUPPLIER_TABLE + " s ON i.supplier_id = s.supplier_id";
-        String upsertQuery2 = "UPSERT INTO " + tempTable + "(order_id, item_name, quantity) " 
-            + "SELECT 'ORDER_SUM', i.name, sum(quantity) FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
-            + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id GROUP BY i.name ORDER BY i.name";
-        String query = "SELECT * FROM " + tempTable;
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         conn.setAutoCommit(true);
@@ -1458,9 +1450,20 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                     + "    quantity integer, "
                     + "    date timestamp " 
                     + "    CONSTRAINT pk PRIMARY KEY (order_id, item_name))");
-            conn.createStatement().execute(upsertQuery1);
-            conn.createStatement().execute(upsertQuery2);
+            conn.createStatement().execute("UPSERT INTO " + tempTable 
+                    + "(order_id, item_name, supplier_name, quantity, date) " 
+                    + "SELECT order_id, i.name, s.name, quantity, date FROM " 
+                    + JOIN_ORDER_TABLE + " o LEFT JOIN " 
+                    + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id LEFT JOIN "
+                    + JOIN_SUPPLIER_TABLE + " s ON i.supplier_id = s.supplier_id");
+            conn.createStatement().execute("UPSERT INTO " + tempTable 
+                    + "(order_id, item_name, quantity) " 
+                    + "SELECT 'ORDER_SUM', i.name, sum(quantity) FROM " 
+                    + JOIN_ORDER_TABLE + " o LEFT JOIN " 
+                    + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id " 
+                    + "GROUP BY i.name ORDER BY i.name");
             
+            String query = "SELECT * FROM " + tempTable;
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -1523,5 +1526,142 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             conn.close();
         }
     }
+    
+    @Test
+    public void testJoinOverSaltedTables() throws Exception {
+        String tempTableNoSalting = "TEMP_TABLE_NO_SALTING";
+        String tempTableWithSalting = "TEMP_TABLE_WITH_SALTING";
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        try {
+            conn.createStatement().execute("CREATE TABLE " + tempTableNoSalting 
+                    + "   (mypk INTEGER NOT NULL PRIMARY KEY, " 
+                    + "    col1 INTEGER)");
+            conn.createStatement().execute("CREATE TABLE " + tempTableWithSalting 
+                    + "   (mypk INTEGER NOT NULL PRIMARY KEY, " 
+                    + "    col1 INTEGER) SALT_BUCKETS=4");
+            
+            PreparedStatement upsertStmt = conn.prepareStatement(
+                    "upsert into " + tempTableNoSalting + "(mypk, col1) " + "values (?, ?)");
+            for (int i = 0; i < 3; i++) {
+                upsertStmt.setInt(1, i + 1);
+                upsertStmt.setInt(2, 3 - i);
+                upsertStmt.execute();
+            }
+            conn.commit();
+            
+            upsertStmt = conn.prepareStatement(
+                    "upsert into " + tempTableWithSalting + "(mypk, col1) " + "values (?, ?)");
+            for (int i = 0; i < 6; i++) {
+                upsertStmt.setInt(1, i + 1);
+                upsertStmt.setInt(2, 3 - (i % 3));
+                upsertStmt.execute();
+            }
+            conn.commit();
+            
+            // LHS=unsalted JOIN RHS=salted
+            String query = "SELECT lhs.mypk, lhs.col1, rhs.mypk, rhs.col1 FROM " 
+                    + tempTableNoSalting + " lhs JOIN "
+                    + tempTableWithSalting + " rhs ON rhs.mypk = lhs.col1";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 1);
+            assertEquals(rs.getInt(2), 3);
+            assertEquals(rs.getInt(3), 3);
+            assertEquals(rs.getInt(4), 1);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 2);
+            assertEquals(rs.getInt(2), 2);
+            assertEquals(rs.getInt(3), 2);
+            assertEquals(rs.getInt(4), 2);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 3);
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getInt(3), 1);
+            assertEquals(rs.getInt(4), 3);
 
+            assertFalse(rs.next());
+            
+            // LHS=salted JOIN RHS=salted
+            query = "SELECT lhs.mypk, lhs.col1, rhs.mypk, rhs.col1 FROM " 
+                    + tempTableWithSalting + " lhs JOIN "
+                    + tempTableNoSalting + " rhs ON rhs.mypk = lhs.col1";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 1);
+            assertEquals(rs.getInt(2), 3);
+            assertEquals(rs.getInt(3), 3);
+            assertEquals(rs.getInt(4), 1);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 2);
+            assertEquals(rs.getInt(2), 2);
+            assertEquals(rs.getInt(3), 2);
+            assertEquals(rs.getInt(4), 2);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 3);
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getInt(3), 1);
+            assertEquals(rs.getInt(4), 3);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 4);
+            assertEquals(rs.getInt(2), 3);
+            assertEquals(rs.getInt(3), 3);
+            assertEquals(rs.getInt(4), 1);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 5);
+            assertEquals(rs.getInt(2), 2);
+            assertEquals(rs.getInt(3), 2);
+            assertEquals(rs.getInt(4), 2);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 6);
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getInt(3), 1);
+            assertEquals(rs.getInt(4), 3);
+
+            assertFalse(rs.next());
+            
+            // LHS=salted JOIN RHS=salted
+            query = "SELECT lhs.mypk, lhs.col1, rhs.mypk, rhs.col1 FROM " 
+                    + tempTableWithSalting + " lhs JOIN "
+                    + tempTableWithSalting + " rhs ON rhs.mypk = (lhs.col1 + 3)";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 1);
+            assertEquals(rs.getInt(2), 3);
+            assertEquals(rs.getInt(3), 6);
+            assertEquals(rs.getInt(4), 1);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 2);
+            assertEquals(rs.getInt(2), 2);
+            assertEquals(rs.getInt(3), 5);
+            assertEquals(rs.getInt(4), 2);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 3);
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getInt(3), 4);
+            assertEquals(rs.getInt(4), 3);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 4);
+            assertEquals(rs.getInt(2), 3);
+            assertEquals(rs.getInt(3), 6);
+            assertEquals(rs.getInt(4), 1);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 5);
+            assertEquals(rs.getInt(2), 2);
+            assertEquals(rs.getInt(3), 5);
+            assertEquals(rs.getInt(4), 2);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 6);
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getInt(3), 4);
+            assertEquals(rs.getInt(4), 3);
+
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
 }

@@ -600,6 +600,11 @@ public class JoinCompiler {
                 return lType == null ? rType : lType; // to preserve UNSIGNED type
             }
 
+            if ((lType == null || lType.isCoercibleTo(PDataType.DOUBLE))
+                    && (rType == null || rType.isCoercibleTo(PDataType.DOUBLE))) {
+                return lType == null ? rType : lType; // to preserve UNSIGNED type
+            }
+
             if ((lType == null || lType.isCoercibleTo(PDataType.DECIMAL))
                     && (rType == null || rType.isCoercibleTo(PDataType.DECIMAL))) {
                 return PDataType.DECIMAL;

@@ -57,8 +57,8 @@ public class DoubleMultiplyExpression extends MultiplyExpression {
             }
         }
         byte[] resultPtr = new byte[getDataType().getByteSize()];
+        getDataType().getCodec().encodeDouble(result, resultPtr, 0);
         ptr.set(resultPtr);
-        getDataType().getCodec().encodeDouble(result, ptr);
         return true;
     }
 

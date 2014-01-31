@@ -117,8 +117,9 @@ public class SumAggregateFunction extends DelegateConstantToCountAggregateFuncti
             } else {
                 long constantLongValue = ((Number)constantValue).longValue();
                 long value = constantLongValue * type.getCodec().decodeLong(ptr, null);
-                ptr.set(new byte[type.getByteSize()]);
-                type.getCodec().encodeLong(value, ptr);
+                byte[] resultPtr = new byte[type.getByteSize()];
+                type.getCodec().encodeLong(value, resultPtr, 0);
+                ptr.set(resultPtr);
             }
         }
         return true;

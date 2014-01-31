@@ -64,8 +64,8 @@ public class DoubleSumAggregator extends BaseAggregator {
             }
             initBuffer();
         }
+        getDataType().getCodec().encodeDouble(sum, buffer, 0);
         ptr.set(buffer);
-        getDataType().getCodec().encodeDouble(sum, ptr);
         return true;
     }
 

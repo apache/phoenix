@@ -53,8 +53,8 @@ public class LongDivideExpression extends DivideExpression {
             }
         }
         byte[] resultPtr=new byte[PDataType.LONG.getByteSize()];
+        getDataType().getCodec().encodeLong(finalResult, resultPtr, 0);
         ptr.set(resultPtr);
-        getDataType().getCodec().encodeLong(finalResult, ptr);
         return true;
     }
 
