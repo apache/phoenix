@@ -89,12 +89,15 @@ public class TenantSpecificTablesDDLTest extends BaseTenantSpecificTablesTest {
     }
 
     @Test
-    public void testCreateTenantTableWithDifferentTypeId() throws Exception {
+    public void testAlterMultiTenantWithViewsToGlobal() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-        	createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, TENANT_TABLE_DDL.replace(TENANT_TYPE_ID, "000"), null, nextTimestamp(), false);
-            fail();
+            conn.createStatement().execute("alter table " + PARENT_TABLE_NAME + " set MULTI_TENANT=false");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
         }
-        catch (TableAlreadyExistsException expected) {}
     }
     
     @Test
