@@ -62,6 +62,5 @@ Findbugs report is generated in /target/site
 
 ## Generate Apache Web Site
 ===========================
-	$ mvn -pl phoenix-core site -Ddependency.locations.enabled=false
-
-Note: site is generated in phoenix-core/target/site
+checkout https://svn.apache.org/repos/asf/incubator/phoenix
+        $ build.sh
