@@ -106,6 +106,7 @@ public class JoinCompiler {
         private List<ParseNode> preFilters;
         private List<ParseNode> postFilters;
         private List<JoinTable> joinTables;
+        private Map<TableRef, JoinTable> tableRefToJoinTableMap;
         private Map<ColumnRef, ColumnRefType> columnRefs;
         
         private JoinSpec(SelectStatement statement, ColumnResolver resolver) throws SQLException {
@@ -120,36 +121,44 @@ public class JoinCompiler {
             this.joinTables = new ArrayList<JoinTable>(tableNodes.size() - 1);
             this.preFilters = new ArrayList<ParseNode>();
             this.postFilters = new ArrayList<ParseNode>();
+            this.tableRefToJoinTableMap = new HashMap<TableRef, JoinTable>();
             ColumnParseNodeVisitor generalRefVisitor = new ColumnParseNodeVisitor(resolver);
             ColumnParseNodeVisitor joinLocalRefVisitor = new ColumnParseNodeVisitor(resolver);
             ColumnParseNodeVisitor prefilterRefVisitor = new ColumnParseNodeVisitor(resolver);            
-            boolean hasRightJoin = false;
+            int lastRightJoinIndex = -1;
             TableNode tableNode = null;
+            int i = 0;
             while (iter.hasNext()) {
                 tableNode = iter.next();
                 if (!(tableNode instanceof JoinTableNode))
                     throw new SQLFeatureNotSupportedException("Full joins not supported.");
                 JoinTableNode joinTableNode = (JoinTableNode) tableNode;
                 JoinTable joinTable = new JoinTable(joinTableNode, tableRefIter.next(), selectList, resolver);
-                joinTables.add(joinTable);
-                for (ParseNode prefilter : joinTable.preFilters) {
-                    prefilter.accept(prefilterRefVisitor);
-                }
                 for (ParseNode condition : joinTable.conditions) {
                     ComparisonParseNode comparisonNode = (ComparisonParseNode) condition;
                     comparisonNode.getLHS().accept(generalRefVisitor);
                     comparisonNode.getRHS().accept(joinLocalRefVisitor);
                 }
                 if (joinTable.getType() == JoinType.Right) {
-                	hasRightJoin = true;
+                	lastRightJoinIndex = i;
+                }
+                joinTables.add(joinTable);
+                tableRefToJoinTableMap.put(joinTable.getTable(), joinTable);
+                i++;
+            }
+            List<TableRef> prefilterAcceptedTables = new ArrayList<TableRef>();
+            for (i = lastRightJoinIndex == -1 ? 0 : lastRightJoinIndex; i < joinTables.size(); i++) {
+                JoinTable joinTable = joinTables.get(i);
+                if (joinTable.getType() != JoinType.Left) {
+                    prefilterAcceptedTables.add(joinTable.getTable());
                 }
             }
             if (statement.getWhere() != null) {
-            	if (hasRightJoin) {
+            	if (lastRightJoinIndex > -1 && prefilterAcceptedTables.isEmpty()) {
             		// conditions can't be pushed down to the scan filter.
             		postFilters.add(statement.getWhere());
             	} else {
-            		statement.getWhere().accept(new WhereNodeVisitor(resolver));
+            		statement.getWhere().accept(new WhereNodeVisitor(resolver, lastRightJoinIndex > -1, prefilterAcceptedTables));
             		for (ParseNode prefilter : preFilters) {
             		    prefilter.accept(prefilterRefVisitor);
             		}
@@ -157,6 +166,12 @@ public class JoinCompiler {
             	for (ParseNode postfilter : postFilters) {
             		postfilter.accept(generalRefVisitor);
             	}
+            }
+            // Delayed to this point, since pre-filters might have been post-fixed by WhereNodeVisitor.
+            for (JoinTable joinTable : joinTables) {
+                for (ParseNode prefilter : joinTable.preFilters) {
+                    prefilter.accept(prefilterRefVisitor);
+                }
             }
             for (AliasedNode node : selectList) {
                 node.getNode().accept(generalRefVisitor);
@@ -338,9 +353,13 @@ public class JoinCompiler {
         
         private class WhereNodeVisitor  extends TraverseNoParseNodeVisitor<Void> {
             private ColumnResolver resolver;
+            private boolean hasRightJoin;
+            private List<TableRef> prefilterAcceptedTables;
             
-            public WhereNodeVisitor(ColumnResolver resolver) {
+            public WhereNodeVisitor(ColumnResolver resolver, boolean hasRightJoin, List<TableRef> prefilterAcceptedTables) {
                 this.resolver = resolver;
+                this.hasRightJoin = hasRightJoin;
+                this.prefilterAcceptedTables = prefilterAcceptedTables;
             }
             
             private Void leaveBooleanNode(ParseNode node,
@@ -348,11 +367,32 @@ public class JoinCompiler {
                 ColumnParseNodeVisitor visitor = new ColumnParseNodeVisitor(resolver);
                 node.accept(visitor);
                 ColumnParseNodeVisitor.ContentType type = visitor.getContentType(mainTable);
-                if (type == ColumnParseNodeVisitor.ContentType.NONE 
-                        || type == ColumnParseNodeVisitor.ContentType.SELF_ONLY) {
-                    preFilters.add(node);
-                } else {
+                switch (type) {
+                case NONE:
+                case SELF_ONLY:
+                    if (!hasRightJoin) {
+                        preFilters.add(node);
+                    } else {
+                        postFilters.add(node);
+                    }
+                    break;
+                case FOREIGN_ONLY:
+                    TableRef matched = null;
+                    for (TableRef table : prefilterAcceptedTables) {
+                        if (visitor.getContentType(table) == ColumnParseNodeVisitor.ContentType.SELF_ONLY) {
+                            matched = table;
+                            break;
+                        }
+                    }
+                    if (matched != null) {
+                        tableRefToJoinTableMap.get(matched).preFilters.add(node);
+                    } else {
+                        postFilters.add(node);
+                    }
+                    break;
+                default:
                     postFilters.add(node);
+                    break;
                 }
                 return null;
             }
@@ -1136,3 +1176,4 @@ public class JoinCompiler {
     	return PNameFactory.newName(name);
     }
 }
+

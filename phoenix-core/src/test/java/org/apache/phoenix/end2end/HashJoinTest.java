@@ -1286,7 +1286,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     @Test
     public void testJoinPlanWithIndex() throws Exception {
         String query1 = "SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM " + JOIN_ITEM_TABLE + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE + " supp ON substr(item.name, 2, 1) = substr(supp.name, 2, 1) AND (supp.name BETWEEN 'S1' AND 'S5') WHERE item.name BETWEEN 'T1' AND 'T5'";
-        String query2 = "SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM " + JOIN_ITEM_TABLE + " item INNER JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.supplier_id = supp.supplier_id AND (supp.name = 'S1' OR supp.name = 'S5') WHERE item.name = 'T1' OR item.name = 'T5'";
+        String query2 = "SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM " + JOIN_ITEM_TABLE + " item INNER JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.supplier_id = supp.supplier_id WHERE (item.name = 'T1' OR item.name = 'T5') AND (supp.name = 'S1' OR supp.name = 'S5')";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
