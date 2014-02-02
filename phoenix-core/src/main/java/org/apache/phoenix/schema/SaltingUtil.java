@@ -28,6 +28,7 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
 
@@ -124,16 +125,18 @@ public class SaltingUtil {
         }
         KeyRange[] expandedRanges = new KeyRange[count];
         int[] position = new int[ranges.size()];
-        int estimatedKeyLength = ScanUtil.estimateMaximumKeyLength(schema, 1, ranges);
+        int maxKeyLength = SchemaUtil.getMaxKeyLength(schema, ranges);
         int idx = 0, length;
         byte saltByte;
-        byte[] key = new byte[estimatedKeyLength];
+        byte[] key = new byte[maxKeyLength];
         do {
-            length = ScanUtil.setKey(schema, ranges, position, Bound.LOWER, key, 1, 0, ranges.size(), 1);
+            length = ScanUtil.setKey(schema, ranges, position, Bound.LOWER, key, NUM_SALTING_BYTES, 1, ranges.size(), 1);
             saltByte = SaltingUtil.getSaltingByte(key, 1, length, bucketNum);
             key[0] = saltByte;
-            byte[] saltedKey = Arrays.copyOf(key, length + 1);
-            KeyRange range = PDataType.VARBINARY.getKeyRange(saltedKey, true, saltedKey, true);
+            byte[] saltedStartKey = Arrays.copyOf(key, length + 1);
+            length = ScanUtil.setKey(schema, ranges, position, Bound.UPPER, key, NUM_SALTING_BYTES, 1, ranges.size(), 1);
+            byte[] saltedEndKey = Arrays.copyOf(key, length + 1);
+            KeyRange range = PDataType.VARBINARY.getKeyRange(saltedStartKey, true, saltedEndKey, false);
             expandedRanges[idx++] = range;
         } while (incrementKey(ranges, position));
         // The comparator is imperfect, but sufficient for all single keys.

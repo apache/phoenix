@@ -31,19 +31,19 @@ import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.KeyRange.Bound;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.KeyRange.Bound;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.RowKeySchema;
-import org.apache.phoenix.schema.ValueSchema.Field;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.ScanUtil;
 
 
 /**
@@ -81,21 +81,10 @@ public class SkipScanFilter extends FilterBase {
     }
 
     public SkipScanFilter(List<List<KeyRange>> slots, RowKeySchema schema) {
-        int maxKeyLength = getTerminatorCount(schema);
-        for (List<KeyRange> slot : slots) {
-            int maxSlotLength = 0;
-            for (KeyRange range : slot) {
-                int maxRangeLength = Math.max(range.getLowerRange().length, range.getUpperRange().length);
-                if (maxSlotLength < maxRangeLength) {
-                    maxSlotLength = maxRangeLength;
-                }
-            }
-            maxKeyLength += maxSlotLength;
-        }
-        init(slots, schema, maxKeyLength);
+        init(slots, schema);
     }
 
-    private void init(List<List<KeyRange>> slots, RowKeySchema schema, int maxKeyLength) {
+    private void init(List<List<KeyRange>> slots, RowKeySchema schema) {
         for (List<KeyRange> ranges : slots) {
             if (ranges.isEmpty()) {
                 throw new IllegalStateException();
@@ -103,7 +92,7 @@ public class SkipScanFilter extends FilterBase {
         }
         this.slots = slots;
         this.schema = schema;
-        this.maxKeyLength = maxKeyLength;
+        this.maxKeyLength = SchemaUtil.getMaxKeyLength(schema, slots);
         this.position = new int[slots.size()];
         startKey = new byte[maxKeyLength];
         endKey = new byte[maxKeyLength];
@@ -440,46 +429,23 @@ public class SkipScanFilter extends FilterBase {
         return targetKey;
     }
 
-    private int getTerminatorCount(RowKeySchema schema) {
-        int nTerminators = 0;
-        for (int i = 0; i < schema.getFieldCount(); i++) {
-            Field field = schema.getField(i);
-            // We won't have a terminator on the last PK column
-            // unless it is variable length and exclusive, but
-            // having the extra byte irregardless won't hurt anything
-            if (!field.getDataType().isFixedWidth()) {
-                nTerminators++;
-            }
-        }
-        return nTerminators;
-    }
-
     @Override
     public void readFields(DataInput in) throws IOException {
         RowKeySchema schema = new RowKeySchema();
         schema.readFields(in);
-        int maxLength = getTerminatorCount(schema);
         int andLen = in.readInt();
         List<List<KeyRange>> slots = Lists.newArrayListWithExpectedSize(andLen);
         for (int i=0; i<andLen; i++) {
             int orlen = in.readInt();
             List<KeyRange> orclause = Lists.newArrayListWithExpectedSize(orlen);
             slots.add(orclause);
-            int maxSlotLength = 0;
             for (int j=0; j<orlen; j++) {
                 KeyRange range = new KeyRange();
                 range.readFields(in);
-                if (range.getLowerRange().length > maxSlotLength) {
-                    maxSlotLength = range.getLowerRange().length;
-                }
-                if (range.getUpperRange().length > maxSlotLength) {
-                    maxSlotLength = range.getUpperRange().length;
-                }
                 orclause.add(range);
             }
-            maxLength += maxSlotLength;
         }
-        this.init(slots, schema, maxLength);
+        this.init(slots, schema);
     }
 
     @Override

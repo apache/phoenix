@@ -32,10 +32,6 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -65,8 +61,11 @@ import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
 
 
 /**
@@ -205,7 +204,7 @@ public class WhereOptimizer {
                 // If we have all single keys, we can optimize by adding the salt byte up front
                 if (schema == SchemaUtil.VAR_BINARY_SCHEMA) {
                     ranges = SaltingUtil.setSaltByte(ranges, table.getBucketNum());
-                } else if (ScanUtil.isAllSingleRowScan(cnf, table.getRowKeySchema())) {
+                } else if (isAllSingleRowScan(cnf, table)) {
                     cnf.addFirst(SALT_PLACEHOLDER);
                     ranges = SaltingUtil.flattenRanges(cnf, table.getRowKeySchema(), table.getBucketNum());
                     schema = SchemaUtil.VAR_BINARY_SCHEMA;
@@ -222,6 +221,30 @@ public class WhereOptimizer {
         } else {
             return whereClause.accept(new RemoveExtractedNodesVisitor(extractNodes));
         }
+    }
+
+    /**
+     * Calculate whether or not the list of ranges represents the full primary key
+     * of one or more rows
+     * @param ranges the list of ranges WITHOUT the salt KeyRange inserted yet
+     * @param table
+     * @return true if the list of ranges represents the full primary key of one or
+     * more ranges and false otherwise.
+     */
+    private static boolean isAllSingleRowScan(List<List<KeyRange>> ranges, PTable table) {
+        RowKeySchema schema = table.getRowKeySchema();
+        if (ranges.size() + ( table.getBucketNum() == null ? 0 : 1) < schema.getMaxFields()) {
+            return false;
+        }
+        for (int i = 0; i < ranges.size(); i++) {
+            List<KeyRange> orRanges = ranges.get(i);
+            for (KeyRange range: orRanges) {
+                if (!range.isSingleKey()) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private static class RemoveExtractedNodesVisitor extends TraverseNoExpressionVisitor<Expression> {

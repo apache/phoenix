@@ -36,6 +36,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
@@ -51,6 +52,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SaltingUtil;
+import org.apache.phoenix.schema.ValueSchema.Field;
 
 
 
@@ -503,5 +505,34 @@ public class SchemaUtil {
         String schemaName = fullTableName.substring(0, index);
         String tableName = fullTableName.substring(index+1);
         return getTableKey(null, schemaName, tableName); 
+    }
+
+    private static int getTerminatorCount(RowKeySchema schema) {
+        int nTerminators = 0;
+        for (int i = 0; i < schema.getFieldCount(); i++) {
+            Field field = schema.getField(i);
+            // We won't have a terminator on the last PK column
+            // unless it is variable length and exclusive, but
+            // having the extra byte irregardless won't hurt anything
+            if (!field.getDataType().isFixedWidth()) {
+                nTerminators++;
+            }
+        }
+        return nTerminators;
+    }
+
+    public static int getMaxKeyLength(RowKeySchema schema, List<List<KeyRange>> slots) {
+        int maxKeyLength = getTerminatorCount(schema);
+        for (List<KeyRange> slot : slots) {
+            int maxSlotLength = 0;
+            for (KeyRange range : slot) {
+                int maxRangeLength = Math.max(range.getLowerRange().length, range.getUpperRange().length);
+                if (maxSlotLength < maxRangeLength) {
+                    maxSlotLength = maxRangeLength;
+                }
+            }
+            maxKeyLength += maxSlotLength;
+        }
+        return maxKeyLength;
     }
 }
