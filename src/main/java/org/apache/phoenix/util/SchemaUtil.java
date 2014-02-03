@@ -68,11 +68,6 @@ import org.apache.hadoop.hbase.regionserver.MultiVersionConsistencyControl;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -80,6 +75,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
@@ -96,6 +92,12 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SaltingUtil;
+import org.apache.phoenix.schema.ValueSchema.Field;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 
 
@@ -819,5 +821,34 @@ public class SchemaUtil {
         String schemaName = fullTableName.substring(0, index);
         String tableName = fullTableName.substring(index+1);
         return getTableKey(schemaName, tableName); 
+    }
+    
+    private static int getTerminatorCount(RowKeySchema schema) {
+        int nTerminators = 0;
+        for (int i = 0; i < schema.getFieldCount(); i++) {
+            Field field = schema.getField(i);
+            // We won't have a terminator on the last PK column
+            // unless it is variable length and exclusive, but
+            // having the extra byte irregardless won't hurt anything
+            if (!field.getDataType().isFixedWidth()) {
+                nTerminators++;
+            }
+        }
+        return nTerminators;
+    }
+
+    public static int getMaxKeyLength(RowKeySchema schema, List<List<KeyRange>> slots) {
+        int maxKeyLength = getTerminatorCount(schema);
+        for (List<KeyRange> slot : slots) {
+            int maxSlotLength = 0;
+            for (KeyRange range : slot) {
+                int maxRangeLength = Math.max(range.getLowerRange().length, range.getUpperRange().length);
+                if (maxSlotLength < maxRangeLength) {
+                    maxSlotLength = maxRangeLength;
+                }
+            }
+            maxKeyLength += maxSlotLength;
+        }
+        return maxKeyLength;
     }
 }

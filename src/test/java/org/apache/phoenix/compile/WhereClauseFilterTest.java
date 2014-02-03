@@ -19,6 +19,7 @@
  */
 package org.apache.phoenix.compile;
 
+import static java.util.Collections.emptyList;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.and;
@@ -31,7 +32,6 @@ import static org.apache.phoenix.util.TestUtil.multiKVFilter;
 import static org.apache.phoenix.util.TestUtil.not;
 import static org.apache.phoenix.util.TestUtil.or;
 import static org.apache.phoenix.util.TestUtil.singleKVFilter;
-import static java.util.Collections.emptyList;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -52,11 +52,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.Ignore;
-import org.junit.Test;
-
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Sets;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
@@ -64,6 +59,7 @@ import org.apache.phoenix.expression.function.SubstrFunction;
 import org.apache.phoenix.filter.RowKeyComparisonFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -71,10 +67,16 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.junit.Ignore;
+import org.junit.Test;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Sets;
 
 
 public class WhereClauseFilterTest extends BaseConnectionlessQueryTest {
@@ -111,6 +113,97 @@ public class WhereClauseFilterTest extends BaseConnectionlessQueryTest {
                 BaseConnectionlessQueryTest.A_INTEGER,
                 0)),
             filter);
+    }
+
+    @Test
+    public void testSingleFixedFullPkSalted() throws SQLException {
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
+        pconn.createStatement().execute("CREATE TABLE t (k bigint not null primary key, v varchar) SALT_BUCKETS=20");
+        String query = "select * from t where k=" + 1;
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        QueryPlan plan = pstmt.optimizeQuery();
+        Scan scan = plan.getContext().getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
+        byte[] key = new byte[PDataType.LONG.getByteSize() + 1];
+        PDataType.LONG.toBytes(1L, key, 1);
+        key[0] = SaltingUtil.getSaltingByte(key, 1, PDataType.LONG.getByteSize(), 20);
+        byte[] expectedStartKey = key;
+        byte[] expectedEndKey = ByteUtil.nextKey(key);
+        byte[] startKey = scan.getStartRow();
+        byte[] stopKey = scan.getStopRow();
+        assertTrue(Bytes.compareTo(expectedStartKey, startKey) == 0);
+        assertTrue(Bytes.compareTo(expectedEndKey, stopKey) == 0);
+    }
+
+    @Test
+    public void testSingleVariableFullPkSalted() throws SQLException {
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
+        pconn.createStatement().execute("CREATE TABLE t (k varchar primary key, v varchar) SALT_BUCKETS=20");
+        String query = "select * from t where k='a'";
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        QueryPlan plan = pstmt.optimizeQuery();
+        Scan scan = plan.getContext().getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
+        byte[] key = new byte[2];
+        PDataType.VARCHAR.toBytes("a", key, 1);
+        key[0] = SaltingUtil.getSaltingByte(key, 1, 1, 20);
+        byte[] expectedStartKey = key;
+        byte[] expectedEndKey = ByteUtil.concat(key, ByteUtil.nextKey(QueryConstants.SEPARATOR_BYTE_ARRAY));
+        byte[] startKey = scan.getStartRow();
+        byte[] stopKey = scan.getStopRow();
+        assertTrue(Bytes.compareTo(expectedStartKey, startKey) == 0);
+        assertTrue(Bytes.compareTo(expectedEndKey, stopKey) == 0);
+    }
+
+    @Test
+    public void testMultiFixedFullPkSalted() throws SQLException {
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
+        pconn.createStatement().execute("CREATE TABLE t (k bigint not null primary key, v varchar) SALT_BUCKETS=20");
+        String query = "select * from t where k in (1,3)";
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        QueryPlan plan = pstmt.optimizeQuery();
+        Scan scan = plan.getContext().getScan();
+        Filter filter = scan.getFilter();
+        byte[] key = new byte[PDataType.LONG.getByteSize() + 1];
+        PDataType.LONG.toBytes(1L, key, 1);
+        key[0] = SaltingUtil.getSaltingByte(key, 1, PDataType.LONG.getByteSize(), 20);
+        byte[] startKey1 = key;
+        byte[] endKey1 = ByteUtil.nextKey(key);
+        
+        key = new byte[PDataType.LONG.getByteSize() + 1];
+        PDataType.LONG.toBytes(3L, key, 1);
+        key[0] = SaltingUtil.getSaltingByte(key, 1, PDataType.LONG.getByteSize(), 20);
+        byte[] startKey2 = key;
+        byte[] endKey2 = ByteUtil.nextKey(key);
+        
+        byte[] startKey = scan.getStartRow();
+        byte[] stopKey = scan.getStopRow();
+        
+        // Due to salting byte, the 1 key may be after the 3 key
+        byte[] expectedStartKey;
+        byte[] expectedEndKey;
+        List<List<KeyRange>> expectedRanges = Collections.singletonList(
+                Arrays.asList(KeyRange.getKeyRange(startKey1, true, endKey1, false),
+                              KeyRange.getKeyRange(startKey2, true, endKey2, false)));
+        if (Bytes.compareTo(startKey1, startKey2) > 0) {
+            expectedStartKey = startKey2;
+            expectedEndKey = endKey1;
+            Collections.reverse(expectedRanges.get(0));
+        } else {
+            expectedStartKey = startKey1;
+            expectedEndKey = endKey2;
+        }
+        assertTrue(Bytes.compareTo(expectedStartKey, startKey) == 0);
+        assertTrue(Bytes.compareTo(expectedEndKey, stopKey) == 0);
+
+        assertNotNull(filter);
+        assertTrue(filter instanceof SkipScanFilter);
+        StatementContext context = plan.getContext();
+        ScanRanges scanRanges = context.getScanRanges();
+        List<List<KeyRange>> ranges = scanRanges.getRanges();
+        assertEquals(expectedRanges, ranges);
     }
 
     @Test
