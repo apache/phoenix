@@ -101,7 +101,7 @@ public class FromCompiler {
         NamedTableNode tableNode = NamedTableNode.create(null, baseTable, Collections.<ColumnDef>emptyList());
         // Always use non-tenant-specific connection here
         try {
-            SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, false, true);
+            SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, false);
             return visitor;
         } catch (TableNotFoundException e) {
             // Used for mapped VIEW, since we won't be able to resolve that.
@@ -142,7 +142,7 @@ public class FromCompiler {
     		throws SQLException {
     	List<TableNode> fromNodes = statement.getFrom();
         if (fromNodes.size() == 1)
-            return new SingleTableColumnResolver(connection, (NamedTableNode)fromNodes.get(0), false, false);
+            return new SingleTableColumnResolver(connection, (NamedTableNode)fromNodes.get(0), false);
 
         MultiTableColumnResolver visitor = new MultiTableColumnResolver(connection);
         for (TableNode node : fromNodes) {
@@ -152,13 +152,13 @@ public class FromCompiler {
     }
 
     public static ColumnResolver getResolver(NamedTableNode tableNode, PhoenixConnection connection) throws SQLException {
-        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, false, false);
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, false);
         return visitor;
     }
     
     public static ColumnResolver getResolver(SingleTableSQLStatement statement, PhoenixConnection connection,
             List<ColumnDef> dyn_columns) throws SQLException {
-        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), true, false);
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), true);
         return visitor;
     }
 
@@ -186,7 +186,7 @@ public class FromCompiler {
            tableRefs = ImmutableList.of(new TableRef(alias, theTable, timeStamp, !table.getDynamicColumns().isEmpty()));
        }
        
-        public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode table, boolean updateCacheOnlyIfAutoCommit, boolean allowMultiTenant) throws SQLException {
+        public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode table, boolean updateCacheOnlyIfAutoCommit) throws SQLException {
             super(connection);
             alias = table.getAlias();
             TableName tableNameNode = table.getName();
@@ -206,16 +206,7 @@ public class FromCompiler {
                         result = client.updateCache(schemaName, tableName);
                         timeStamp = result.getMutationTime();
                     }
-                    PTable theTable;
-                    try {
-                        theTable = connection.getPMetaData().getTable(fullTableName);
-                    } catch (TableNotFoundException e) {
-                        if (allowMultiTenant && result != null && result.getTable() != null) {
-                            theTable = result.getTable();
-                        } else {
-                            throw e;
-                        }
-                    }
+                    PTable theTable = connection.getPMetaData().getTable(fullTableName);
                     // If dynamic columns have been specified add them to the table declaration
                     if (!table.getDynamicColumns().isEmpty()) {
                         theTable = this.addDynamicColumns(table.getDynamicColumns(), theTable);
@@ -229,8 +220,8 @@ public class FromCompiler {
                     sqlE = new TableNotFoundException(e,timeStamp);
                 }
                 // If we haven't already tried, update our cache and retry
-                // Only loop back if the cache was updated or we got a result back and we're allowed to multi-tenant tables
-                if (retry && ((result = client.updateCache(schemaName, tableName)).wasUpdated() || (result.getTable() != null && allowMultiTenant))) {
+                // Only loop back if the cache was updated
+                if (retry && (result = client.updateCache(schemaName, tableName)).wasUpdated()) {
                     timeStamp = result.getMutationTime();
                     retry = false;
                     didRetry = true;

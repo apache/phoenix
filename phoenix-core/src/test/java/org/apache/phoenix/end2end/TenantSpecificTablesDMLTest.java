@@ -318,14 +318,17 @@ public class TenantSpecificTablesDMLTest extends BaseTenantSpecificTablesTest {
     }
     
     @Test
-    public void testBaseTableCannotBeUsedInStatementsInMultitenantConnections() throws Exception {
+    public void testBaseTableCanBeUsedInStatementsInMultitenantConnections() throws Exception {
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
         try {
-            try {
-                conn.createStatement().execute("select * from " + PARENT_TABLE_NAME);
-                fail();
-            }
-            catch (TableNotFoundException expected) {};   
+            ResultSet rs = conn.createStatement().executeQuery("select * from " + PARENT_TABLE_NAME);
+            assertFalse(rs.next());
+            conn.setAutoCommit(true);
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_type_id, id, user) values ('" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
+            rs = conn.createStatement().executeQuery("select user from " + PARENT_TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1),"Billy Gibbons");
+            assertFalse(rs.next());
         }
         finally {
             conn.close();

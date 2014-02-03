@@ -280,12 +280,14 @@ public class MetaDataClient {
             PTable resultTable = result.getTable();
             // We found an updated table, so update our cache
             if (resultTable != null) {
-                // Don't cache the table unless it has the same tenantId
-                // as the connection or it's not multi-tenant.
-                if (tryCount == 0 || !resultTable.isMultiTenant()) {
-                    connection.addTable(resultTable);
-                    return result;
-                }
+                // Cache table, even if multi-tenant table found for null tenant_id
+                // These may be accessed by tenant-specific connections, as the
+                // tenant_id will always be added to mask other tenants data.
+                // Otherwise, a tenant would be required to create a VIEW first
+                // which is not really necessary unless you want to filter or add
+                // columns
+                connection.addTable(resultTable);
+                return result;
             } else {
                 // if (result.getMutationCode() == MutationCode.NEWER_TABLE_FOUND) {
                 // TODO: No table exists at the clientTimestamp, but a newer one exists.
@@ -488,7 +490,7 @@ public class MetaDataClient {
                 ColumnResolver resolver = FromCompiler.getResolver(statement, connection);
                 tableRef = resolver.getTables().get(0);
                 PTable dataTable = tableRef.getTable();
-                if (dataTable.getType() == PTableType.VIEW) {
+                if (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED) {
                     throw new SQLFeatureNotSupportedException("Creating an index on a view is not supported currently, but will be soon");
                 }
                 int hbaseVersion = connection.getQueryServices().getLowestClusterHBaseVersion();
