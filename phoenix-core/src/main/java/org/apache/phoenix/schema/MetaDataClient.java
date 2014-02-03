@@ -59,6 +59,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Types;
 import java.util.Collection;
 import java.util.Collections;
@@ -487,6 +488,9 @@ public class MetaDataClient {
                 ColumnResolver resolver = FromCompiler.getResolver(statement, connection);
                 tableRef = resolver.getTables().get(0);
                 PTable dataTable = tableRef.getTable();
+                if (dataTable.getType() == PTableType.VIEW) {
+                    throw new SQLFeatureNotSupportedException("Creating an index on a view is not supported currently, but will be soon");
+                }
                 int hbaseVersion = connection.getQueryServices().getLowestClusterHBaseVersion();
                 if (!dataTable.isImmutableRows()) {
                     if (hbaseVersion < PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) {
