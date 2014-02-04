@@ -56,6 +56,8 @@ public class ScanRanges {
         }
         boolean isPointLookup = !forceRangeScan && ScanRanges.isPointLookup(schema, ranges);
         if (isPointLookup) {
+            // TODO: consider keeping original to use for serialization as it would
+            // be smaller?
             List<byte[]> keys = ScanRanges.getPointKeys(ranges, schema, nBuckets);
             List<KeyRange> keyRanges = Lists.newArrayListWithExpectedSize(keys.size());
             for (byte[] key : keys) {
