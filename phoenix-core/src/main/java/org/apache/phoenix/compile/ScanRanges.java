@@ -19,18 +19,22 @@
  */
 package org.apache.phoenix.compile;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.KeyRange.Bound;
+import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.SaltingUtil;
+import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import org.apache.phoenix.filter.SkipScanFilter;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.RowKeySchema;
-import org.apache.phoenix.util.ScanUtil;
 
 
 public class ScanRanges {
@@ -115,21 +119,67 @@ public class ScanRanges {
         return false;
     }
 
-    /**
-     * @return true if this represents the full key to a single row
-     */
-    public boolean isSingleRowScan() {
-        if (schema == null || ranges.size() < schema.getMaxFields()) {
+    public static boolean isPointLookup(RowKeySchema schema, List<List<KeyRange>> ranges) {
+        if (ranges.size() < schema.getMaxFields()) {
             return false;
         }
-        boolean isSingleKey = true;
         for (List<KeyRange> orRanges : ranges) {
-            if (orRanges.size() > 1) {
-                return false;
+            for (KeyRange keyRange : orRanges) {
+                if (!keyRange.isSingleKey()) {
+                    return false;
+                }
             }
-            isSingleKey &= orRanges.get(0).isSingleKey();
         }
-        return isSingleKey;
+        return true;
+    }
+    
+    
+    private static boolean incrementKey(List<List<KeyRange>> slots, int[] position) {
+        int idx = slots.size() - 1;
+        while (idx >= 0 && (position[idx] = (position[idx] + 1) % slots.get(idx).size()) == 0) {
+            idx--;
+        }
+        return idx >= 0;
+    }
+
+    /**
+     * @return true if this represents a set of complete keys
+     */
+    public List<byte[]> getPointKeys(Integer bucketNum) {
+        return getPointKeys(this.getRanges(), this.getSchema(), bucketNum);
+    }
+    
+    public static List<byte[]> getPointKeys(List<List<KeyRange>> ranges, RowKeySchema schema, Integer bucketNum) {
+        if (ranges == null || ranges.isEmpty()) {
+            return Collections.emptyList();
+        }
+        boolean isSalted = bucketNum != null;
+        int count = 1;
+        int offset = isSalted ? 1 : 0;
+        // Skip salt byte range in the first position if salted
+        for (int i = offset; i < ranges.size(); i++) {
+            count *= ranges.get(i).size();
+        }
+        List<byte[]> keys = Lists.newArrayListWithExpectedSize(count);
+        int[] position = new int[ranges.size()];
+        int maxKeyLength = SchemaUtil.getMaxKeyLength(schema, ranges);
+        int length;
+        byte[] key = new byte[maxKeyLength];
+        do {
+            length = ScanUtil.setKey(schema, ranges, position, Bound.LOWER, key, offset, offset, ranges.size(), offset);
+            if (isSalted) {
+                key[0] = SaltingUtil.getSaltingByte(key, offset, length, bucketNum);
+            }
+            keys.add(Arrays.copyOf(key, length + offset));
+        } while (incrementKey(ranges, position));
+        return keys;
+    }
+
+    /**
+     * @return true if this represents a set of complete keys
+     */
+    public boolean isPointLookup() {
+        return schema != null && isPointLookup(schema, ranges);
     }
 
     public void setScanStartStopRow(Scan scan) {

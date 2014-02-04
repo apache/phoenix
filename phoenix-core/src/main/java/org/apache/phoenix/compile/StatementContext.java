@@ -24,9 +24,7 @@ import java.text.Format;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
@@ -215,10 +213,6 @@ public class StatementContext {
      */
     public KeyRange getMinMaxRange () {
         return minMaxRange;
-    }
-    
-    public boolean isSingleRowScan() {
-        return this.getScanRanges().isSingleRowScan() && ! (this.getScan().getFilter() instanceof FilterList);
     }
     
     public SequenceManager getSequenceManager(){

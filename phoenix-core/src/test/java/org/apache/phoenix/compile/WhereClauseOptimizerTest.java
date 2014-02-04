@@ -42,9 +42,6 @@ import java.util.Set;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
-import org.junit.Test;
-
-import com.google.common.collect.Sets;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrExpression;
@@ -62,6 +59,9 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Test;
+
+import com.google.common.collect.Sets;
 
 
 
@@ -1615,6 +1615,6 @@ public class WhereClauseOptimizerTest extends BaseConnectionlessQueryTest {
                 KeyRange.getKeyRange(ByteUtil.concat(PDataType.CHAR.toBytes(secondOrgId), PDataType.CHAR.toBytes(secondParentId)))));
         assertEquals(skipScanRanges, context.getScanRanges().getRanges());
         assertArrayEquals(ByteUtil.concat(PDataType.CHAR.toBytes(firstOrgId), PDataType.CHAR.toBytes(firstParentId)), scan.getStartRow());
-        assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(PDataType.CHAR.toBytes(secondOrgId), PDataType.CHAR.toBytes(secondParentId), QueryConstants.SEPARATOR_BYTE_ARRAY)), scan.getStopRow());
+        assertArrayEquals(ByteUtil.concat(PDataType.CHAR.toBytes(secondOrgId), PDataType.CHAR.toBytes(secondParentId), QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
     }
 }

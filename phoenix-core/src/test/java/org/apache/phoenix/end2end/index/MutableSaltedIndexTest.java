@@ -31,13 +31,13 @@ import java.sql.ResultSet;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 
 
 public class MutableSaltedIndexTest extends BaseMutableIndexTest{
@@ -138,27 +138,21 @@ public class MutableSaltedIndexTest extends BaseMutableIndexTest{
              "CLIENT MERGE SORT");
         assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
         
-        // Will still use index, since there's no LIMIT clause
-        query = "SELECT k,v FROM " + DATA_TABLE_FULL_NAME + " WHERE v >= 'x' ORDER BY k";
+        // Use data table, since point lookup trumps order by
+        query = "SELECT k,v FROM " + DATA_TABLE_FULL_NAME + " WHERE k = 'a' ORDER BY v";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("a",rs.getString(1));
         assertEquals("x",rs.getString(2));
-        assertTrue(rs.next());
-        assertEquals("b",rs.getString(1));
-        assertEquals("y",rs.getString(2));
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        // Turns into an ORDER BY, which could be bad if lots of data is
-        // being returned. Without stats we don't know. The alternative
-        // would be a full table scan.
-        expectedPlan = indexSaltBuckets == null ? 
-            ("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + INDEX_TABLE_FULL_NAME + " [*] - [~'x']\n" + 
-             "    SERVER TOP -1 ROWS SORTED BY [K]\n" + 
-             "CLIENT MERGE SORT") :
-            ("CLIENT PARALLEL 4-WAY SKIP SCAN ON 4 RANGES OVER " + INDEX_TABLE_FULL_NAME + " [0,*] - [3,~'x']\n" + 
-             "    SERVER TOP -1 ROWS SORTED BY [K]\n" + 
-             "CLIENT MERGE SORT");
+        expectedPlan = tableSaltBuckets == null ? 
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + DATA_TABLE_FULL_NAME + " ['a']\n" +
+                "    SERVER SORTED BY [V]\n" + 
+                "CLIENT MERGE SORT" :
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T [[2,97]]\n" + 
+                    "    SERVER SORTED BY [V]\n" + 
+                    "CLIENT MERGE SORT";
         assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
         
         // Will use data table now, since there's a LIMIT clause and

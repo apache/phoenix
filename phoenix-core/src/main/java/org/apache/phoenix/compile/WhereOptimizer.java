@@ -32,6 +32,7 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -78,6 +79,7 @@ import com.google.common.collect.Lists;
  */
 public class WhereOptimizer {
     private static final List<KeyRange> SALT_PLACEHOLDER = Collections.singletonList(PDataType.CHAR.getKeyRange(QueryConstants.SEPARATOR_BYTE_ARRAY));
+    
     private WhereOptimizer() {
     }
 
@@ -204,12 +206,21 @@ public class WhereOptimizer {
                 // If we have all single keys, we can optimize by adding the salt byte up front
                 if (schema == SchemaUtil.VAR_BINARY_SCHEMA) {
                     ranges = SaltingUtil.setSaltByte(ranges, table.getBucketNum());
-                } else if (isAllSingleRowScan(cnf, table)) {
-                    cnf.addFirst(SALT_PLACEHOLDER);
-                    ranges = SaltingUtil.flattenRanges(cnf, table.getRowKeySchema(), table.getBucketNum());
-                    schema = SchemaUtil.VAR_BINARY_SCHEMA;
                 } else {
-                    cnf.addFirst(SaltingUtil.generateAllSaltingRanges(table.getBucketNum()));
+                    List<KeyRange> saltRanges = SALT_PLACEHOLDER;
+                    cnf.addFirst(saltRanges);
+                    if (ScanRanges.isPointLookup(schema, cnf)) {
+                        List<byte[]> keys = ScanRanges.getPointKeys(cnf, schema, table.getBucketNum());
+                        Collections.sort(keys, Bytes.BYTES_COMPARATOR);
+                        List<KeyRange> keyRanges = Lists.newArrayListWithExpectedSize(keys.size());
+                        for (byte[] key : keys) {
+                            keyRanges.add(KeyRange.getKeyRange(key));
+                        }
+                        ranges = Collections.singletonList(keyRanges);
+                        schema = SchemaUtil.VAR_BINARY_SCHEMA;
+                    } else {
+                        cnf.set(0, SaltingUtil.generateAllSaltingRanges(table.getBucketNum()));
+                    }
                 }
             }
         }
@@ -221,30 +232,6 @@ public class WhereOptimizer {
         } else {
             return whereClause.accept(new RemoveExtractedNodesVisitor(extractNodes));
         }
-    }
-
-    /**
-     * Calculate whether or not the list of ranges represents the full primary key
-     * of one or more rows
-     * @param ranges the list of ranges WITHOUT the salt KeyRange inserted yet
-     * @param table
-     * @return true if the list of ranges represents the full primary key of one or
-     * more ranges and false otherwise.
-     */
-    private static boolean isAllSingleRowScan(List<List<KeyRange>> ranges, PTable table) {
-        RowKeySchema schema = table.getRowKeySchema();
-        if (ranges.size() + ( table.getBucketNum() == null ? 0 : 1) < schema.getMaxFields()) {
-            return false;
-        }
-        for (int i = 0; i < ranges.size(); i++) {
-            List<KeyRange> orRanges = ranges.get(i);
-            for (KeyRange range: orRanges) {
-                if (!range.isSingleKey()) {
-                    return false;
-                }
-            }
-        }
-        return true;
     }
 
     private static class RemoveExtractedNodesVisitor extends TraverseNoExpressionVisitor<Expression> {

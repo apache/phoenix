@@ -25,12 +25,11 @@ import static org.junit.Assert.assertFalse;
 import java.sql.Connection;
 import java.sql.DriverManager;
 
-import org.junit.Test;
-
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Test;
 
 public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     
@@ -156,8 +155,18 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k = 30 ORDER BY v1 LIMIT 5");
+        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k > 30 ORDER BY v1 LIMIT 5");
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
+    }
+    
+    @Test
+    public void testChoosePointLookupOverOrderByRemoval() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
+        conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k = 30 ORDER BY v1 LIMIT 5"); // Prefer 
+        assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
     }
     
     @Test
@@ -166,7 +175,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY DESC, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k = 30 ORDER BY v1, k DESC LIMIT 5");
+        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k > 30 ORDER BY v1, k DESC LIMIT 5");
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -176,7 +185,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY DESC, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k = 30 ORDER BY v1, k LIMIT 5");
+        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k > 30 ORDER BY v1, k LIMIT 5");
         assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -186,8 +195,18 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY DESC, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1, k)");
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k = 30 ORDER BY v1, k LIMIT 5");
+        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k > 30 ORDER BY v1, k LIMIT 5");
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
+    }
+    
+    @Test
+    public void testChoosePointLookupOverOrderByDesc() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY DESC, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
+        conn.createStatement().execute("CREATE INDEX idx ON t(v1, k)");
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k = 30 ORDER BY v1, k LIMIT 5");
+        assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
     }
     
 

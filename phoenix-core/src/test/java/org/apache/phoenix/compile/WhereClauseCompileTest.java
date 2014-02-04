@@ -107,7 +107,7 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
         PDataType.LONG.toBytes(1L, key, 1);
         key[0] = SaltingUtil.getSaltingByte(key, 1, PDataType.LONG.getByteSize(), 20);
         byte[] expectedStartKey = key;
-        byte[] expectedEndKey = ByteUtil.nextKey(key);
+        byte[] expectedEndKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
         byte[] startKey = scan.getStartRow();
         byte[] stopKey = scan.getStopRow();
         assertTrue(Bytes.compareTo(expectedStartKey, startKey) == 0);
@@ -128,7 +128,7 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
         PDataType.VARCHAR.toBytes("a", key, 1);
         key[0] = SaltingUtil.getSaltingByte(key, 1, 1, 20);
         byte[] expectedStartKey = key;
-        byte[] expectedEndKey = ByteUtil.concat(key, ByteUtil.nextKey(QueryConstants.SEPARATOR_BYTE_ARRAY));
+        byte[] expectedEndKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
         byte[] startKey = scan.getStartRow();
         byte[] stopKey = scan.getStopRow();
         assertTrue(Bytes.compareTo(expectedStartKey, startKey) == 0);
@@ -148,13 +148,11 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
         PDataType.LONG.toBytes(1L, key, 1);
         key[0] = SaltingUtil.getSaltingByte(key, 1, PDataType.LONG.getByteSize(), 20);
         byte[] startKey1 = key;
-        byte[] endKey1 = ByteUtil.nextKey(key);
         
         key = new byte[PDataType.LONG.getByteSize() + 1];
         PDataType.LONG.toBytes(3L, key, 1);
         key[0] = SaltingUtil.getSaltingByte(key, 1, PDataType.LONG.getByteSize(), 20);
         byte[] startKey2 = key;
-        byte[] endKey2 = ByteUtil.nextKey(key);
         
         byte[] startKey = scan.getStartRow();
         byte[] stopKey = scan.getStopRow();
@@ -163,15 +161,15 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
         byte[] expectedStartKey;
         byte[] expectedEndKey;
         List<List<KeyRange>> expectedRanges = Collections.singletonList(
-                Arrays.asList(KeyRange.getKeyRange(startKey1, true, endKey1, false),
-                              KeyRange.getKeyRange(startKey2, true, endKey2, false)));
+                Arrays.asList(KeyRange.getKeyRange(startKey1),
+                              KeyRange.getKeyRange(startKey2)));
         if (Bytes.compareTo(startKey1, startKey2) > 0) {
             expectedStartKey = startKey2;
-            expectedEndKey = endKey1;
+            expectedEndKey = ByteUtil.concat(startKey1, QueryConstants.SEPARATOR_BYTE_ARRAY);
             Collections.reverse(expectedRanges.get(0));
         } else {
             expectedStartKey = startKey1;
-            expectedEndKey = endKey2;
+            expectedEndKey = ByteUtil.concat(startKey2, QueryConstants.SEPARATOR_BYTE_ARRAY);;
         }
         assertTrue(Bytes.compareTo(expectedStartKey, startKey) == 0);
         assertTrue(Bytes.compareTo(expectedEndKey, stopKey) == 0);

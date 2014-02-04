@@ -283,9 +283,6 @@ public class ScanUtil {
              */
             boolean inclusiveUpper = range.isInclusive(bound) && bound == Bound.UPPER;
             boolean exclusiveLower = !range.isInclusive(bound) && bound == Bound.LOWER;
-            if (!isFixedWidth && ( i < schema.getMaxFields()-1 || inclusiveUpper || exclusiveLower)) {
-                key[offset++] = QueryConstants.SEPARATOR_BYTE;
-            }
             // If we are setting the upper bound of using inclusive single key, we remember 
             // to increment the key if we exit the loop after this iteration.
             // 
@@ -298,6 +295,13 @@ public class ScanUtil {
             // key slots would cause the flag to become true.
             lastInclusiveUpperSingleKey = range.isSingleKey() && inclusiveUpper;
             anyInclusiveUpperRangeKey |= !range.isSingleKey() && inclusiveUpper;
+            
+            if (!isFixedWidth && ( i < schema.getMaxFields()-1 || inclusiveUpper || exclusiveLower)) {
+                key[offset++] = QueryConstants.SEPARATOR_BYTE;
+                // Set lastInclusiveUpperSingleKey back to false if this is the last pk column
+                // as we don't want to increment the null byte in this case
+                lastInclusiveUpperSingleKey &= i < schema.getMaxFields()-1;
+            }
             // If we are setting the lower bound with an exclusive range key, we need to bump the
             // slot up for each key part. For an upper bound, we bump up an inclusive key, but
             // only after the last key part.
