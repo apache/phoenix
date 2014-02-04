@@ -75,6 +75,10 @@ public class HintNode {
         * the data table when optimizing.
         */
        USE_INDEX_OVER_DATA_TABLE,
+       /**
+        * Avoid caching any HBase blocks loaded by this query.
+        */
+       NO_CACHE,
     };
 
     private final Map<Hint,String> hints;
