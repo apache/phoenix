@@ -32,8 +32,6 @@ import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.Iterators;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
@@ -44,6 +42,8 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.StringUtil;
+
+import com.google.common.collect.Iterators;
 
 
 public abstract class ExplainTable {
@@ -65,19 +65,24 @@ public abstract class ExplainTable {
     private boolean explainSkipScan(StringBuilder buf) {
         ScanRanges scanRanges = context.getScanRanges();
         if (scanRanges.useSkipScanFilter()) {
-            buf.append("SKIP SCAN ");
-            int count = 1;
-            boolean hasRanges = false;
-            for (List<KeyRange> ranges : scanRanges.getRanges()) {
-                count *= ranges.size();
-                for (KeyRange range : ranges) {
-                    hasRanges |= !range.isSingleKey();
+            int keyCount = scanRanges.getPointLookupCount();
+            if (keyCount == 0) {
+                buf.append("SKIP SCAN ");
+                int count = 1;
+                boolean hasRanges = false;
+                for (List<KeyRange> ranges : scanRanges.getRanges()) {
+                    count *= ranges.size();
+                    for (KeyRange range : ranges) {
+                        hasRanges |= !range.isSingleKey();
+                    }
                 }
+                buf.append("ON ");
+                buf.append(count);
+                buf.append(hasRanges ? " RANGE" : " KEY");
+                buf.append(count > 1 ? "S " : " ");
+            } else {
+                buf.append("POINT LOOKUP ON " + keyCount + " KEY" + (keyCount > 1 ? "S " : " "));
             }
-            buf.append("ON ");
-            buf.append(count);
-            buf.append(hasRanges ? " RANGE" : " KEY");
-            buf.append(count > 1 ? "S " : " ");
             return true;
         } else {
             buf.append("RANGE SCAN ");
@@ -95,7 +100,9 @@ public abstract class ExplainTable {
             hasSkipScanFilter = explainSkipScan(buf);
         }
         buf.append("OVER " + tableRef.getTable().getName().getString());
-        appendKeyRanges(buf);
+        if (!scanRanges.isPointLookup()) {
+            appendKeyRanges(buf);
+        }
         planSteps.add(buf.toString());
         
         Scan scan = context.getScan();

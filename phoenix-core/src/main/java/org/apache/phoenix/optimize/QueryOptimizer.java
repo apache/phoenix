@@ -45,6 +45,7 @@ public class QueryOptimizer {
     public QueryPlan optimize(SelectStatement select, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
         QueryCompiler compiler = new QueryCompiler(statement, targetColumns, parallelIteratorFactory);
         QueryPlan dataPlan = compiler.compile(select);
+        // TODO: consider not even compiling index plans if we have a point lookup
         if (!useIndexes || select.getFrom().size() > 1) {
             return dataPlan;
         }

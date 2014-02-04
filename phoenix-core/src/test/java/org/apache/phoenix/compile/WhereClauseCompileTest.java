@@ -67,6 +67,7 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -392,8 +393,9 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
         bindParams(pstmt, binds);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
-        assertArrayEquals(ByteUtil.concat(Bytes.toBytes(tenantId), StringUtil.padChar(Bytes.toBytes(keyPrefix), 15)),scan.getStartRow());
-        assertArrayEquals(ByteUtil.nextKey(scan.getStartRow()),scan.getStopRow());
+        byte[] expectedStartRow = ByteUtil.concat(Bytes.toBytes(tenantId), StringUtil.padChar(Bytes.toBytes(keyPrefix), 15));
+        assertArrayEquals(expectedStartRow,scan.getStartRow());
+        assertArrayEquals(ByteUtil.concat(expectedStartRow,QueryConstants.SEPARATOR_BYTE_ARRAY),scan.getStopRow());
     }
 
     @Test
@@ -656,18 +658,17 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
         byte[] startRow = PDataType.VARCHAR.toBytes(tenantId + entityId1);
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = PDataType.VARCHAR.toBytes(tenantId + entityId2);
-        assertArrayEquals(ByteUtil.nextKey(stopRow), scan.getStopRow());
+        assertArrayEquals(ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
 
         Filter filter = scan.getFilter();
 
         assertEquals(
             new SkipScanFilter(
                 ImmutableList.of(
-                    Arrays.asList(pointRange(tenantId)),
                     Arrays.asList(
-                        pointRange(entityId1),
-                        pointRange(entityId2))),
-                plan.getContext().getResolver().getTables().get(0).getTable().getRowKeySchema()),
+                        pointRange(tenantId,entityId1),
+                        pointRange(tenantId,entityId2))),
+                SchemaUtil.VAR_BINARY_SCHEMA),
             filter);
     }
 
@@ -700,6 +701,7 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
                 plan.getContext().getResolver().getTables().get(0).getTable().getRowKeySchema()),
             filter);
     }
+    
     @Test
     public void testInListWithAnd1Filter() throws SQLException {
         String tenantId1 = "000000000000001";
@@ -717,11 +719,10 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
             new SkipScanFilter(
                 ImmutableList.of(
                     Arrays.asList(
-                        pointRange(tenantId1),
-                        pointRange(tenantId2),
-                        pointRange(tenantId3)),
-                    Arrays.asList(pointRange(entityId))),
-                plan.getContext().getResolver().getTables().get(0).getTable().getRowKeySchema()),
+                        pointRange(tenantId1, entityId),
+                        pointRange(tenantId2, entityId),
+                        pointRange(tenantId3, entityId))),
+                SchemaUtil.VAR_BINARY_SCHEMA),
             filter);
     }
     @Test
@@ -739,12 +740,16 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId1), PDataType.VARCHAR.toBytes(entityId));
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId3), PDataType.VARCHAR.toBytes(entityId));
-        assertArrayEquals(ByteUtil.nextKey(stopRow), scan.getStopRow());
+        assertArrayEquals(ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
         // TODO: validate scan ranges
     }
 
-    private static KeyRange pointRange(String id) {
-        return pointRange(Bytes.toBytes(id));
+    private static KeyRange pointRange(String... ids) {
+        byte[] theKey = ByteUtil.EMPTY_BYTE_ARRAY;
+        for (String id : ids) {
+            theKey = ByteUtil.concat(theKey, Bytes.toBytes(id));
+        }
+        return pointRange(theKey);
     }
     private static KeyRange pointRange(byte[] bytes) {
         return KeyRange.POINT.apply(bytes);
@@ -754,11 +759,10 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
     public void testInListWithAnd2Filter() throws SQLException {
         String tenantId1 = "000000000000001";
         String tenantId2 = "000000000000002";
-        String tenantId3 = "000000000000003";
         String entityId1 = "00000000000000X";
         String entityId2 = "00000000000000Y";
-        String query = String.format("select * from %s where organization_id IN ('%s','%s','%s') AND entity_id IN ('%s', '%s')",
-                ATABLE_NAME, tenantId1, tenantId3, tenantId2, entityId1, entityId2);
+        String query = String.format("select * from %s where organization_id IN ('%s','%s') AND entity_id IN ('%s', '%s')",
+                ATABLE_NAME, tenantId1, tenantId2, entityId1, entityId2);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
@@ -767,15 +771,12 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
         Filter filter = scan.getFilter();
         assertEquals(
             new SkipScanFilter(
-                ImmutableList.of(
-                    Arrays.asList(
-                        pointRange(tenantId1),
-                        pointRange(tenantId2),
-                        pointRange(tenantId3)),
-                    Arrays.asList(
-                        pointRange(entityId1),
-                        pointRange(entityId2))),
-                plan.getContext().getResolver().getTables().get(0).getTable().getRowKeySchema()),
+                    ImmutableList.<List<KeyRange>>of(ImmutableList.of(
+                        pointRange(tenantId1, entityId1),
+                        pointRange(tenantId1, entityId2),
+                        pointRange(tenantId2, entityId1),
+                        pointRange(tenantId2, entityId2))),
+                SchemaUtil.VAR_BINARY_SCHEMA),
             filter);
     }
 
@@ -814,7 +815,7 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId1),PDataType.VARCHAR.toBytes(entityId1));
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId3),PDataType.VARCHAR.toBytes(entityId2));
-        assertArrayEquals(ByteUtil.nextKey(stopRow), scan.getStopRow());
+        assertArrayEquals(ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
         // TODO: validate scan ranges
     }
     

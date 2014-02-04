@@ -26,13 +26,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -135,18 +133,28 @@ public class WhereOptimizer {
             extractNodes = new HashSet<Expression>(table.getPKColumns().size());
         }
 
+        int pkPos = -1;
+        Integer nBuckets = table.getBucketNum();
         // We're fully qualified if all columns except the salt column are specified
-        int fullyQualifiedColumnCount = table.getPKColumns().size() - (table.getBucketNum() == null ? 0 : 1);
-        int pkPos = table.getBucketNum() == null ? -1 : 0;
-        LinkedList<List<KeyRange>> cnf = new LinkedList<List<KeyRange>>();
+        int fullyQualifiedColumnCount = table.getPKColumns().size() - (nBuckets == null ? 0 : 1);
         RowKeySchema schema = table.getRowKeySchema();
+        List<List<KeyRange>> cnf = Lists.newArrayListWithExpectedSize(schema.getMaxFields());
         boolean forcedSkipScan = statement.getHint().hasHint(Hint.SKIP_SCAN);
         boolean forcedRangeScan = statement.getHint().hasHint(Hint.RANGE_SCAN);
         boolean hasUnboundedRange = false;
         boolean hasAnyRange = false;
         
         Iterator<KeyExpressionVisitor.KeySlot> iterator = keySlots.iterator();
-        // add tenant data isolation for tenant-specific tables
+        // Add placeholder for salt byte ranges
+        if (nBuckets != null) {
+            cnf.add(SALT_PLACEHOLDER);
+            // Increment the pkPos, as the salt column is in the row schema
+            // Do not increment the iterator, though, as there will never be
+            // an expression in the keySlots for the salt column
+            pkPos++;
+        }
+        
+        // aAd tenant data isolation for tenant-specific tables
         if (tenantId != null && table.isMultiTenant()) {
             KeyRange tenantIdKeyRange = KeyRange.getKeyRange(tenantId.getBytes());
             cnf.add(singletonList(tenantIdKeyRange));
@@ -171,14 +179,17 @@ public class WhereOptimizer {
             }
             // We support (a,b) IN ((1,2),(3,4), so in this case we switch to a flattened schema
             if (fullyQualifiedColumnCount > 1 && slot.getPKSpan() == fullyQualifiedColumnCount && slot.getKeyRanges().size() > 1) {
-                schema = SchemaUtil.VAR_BINARY_SCHEMA;
+                schema = nBuckets == null ? SchemaUtil.VAR_BINARY_SCHEMA : SaltingUtil.VAR_BINARY_SALTED_SCHEMA;
             }
             KeyPart keyPart = slot.getKeyPart();
             pkPos = slot.getPKPosition();
             List<KeyRange> keyRanges = slot.getKeyRanges();
             cnf.add(keyRanges);
             for (KeyRange range : keyRanges) {
-                hasUnboundedRange |= range.isUnbound();
+                if (range.isUnbound()) {
+                    hasUnboundedRange = true;
+                    break;
+                }
             }
             
             // Will be null in cases for which only part of the expression was factored out here
@@ -200,32 +211,8 @@ public class WhereOptimizer {
             }
             hasAnyRange |= keyRanges.size() > 1 || (keyRanges.size() == 1 && !keyRanges.get(0).isSingleKey());
         }
-        List<List<KeyRange>> ranges = cnf;
-        if (table.getBucketNum() != null) {
-            if (!cnf.isEmpty()) {
-                // If we have all single keys, we can optimize by adding the salt byte up front
-                if (schema == SchemaUtil.VAR_BINARY_SCHEMA) {
-                    ranges = SaltingUtil.setSaltByte(ranges, table.getBucketNum());
-                } else {
-                    List<KeyRange> saltRanges = SALT_PLACEHOLDER;
-                    cnf.addFirst(saltRanges);
-                    if (ScanRanges.isPointLookup(schema, cnf)) {
-                        List<byte[]> keys = ScanRanges.getPointKeys(cnf, schema, table.getBucketNum());
-                        Collections.sort(keys, Bytes.BYTES_COMPARATOR);
-                        List<KeyRange> keyRanges = Lists.newArrayListWithExpectedSize(keys.size());
-                        for (byte[] key : keys) {
-                            keyRanges.add(KeyRange.getKeyRange(key));
-                        }
-                        ranges = Collections.singletonList(keyRanges);
-                        schema = SchemaUtil.VAR_BINARY_SCHEMA;
-                    } else {
-                        cnf.set(0, SaltingUtil.generateAllSaltingRanges(table.getBucketNum()));
-                    }
-                }
-            }
-        }
         context.setScanRanges(
-                ScanRanges.create(ranges, schema, statement.getHint().hasHint(Hint.RANGE_SCAN)),
+                ScanRanges.create(cnf, schema, statement.getHint().hasHint(Hint.RANGE_SCAN), nBuckets),
                 keySlots.getMinMaxRange());
         if (whereClause == null) {
             return null;

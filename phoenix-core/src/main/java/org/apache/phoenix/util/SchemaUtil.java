@@ -67,7 +67,7 @@ public class SchemaUtil {
     private static final int VAR_LENGTH_ESTIMATE = 10;
     
     public static final DataBlockEncoding DEFAULT_DATA_BLOCK_ENCODING = DataBlockEncoding.FAST_DIFF;
-    public static final RowKeySchema VAR_BINARY_SCHEMA = new RowKeySchemaBuilder(1).addField(new PDatum() {
+    public static final PDatum VAR_BINARY_DATUM = new PDatum() {
     
         @Override
         public boolean isNullable() {
@@ -99,7 +99,8 @@ public class SchemaUtil {
             return null;
         }
         
-    }, false, null).build();
+    };
+    public static final RowKeySchema VAR_BINARY_SCHEMA = new RowKeySchemaBuilder(1).addField(VAR_BINARY_DATUM, false, null).build();
     
     /**
      * May not be instantiated

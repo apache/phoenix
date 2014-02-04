@@ -31,6 +31,7 @@ import java.sql.ResultSet;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -40,7 +41,7 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 
-public class MutableSaltedIndexTest extends BaseMutableIndexTest{
+public class SaltedIndexTest extends BaseIndexTest{
     private static final int TABLE_SPLITS = 3;
     private static final int INDEX_SPLITS = 4;
     
@@ -53,18 +54,37 @@ public class MutableSaltedIndexTest extends BaseMutableIndexTest{
         startServer(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
     
+    private static void makeImmutableAndDeleteData() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES);
+        try {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("DELETE FROM " + DATA_TABLE_FULL_NAME);
+            conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " SET IMMUTABLE_ROWS=true");
+            conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + DATA_TABLE_FULL_NAME).next();
+            assertTrue(conn.unwrap(PhoenixConnection.class).getPMetaData().getTable(DATA_TABLE_FULL_NAME).isImmutableRows());
+        } finally {
+            conn.close();
+        }
+    }
+    
     @Test
     public void testMutableTableIndexMaintanenceSaltedSalted() throws Exception {
+        testMutableTableIndexMaintanence(TABLE_SPLITS, INDEX_SPLITS);
+        makeImmutableAndDeleteData();
         testMutableTableIndexMaintanence(TABLE_SPLITS, INDEX_SPLITS);
     }
 
     @Test
     public void testMutableTableIndexMaintanenceSalted() throws Exception {
         testMutableTableIndexMaintanence(null, INDEX_SPLITS);
+        makeImmutableAndDeleteData();
+        testMutableTableIndexMaintanence(null, INDEX_SPLITS);
     }
 
     @Test
     public void testMutableTableIndexMaintanenceUnsalted() throws Exception {
+        testMutableTableIndexMaintanence(null, null);
+        makeImmutableAndDeleteData();
         testMutableTableIndexMaintanence(null, null);
     }
 
@@ -75,12 +95,12 @@ public class MutableSaltedIndexTest extends BaseMutableIndexTest{
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        conn.createStatement().execute("CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)  " +  (tableSaltBuckets == null ? "" : " SALT_BUCKETS=" + tableSaltBuckets));
+        conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)  " +  (tableSaltBuckets == null ? "" : " SALT_BUCKETS=" + tableSaltBuckets));
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
         
-        conn.createStatement().execute("CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v DESC)" + (indexSaltBuckets == null ? "" : " SALT_BUCKETS=" + indexSaltBuckets));
+        conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v DESC)" + (indexSaltBuckets == null ? "" : " SALT_BUCKETS=" + indexSaltBuckets));
         query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
@@ -147,10 +167,10 @@ public class MutableSaltedIndexTest extends BaseMutableIndexTest{
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         expectedPlan = tableSaltBuckets == null ? 
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + DATA_TABLE_FULL_NAME + " ['a']\n" +
+                "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER " + DATA_TABLE_FULL_NAME + "\n" +
                 "    SERVER SORTED BY [V]\n" + 
                 "CLIENT MERGE SORT" :
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T [[2,97]]\n" + 
+                    "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER " + DATA_TABLE_FULL_NAME + "\n" + 
                     "    SERVER SORTED BY [V]\n" + 
                     "CLIENT MERGE SORT";
         assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));

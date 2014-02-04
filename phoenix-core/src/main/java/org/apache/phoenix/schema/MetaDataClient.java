@@ -1221,6 +1221,10 @@ public class MetaDataClient {
             TableName tableNameNode = statement.getTable().getName();
             String schemaName = tableNameNode.getSchemaName();
             String tableName = tableNameNode.getTableName();
+            // Outside of retry loop, as we're removing the property and wouldn't find it the second time
+            Boolean isImmutableRowsProp = (Boolean)statement.getProps().remove(PTable.IS_IMMUTABLE_ROWS_PROP_NAME);
+            Boolean multiTenantProp = (Boolean)statement.getProps().remove(PhoenixDatabaseMetaData.MULTI_TENANT);
+            boolean disableWAL = Boolean.TRUE.equals(statement.getProps().remove(DISABLE_WAL));
             
             boolean retried = false;
             while (true) {
@@ -1247,17 +1251,14 @@ public class MetaDataClient {
                 }
                           
                 boolean isImmutableRows = table.isImmutableRows();
-                Boolean isImmutableRowsProp = (Boolean)statement.getProps().remove(PTable.IS_IMMUTABLE_ROWS_PROP_NAME);
                 if (isImmutableRowsProp != null) {
                     isImmutableRows = isImmutableRowsProp;
                 }
                 boolean multiTenant = table.isMultiTenant();
-                Boolean multiTenantProp = (Boolean) statement.getProps().remove(PhoenixDatabaseMetaData.MULTI_TENANT);
                 if (multiTenantProp != null) {
                     multiTenant = Boolean.TRUE.equals(multiTenantProp);
                 }
                 
-                boolean disableWAL = Boolean.TRUE.equals(statement.getProps().remove(DISABLE_WAL));
                 if (statement.getProps().get(PhoenixDatabaseMetaData.SALT_BUCKETS) != null) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE)
                     .setTableName(table.getName().getString()).build().buildException();
@@ -1313,7 +1314,8 @@ public class MetaDataClient {
                         connection.rollback();
                     }
                 } else {
-                 // Only support setting IMMUTABLE_ROWS=true and DISABLE_WAL=true on ALTER TABLE SET command
+                    // Only support setting IMMUTABLE_ROWS=true and DISABLE_WAL=true on ALTER TABLE SET command
+                    // TODO: support setting HBase table properties too
                     if (!statement.getProps().isEmpty()) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.SET_UNSUPPORTED_PROP_ON_ALTER_TABLE)
                         .setTableName(table.getName().getString()).build().buildException();

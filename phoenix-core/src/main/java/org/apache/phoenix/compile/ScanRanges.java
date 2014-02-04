@@ -40,28 +40,46 @@ import com.google.common.collect.Lists;
 public class ScanRanges {
     private static final List<List<KeyRange>> EVERYTHING_RANGES = Collections.<List<KeyRange>>emptyList();
     private static final List<List<KeyRange>> NOTHING_RANGES = Collections.<List<KeyRange>>singletonList(Collections.<KeyRange>singletonList(KeyRange.EMPTY_RANGE));
-    public static final ScanRanges EVERYTHING = new ScanRanges(EVERYTHING_RANGES,null,false);
-    public static final ScanRanges NOTHING = new ScanRanges(NOTHING_RANGES,null,false);
+    public static final ScanRanges EVERYTHING = new ScanRanges(EVERYTHING_RANGES,null,false, false);
+    public static final ScanRanges NOTHING = new ScanRanges(NOTHING_RANGES,null,false, false);
 
     public static ScanRanges create(List<List<KeyRange>> ranges, RowKeySchema schema) {
-        return create(ranges, schema, false);
+        return create(ranges, schema, false, null);
     }
     
-    public static ScanRanges create(List<List<KeyRange>> ranges, RowKeySchema schema, boolean forceRangeScan) {
-        if (ranges.isEmpty()) {
+    public static ScanRanges create(List<List<KeyRange>> ranges, RowKeySchema schema, boolean forceRangeScan, Integer nBuckets) {
+        int offset = nBuckets == null ? 0 : 1;
+        if (ranges.size() == offset) {
             return EVERYTHING;
-        } else if (ranges.size() == 1 && ranges.get(0).size() == 1 && ranges.get(0).get(0) == KeyRange.EMPTY_RANGE) {
+        } else if (ranges.size() == 1 + offset && ranges.get(offset).size() == 1 && ranges.get(offset).get(0) == KeyRange.EMPTY_RANGE) {
             return NOTHING;
         }
-        return new ScanRanges(ranges, schema, forceRangeScan);
+        boolean isPointLookup = !forceRangeScan && ScanRanges.isPointLookup(schema, ranges);
+        if (isPointLookup) {
+            List<byte[]> keys = ScanRanges.getPointKeys(ranges, schema, nBuckets);
+            List<KeyRange> keyRanges = Lists.newArrayListWithExpectedSize(keys.size());
+            for (byte[] key : keys) {
+                keyRanges.add(KeyRange.getKeyRange(key));
+            }
+            ranges = Collections.singletonList(keyRanges);
+            schema = SchemaUtil.VAR_BINARY_SCHEMA;
+        } else if (nBuckets != null) {
+            List<List<KeyRange>> saltedRanges = Lists.newArrayListWithExpectedSize(ranges.size());
+            saltedRanges.add(SaltingUtil.generateAllSaltingRanges(nBuckets));
+            saltedRanges.addAll(ranges.subList(1, ranges.size()));
+            ranges = saltedRanges;
+        }
+        return new ScanRanges(ranges, schema, forceRangeScan, isPointLookup);
     }
 
     private SkipScanFilter filter;
     private final List<List<KeyRange>> ranges;
     private final RowKeySchema schema;
     private final boolean forceRangeScan;
+    private final boolean isPointLookup;
 
-    private ScanRanges (List<List<KeyRange>> ranges, RowKeySchema schema, boolean forceRangeScan) {
+    private ScanRanges (List<List<KeyRange>> ranges, RowKeySchema schema, boolean forceRangeScan, boolean isPointLookup) {
+        this.isPointLookup = isPointLookup;
         List<List<KeyRange>> sortedRanges = Lists.newArrayListWithExpectedSize(ranges.size());
         for (int i = 0; i < ranges.size(); i++) {
             List<KeyRange> sorted = Lists.newArrayList(ranges.get(i));
@@ -106,6 +124,9 @@ public class ScanRanges {
         if (forceRangeScan) {
             return false;
         }
+        if (isPointLookup) {
+            return getPointLookupCount() > 1;
+        }
         boolean hasRangeKey = false, useSkipScan = false;
         for (List<KeyRange> orRanges : ranges) {
             useSkipScan |= orRanges.size() > 1 | hasRangeKey;
@@ -119,7 +140,7 @@ public class ScanRanges {
         return false;
     }
 
-    public static boolean isPointLookup(RowKeySchema schema, List<List<KeyRange>> ranges) {
+    private static boolean isPointLookup(RowKeySchema schema, List<List<KeyRange>> ranges) {
         if (ranges.size() < schema.getMaxFields()) {
             return false;
         }
@@ -142,14 +163,7 @@ public class ScanRanges {
         return idx >= 0;
     }
 
-    /**
-     * @return true if this represents a set of complete keys
-     */
-    public List<byte[]> getPointKeys(Integer bucketNum) {
-        return getPointKeys(this.getRanges(), this.getSchema(), bucketNum);
-    }
-    
-    public static List<byte[]> getPointKeys(List<List<KeyRange>> ranges, RowKeySchema schema, Integer bucketNum) {
+    private static List<byte[]> getPointKeys(List<List<KeyRange>> ranges, RowKeySchema schema, Integer bucketNum) {
         if (ranges == null || ranges.isEmpty()) {
             return Collections.emptyList();
         }
@@ -179,7 +193,11 @@ public class ScanRanges {
      * @return true if this represents a set of complete keys
      */
     public boolean isPointLookup() {
-        return schema != null && isPointLookup(schema, ranges);
+        return isPointLookup;
+    }
+    
+    public int getPointLookupCount() {
+        return isPointLookup ? ranges.get(0).size() : 0;
     }
 
     public void setScanStartStopRow(Scan scan) {
