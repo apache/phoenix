@@ -64,30 +64,27 @@ public abstract class ExplainTable {
 
     private boolean explainSkipScan(StringBuilder buf) {
         ScanRanges scanRanges = context.getScanRanges();
-        if (scanRanges.useSkipScanFilter()) {
+        if (scanRanges.isPointLookup()) {
             int keyCount = scanRanges.getPointLookupCount();
-            if (keyCount == 0) {
-                buf.append("SKIP SCAN ");
-                int count = 1;
-                boolean hasRanges = false;
-                for (List<KeyRange> ranges : scanRanges.getRanges()) {
-                    count *= ranges.size();
-                    for (KeyRange range : ranges) {
-                        hasRanges |= !range.isSingleKey();
-                    }
+            buf.append("POINT LOOKUP ON " + keyCount + " KEY" + (keyCount > 1 ? "S " : " "));
+        } else if (scanRanges.useSkipScanFilter()) {
+            buf.append("SKIP SCAN ");
+            int count = 1;
+            boolean hasRanges = false;
+            for (List<KeyRange> ranges : scanRanges.getRanges()) {
+                count *= ranges.size();
+                for (KeyRange range : ranges) {
+                    hasRanges |= !range.isSingleKey();
                 }
-                buf.append("ON ");
-                buf.append(count);
-                buf.append(hasRanges ? " RANGE" : " KEY");
-                buf.append(count > 1 ? "S " : " ");
-            } else {
-                buf.append("POINT LOOKUP ON " + keyCount + " KEY" + (keyCount > 1 ? "S " : " "));
             }
-            return true;
+            buf.append("ON ");
+            buf.append(count);
+            buf.append(hasRanges ? " RANGE" : " KEY");
+            buf.append(count > 1 ? "S " : " ");
         } else {
             buf.append("RANGE SCAN ");
         }
-        return false;
+        return scanRanges.useSkipScanFilter();
     }
     
     protected void explain(String prefix, List<String> planSteps) {

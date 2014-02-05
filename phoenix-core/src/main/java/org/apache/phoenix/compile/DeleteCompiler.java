@@ -24,6 +24,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -235,10 +236,11 @@ public class DeleteCompiler {
                 public MutationState execute() {
                     // We have a point lookup, so we know we have a simple set of fully qualified
                     // keys for our ranges
-                    List<KeyRange> keys = context.getScanRanges().getRanges().get(0);
-                    Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutation = Maps.newHashMapWithExpectedSize(keys.size());
-                    for (KeyRange key : keys) {
-                        mutation.put(new ImmutableBytesPtr(key.getLowerRange()), PRow.DELETE_MARKER);
+                    ScanRanges ranges = context.getScanRanges();
+                    Iterator<KeyRange> iterator = ranges.getPointLookupKeyIterator(); 
+                    Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutation = Maps.newHashMapWithExpectedSize(ranges.getPointLookupCount());
+                    while (iterator.hasNext()) {
+                        mutation.put(new ImmutableBytesPtr(iterator.next().getLowerRange()), PRow.DELETE_MARKER);
                     }
                     return new MutationState(tableRef, mutation, 0, maxSize, connection);
                 }

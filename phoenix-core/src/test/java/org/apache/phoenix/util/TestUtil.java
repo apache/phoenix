@@ -43,8 +43,6 @@ import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.Lists;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.expression.AndExpression;
@@ -69,6 +67,8 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.tuple.Tuple;
+
+import com.google.common.collect.Lists;
 
 
 
@@ -244,7 +244,7 @@ public class TestUtil {
     }
 
     public static Expression in(Expression... expressions) throws SQLException {
-        return InListExpression.create(Arrays.asList(expressions), new ImmutableBytesWritable());
+        return InListExpression.create(Arrays.asList(expressions), new ImmutableBytesWritable(), false);
     }
 
     public static Expression in(Expression e, Object... literals) throws SQLException {
@@ -254,7 +254,7 @@ public class TestUtil {
         for (Object o : literals) {
             expressions.add(LiteralExpression.newConstant(o, childType));
         }
-        return InListExpression.create(expressions, new ImmutableBytesWritable());
+        return InListExpression.create(expressions, new ImmutableBytesWritable(), false);
     }
 
     public static void assertDegenerate(StatementContext context) {

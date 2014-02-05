@@ -21,6 +21,7 @@ package org.apache.phoenix.compile;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
@@ -34,6 +35,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 
 
@@ -200,6 +202,10 @@ public class ScanRanges {
     
     public int getPointLookupCount() {
         return isPointLookup ? ranges.get(0).size() : 0;
+    }
+    
+    public Iterator<KeyRange> getPointLookupKeyIterator() {
+        return isPointLookup ? ranges.get(0).iterator() : Iterators.<KeyRange>emptyIterator();
     }
 
     public void setScanStartStopRow(Scan scan) {

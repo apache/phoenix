@@ -25,12 +25,12 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 /**
  * 
@@ -339,12 +339,21 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
     
     @Override
     public ParseNode visitLeave(final InListParseNode node, List<ParseNode> nodes) throws SQLException {
-        return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+        ParseNode normNode = leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
             @Override
             public ParseNode createNode(List<ParseNode> children) {
                 return NODE_FACTORY.inList(children, node.isNegate());
             }
         });
+        if (normNode.getChildren().size() == 2) { // Rewrite as equality or inequality
+            // Rewrite row value constructor in = or != expression, as this is the same as if it was
+            // used in an equality expression which will be more efficient
+            ParseNode lhs = normNode.getChildren().get(0);
+            ParseNode rhs = normNode.getChildren().get(1);
+            normNode = NODE_FACTORY.comparison(node.isNegate() ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, lhs, rhs);
+            normNode = normNode.accept(this);
+        }
+        return normNode;
     }
     
     @Override
@@ -387,14 +396,18 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
             for (int i = 1; i < rhs.getChildren().size(); i++) {
                 rewriteRowValueConstuctorEqualityComparison(null, rhs.getChildren().get(i), andNodes);
             }
-        } else if (lhs == null && rhs == null) { // null == null will end up making the query degenerate
-            andNodes.add(NODE_FACTORY.comparison(CompareOp.EQUAL, null, null).accept(this));
-        } else if (lhs == null) { // AND rhs IS NULL
-            andNodes.add(NODE_FACTORY.isNull(rhs, false).accept(this));
-        } else if (rhs == null) { // AND lhs IS NULL
-            andNodes.add(NODE_FACTORY.isNull(lhs, false).accept(this));
-        } else { // AND lhs = rhs
-            andNodes.add(NODE_FACTORY.comparison(CompareOp.EQUAL, lhs, rhs).accept(this));
+        } else {
+            boolean isLHSNull = lhs == null || (lhs instanceof LiteralParseNode && ((LiteralParseNode)lhs).getValue() == null);
+            boolean isRHSNull = rhs == null || (rhs instanceof LiteralParseNode && ((LiteralParseNode)rhs).getValue() == null);
+            if (isLHSNull && isRHSNull) { // null == null will end up making the query degenerate
+                andNodes.add(NODE_FACTORY.comparison(CompareOp.EQUAL, lhs, rhs).accept(this));
+            } else if (isLHSNull) { // AND rhs IS NULL
+                andNodes.add(NODE_FACTORY.isNull(rhs, false).accept(this));
+            } else if (isRHSNull) { // AND lhs IS NULL
+                andNodes.add(NODE_FACTORY.isNull(lhs, false).accept(this));
+            } else { // AND lhs = rhs
+                andNodes.add(NODE_FACTORY.comparison(CompareOp.EQUAL, lhs, rhs).accept(this));
+            }
         }
     }
     

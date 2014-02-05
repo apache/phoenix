@@ -31,7 +31,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -742,10 +741,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             return LiteralExpression.newConstant(null, PDataType.BOOLEAN, firstChild.isDeterministic());
         }
         
-        Expression e = InListExpression.create(inChildren, ptr);
-        if (node.isNegate()) {
-            e = new NotExpression(e);
-        }
+        Expression e = InListExpression.create(inChildren, ptr, node.isNegate());
         if (node.isStateless()) {
             if (!e.evaluate(null, ptr) || ptr.getLength() == 0) {
                 return LiteralExpression.newConstant(null, e.getDataType(), e.isDeterministic());

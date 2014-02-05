@@ -76,6 +76,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class WhereOptimizer {
+    private static final List<KeyRange> EVERYTHING_RANGES = Collections.<KeyRange>singletonList(KeyRange.EVERYTHING_RANGE);
     private static final List<KeyRange> SALT_PLACEHOLDER = Collections.singletonList(PDataType.CHAR.getKeyRange(QueryConstants.SEPARATOR_BYTE_ARRAY));
     
     private WhereOptimizer() {
@@ -177,8 +178,8 @@ public class WhereOptimizer {
                     cnf.add(Collections.singletonList(KeyRange.EVERYTHING_RANGE));
                 }
             }
-            // We support (a,b) IN ((1,2),(3,4), so in this case we switch to a flattened schema
-            if (fullyQualifiedColumnCount > 1 && slot.getPKSpan() == fullyQualifiedColumnCount && slot.getKeyRanges().size() > 1) {
+            // We support (a,b) IN ((1,2),(3,4)), so in this case we switch to a flattened schema
+            if (fullyQualifiedColumnCount > 1 && slot.getPKSpan() == fullyQualifiedColumnCount && !EVERYTHING_RANGES.equals(slot.getKeyRanges())) {
                 schema = nBuckets == null ? SchemaUtil.VAR_BINARY_SCHEMA : SaltingUtil.VAR_BINARY_SALTED_SCHEMA;
             }
             KeyPart keyPart = slot.getKeyPart();
@@ -269,7 +270,6 @@ public class WhereOptimizer {
      * operators, CASE statements, and string concatenation.
      */
     public static class KeyExpressionVisitor extends TraverseNoExpressionVisitor<KeyExpressionVisitor.KeySlots> {
-        private static final List<KeyRange> EVERYTHING_RANGES = Collections.<KeyRange>singletonList(KeyRange.EVERYTHING_RANGE);
         private static final KeySlots DEGENERATE_KEY_PARTS = new KeySlots() {
             @Override
             public Iterator<KeySlot> iterator() {

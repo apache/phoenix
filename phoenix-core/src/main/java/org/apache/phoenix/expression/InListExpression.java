@@ -29,18 +29,18 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 /*
  * Implementation of a SQL foo IN (a,b,c) expression. Other than the first
@@ -57,7 +57,7 @@ public class InListExpression extends BaseSingleExpression {
     private ImmutableBytesPtr value = new ImmutableBytesPtr();
     private List<Expression> keyExpressions; // client side only
 
-    public static Expression create (List<Expression> children, ImmutableBytesWritable ptr) throws SQLException {
+    public static Expression create (List<Expression> children, ImmutableBytesWritable ptr, boolean isNegate) throws SQLException {
         Expression firstChild = children.get(0);
         PDataType firstChildType = firstChild.getDataType();
         
@@ -101,13 +101,19 @@ public class InListExpression extends BaseSingleExpression {
         // TODO: if inChildren.isEmpty() then Oracle throws a type mismatch exception. This means
         // that none of the list elements match in type and there's no null element. We'd return
         // false in this case. Should we throw?
-        if (keys.size() == 2) {
-            expression = new ComparisonExpression(CompareOp.EQUAL, keys);
+        // FIXME: We don't optimize RVC equality expression currently like we do with an IN
+        // expression, so don't convert in that case.
+        if (keys.size() == 2 && ! (firstChild instanceof RowValueConstructorExpression) ) {
+            expression = new ComparisonExpression(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, keys);
         } else {
             expression = new InListExpression(keys, coercedKeyExpressions);
+            if (isNegate) { 
+                expression = new NotExpression(expression);
+            }
         }
         return expression;
-    }    
+    }
+    
     public InListExpression() {
     }
 

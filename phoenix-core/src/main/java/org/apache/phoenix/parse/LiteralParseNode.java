@@ -44,8 +44,10 @@ public class LiteralParseNode extends TerminalParseNode {
     private final PDataType type;
     
     public LiteralParseNode(Object value) {
-        this.value = value;
         this.type = PDataType.fromLiteral(value);
+        // This will make the value null if the value passed through represents null for the given type.
+        // For example, an empty string is treated as a null.
+        this.value = this.type == null ? null : this.type.toObject(value, this.type);
     }
 
     public PDataType getType() {

@@ -53,11 +53,10 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Properties;
 
-import org.junit.Test;
-
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Test;
 
 public class RowValueConstructorTest extends BaseClientManagedTimeTest {
     
@@ -784,7 +783,8 @@ public class RowValueConstructorTest extends BaseClientManagedTimeTest {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
-        //we have a row present in aTable where organization_id = tenantId and  x_integer = 5 
+        // Though we have a row present in aTable where organization_id = tenantId and  x_integer = 5,
+        // we'd also need to have an entity_id that is null (which we don't have).
         String query = "SELECT organization_id, entity_id FROM aTable WHERE (organization_id, entity_id) IN (('" + tenantId + "')) AND x_integer = 5";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
@@ -795,9 +795,6 @@ public class RowValueConstructorTest extends BaseClientManagedTimeTest {
                 conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
                 statement = conn.prepareStatement(query);
                 ResultSet rs = statement.executeQuery();
-                assertTrue(rs.next());
-                assertEquals(tenantId, rs.getString(1));
-                assertEquals(ROW7, rs.getString(2));
                 assertFalse(rs.next());
             } finally {
                 if(statement != null) {
