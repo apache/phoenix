@@ -163,11 +163,15 @@ public class TestUtil {
     public static final String INDEX_DATA_SCHEMA = "INDEX_TEST";
     public static final String INDEX_DATA_TABLE = "INDEX_DATA_TABLE";
     public static final String MUTABLE_INDEX_DATA_TABLE = "MUTABLE_INDEX_DATA_TABLE";
-    public static final String JOIN_ORDER_TABLE = "JOIN_ORDER_TABLE";
-    public static final String JOIN_CUSTOMER_TABLE = "JOIN_CUSTOMER_TABLE";
-    public static final String JOIN_ITEM_TABLE = "JOIN_ITEM_TABLE";
-    public static final String JOIN_SUPPLIER_TABLE = "JOIN_SUPPLIER_TABLE";
-
+    public static final String JOIN_ORDER_TABLE_NORMALIZED = "joinOrderTable";
+    public static final String JOIN_CUSTOMER_TABLE_NORMALIZED = "joinCustomerTable";
+    public static final String JOIN_ITEM_TABLE_NORMALIZED = "joinItemTable";
+    public static final String JOIN_SUPPLIER_TABLE_NORMALIZED = "joinSupplierTable";
+    public static final String JOIN_ORDER_TABLE = '"' + JOIN_ORDER_TABLE_NORMALIZED + '"';
+    public static final String JOIN_CUSTOMER_TABLE = '"' + JOIN_CUSTOMER_TABLE_NORMALIZED + '"';
+    public static final String JOIN_ITEM_TABLE = '"' + JOIN_ITEM_TABLE_NORMALIZED + '"';
+    public static final String JOIN_SUPPLIER_TABLE = '"' + JOIN_SUPPLIER_TABLE_NORMALIZED + '"';
+ 
     public static final Properties TEST_PROPERTIES = new Properties();
 
     public static byte[][] getSplits(String tenantId) {

@@ -147,7 +147,7 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
         // Drop VIEWs first, as we don't allow a TABLE with views to be dropped.
         ResultSet rs = dbmd.getTables(null, null, null, new String[] {PTableType.VIEW.toString()});
         while (rs.next()) {
-            String fullTableName = SchemaUtil.getTableName(
+            String fullTableName = SchemaUtil.getEscapedTableName(
                     rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM_NAME),
                     rs.getString(PhoenixDatabaseMetaData.TABLE_NAME_NAME));
             String ddl = "DROP " + rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE_NAME) + " " + fullTableName;
@@ -155,7 +155,7 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
         }
         rs = dbmd.getTables(null, null, null, new String[] {PTableType.TABLE.toString()});
         while (rs.next()) {
-            String fullTableName = SchemaUtil.getTableName(
+            String fullTableName = SchemaUtil.getEscapedTableName(
                     rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM_NAME),
                     rs.getString(PhoenixDatabaseMetaData.TABLE_NAME_NAME));
             String ddl = "DROP " + rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE_NAME) + " " + fullTableName;

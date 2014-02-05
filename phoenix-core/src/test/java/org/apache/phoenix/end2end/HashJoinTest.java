@@ -21,8 +21,11 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE;
+import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_NORMALIZED;
 import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE;
+import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_NORMALIZED;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE;
+import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_NORMALIZED;
 import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -87,48 +90,48 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
         List<Object> testCases = Lists.newArrayList();
         testCases.add(new String[][] {
                 {}, {
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER JOIN_ITEM_TABLE\n" +
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
                 "    SERVER FILTER BY (NAME >= 'T1' AND NAME <= 'T5')\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER JOIN_SUPPLIER_TABLE\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_NORMALIZED + "\n" +
                 "            SERVER FILTER BY (NAME >= 'S1' AND NAME <= 'S5')",
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER JOIN_ITEM_TABLE\n" +
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
                 "    SERVER FILTER BY (NAME = 'T1' OR NAME = 'T5')\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER JOIN_SUPPLIER_TABLE\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_NORMALIZED + "\n" +
                 "            SERVER FILTER BY (NAME = 'S1' OR NAME = 'S5')",
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER JOIN_ITEM_TABLE\n" +
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
                 "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0 (SKIP MERGE)\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER JOIN_ORDER_TABLE\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
                 "    BUILD HASH TABLE 1\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER JOIN_SUPPLIER_TABLE"
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_NORMALIZED
                 }});
         testCases.add(new String[][] {
                 {
-                "CREATE INDEX INDEX_" + JOIN_CUSTOMER_TABLE + " ON " + JOIN_CUSTOMER_TABLE + " (name)",
-                "CREATE INDEX INDEX_" + JOIN_ITEM_TABLE + " ON " + JOIN_ITEM_TABLE + " (name)",
-                "CREATE INDEX INDEX_" + JOIN_SUPPLIER_TABLE + " ON " + JOIN_SUPPLIER_TABLE + " (name)"
+                "CREATE INDEX IDX_CUSTOMER ON " + JOIN_CUSTOMER_TABLE + " (name)",
+                "CREATE INDEX IDX_ITEM ON " + JOIN_ITEM_TABLE + " (name) INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
+                "CREATE INDEX IDX_SUPPLIER ON " + JOIN_SUPPLIER_TABLE + " (name)"
                 }, {
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_JOIN_ITEM_TABLE ['T1'] - ['T5']\n" +
+                "CLIENT PARALLEL 4-WAY RANGE SCAN OVER IDX_ITEM ['T1'] - ['T5']\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_JOIN_SUPPLIER_TABLE ['S1'] - ['S5']",
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER JOIN_ITEM_TABLE\n" +
-                "    SERVER FILTER BY (NAME = 'T1' OR NAME = 'T5')\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX_SUPPLIER ['S1'] - ['S5']",
+                "CLIENT PARALLEL 4-WAY SKIP SCAN ON 2 KEYS OVER IDX_ITEM ['T1'] - ['T5']\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER INDEX_JOIN_SUPPLIER_TABLE ['S1'] - ['S5']",
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER JOIN_ITEM_TABLE\n" +
+                "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER IDX_SUPPLIER ['S1'] - ['S5']",
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER IDX_ITEM\n" +
                 "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0 (SKIP MERGE)\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER JOIN_ORDER_TABLE\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
                 "    BUILD HASH TABLE 1\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER INDEX_JOIN_SUPPLIER_TABLE"
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER IDX_SUPPLIER"
                 }});
         return testCases;
     }
@@ -148,7 +151,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             // Insert into customer table
             PreparedStatement stmt = conn.prepareStatement(
                     "upsert into " + JOIN_CUSTOMER_TABLE +
-                    "   (CUSTOMER_ID, " +
+                    "   (\"customer_id\", " +
                     "    NAME, " +
                     "    PHONE, " +
                     "    ADDRESS, " +
@@ -206,12 +209,12 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             // Insert into item table
             stmt = conn.prepareStatement(
                     "upsert into " + JOIN_ITEM_TABLE +
-                    "   (ITEM_ID, " +
+                    "   (\"item_id\", " +
                     "    NAME, " +
                     "    PRICE, " +
                     "    DISCOUNT1, " +
                     "    DISCOUNT2, " +
-                    "    SUPPLIER_ID, " +
+                    "    \"supplier_id\", " +
                     "    DESCRIPTION) " +
                     "values (?, ?, ?, ?, ?, ?, ?)");
             stmt.setString(1, "0000000001");
@@ -280,7 +283,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             // Insert into supplier table
             stmt = conn.prepareStatement(
                     "upsert into " + JOIN_SUPPLIER_TABLE +
-                    "   (SUPPLIER_ID, " +
+                    "   (\"supplier_id\", " +
                     "    NAME, " +
                     "    PHONE, " +
                     "    ADDRESS, " +
@@ -331,9 +334,9 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             // Insert into order table
             stmt = conn.prepareStatement(
                     "upsert into " + JOIN_ORDER_TABLE +
-                    "   (ORDER_ID, " +
-                    "    CUSTOMER_ID, " +
-                    "    ITEM_ID, " +
+                    "   (\"order_id\", " +
+                    "    \"customer_id\", " +
+                    "    \"item_id\", " +
                     "    PRICE, " +
                     "    QUANTITY," +
                     "    DATE) " +
@@ -386,7 +389,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
 
     @Test
     public void testDefaultJoin() throws Exception {
-        String query = "SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM " + JOIN_ITEM_TABLE + " item JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.supplier_id = supp.supplier_id";
+        String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE + " item JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -431,7 +434,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
 
     @Test
     public void testInnerJoin() throws Exception {
-        String query = "SELECT item.item_id, item.name, supp.supplier_id, supp.name, next value for my.seq FROM " + JOIN_ITEM_TABLE + " item INNER JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.supplier_id = supp.supplier_id";
+        String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name, next value for my.seq FROM " + JOIN_ITEM_TABLE + " item INNER JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -483,9 +486,9 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     @Test
     public void testLeftJoin() throws Exception {
         String query[] = new String[3];
-        query[0] = "SELECT item.item_id, item.name, supp.supplier_id, supp.name, next value for my.seq FROM " + JOIN_ITEM_TABLE + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.supplier_id = supp.supplier_id";
-        query[1] = "SELECT " + JOIN_ITEM_TABLE + ".item_id, " + JOIN_ITEM_TABLE + ".name, " + JOIN_SUPPLIER_TABLE + ".supplier_id, " + JOIN_SUPPLIER_TABLE + ".name, next value for my.seq FROM " + JOIN_ITEM_TABLE + " LEFT JOIN " + JOIN_SUPPLIER_TABLE + " ON " + JOIN_ITEM_TABLE + ".supplier_id = " + JOIN_SUPPLIER_TABLE + ".supplier_id";
-        query[2] = "SELECT item.item_id, " + JOIN_ITEM_TABLE + ".name, supp.supplier_id, " + JOIN_SUPPLIER_TABLE + ".name, next value for my.seq FROM " + JOIN_ITEM_TABLE + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE + " supp ON " + JOIN_ITEM_TABLE + ".supplier_id = supp.supplier_id";
+        query[0] = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name, next value for my.seq FROM " + JOIN_ITEM_TABLE + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
+        query[1] = "SELECT " + JOIN_ITEM_TABLE + ".\"item_id\", " + JOIN_ITEM_TABLE + ".name, " + JOIN_SUPPLIER_TABLE + ".\"supplier_id\", " + JOIN_SUPPLIER_TABLE + ".name, next value for my.seq FROM " + JOIN_ITEM_TABLE + " LEFT JOIN " + JOIN_SUPPLIER_TABLE + " ON " + JOIN_ITEM_TABLE + ".\"supplier_id\" = " + JOIN_SUPPLIER_TABLE + ".\"supplier_id\" ORDER BY \"item_id\"";
+        query[2] = "SELECT item.\"item_id\", " + JOIN_ITEM_TABLE + ".name, supp.\"supplier_id\", " + JOIN_SUPPLIER_TABLE + ".name, next value for my.seq FROM " + JOIN_ITEM_TABLE + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE + " supp ON " + JOIN_ITEM_TABLE + ".\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -539,7 +542,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testRightJoin() throws Exception {
-        String query = "SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM " + JOIN_SUPPLIER_TABLE + " supp RIGHT JOIN " + JOIN_ITEM_TABLE + " item ON item.supplier_id = supp.supplier_id";
+        String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_SUPPLIER_TABLE + " supp RIGHT JOIN " + JOIN_ITEM_TABLE + " item ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -589,8 +592,8 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testInnerJoinWithPreFilters() throws Exception {
-        String query1 = "SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM " + JOIN_ITEM_TABLE + " item INNER JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.supplier_id = supp.supplier_id AND supp.supplier_id BETWEEN '0000000001' AND '0000000005'";
-        String query2 = "SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM " + JOIN_ITEM_TABLE + " item INNER JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.supplier_id = supp.supplier_id AND (supp.supplier_id = '0000000001' OR supp.supplier_id = '0000000005')";
+        String query1 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE + " item INNER JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND supp.\"supplier_id\" BETWEEN '0000000001' AND '0000000005'";
+        String query2 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE + " item INNER JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.\"supplier_id\" = '0000000001' OR supp.\"supplier_id\" = '0000000005')";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -651,7 +654,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testLeftJoinWithPreFilters() throws Exception {
-        String query = "SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM " + JOIN_ITEM_TABLE + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.supplier_id = supp.supplier_id AND (supp.supplier_id = '0000000001' OR supp.supplier_id = '0000000005')";
+        String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.\"supplier_id\" = '0000000001' OR supp.\"supplier_id\" = '0000000005') ORDER BY \"item_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -701,8 +704,8 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testJoinWithPostFilters() throws Exception {
-        String query1 = "SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM " + JOIN_SUPPLIER_TABLE + " supp RIGHT JOIN " + JOIN_ITEM_TABLE + " item ON item.supplier_id = supp.supplier_id WHERE supp.supplier_id BETWEEN '0000000001' AND '0000000005'";
-        String query2 = "SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM " + JOIN_ITEM_TABLE + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.supplier_id = supp.supplier_id WHERE supp.supplier_id = '0000000001' OR supp.supplier_id = '0000000005'";
+        String query1 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_SUPPLIER_TABLE + " supp RIGHT JOIN " + JOIN_ITEM_TABLE + " item ON item.\"supplier_id\" = supp.\"supplier_id\" WHERE supp.\"supplier_id\" BETWEEN '0000000001' AND '0000000005'";
+        String query2 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" WHERE supp.\"supplier_id\" = '0000000001' OR supp.\"supplier_id\" = '0000000005'";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -763,9 +766,9 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testStarJoin() throws Exception {
-        String query = "SELECT order_id, c.name, i.name iname, quantity, o.date FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
-            + JOIN_CUSTOMER_TABLE + " c ON o.customer_id = c.customer_id LEFT JOIN " 
-            + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id";
+        String query = "SELECT \"order_id\", c.name, i.name iname, quantity, o.date FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
+            + JOIN_CUSTOMER_TABLE + " c ON o.\"customer_id\" = c.\"customer_id\" LEFT JOIN " 
+            + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -773,7 +776,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
             assertEquals(rs.getString(1), "000000000000001");
-            assertEquals(rs.getString("order_id"), "000000000000001");
+            assertEquals(rs.getString("\"order_id\""), "000000000000001");
             assertEquals(rs.getString(2), "C4");
             assertEquals(rs.getString("C.name"), "C4");
             assertEquals(rs.getString(3), "T1");
@@ -815,7 +818,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     @Test
     public void testLeftJoinWithAggregation() throws Exception {
         String query = "SELECT i.name, sum(quantity) FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
-            + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id GROUP BY i.name ORDER BY i.name";
+            + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.name ORDER BY i.name";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -843,7 +846,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     @Test
     public void testRightJoinWithAggregation() throws Exception {
         String query = "SELECT i.name, sum(quantity) FROM " + JOIN_ORDER_TABLE + " o RIGHT JOIN " 
-            + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id GROUP BY i.name ORDER BY i.name";
+            + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.name ORDER BY i.name";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -879,9 +882,9 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testLeftRightJoin() throws Exception {
-        String query = "SELECT order_id, i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
-            + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id RIGHT JOIN "
-            + JOIN_SUPPLIER_TABLE + " s ON i.supplier_id = s.supplier_id ORDER BY order_id, s.supplier_id DESC";
+        String query = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
+            + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
+            + JOIN_SUPPLIER_TABLE + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -944,9 +947,9 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testMultiLeftJoin() throws Exception {
-        String query = "SELECT order_id, i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
-            + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id LEFT JOIN "
-            + JOIN_SUPPLIER_TABLE + " s ON i.supplier_id = s.supplier_id";
+        String query = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
+            + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
+            + JOIN_SUPPLIER_TABLE + " s ON i.\"supplier_id\" = s.\"supplier_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -991,9 +994,9 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testMultiRightJoin() throws Exception {
-        String query = "SELECT order_id, i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE + " o RIGHT JOIN " 
-            + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id RIGHT JOIN "
-            + JOIN_SUPPLIER_TABLE + " s ON i.supplier_id = s.supplier_id ORDER BY order_id, s.supplier_id DESC";
+        String query = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE + " o RIGHT JOIN " 
+            + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
+            + JOIN_SUPPLIER_TABLE + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -1062,115 +1065,103 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testJoinWithWildcard() throws Exception {
-        String query = "SELECT * FROM " + JOIN_ITEM_TABLE + " LEFT JOIN " + JOIN_SUPPLIER_TABLE + " supp ON " + JOIN_ITEM_TABLE + ".supplier_id = supp.supplier_id";
+        String query = "SELECT * FROM " + JOIN_ITEM_TABLE + " LEFT JOIN " + JOIN_SUPPLIER_TABLE + " supp ON " + JOIN_ITEM_TABLE + ".\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
-            assertEquals(rs.getString(1), "0000000001");
-            assertEquals(rs.getString(JOIN_ITEM_TABLE + ".item_id"), "0000000001");
-            assertEquals(rs.getString(2), "T1");
-            assertEquals(rs.getString(JOIN_ITEM_TABLE + ".name"), "T1");
-            assertEquals(rs.getInt(3), 100);
-            assertEquals(rs.getInt(JOIN_ITEM_TABLE + ".price"), 100);
-            assertEquals(rs.getInt(4), 5);
-            assertEquals(rs.getInt(JOIN_ITEM_TABLE + ".discount1"), 5);
-            assertEquals(rs.getInt(5), 10);
-            assertEquals(rs.getInt(JOIN_ITEM_TABLE + ".discount2"), 10);
-            assertEquals(rs.getString(6), "0000000001");
-            assertEquals(rs.getString(JOIN_ITEM_TABLE + ".supplier_id"), "0000000001");
-            assertEquals(rs.getString(7), "Item T1");
-            assertEquals(rs.getString(JOIN_ITEM_TABLE + ".description"), "Item T1");
-            assertEquals(rs.getString(8), "0000000001");
-            assertEquals(rs.getString("supp.supplier_id"), "0000000001");
-            assertEquals(rs.getString(9), "S1");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".item_id"), "0000000001");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".NAME"), "T1");
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".PRICE"), 100);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT1"), 5);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT2"), 10);
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".supplier_id"), "0000000001");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".DESCRIPTION"), "Item T1");
+            assertEquals(rs.getString("SUPP.supplier_id"), "0000000001");
             assertEquals(rs.getString("supp.name"), "S1");
-            assertEquals(rs.getString(10), "888-888-1111");
             assertEquals(rs.getString("supp.phone"), "888-888-1111");
-            assertEquals(rs.getString(11), "101 YYY Street");
             assertEquals(rs.getString("supp.address"), "101 YYY Street");
-            assertEquals(rs.getString(12), "10001");            
             assertEquals(rs.getString("supp.loc_id"), "10001");            
             assertTrue (rs.next());
-            assertEquals(rs.getString(1), "0000000002");
-            assertEquals(rs.getString(2), "T2");
-            assertEquals(rs.getInt(3), 200);
-            assertEquals(rs.getInt(4), 5);
-            assertEquals(rs.getInt(5), 8);
-            assertEquals(rs.getString(6), "0000000001");
-            assertEquals(rs.getString(7), "Item T2");
-            assertEquals(rs.getString(8), "0000000001");
-            assertEquals(rs.getString(9), "S1");
-            assertEquals(rs.getString(10), "888-888-1111");
-            assertEquals(rs.getString(11), "101 YYY Street");
-            assertEquals(rs.getString(12), "10001");            
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".item_id"), "0000000002");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".NAME"), "T2");
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".PRICE"), 200);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT1"), 5);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT2"), 8);
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".supplier_id"), "0000000001");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".DESCRIPTION"), "Item T2");
+            assertEquals(rs.getString("SUPP.supplier_id"), "0000000001");
+            assertEquals(rs.getString("supp.name"), "S1");
+            assertEquals(rs.getString("supp.phone"), "888-888-1111");
+            assertEquals(rs.getString("supp.address"), "101 YYY Street");
+            assertEquals(rs.getString("supp.loc_id"), "10001");            
             assertTrue (rs.next());
-            assertEquals(rs.getString(1), "0000000003");
-            assertEquals(rs.getString(2), "T3");
-            assertEquals(rs.getInt(3), 300);
-            assertEquals(rs.getInt(4), 8);
-            assertEquals(rs.getInt(5), 12);
-            assertEquals(rs.getString(6), "0000000002");
-            assertEquals(rs.getString(7), "Item T3");
-            assertEquals(rs.getString(8), "0000000002");
-            assertEquals(rs.getString(9), "S2");
-            assertEquals(rs.getString(10), "888-888-2222");
-            assertEquals(rs.getString(11), "202 YYY Street");
-            assertEquals(rs.getString(12), "10002");            
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".item_id"), "0000000003");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".NAME"), "T3");
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".PRICE"), 300);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT1"), 8);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT2"), 12);
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".supplier_id"), "0000000002");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".DESCRIPTION"), "Item T3");
+            assertEquals(rs.getString("SUPP.supplier_id"), "0000000002");
+            assertEquals(rs.getString("supp.name"), "S2");
+            assertEquals(rs.getString("supp.phone"), "888-888-2222");
+            assertEquals(rs.getString("supp.address"), "202 YYY Street");
+            assertEquals(rs.getString("supp.loc_id"), "10002");            
             assertTrue (rs.next());
-            assertEquals(rs.getString(1), "0000000004");
-            assertEquals(rs.getString(2), "T4");
-            assertEquals(rs.getInt(3), 400);
-            assertEquals(rs.getInt(4), 6);
-            assertEquals(rs.getInt(5), 10);
-            assertEquals(rs.getString(6), "0000000002");
-            assertEquals(rs.getString(7), "Item T4");
-            assertEquals(rs.getString(8), "0000000002");
-            assertEquals(rs.getString(9), "S2");
-            assertEquals(rs.getString(10), "888-888-2222");
-            assertEquals(rs.getString(11), "202 YYY Street");
-            assertEquals(rs.getString(12), "10002");            
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".item_id"), "0000000004");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".NAME"), "T4");
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".PRICE"), 400);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT1"), 6);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT2"), 10);
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".supplier_id"), "0000000002");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".DESCRIPTION"), "Item T4");
+            assertEquals(rs.getString("SUPP.supplier_id"), "0000000002");
+            assertEquals(rs.getString("supp.name"), "S2");
+            assertEquals(rs.getString("supp.phone"), "888-888-2222");
+            assertEquals(rs.getString("supp.address"), "202 YYY Street");
+            assertEquals(rs.getString("supp.loc_id"), "10002");            
             assertTrue (rs.next());
-            assertEquals(rs.getString(1), "0000000005");
-            assertEquals(rs.getString(2), "T5");
-            assertEquals(rs.getInt(3), 500);
-            assertEquals(rs.getInt(4), 8);
-            assertEquals(rs.getInt(5), 15);
-            assertEquals(rs.getString(6), "0000000005");
-            assertEquals(rs.getString(7), "Item T5");
-            assertEquals(rs.getString(8), "0000000005");
-            assertEquals(rs.getString(9), "S5");
-            assertEquals(rs.getString(10), "888-888-5555");
-            assertEquals(rs.getString(11), "505 YYY Street");
-            assertEquals(rs.getString(12), "10005");            
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".item_id"), "0000000005");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".NAME"), "T5");
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".PRICE"), 500);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT1"), 8);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT2"), 15);
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".supplier_id"), "0000000005");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".DESCRIPTION"), "Item T5");
+            assertEquals(rs.getString("SUPP.supplier_id"), "0000000005");
+            assertEquals(rs.getString("supp.name"), "S5");
+            assertEquals(rs.getString("supp.phone"), "888-888-5555");
+            assertEquals(rs.getString("supp.address"), "505 YYY Street");
+            assertEquals(rs.getString("supp.loc_id"), "10005");            
             assertTrue (rs.next());
-            assertEquals(rs.getString(1), "0000000006");
-            assertEquals(rs.getString(2), "T6");
-            assertEquals(rs.getInt(3), 600);
-            assertEquals(rs.getInt(4), 8);
-            assertEquals(rs.getInt(5), 15);
-            assertEquals(rs.getString(6), "0000000006");
-            assertEquals(rs.getString(7), "Item T6");
-            assertEquals(rs.getString(8), "0000000006");
-            assertEquals(rs.getString(9), "S6");
-            assertEquals(rs.getString(10), "888-888-6666");
-            assertEquals(rs.getString(11), "606 YYY Street");
-            assertEquals(rs.getString(12), "10006");            
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".item_id"), "0000000006");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".NAME"), "T6");
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".PRICE"), 600);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT1"), 8);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT2"), 15);
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".supplier_id"), "0000000006");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".DESCRIPTION"), "Item T6");
+            assertEquals(rs.getString("SUPP.supplier_id"), "0000000006");
+            assertEquals(rs.getString("supp.name"), "S6");
+            assertEquals(rs.getString("supp.phone"), "888-888-6666");
+            assertEquals(rs.getString("supp.address"), "606 YYY Street");
+            assertEquals(rs.getString("supp.loc_id"), "10006");            
             assertTrue (rs.next());
-            assertEquals(rs.getString(1), "invalid001");
-            assertEquals(rs.getString(2), "INVALID-1");
-            assertEquals(rs.getInt(3), 0);
-            assertEquals(rs.getInt(4), 0);
-            assertEquals(rs.getInt(5), 0);
-            assertEquals(rs.getString(6), "0000000000");
-            assertEquals(rs.getString(7), "Invalid item for join test");
-            assertNull(rs.getString(8));
-            assertNull(rs.getString(9));
-            assertNull(rs.getString(10));
-            assertNull(rs.getString(11));
-            assertNull(rs.getString(12));
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".item_id"), "invalid001");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".NAME"), "INVALID-1");
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".PRICE"), 0);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT1"), 0);
+            assertEquals(rs.getInt(JOIN_ITEM_TABLE_NORMALIZED + ".DISCOUNT2"), 0);
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".supplier_id"), "0000000000");
+            assertEquals(rs.getString(JOIN_ITEM_TABLE_NORMALIZED + ".DESCRIPTION"), "Invalid item for join test");
+            assertNull(rs.getString("SUPP.supplier_id"));
+            assertNull(rs.getString("supp.name"));
+            assertNull(rs.getString("supp.phone"));
+            assertNull(rs.getString("supp.address"));
+            assertNull(rs.getString("supp.loc_id"));
 
             assertFalse(rs.next());
         } finally {
@@ -1180,7 +1171,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testJoinMultiJoinKeys() throws Exception {
-        String query = "SELECT c.name, s.name FROM " + JOIN_CUSTOMER_TABLE + " c LEFT JOIN " + JOIN_SUPPLIER_TABLE + " s ON customer_id = supplier_id AND c.loc_id = s.loc_id AND substr(s.name, 2, 1) = substr(c.name, 2, 1)";
+        String query = "SELECT c.name, s.name FROM " + JOIN_CUSTOMER_TABLE + " c LEFT JOIN " + JOIN_SUPPLIER_TABLE + " s ON \"customer_id\" = \"supplier_id\" AND c.loc_id = s.loc_id AND substr(s.name, 2, 1) = substr(c.name, 2, 1)";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -1213,8 +1204,8 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testJoinWithDifferentNumericJoinKeyTypes() throws Exception {
-        String query = "SELECT order_id, i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE + " o INNER JOIN " 
-            + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id AND o.price = (i.price * (100 - discount2)) / 100.0 WHERE quantity < 5000";
+        String query = "SELECT \"order_id\", i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE + " o INNER JOIN " 
+            + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" AND o.price = (i.price * (100 - discount2)) / 100.0 WHERE quantity < 5000";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -1235,8 +1226,8 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testJoinWithDifferentDateJoinKeyTypes() throws Exception {
-        String query = "SELECT order_id, c.name, o.date FROM " + JOIN_ORDER_TABLE + " o INNER JOIN " 
-            + JOIN_CUSTOMER_TABLE + " c ON o.customer_id = c.customer_id AND o.date = c.date";
+        String query = "SELECT \"order_id\", c.name, o.date FROM " + JOIN_ORDER_TABLE + " o INNER JOIN " 
+            + JOIN_CUSTOMER_TABLE + " c ON o.\"customer_id\" = c.\"customer_id\" AND o.date = c.date";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -1268,8 +1259,8 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testJoinWithIncomparableJoinKeyTypes() throws Exception {
-        String query = "SELECT order_id, i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE + " o INNER JOIN " 
-            + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id AND o.price / 100 = substr(i.name, 2, 1)";
+        String query = "SELECT \"order_id\", i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE + " o INNER JOIN " 
+            + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" AND o.price / 100 = substr(i.name, 2, 1)";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -1285,8 +1276,8 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testJoinPlanWithIndex() throws Exception {
-        String query1 = "SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM " + JOIN_ITEM_TABLE + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE + " supp ON substr(item.name, 2, 1) = substr(supp.name, 2, 1) AND (supp.name BETWEEN 'S1' AND 'S5') WHERE item.name BETWEEN 'T1' AND 'T5'";
-        String query2 = "SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM " + JOIN_ITEM_TABLE + " item INNER JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.supplier_id = supp.supplier_id WHERE (item.name = 'T1' OR item.name = 'T5') AND (supp.name = 'S1' OR supp.name = 'S5')";
+        String query1 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE + " supp ON substr(item.name, 2, 1) = substr(supp.name, 2, 1) AND (supp.name BETWEEN 'S1' AND 'S5') WHERE item.name BETWEEN 'T1' AND 'T5'";
+        String query2 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE + " item INNER JOIN " + JOIN_SUPPLIER_TABLE + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" WHERE (item.name = 'T1' OR item.name = 'T5') AND (supp.name = 'S1' OR supp.name = 'S5')";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -1349,8 +1340,8 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     @Test
     public void testJoinWithSkipMergeOptimization() throws Exception {
         String query = "SELECT s.name FROM " + JOIN_ITEM_TABLE + " i JOIN " 
-            + JOIN_ORDER_TABLE + " o ON o.item_id = i.item_id AND quantity < 5000 JOIN "
-            + JOIN_SUPPLIER_TABLE + " s ON i.supplier_id = s.supplier_id";
+            + JOIN_ORDER_TABLE + " o ON o.\"item_id\" = i.\"item_id\" AND quantity < 5000 JOIN "
+            + JOIN_SUPPLIER_TABLE + " s ON i.\"supplier_id\" = s.\"supplier_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -1376,10 +1367,10 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testSelfJoin() throws Exception {
-        String query1 = "SELECT i2.item_id, i1.name FROM " + JOIN_ITEM_TABLE + " i1 JOIN " 
-            + JOIN_ITEM_TABLE + " i2 ON i1.item_id = i2.item_id ORDER BY i1.item_id";
+        String query1 = "SELECT i2.\"item_id\", i1.name FROM " + JOIN_ITEM_TABLE + " i1 JOIN " 
+            + JOIN_ITEM_TABLE + " i2 ON i1.\"item_id\" = i2.\"item_id\" ORDER BY i1.\"item_id\"";
         String query2 = "SELECT i1.name, i2.name FROM " + JOIN_ITEM_TABLE + " i1 JOIN " 
-        + JOIN_ITEM_TABLE + " i2 ON i1.item_id = i2.supplier_id ORDER BY i1.name, i2.name";
+        + JOIN_ITEM_TABLE + " i2 ON i1.\"item_id\" = i2.\"supplier_id\" ORDER BY i1.name, i2.name";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -1444,23 +1435,23 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
         conn.setAutoCommit(true);
         try {
             conn.createStatement().execute("CREATE TABLE " + tempTable 
-                    + "   (order_id varchar not null, " 
+                    + "   (\"order_id\" varchar not null, " 
                     + "    item_name varchar not null, " 
                     + "    supplier_name varchar, "
                     + "    quantity integer, "
                     + "    date timestamp " 
-                    + "    CONSTRAINT pk PRIMARY KEY (order_id, item_name))");
+                    + "    CONSTRAINT pk PRIMARY KEY (\"order_id\", item_name))");
             conn.createStatement().execute("UPSERT INTO " + tempTable 
-                    + "(order_id, item_name, supplier_name, quantity, date) " 
-                    + "SELECT order_id, i.name, s.name, quantity, date FROM " 
+                    + "(\"order_id\", item_name, supplier_name, quantity, date) " 
+                    + "SELECT \"order_id\", i.name, s.name, quantity, date FROM " 
                     + JOIN_ORDER_TABLE + " o LEFT JOIN " 
-                    + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id LEFT JOIN "
-                    + JOIN_SUPPLIER_TABLE + " s ON i.supplier_id = s.supplier_id");
+                    + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
+                    + JOIN_SUPPLIER_TABLE + " s ON i.\"supplier_id\" = s.\"supplier_id\"");
             conn.createStatement().execute("UPSERT INTO " + tempTable 
-                    + "(order_id, item_name, quantity) " 
+                    + "(\"order_id\", item_name, quantity) " 
                     + "SELECT 'ORDER_SUM', i.name, sum(quantity) FROM " 
                     + JOIN_ORDER_TABLE + " o LEFT JOIN " 
-                    + JOIN_ITEM_TABLE + " i ON o.item_id = i.item_id " 
+                    + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" " 
                     + "GROUP BY i.name ORDER BY i.name");
             
             String query = "SELECT * FROM " + tempTable;

@@ -62,12 +62,10 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
                 return node;
             
             if (origRef.getTableAlias() != null) {
-                tName = FACTORY.table(null, origRef.getTableAlias());
+                tName = TableName.create(null, origRef.getTableAlias());
             } else {
                 String schemaName = tableRef.getTable().getSchemaName().getString();
-                schemaName = schemaName.length() == 0 ? null : '"' + schemaName + '"';
-                String tableName = '"' + tableRef.getTable().getTableName().getString() + '"';
-                tName = FACTORY.table(schemaName, tableName);
+                tName = TableName.create(schemaName.length() == 0 ? null : schemaName, tableRef.getTable().getTableName().getString());
             }
         }
         String indexColName = IndexUtil.getIndexColumnName(dataColRef.getColumn());
@@ -92,12 +90,13 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
 
     @Override
     public ParseNode visit(WildcardParseNode node) throws SQLException {
-        return WildcardParseNode.REWRITE_INSTANCE;
+        return multiTableRewriteMap != null ? node : WildcardParseNode.REWRITE_INSTANCE;
     }
 
     @Override
     public ParseNode visit(FamilyWildcardParseNode node) throws SQLException {
-        return new FamilyWildcardParseNode(node, true);
+        return multiTableRewriteMap != null ? node : new FamilyWildcardParseNode(node, true);
     }
     
 }
+

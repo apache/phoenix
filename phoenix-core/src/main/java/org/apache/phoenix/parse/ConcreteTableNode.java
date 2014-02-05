@@ -30,9 +30,9 @@ import org.apache.phoenix.util.SchemaUtil;
  */
 public abstract class ConcreteTableNode extends TableNode {
     private final TableName name;
-
-    ConcreteTableNode(String alias, TableName name) {
-        super(SchemaUtil.normalizeIdentifier(alias));
+    
+    ConcreteTableNode(String alias, TableName name, boolean isRewrite) {
+        super(SchemaUtil.normalizeIdentifier(alias), isRewrite);
         this.name = name;
     }
 
@@ -41,3 +41,4 @@ public abstract class ConcreteTableNode extends TableNode {
     }
 
 }
+
