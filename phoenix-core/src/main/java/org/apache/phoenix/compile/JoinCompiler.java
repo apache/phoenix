@@ -40,6 +40,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.join.ScanProjector;
 import org.apache.phoenix.parse.AliasedNode;
@@ -897,7 +898,43 @@ public class JoinCompiler {
     
     public static SelectStatement optimize(StatementContext context, SelectStatement select, PhoenixStatement statement) throws SQLException {
         ColumnResolver resolver = context.getResolver();
-        JoinSpec join = new JoinSpec(select, resolver);
+        TableRef groupByTableRef = null;
+        TableRef orderByTableRef = null;
+        if (select.getGroupBy() != null && !select.getGroupBy().isEmpty()) {
+            ColumnParseNodeVisitor groupByVisitor = new ColumnParseNodeVisitor(resolver);
+            for (ParseNode node : select.getGroupBy()) {
+                node.accept(groupByVisitor);
+            }
+            Set<TableRef> set = groupByVisitor.getTableRefSet();
+            if (set.size() == 1) {
+                groupByTableRef = set.iterator().next();
+            }
+        } else if (select.getOrderBy() != null && !select.getOrderBy().isEmpty()) {
+            ColumnParseNodeVisitor orderByVisitor = new ColumnParseNodeVisitor(resolver);
+            for (OrderByNode node : select.getOrderBy()) {
+                node.getNode().accept(orderByVisitor);
+            }
+            Set<TableRef> set = orderByVisitor.getTableRefSet();
+            if (set.size() == 1) {
+                orderByTableRef = set.iterator().next();
+            }
+        }
+        JoinSpec join = getJoinSpec(context, select);
+        if (groupByTableRef != null || orderByTableRef != null) {
+            QueryCompiler compiler = new QueryCompiler(statement);
+            List<Object> binds = statement.getParameters();
+            StatementContext ctx = new StatementContext(statement, resolver, binds, new Scan());
+            context.setScanHints(select.getHint());
+            QueryPlan plan = compiler.compileJoinQuery(ctx, select, binds, join, false);
+            TableRef table = plan.getTableRef();
+            if (groupByTableRef != null && !groupByTableRef.equals(table)) {
+                groupByTableRef = null;
+            }
+            if (orderByTableRef != null && !orderByTableRef.equals(table)) {
+                orderByTableRef = null;
+            }            
+        }
+        
         Map<TableRef, TableRef> replacement = new HashMap<TableRef, TableRef>();
         List<TableNode> from = select.getFrom();
         List<TableNode> newFrom = Lists.newArrayListWithExpectedSize(from.size());
@@ -954,7 +991,9 @@ public class JoinCompiler {
                 if (jTable.getTableNode() != tNode)
                     continue;
                 TableRef table = jTable.getTable();
-                SelectStatement stmt = getSubqueryForOptimizedPlan(select, table, join.columnRefs, jTable.getPreFiltersCombined());
+                List<ParseNode> groupBy = table.equals(groupByTableRef) ? select.getGroupBy() : null;
+                List<OrderByNode> orderBy = table.equals(orderByTableRef) ? select.getOrderBy() : null;
+                SelectStatement stmt = getSubqueryForOptimizedPlan(select, table, join.columnRefs, jTable.getPreFiltersCombined(), groupBy, orderBy);
                 QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(stmt, statement);
                 if (!plan.getTableRef().equals(table)) {
                     TableNodeRewriter rewriter = new TableNodeRewriter(plan.getTableRef());
@@ -968,7 +1007,9 @@ public class JoinCompiler {
         }
         // get optimized plan for main table
         TableRef table = join.getMainTable();
-        SelectStatement stmt = getSubqueryForOptimizedPlan(select, table, join.columnRefs, join.getPreFiltersCombined());
+        List<ParseNode> groupBy = table.equals(groupByTableRef) ? select.getGroupBy() : null;
+        List<OrderByNode> orderBy = table.equals(orderByTableRef) ? select.getOrderBy() : null;
+        SelectStatement stmt = getSubqueryForOptimizedPlan(select, table, join.columnRefs, join.getPreFiltersCombined(), groupBy, orderBy);
         QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(stmt, statement);
         if (!plan.getTableRef().equals(table)) {
             TableNodeRewriter rewriter = new TableNodeRewriter(plan.getTableRef());
@@ -985,7 +1026,7 @@ public class JoinCompiler {
         return IndexStatementRewriter.translate(NODE_FACTORY.select(select, newFrom), resolver, replacement);        
     }
     
-    private static SelectStatement getSubqueryForOptimizedPlan(SelectStatement select, TableRef table, Map<ColumnRef, ColumnRefType> columnRefs, ParseNode where) {
+    private static SelectStatement getSubqueryForOptimizedPlan(SelectStatement select, TableRef table, Map<ColumnRef, ColumnRefType> columnRefs, ParseNode where, List<ParseNode> groupBy, List<OrderByNode> orderBy) {
         String schemaName = table.getTable().getSchemaName().getString();
         TableName tName = TableName.create(schemaName.length() == 0 ? null : schemaName, table.getTable().getTableName().getString());
         List<AliasedNode> selectList = new ArrayList<AliasedNode>();
@@ -994,14 +1035,18 @@ public class JoinCompiler {
         } else {
             for (ColumnRef colRef : columnRefs.keySet()) {
                 if (colRef.getTableRef().equals(table)) {
-                    selectList.add(NODE_FACTORY.aliasedNode(null, NODE_FACTORY.column(tName, '"' + colRef.getColumn().getName().getString() + '"', null)));
+                    ParseNode node = NODE_FACTORY.column(tName, '"' + colRef.getColumn().getName().getString() + '"', null);
+                    if (groupBy != null) {
+                        node = NODE_FACTORY.function(CountAggregateFunction.NAME, Collections.singletonList(node));
+                    }
+                    selectList.add(NODE_FACTORY.aliasedNode(null, node));
                 }
             }
         }
         String tableAlias = table.getTableAlias();
         List<? extends TableNode> from = Collections.singletonList(NODE_FACTORY.namedTable(tableAlias == null ? null : '"' + tableAlias + '"', tName));
 
-        return NODE_FACTORY.select(from, select.getHint(), false, selectList, where, null, null, null, null, 0, false);
+        return NODE_FACTORY.select(from, select.getHint(), false, selectList, where, groupBy, null, orderBy, null, 0, false);
     }
     
     /**
@@ -1190,5 +1235,4 @@ public class JoinCompiler {
     	return SchemaUtil.getColumnName(SchemaUtil.getTableName(schemaName, tableName), colName);
     }
 }
-
 
