@@ -72,7 +72,7 @@ public class QueryPlanTest extends BaseConnectedQueryTest {
                 "    SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL AND DATE >= '2013-01-01 00:00:00.000')",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id = '000000000000002' AND x_integer = 2 AND a_integer < 5 ",
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000002']\n" + 
+                "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER ATABLE\n" + 
                 "    SERVER FILTER BY (X_INTEGER = 2 AND A_INTEGER < 5)",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id > '000000000000002' AND entity_id < '000000000000008' AND (organization_id,entity_id) >= ('000000000000001','000000000000005') ",
@@ -180,7 +180,7 @@ public class QueryPlanTest extends BaseConnectedQueryTest {
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER ATABLE ['000000000000001'] - ['000000000000005']",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id IN ('00D000000000001', '00D000000000005') AND entity_id IN('00E00000000000X','00E00000000000Z')",
-                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER ATABLE ['00D000000000001','00E00000000000X'] - ['00D000000000005','00E00000000000Z']",
+                "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 4 KEYS OVER ATABLE",
         };
         for (int i = 0; i < queryPlans.length; i+=2) {
             String query = queryPlans[i];

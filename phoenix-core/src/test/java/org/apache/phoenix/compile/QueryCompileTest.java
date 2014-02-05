@@ -26,6 +26,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
@@ -1282,5 +1283,16 @@ public class QueryCompileTest extends BaseConnectionlessQueryTest {
             }
         }
     }
-    
+
+    @Test
+    public void testNoCachingHint() throws Exception {
+        List<Object> binds = Collections.emptyList();
+        Scan scan = compileQuery("select val from ptsdb", binds);
+        assertTrue(scan.getCacheBlocks());
+        scan = compileQuery("select /*+ NO_CACHE */ val from ptsdb", binds);
+        assertFalse(scan.getCacheBlocks());
+        scan = compileQuery("select /*+ NO_CACHE */ p1.val from ptsdb p1 inner join ptsdb p2 on p1.inst = p2.inst", binds);
+        assertFalse(scan.getCacheBlocks());
+    }
+
 }

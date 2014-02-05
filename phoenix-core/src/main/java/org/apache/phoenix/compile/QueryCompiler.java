@@ -120,7 +120,8 @@ public class QueryCompiler {
         // TODO: do this normalization outside of this so as it's not repeated by the optimizer
         select = StatementNormalizer.normalize(select, resolver);
         StatementContext context = new StatementContext(statement, resolver, binds, scan);
-        
+        context.setScanHints(select.getHint());
+
         if (select.getFrom().size() == 1)
             return compileSingleQuery(context, select, binds, parallelIteratorFactory);
         

@@ -19,15 +19,12 @@
  */
 package org.apache.phoenix.schema;
 
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.KeyRange.Bound;
-import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
+import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
 
@@ -42,9 +39,12 @@ public class SaltingUtil {
     public static final String SALTED_ROW_KEY_NAME = "_SALTED_KEY";
     public static final PColumnImpl SALTING_COLUMN = new PColumnImpl(
             PNameFactory.newName(SALTING_COLUMN_NAME), null, PDataType.BINARY, 1, 0, false, 0, null, 0);
+    public static final RowKeySchema VAR_BINARY_SALTED_SCHEMA = new RowKeySchemaBuilder(1)
+        .addField(SALTING_COLUMN, false, null)
+        .addField(SchemaUtil.VAR_BINARY_DATUM, false, null).build();
 
     public static List<KeyRange> generateAllSaltingRanges(int bucketNum) {
-        List<KeyRange> allRanges = Lists.<KeyRange>newArrayListWithExpectedSize(bucketNum);
+        List<KeyRange> allRanges = Lists.newArrayListWithExpectedSize(bucketNum);
         for (int i=0; i<bucketNum; i++) {
             byte[] saltByte = new byte[] {(byte) i};
             allRanges.add(SALTING_COLUMN.getDataType().getKeyRange(
@@ -73,12 +73,12 @@ public class SaltingUtil {
 
     // Generate the bucket byte given a byte array and the number of buckets.
     public static byte getSaltingByte(byte[] value, int offset, int length, int bucketNum) {
-        int hash = hashCode(value, offset, length);
+        int hash = calculateHashCode(value, offset, length);
         byte bucketByte = (byte) ((Math.abs(hash) % bucketNum));
         return bucketByte;
     }
 
-    private static int hashCode(byte a[], int offset, int length) {
+    private static int calculateHashCode(byte a[], int offset, int length) {
         if (a == null)
             return 0;
         int result = 1;
@@ -86,68 +86,6 @@ public class SaltingUtil {
             result = 31 * result + a[i];
         }
         return result;
-    }
-
-    public static List<List<KeyRange>> setSaltByte(List<List<KeyRange>> ranges, int bucketNum) {
-        if (ranges == null || ranges.isEmpty()) {
-            return ScanRanges.NOTHING.getRanges();
-        }
-        for (int i = 1; i < ranges.size(); i++) {
-            List<KeyRange> range = ranges.get(i);
-            if (range != null && !range.isEmpty()) {
-                throw new IllegalStateException();
-            }
-        }
-        List<KeyRange> newRanges = Lists.newArrayListWithExpectedSize(ranges.size());
-        for (KeyRange range : ranges.get(0)) {
-            if (!range.isSingleKey()) {
-                throw new IllegalStateException();
-            }
-            byte[] key = range.getLowerRange();
-            byte saltByte = SaltingUtil.getSaltingByte(key, 0, key.length, bucketNum);
-            byte[] saltedKey = new byte[key.length + 1];
-            System.arraycopy(key, 0, saltedKey, 1, key.length);   
-            saltedKey[0] = saltByte;
-            newRanges.add(KeyRange.getKeyRange(saltedKey, true, saltedKey, true));
-        }
-        return Collections.singletonList(newRanges);
-    }
-    
-    public static List<List<KeyRange>> flattenRanges(List<List<KeyRange>> ranges, RowKeySchema schema, int bucketNum) {
-        if (ranges == null || ranges.isEmpty()) {
-            return ScanRanges.NOTHING.getRanges();
-        }
-        int count = 1;
-        // Skip salt byte range in the first position
-        for (int i = 1; i < ranges.size(); i++) {
-            count *= ranges.get(i).size();
-        }
-        KeyRange[] expandedRanges = new KeyRange[count];
-        int[] position = new int[ranges.size()];
-        int estimatedKeyLength = ScanUtil.estimateMaximumKeyLength(schema, 1, ranges);
-        int idx = 0, length;
-        byte saltByte;
-        byte[] key = new byte[estimatedKeyLength];
-        do {
-            length = ScanUtil.setKey(schema, ranges, position, Bound.LOWER, key, 1, 0, ranges.size(), 1);
-            saltByte = SaltingUtil.getSaltingByte(key, 1, length, bucketNum);
-            key[0] = saltByte;
-            byte[] saltedKey = Arrays.copyOf(key, length + 1);
-            KeyRange range = PDataType.VARBINARY.getKeyRange(saltedKey, true, saltedKey, true);
-            expandedRanges[idx++] = range;
-        } while (incrementKey(ranges, position));
-        // The comparator is imperfect, but sufficient for all single keys.
-        Arrays.sort(expandedRanges, KeyRange.COMPARATOR);
-        List<KeyRange> expandedRangesList = Arrays.asList(expandedRanges);
-        return Collections.singletonList(expandedRangesList);
-    }
-
-    private static boolean incrementKey(List<List<KeyRange>> slots, int[] position) {
-        int idx = slots.size() - 1;
-        while (idx >= 0 && (position[idx] = (position[idx] + 1) % slots.get(idx).size()) == 0) {
-            idx--;
-        }
-        return idx >= 0;
     }
 
     public static KeyRange addSaltByte(byte[] startKey, KeyRange minMaxRange) {

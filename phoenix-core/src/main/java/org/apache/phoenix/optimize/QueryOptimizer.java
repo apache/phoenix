@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import com.google.common.collect.Lists;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.IndexStatementRewriter;
 import org.apache.phoenix.compile.QueryCompiler;
@@ -26,6 +25,8 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 
+import com.google.common.collect.Lists;
+
 public class QueryOptimizer {
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
 
@@ -44,6 +45,7 @@ public class QueryOptimizer {
     public QueryPlan optimize(SelectStatement select, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
         QueryCompiler compiler = new QueryCompiler(statement, targetColumns, parallelIteratorFactory);
         QueryPlan dataPlan = compiler.compile(select);
+        // TODO: consider not even compiling index plans if we have a point lookup
         if (!useIndexes || select.getFrom().size() > 1) {
             return dataPlan;
         }
@@ -170,9 +172,10 @@ public class QueryOptimizer {
     /**
      * Choose the best plan among all the possible ones.
      * Since we don't keep stats yet, we use the following simple algorithm:
-     * 1) If the query has an ORDER BY and a LIMIT, choose the plan that has all the ORDER BY expression
+     * 1) If the query is a point lookup (i.e. we have a set of exact row keys), choose among those.
+     * 2) If the query has an ORDER BY and a LIMIT, choose the plan that has all the ORDER BY expression
      * in the same order as the row key columns.
-     * 2) If there are more than one plan that meets (1), choose the plan with:
+     * 3) If there are more than one plan that meets (1&2), choose the plan with:
      *    a) the most row key columns that may be used to form the start/stop scan key.
      *    b) the plan that preserves ordering for a group by.
      *    c) the data table plan
@@ -185,22 +188,41 @@ public class QueryOptimizer {
             return firstPlan;
         }
         
+        /**
+         * If we have a plan(s) that are just point lookups (i.e. fully qualified row
+         * keys), then favor those first.
+         */
         List<QueryPlan> candidates = Lists.newArrayListWithExpectedSize(plans.size());
-        if (firstPlan.getLimit() == null) {
-            candidates.addAll(plans);
-        } else {
-            for (QueryPlan plan : plans) {
-                // If ORDER BY optimized out (or not present at all)
-                if (plan.getOrderBy().getOrderByExpressions().isEmpty()) {
-                    candidates.add(plan);
-                }
-            }
-            if (candidates.isEmpty()) {
-                candidates.addAll(plans);
+        for (QueryPlan plan : plans) {
+            if (plan.getContext().getScanRanges().isPointLookup()) {
+                candidates.add(plan);
             }
         }
+        /**
+         * If we have a plan(s) that removes the order by, choose from among these,
+         * as this is typically the most expensive operation. Once we have stats, if
+         * there's a limit on the query, we might choose a different plan. For example
+         * if the limit was a very large number and the combination of applying other 
+         * filters on the row key are estimated to choose fewer rows, we'd choose that
+         * one.
+         */
+        List<QueryPlan> stillCandidates = plans;
+        List<QueryPlan> bestCandidates = candidates;
+        if (!candidates.isEmpty()) {
+            stillCandidates = candidates;
+            bestCandidates = Lists.<QueryPlan>newArrayListWithExpectedSize(candidates.size());
+        }
+        for (QueryPlan plan : stillCandidates) {
+            // If ORDER BY optimized out (or not present at all)
+            if (plan.getOrderBy().getOrderByExpressions().isEmpty()) {
+                bestCandidates.add(plan);
+            }
+        }
+        if (bestCandidates.isEmpty()) {
+            bestCandidates.addAll(stillCandidates);
+        }
         final int comparisonOfDataVersusIndexTable = select.getHint().hasHint(Hint.USE_DATA_OVER_INDEX_TABLE) ? -1 : 1;
-        Collections.sort(candidates, new Comparator<QueryPlan>() {
+        Collections.sort(bestCandidates, new Comparator<QueryPlan>() {
 
             @Override
             public int compare(QueryPlan plan1, QueryPlan plan2) {
@@ -217,8 +239,7 @@ public class QueryOptimizer {
                 c = (table1.getColumns().size() - table1.getPKColumns().size()) - (table2.getColumns().size() - table2.getPKColumns().size());
                 if (c != 0) return c;
                 
-                // All things being equal, just use the index table
-                // TODO: have hint that drives this
+                // All things being equal, just use the table based on the Hint.USE_DATA_OVER_INDEX_TABLE
                 if (plan1.getTableRef().getTable().getType() == PTableType.INDEX) {
                     return comparisonOfDataVersusIndexTable;
                 }

@@ -23,7 +23,6 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -94,7 +93,7 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
     @Override
     public void explain(List<String> planSteps) {
         resultIterators.explain(planSteps);
-        planSteps.add("    SERVER TOP " + limit + " ROW" + (limit == 1 ? "" : "S") + " SORTED BY " + orderByColumns.toString());
+        planSteps.add("    SERVER" + (limit == -1 ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S")) + " SORTED BY " + orderByColumns.toString());
         planSteps.add("CLIENT MERGE SORT");
     }
 }

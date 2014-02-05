@@ -29,6 +29,7 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
@@ -54,6 +55,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -176,7 +178,7 @@ public class DeleteCompiler {
         final ConnectionQueryServices services = connection.getQueryServices();
         final ColumnResolver resolver = FromCompiler.getResolver(delete, connection);
         final TableRef tableRef = resolver.getTables().get(0);
-        PTable table = tableRef.getTable();
+        final PTable table = tableRef.getTable();
         if (table.getType() == PTableType.VIEW && table.getViewType().isReadOnly()) {
             throw new ReadOnlyTableException(table.getSchemaName().getString(),table.getTableName().getString());
         }
@@ -217,11 +219,11 @@ public class DeleteCompiler {
         }
         
         final StatementContext context = plan.getContext();
-        // If we're doing a query for a single row with no where clause, then we don't need to contact the server at all.
+        // If we're doing a query for a set of rows with no where clause, then we don't need to contact the server at all.
         // A simple check of the none existence of a where clause in the parse node is not sufficient, as the where clause
-        // may have been optimized out.
-        if (noQueryReqd && context.isSingleRowScan()) {
-            final ImmutableBytesPtr key = new ImmutableBytesPtr(context.getScan().getStartRow());
+        // may have been optimized out. Instead, we check that there's a single filter which must be the SkipScanFilter
+        // in this case.
+        if (noQueryReqd && ! (context.getScan().getFilter() instanceof FilterList) && context.getScanRanges().isPointLookup()) {
             return new MutationPlan() {
 
                 @Override
@@ -231,8 +233,13 @@ public class DeleteCompiler {
 
                 @Override
                 public MutationState execute() {
-                    Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutation = Maps.newHashMapWithExpectedSize(1);
-                    mutation.put(key, PRow.DELETE_MARKER);
+                    // We have a point lookup, so we know we have a simple set of fully qualified
+                    // keys for our ranges
+                    List<KeyRange> keys = context.getScanRanges().getRanges().get(0);
+                    Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutation = Maps.newHashMapWithExpectedSize(keys.size());
+                    for (KeyRange key : keys) {
+                        mutation.put(new ImmutableBytesPtr(key.getLowerRange()), PRow.DELETE_MARKER);
+                    }
                     return new MutationState(tableRef, mutation, 0, maxSize, connection);
                 }
 

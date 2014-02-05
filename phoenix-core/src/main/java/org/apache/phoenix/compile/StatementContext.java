@@ -24,11 +24,11 @@ import java.text.Format;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -142,6 +142,12 @@ public class StatementContext {
         return this.scanRanges;
     }
     
+    public void setScanHints(HintNode hints) {
+        if (hints.hasHint(Hint.NO_CACHE)) {
+            scan.setCacheBlocks(false);
+        }
+    }
+
     public void setScanRanges(ScanRanges scanRanges) {
         setScanRanges(scanRanges, null);
     }
@@ -215,10 +221,6 @@ public class StatementContext {
      */
     public KeyRange getMinMaxRange () {
         return minMaxRange;
-    }
-    
-    public boolean isSingleRowScan() {
-        return this.getScanRanges().isSingleRowScan() && ! (this.getScan().getFilter() instanceof FilterList);
     }
     
     public SequenceManager getSequenceManager(){

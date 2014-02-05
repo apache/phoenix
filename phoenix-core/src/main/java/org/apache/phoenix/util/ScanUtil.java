@@ -35,8 +35,6 @@ import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.Lists;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.filter.SkipScanFilter;
@@ -46,6 +44,8 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
+
+import com.google.common.collect.Lists;
 
 
 /**
@@ -231,23 +231,6 @@ public class ScanUtil {
         return keyCopy;
     }
 
-    public static int estimateMaximumKeyLength(RowKeySchema schema, int schemaStartIndex, List<List<KeyRange>> slots) {
-        int maxLowerKeyLength = 0, maxUpperKeyLength = 0;
-        for (int i = 0; i < slots.size(); i++) {
-            int maxLowerRangeLength = 0, maxUpperRangeLength = 0;
-            for (KeyRange range: slots.get(i)) {
-                maxLowerRangeLength = Math.max(maxLowerRangeLength, range.getLowerRange().length); 
-                maxUpperRangeLength = Math.max(maxUpperRangeLength, range.getUpperRange().length);
-            }
-            int trailingByte = (schema.getField(schemaStartIndex).getDataType().isFixedWidth() ||
-                    schemaStartIndex == schema.getFieldCount() - 1 ? 0 : 1);
-            maxLowerKeyLength += maxLowerRangeLength + trailingByte;
-            maxUpperKeyLength += maxUpperKeyLength + trailingByte;
-            schemaStartIndex++;
-        }
-        return Math.max(maxLowerKeyLength, maxUpperKeyLength);
-    }
-
     /*
      * Set the key by appending the keyRanges inside slots at positions as specified by the position array.
      * 
@@ -300,9 +283,6 @@ public class ScanUtil {
              */
             boolean inclusiveUpper = range.isInclusive(bound) && bound == Bound.UPPER;
             boolean exclusiveLower = !range.isInclusive(bound) && bound == Bound.LOWER;
-            if (!isFixedWidth && ( i < schema.getMaxFields()-1 || inclusiveUpper || exclusiveLower)) {
-                key[offset++] = QueryConstants.SEPARATOR_BYTE;
-            }
             // If we are setting the upper bound of using inclusive single key, we remember 
             // to increment the key if we exit the loop after this iteration.
             // 
@@ -315,6 +295,13 @@ public class ScanUtil {
             // key slots would cause the flag to become true.
             lastInclusiveUpperSingleKey = range.isSingleKey() && inclusiveUpper;
             anyInclusiveUpperRangeKey |= !range.isSingleKey() && inclusiveUpper;
+            
+            if (!isFixedWidth && ( i < schema.getMaxFields()-1 || inclusiveUpper || exclusiveLower)) {
+                key[offset++] = QueryConstants.SEPARATOR_BYTE;
+                // Set lastInclusiveUpperSingleKey back to false if this is the last pk column
+                // as we don't want to increment the null byte in this case
+                lastInclusiveUpperSingleKey &= i < schema.getMaxFields()-1;
+            }
             // If we are setting the lower bound with an exclusive range key, we need to bump the
             // slot up for each key part. For an upper bound, we bump up an inclusive key, but
             // only after the last key part.
@@ -350,21 +337,6 @@ public class ScanUtil {
             }
         }
         return offset - byteOffset;
-    }
-
-    public static boolean isAllSingleRowScan(List<List<KeyRange>> ranges, RowKeySchema schema) {
-        if (ranges.size() < schema.getMaxFields()) {
-            return false;
-        }
-        for (int i = 0; i < ranges.size(); i++) {
-            List<KeyRange> orRanges = ranges.get(i);
-            for (KeyRange range: orRanges) {
-                if (!range.isSingleKey()) {
-                    return false;
-                }
-            }
-        }
-        return true;
     }
 
     /**

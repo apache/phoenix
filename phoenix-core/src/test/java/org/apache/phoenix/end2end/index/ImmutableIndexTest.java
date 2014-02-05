@@ -33,26 +33,17 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Map;
 import java.util.Properties;
 
-import org.junit.BeforeClass;
-import org.junit.Test;
-
-import com.google.common.collect.Maps;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.Test;
 
 
 public class ImmutableIndexTest extends BaseHBaseManagedTimeTest{
-    private static final int TABLE_SPLITS = 3;
-    private static final int INDEX_SPLITS = 4;
-    
     // Populate the test table with data.
     private static void populateTestTable() throws SQLException {
         Properties props = new Properties(TEST_PROPERTIES);
@@ -118,152 +109,6 @@ public class ImmutableIndexTest extends BaseHBaseManagedTimeTest{
         }
     }
     
-    @BeforeClass 
-    public static void doSetup() throws Exception {
-        
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        // Drop the HBase table metadata for this test
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        // Must update config before starting server
-        startServer(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
-    }
-    
-    
-    @Test
-    public void testImmutableTableIndexMaintanenceSaltedSalted() throws Exception {
-        testImmutableTableIndexMaintanence(TABLE_SPLITS, INDEX_SPLITS);
-    }
-
-    @Test
-    public void testImmutableTableIndexMaintanenceSalted() throws Exception {
-        testImmutableTableIndexMaintanence(null, INDEX_SPLITS);
-    }
-
-    @Test
-    public void testImmutableTableIndexMaintanenceUnsalted() throws Exception {
-        testImmutableTableIndexMaintanence(null, null);
-    }
-
-    private void testImmutableTableIndexMaintanence(Integer tableSaltBuckets, Integer indexSaltBuckets) throws Exception {
-        String query;
-        ResultSet rs;
-        
-        Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(false);
-        conn.createStatement().execute("CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) immutable_rows=true " +  (tableSaltBuckets == null ? "" : ", SALT_BUCKETS=" + tableSaltBuckets));
-        query = "SELECT * FROM t";
-        rs = conn.createStatement().executeQuery(query);
-        assertFalse(rs.next());
-        
-        conn.createStatement().execute("CREATE INDEX i ON t (v DESC)" + (indexSaltBuckets == null ? "" : " SALT_BUCKETS=" + indexSaltBuckets));
-        query = "SELECT * FROM i";
-        rs = conn.createStatement().executeQuery(query);
-        assertFalse(rs.next());
-
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?)");
-        stmt.setString(1,"a");
-        stmt.setString(2, "x");
-        stmt.execute();
-        stmt.setString(1,"b");
-        stmt.setString(2, "y");
-        stmt.execute();
-        conn.commit();
-        
-        query = "SELECT * FROM i";
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals("y",rs.getString(1));
-        assertEquals("b",rs.getString(2));
-        assertTrue(rs.next());
-        assertEquals("x",rs.getString(1));
-        assertEquals("a",rs.getString(2));
-        assertFalse(rs.next());
-
-        query = "SELECT k,v FROM t WHERE v = 'y'";
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals("b",rs.getString(1));
-        assertEquals("y",rs.getString(2));
-        assertFalse(rs.next());
-        
-        String expectedPlan;
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        expectedPlan = indexSaltBuckets == null ? 
-             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER I [~'y']" : 
-            ("CLIENT PARALLEL 4-WAY SKIP SCAN ON 4 KEYS OVER I [0,~'y'] - [3,~'y']\n" + 
-             "CLIENT MERGE SORT");
-        assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
-
-        // Will use index, so rows returned in DESC order.
-        // This is not a bug, though, because we can
-        // return in any order.
-        query = "SELECT k,v FROM t WHERE v >= 'x'";
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals("b",rs.getString(1));
-        assertEquals("y",rs.getString(2));
-        assertTrue(rs.next());
-        assertEquals("a",rs.getString(1));
-        assertEquals("x",rs.getString(2));
-        assertFalse(rs.next());
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        expectedPlan = indexSaltBuckets == null ? 
-            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER I [*] - [~'x']" :
-            ("CLIENT PARALLEL 4-WAY SKIP SCAN ON 4 RANGES OVER I [0,*] - [3,~'x']\n" + 
-             "CLIENT MERGE SORT");
-        assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
-        
-        // Will still use index, since there's no LIMIT clause
-        query = "SELECT k,v FROM t WHERE v >= 'x' ORDER BY k";
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals("a",rs.getString(1));
-        assertEquals("x",rs.getString(2));
-        assertTrue(rs.next());
-        assertEquals("b",rs.getString(1));
-        assertEquals("y",rs.getString(2));
-        assertFalse(rs.next());
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        // Turns into an ORDER BY, which could be bad if lots of data is
-        // being returned. Without stats we don't know. The alternative
-        // would be a full table scan.
-        expectedPlan = indexSaltBuckets == null ? 
-            ("CLIENT PARALLEL 1-WAY RANGE SCAN OVER I [*] - [~'x']\n" + 
-             "    SERVER TOP -1 ROWS SORTED BY [K]\n" + 
-             "CLIENT MERGE SORT") :
-            ("CLIENT PARALLEL 4-WAY SKIP SCAN ON 4 RANGES OVER I [0,*] - [3,~'x']\n" + 
-             "    SERVER TOP -1 ROWS SORTED BY [K]\n" + 
-             "CLIENT MERGE SORT");
-        assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
-        
-        // Will use data table now, since there's a LIMIT clause and
-        // we're able to optimize out the ORDER BY.
-        query = "SELECT k,v FROM t WHERE v >= 'x' ORDER BY k LIMIT 2";
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals("a",rs.getString(1));
-        assertEquals("x",rs.getString(2));
-        assertTrue(rs.next());
-        assertEquals("b",rs.getString(1));
-        assertEquals("y",rs.getString(2));
-        assertFalse(rs.next());
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        expectedPlan = tableSaltBuckets == null ? 
-             "CLIENT PARALLEL 1-WAY FULL SCAN OVER T\n" + 
-             "    SERVER FILTER BY V >= 'x'\n" + 
-             "    SERVER 2 ROW LIMIT\n" + 
-             "CLIENT 2 ROW LIMIT" :
-             "CLIENT PARALLEL 3-WAY FULL SCAN OVER T\n" + 
-             "    SERVER FILTER BY V >= 'x'\n" + 
-             "    SERVER 2 ROW LIMIT\n" + 
-             "CLIENT MERGE SORT\n" + 
-             "CLIENT 2 ROW LIMIT";
-        assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
-        
-        conn.createStatement().execute("DROP TABLE t ");
-    }
-
     @Test
     public void testIndexWithNullableFixedWithCols() throws Exception {
         Properties props = new Properties(TEST_PROPERTIES);

@@ -59,6 +59,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Types;
 import java.util.Collection;
 import java.util.Collections;
@@ -279,12 +280,14 @@ public class MetaDataClient {
             PTable resultTable = result.getTable();
             // We found an updated table, so update our cache
             if (resultTable != null) {
-                // Don't cache the table unless it has the same tenantId
-                // as the connection or it's not multi-tenant.
-                if (tryCount == 0 || !resultTable.isMultiTenant()) {
-                    connection.addTable(resultTable);
-                    return result;
-                }
+                // Cache table, even if multi-tenant table found for null tenant_id
+                // These may be accessed by tenant-specific connections, as the
+                // tenant_id will always be added to mask other tenants data.
+                // Otherwise, a tenant would be required to create a VIEW first
+                // which is not really necessary unless you want to filter or add
+                // columns
+                connection.addTable(resultTable);
+                return result;
             } else {
                 // if (result.getMutationCode() == MutationCode.NEWER_TABLE_FOUND) {
                 // TODO: No table exists at the clientTimestamp, but a newer one exists.
@@ -487,6 +490,9 @@ public class MetaDataClient {
                 ColumnResolver resolver = FromCompiler.getResolver(statement, connection);
                 tableRef = resolver.getTables().get(0);
                 PTable dataTable = tableRef.getTable();
+                if (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED) {
+                    throw new SQLFeatureNotSupportedException("Creating an index on a view is not supported currently, but will be soon");
+                }
                 int hbaseVersion = connection.getQueryServices().getLowestClusterHBaseVersion();
                 if (!dataTable.isImmutableRows()) {
                     if (hbaseVersion < PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) {
@@ -1215,6 +1221,10 @@ public class MetaDataClient {
             TableName tableNameNode = statement.getTable().getName();
             String schemaName = tableNameNode.getSchemaName();
             String tableName = tableNameNode.getTableName();
+            // Outside of retry loop, as we're removing the property and wouldn't find it the second time
+            Boolean isImmutableRowsProp = (Boolean)statement.getProps().remove(PTable.IS_IMMUTABLE_ROWS_PROP_NAME);
+            Boolean multiTenantProp = (Boolean)statement.getProps().remove(PhoenixDatabaseMetaData.MULTI_TENANT);
+            boolean disableWAL = Boolean.TRUE.equals(statement.getProps().remove(DISABLE_WAL));
             
             boolean retried = false;
             while (true) {
@@ -1241,17 +1251,14 @@ public class MetaDataClient {
                 }
                           
                 boolean isImmutableRows = table.isImmutableRows();
-                Boolean isImmutableRowsProp = (Boolean)statement.getProps().remove(PTable.IS_IMMUTABLE_ROWS_PROP_NAME);
                 if (isImmutableRowsProp != null) {
                     isImmutableRows = isImmutableRowsProp;
                 }
                 boolean multiTenant = table.isMultiTenant();
-                Boolean multiTenantProp = (Boolean) statement.getProps().remove(PhoenixDatabaseMetaData.MULTI_TENANT);
                 if (multiTenantProp != null) {
                     multiTenant = Boolean.TRUE.equals(multiTenantProp);
                 }
                 
-                boolean disableWAL = Boolean.TRUE.equals(statement.getProps().remove(DISABLE_WAL));
                 if (statement.getProps().get(PhoenixDatabaseMetaData.SALT_BUCKETS) != null) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE)
                     .setTableName(table.getName().getString()).build().buildException();
@@ -1307,7 +1314,8 @@ public class MetaDataClient {
                         connection.rollback();
                     }
                 } else {
-                 // Only support setting IMMUTABLE_ROWS=true and DISABLE_WAL=true on ALTER TABLE SET command
+                    // Only support setting IMMUTABLE_ROWS=true and DISABLE_WAL=true on ALTER TABLE SET command
+                    // TODO: support setting HBase table properties too
                     if (!statement.getProps().isEmpty()) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.SET_UNSUPPORTED_PROP_ON_ALTER_TABLE)
                         .setTableName(table.getName().getString()).build().buildException();
