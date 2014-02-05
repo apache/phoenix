@@ -19,23 +19,17 @@
  */
 package org.apache.phoenix.expression.aggregator;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Map;
+import java.io.*;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.TreeMap;
 
+import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
@@ -48,6 +42,7 @@ public abstract class DistinctValueWithCountClientAggregator extends BaseAggrega
     protected Map<ImmutableBytesPtr, Integer> valueVsCount = new HashMap<ImmutableBytesPtr, Integer>();
     protected byte[] buffer;
     protected long totalCount = 0L;
+    protected Object cachedResult;
 
     public DistinctValueWithCountClientAggregator(ColumnModifier columnModifier) {
         super(columnModifier);
@@ -55,40 +50,44 @@ public abstract class DistinctValueWithCountClientAggregator extends BaseAggrega
 
     @Override
     public void aggregate(Tuple tuple, ImmutableBytesWritable ptr) {
-        InputStream is = new ByteArrayInputStream(ptr.get(), ptr.getOffset() + 1, ptr.getLength() - 1);
-        try {
-            if (Bytes.equals(ptr.get(), ptr.getOffset(), 1, DistinctValueWithCountServerAggregator.COMPRESS_MARKER, 0,
-                    1)) {
-                InputStream decompressionStream = DistinctValueWithCountServerAggregator.COMPRESS_ALGO
-                        .createDecompressionStream(is,
-                                DistinctValueWithCountServerAggregator.COMPRESS_ALGO.getDecompressor(), 0);
-                is = decompressionStream;
-            }
-            DataInputStream in = new DataInputStream(is);
-            int mapSize = WritableUtils.readVInt(in);
-            for (int i = 0; i < mapSize; i++) {
-                int keyLen = WritableUtils.readVInt(in);
-                byte[] keyBytes = new byte[keyLen];
-                in.read(keyBytes, 0, keyLen);
-                ImmutableBytesPtr key = new ImmutableBytesPtr(keyBytes);
-                int value = WritableUtils.readVInt(in);
-                Integer curCount = valueVsCount.get(key);
-                if (curCount == null) {
-                    valueVsCount.put(key, value);
-                } else {
-                    valueVsCount.put(key, curCount + value);
+        if (tuple instanceof SingleKeyValueTuple) {
+            // Case when scanners do look ahead and re-aggregate result row.The result is already available in the ptr
+            PDataType resultDataType = getResultDataType();
+            cachedResult = resultDataType.toObject(ptr, resultDataType, columnModifier);
+        } else {
+            InputStream is = new ByteArrayInputStream(ptr.get(), ptr.getOffset() + 1, ptr.getLength() - 1);
+            try {
+                if (Bytes.equals(ptr.get(), ptr.getOffset(), 1, DistinctValueWithCountServerAggregator.COMPRESS_MARKER,
+                        0, 1)) {
+                    InputStream decompressionStream = DistinctValueWithCountServerAggregator.COMPRESS_ALGO
+                            .createDecompressionStream(is,
+                                    DistinctValueWithCountServerAggregator.COMPRESS_ALGO.getDecompressor(), 0);
+                    is = decompressionStream;
                 }
-                totalCount += value;
+                DataInputStream in = new DataInputStream(is);
+                int mapSize = WritableUtils.readVInt(in);
+                for (int i = 0; i < mapSize; i++) {
+                    int keyLen = WritableUtils.readVInt(in);
+                    byte[] keyBytes = new byte[keyLen];
+                    in.read(keyBytes, 0, keyLen);
+                    ImmutableBytesPtr key = new ImmutableBytesPtr(keyBytes);
+                    int value = WritableUtils.readVInt(in);
+                    Integer curCount = valueVsCount.get(key);
+                    if (curCount == null) {
+                        valueVsCount.put(key, value);
+                    } else {
+                        valueVsCount.put(key, curCount + value);
+                    }
+                    totalCount += value;
+                }
+            } catch (IOException ioe) {
+                throw new RuntimeException(ioe); // Impossible as we're using a ByteArrayInputStream
             }
-        } catch (IOException ioe) {
-            throw new RuntimeException(ioe); // Impossible as we're using a ByteArrayInputStream
         }
         if (buffer == null) {
             initBuffer();
         }
     }
-
-    protected abstract int getBufferLength();
 
     protected void initBuffer() {
         buffer = new byte[getBufferLength()];
@@ -109,6 +108,7 @@ public abstract class DistinctValueWithCountClientAggregator extends BaseAggrega
         valueVsCount = new HashMap<ImmutableBytesPtr, Integer>();
         buffer = null;
         totalCount = 0L;
+        cachedResult = null;
         super.reset();
     }
     
@@ -129,4 +129,10 @@ public abstract class DistinctValueWithCountClientAggregator extends BaseAggrega
         }
         return sorted;
     }
+
+    protected int getBufferLength() {
+        return getResultDataType().getByteSize();
+    }
+
+    protected abstract PDataType getResultDataType();
 }

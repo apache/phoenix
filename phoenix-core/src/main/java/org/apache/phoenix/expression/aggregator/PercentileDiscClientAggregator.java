@@ -23,7 +23,6 @@ import java.util.*;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.*;
 import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PDataType;
@@ -36,11 +35,9 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * @author ramkrishna
  * @since 1.2.1
  */
-public class PercentileDiscClientAggregator extends
-		DistinctValueWithCountClientAggregator {
+public class PercentileDiscClientAggregator extends DistinctValueWithCountClientAggregator {
 
 	private final List<Expression> exps;
-	private Object cachedResult = null;
 	ColumnExpression columnExp = null;
 
 	public PercentileDiscClientAggregator(List<Expression> exps, ColumnModifier columnModifier) {
@@ -92,15 +89,14 @@ public class PercentileDiscClientAggregator extends
 	}
 
 	@Override
-	public void reset() {
-		super.reset();
-		this.cachedResult = null;
-	}
-
-	@Override
 	protected int getBufferLength() {
 		// Will be used in the aggregate() call
 		return PDataType.DECIMAL.getByteSize();
 	}
+
+    @Override
+    protected PDataType getResultDataType() {
+        return columnExp.getDataType();
+    }
 	
 }

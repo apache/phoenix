@@ -20,7 +20,6 @@
 package org.apache.phoenix.expression.aggregator;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -42,14 +41,17 @@ public class DistinctCountClientAggregator extends DistinctValueWithCountClientA
         if (buffer == null) {
             initBuffer();
         }
-        long value = this.valueVsCount.size();
-        buffer = PDataType.LONG.toBytes(value);
+        if (cachedResult != null) {
+            buffer = PDataType.LONG.toBytes(cachedResult);
+        } else {
+            buffer = PDataType.LONG.toBytes(this.valueVsCount.size());
+        }
         ptr.set(buffer);
         return true;
     }
 
     @Override
-    protected int getBufferLength() {
-        return PDataType.LONG.getByteSize();
+    protected PDataType getResultDataType() {
+        return PDataType.LONG;
     }
 }

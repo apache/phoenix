@@ -26,9 +26,8 @@ import java.math.BigDecimal;
 import java.sql.*;
 import java.util.Properties;
 
-import org.junit.Test;
-
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.Test;
 
 public class DistinctCountTest extends BaseClientManagedTimeTest {
 
@@ -102,6 +101,66 @@ public class DistinctCountTest extends BaseClientManagedTimeTest {
             assertTrue(rs.next());
             assertEquals(C_VALUE, rs.getString(1));
             assertEquals(1, rs.getLong(2));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testDistinctCountWithGroupByAndOrderBy() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, ts);
+
+        String query = "SELECT A_STRING, count(DISTINCT B_STRING) FROM aTable group by A_STRING order by A_STRING desc";
+
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
+                                                                                     // timestamp 2
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(C_VALUE, rs.getString(1));
+            assertEquals(1, rs.getLong(2));
+            assertTrue(rs.next());
+            assertEquals(B_VALUE, rs.getString(1));
+            assertEquals(1, rs.getLong(2));
+            assertTrue(rs.next());
+            assertEquals(A_VALUE, rs.getString(1));
+            assertEquals(2, rs.getLong(2));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testDistinctCountWithGroupByAndOrderByOnDistinctCount() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, ts);
+
+        String query = "SELECT A_STRING, count(DISTINCT B_STRING) as COUNT_B_STRING FROM aTable group by A_STRING order by COUNT_B_STRING";
+
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
+                                                                                     // timestamp 2
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(B_VALUE, rs.getString(1));
+            assertEquals(1, rs.getLong(2));
+            assertTrue(rs.next());
+            assertEquals(C_VALUE, rs.getString(1));
+            assertEquals(1, rs.getLong(2));
+            assertTrue(rs.next());
+            assertEquals(A_VALUE, rs.getString(1));
+            assertEquals(2, rs.getLong(2));
             assertFalse(rs.next());
         } finally {
             conn.close();
