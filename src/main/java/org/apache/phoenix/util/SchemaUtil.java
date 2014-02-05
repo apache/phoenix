@@ -522,6 +522,7 @@ public class SchemaUtil {
     public static final String UPGRADE_TO_2_0 = "UpgradeTo20";
     public static final Integer SYSTEM_TABLE_NULLABLE_VAR_LENGTH_COLUMNS = 3;
     public static final String UPGRADE_TO_2_1 = "UpgradeTo21";
+    public static final String UPGRADE_TO_2_2 = "UpgradeTo22";
 
     public static boolean isUpgradeTo2Necessary(ConnectionQueryServices connServices) throws SQLException {
         HTableInterface htable = connServices.getTable(PhoenixDatabaseMetaData.TYPE_TABLE_NAME_BYTES);

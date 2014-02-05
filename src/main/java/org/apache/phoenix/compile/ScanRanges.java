@@ -24,13 +24,13 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.util.ScanUtil;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 
 
 public class ScanRanges {
@@ -92,6 +92,20 @@ public class ScanRanges {
         return this == NOTHING;
     }
     
+    public boolean isPointLookup() {
+        if (schema == null || forceRangeScan || ranges.size() < schema.getMaxFields()) {
+            return false;
+        }
+        for (List<KeyRange> orRanges : ranges) {
+            for (KeyRange keyRange : orRanges) {
+                if (!keyRange.isSingleKey()) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     /**
      * Use SkipScanFilter under two circumstances:
      * 1) If we have multiple ranges for a given key slot (use of IN)

@@ -65,12 +65,6 @@ import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import org.apache.hbase.index.Indexer;
 import org.apache.hbase.index.covered.CoveredColumnsIndexBuilder;
 import org.apache.phoenix.compile.MutationPlan;
@@ -112,6 +106,12 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
@@ -452,6 +452,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
       hcd.setKeepDeletedCells(true);
     }
     
+    private static final String OLD_PACKAGE = "com.salesforce.";
+    private static final String NEW_PACKAGE = "org.apache.";
+    
     private HTableDescriptor generateTableDescriptor(byte[] tableName, HTableDescriptor existingDesc, PTableType tableType, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits) throws SQLException {
         HTableDescriptor descriptor = (existingDesc != null) ? new HTableDescriptor(existingDesc) : new HTableDescriptor(tableName);
         for (Entry<String,Object> entry : tableProps.entrySet()) {
@@ -485,18 +488,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // The phoenix jar must be available on HBase classpath
         try {
             if (!descriptor.hasCoprocessor(ScanRegionObserver.class.getName())) {
+                descriptor.removeCoprocessor(ScanRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
                 descriptor.addCoprocessor(ScanRegionObserver.class.getName(), null, 1, null);
             }
             if (!descriptor.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
+                descriptor.removeCoprocessor(UngroupedAggregateRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
                 descriptor.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, 1, null);
             }
             if (!descriptor.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
+                descriptor.removeCoprocessor(GroupedAggregateRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
                 descriptor.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, 1, null);
             }
             if (!descriptor.hasCoprocessor(HashJoiningRegionObserver.class.getName())) {
+                descriptor.removeCoprocessor(HashJoiningRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
                 descriptor.addCoprocessor(HashJoiningRegionObserver.class.getName(), null, 1, null);
             }
             if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
+                descriptor.removeCoprocessor(ServerCachingEndpointImpl.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, 1, null);
             }
             // TODO: better encapsulation for this
@@ -514,10 +522,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (SchemaUtil.isMetaTable(tableName)) {
                 descriptor.setValue(SchemaUtil.UPGRADE_TO_2_0, Boolean.TRUE.toString());
                 descriptor.setValue(SchemaUtil.UPGRADE_TO_2_1, Boolean.TRUE.toString());
+                descriptor.setValue(SchemaUtil.UPGRADE_TO_2_2, Boolean.TRUE.toString());
                 if (!descriptor.hasCoprocessor(MetaDataEndpointImpl.class.getName())) {
+                    descriptor.removeCoprocessor(MetaDataEndpointImpl.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
                     descriptor.addCoprocessor(MetaDataEndpointImpl.class.getName(), null, 1, null);
                 }
                 if (!descriptor.hasCoprocessor(MetaDataRegionObserver.class.getName())) {
+                    descriptor.removeCoprocessor(MetaDataRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
                     descriptor.addCoprocessor(MetaDataRegionObserver.class.getName(), null, 2, null);
                 }
             }
@@ -655,6 +666,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 boolean updateTo2_0 = false;
                 boolean updateTo1_2 = false;
                 boolean updateTo2_1 = false;
+                boolean updateTo2_2 = false;
                 if (isMetaTable) {
                     /*
                      *  FIXME: remove this once everyone has been upgraded to v 0.94.4+
@@ -670,6 +682,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     
                     updateTo2_0 = existingDesc.getValue(SchemaUtil.UPGRADE_TO_2_0) == null;
                     updateTo2_1 = existingDesc.getValue(SchemaUtil.UPGRADE_TO_2_1) == null;
+                    updateTo2_2 = existingDesc.getValue(SchemaUtil.UPGRADE_TO_2_2) == null;
                 }
                 
                 // We'll do this alter at the end of the upgrade
@@ -694,6 +707,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 if (updateTo2_1 && !updateTo2_0) {
                     upgradeTablesFrom2_0to2_1(admin, newDesc);
+                }
+                if (updateTo2_2) {
+                    upgradeTo2_2(admin);
                 }
                 return false;
             }
@@ -777,6 +793,47 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    /**
+     * Walk through all existing tables and install new coprocessors
+     * @param admin
+     * @throws IOException
+     * @throws SQLException
+     */
+    private void upgradeTo2_2(HBaseAdmin admin) throws IOException, SQLException {
+        if (logger.isInfoEnabled()) {
+            logger.info("Upgrading tables from Phoenix 2.x to Apache Phoenix 2.2.3");
+        }
+        /* Use regular HBase scan instead of query because the jar on the server may
+         * not be compatible (we don't know yet) and this is our one chance to do
+         * the conversion automatically.
+         */
+        Scan scan = new Scan();
+        scan.addColumn(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
+        scan.addColumn(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
+        SingleColumnValueFilter filter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES, CompareOp.GREATER_OR_EQUAL, PDataType.CHAR.toBytes("a"));
+        filter.setFilterIfMissing(true);
+        // Add filter so that we only get the table row and not the column rows
+        scan.setFilter(filter);
+        HTableInterface table = HBaseFactoryProvider.getHTableFactory().getTable(TYPE_TABLE_NAME_BYTES, connection, getExecutor());
+        ResultScanner scanner = table.getScanner(scan);
+        Result result = null;
+        while ((result = scanner.next()) != null) {
+            byte[] rowKey = result.getRow();
+            byte[][] rowKeyMetaData = new byte[2][];
+            getVarChars(rowKey, rowKeyMetaData);
+            byte[] schemaBytes = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
+            byte[] tableBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+            byte[] tableName = SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
+            if (!SchemaUtil.isMetaTable(tableName)) {
+                HTableDescriptor existingDesc = admin.getTableDescriptor(tableName);
+                HTableDescriptor newDesc = generateTableDescriptor(tableName, existingDesc, PTableType.VIEW, Collections.<String,Object>emptyMap(), Collections.<Pair<byte[],Map<String,Object>>>emptyList(), null);
+                admin.disableTable(tableName);
+                admin.modifyTable(tableName, newDesc);
+                admin.enableTable(tableName);
+            }
+        }
+    }
+        
     /**
      * FIXME: Temporary code to convert tables from 2.0 to 2.1 by:
      * 1) adding the new coprocessors for mutable secondary indexing

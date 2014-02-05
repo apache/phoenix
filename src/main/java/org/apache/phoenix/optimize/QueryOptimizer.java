@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import com.google.common.collect.Lists;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.IndexStatementRewriter;
 import org.apache.phoenix.compile.QueryCompiler;
@@ -25,6 +24,8 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+
+import com.google.common.collect.Lists;
 
 public class QueryOptimizer {
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
@@ -185,22 +186,41 @@ public class QueryOptimizer {
             return firstPlan;
         }
         
+        /**
+         * If we have a plan(s) that are just point lookups (i.e. fully qualified row
+         * keys), then favor those first.
+         */
         List<QueryPlan> candidates = Lists.newArrayListWithExpectedSize(plans.size());
-        if (firstPlan.getLimit() == null) {
-            candidates.addAll(plans);
-        } else {
-            for (QueryPlan plan : plans) {
-                // If ORDER BY optimized out (or not present at all)
-                if (plan.getOrderBy().getOrderByExpressions().isEmpty()) {
-                    candidates.add(plan);
-                }
-            }
-            if (candidates.isEmpty()) {
-                candidates.addAll(plans);
+        for (QueryPlan plan : plans) {
+            if (plan.getContext().getScanRanges().isPointLookup()) {
+                candidates.add(plan);
             }
         }
+        /**
+         * If we have a plan(s) that removes the order by, choose from among these,
+         * as this is typically the most expensive operation. Once we have stats, if
+         * there's a limit on the query, we might choose a different plan. For example
+         * if the limit was a very large number and the combination of applying other 
+         * filters on the row key are estimated to choose fewer rows, we'd choose that
+         * one.
+         */
+        List<QueryPlan> stillCandidates = plans;
+        List<QueryPlan> bestCandidates = candidates;
+        if (!candidates.isEmpty()) {
+            stillCandidates = candidates;
+            bestCandidates = Lists.<QueryPlan>newArrayListWithExpectedSize(candidates.size());
+        }
+        for (QueryPlan plan : stillCandidates) {
+            // If ORDER BY optimized out (or not present at all)
+            if (plan.getOrderBy().getOrderByExpressions().isEmpty()) {
+                bestCandidates.add(plan);
+            }
+        }
+        if (bestCandidates.isEmpty()) {
+            bestCandidates.addAll(stillCandidates);
+        }
         final int comparisonOfDataVersusIndexTable = select.getHint().hasHint(Hint.USE_DATA_OVER_INDEX_TABLE) ? -1 : 1;
-        Collections.sort(candidates, new Comparator<QueryPlan>() {
+        Collections.sort(bestCandidates, new Comparator<QueryPlan>() {
 
             @Override
             public int compare(QueryPlan plan1, QueryPlan plan2) {
