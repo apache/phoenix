@@ -34,13 +34,13 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 
 public class MutableIndexTest extends BaseMutableIndexTest {
     @BeforeClass 
@@ -256,7 +256,7 @@ public class MutableIndexTest extends BaseMutableIndexTest {
         query = "SELECT v1 as foo FROM " + DATA_TABLE_FULL_NAME + " WHERE v2 = '1' ORDER BY foo";
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +INDEX_TABLE_FULL_NAME + " [~'1']\n" + 
-                "    SERVER TOP -1 ROWS SORTED BY [V1]\n" + 
+                "    SERVER SORTED BY [V1]\n" + 
                 "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
 
         rs = conn.createStatement().executeQuery(query);

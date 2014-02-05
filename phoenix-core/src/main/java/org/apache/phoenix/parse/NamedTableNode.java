@@ -38,14 +38,22 @@ public class NamedTableNode extends ConcreteTableNode {
     public static NamedTableNode create (String alias, TableName name, List<ColumnDef> dynColumns) {
         return new NamedTableNode(alias, name, dynColumns);
     }
+
+    public static NamedTableNode create (String alias, TableName name, List<ColumnDef> dynColumns, boolean isRewrite) {
+        return new NamedTableNode(alias, name, dynColumns, isRewrite);
+    }
     
     NamedTableNode(String alias, TableName name) {
-        super(alias, name);
+        super(alias, name, false);
         dynColumns = Collections.<ColumnDef> emptyList();
     }
 
     NamedTableNode(String alias, TableName name, List<ColumnDef> dynColumns) {
-        super(alias, name);
+        this(alias, name, dynColumns, false);
+    }
+    
+    NamedTableNode(String alias, TableName name, List<ColumnDef> dynColumns, boolean isRewrite) {
+        super(alias, name, isRewrite);
         if (dynColumns != null) {
             this.dynColumns = ImmutableList.copyOf(dynColumns);
         } else {
@@ -62,3 +70,4 @@ public class NamedTableNode extends ConcreteTableNode {
         return dynColumns;
     }
 }
+

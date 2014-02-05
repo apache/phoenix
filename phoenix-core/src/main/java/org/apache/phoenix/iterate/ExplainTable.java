@@ -32,8 +32,6 @@ import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.Iterators;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
@@ -44,6 +42,8 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.StringUtil;
+
+import com.google.common.collect.Iterators;
 
 
 public abstract class ExplainTable {
@@ -64,7 +64,10 @@ public abstract class ExplainTable {
 
     private boolean explainSkipScan(StringBuilder buf) {
         ScanRanges scanRanges = context.getScanRanges();
-        if (scanRanges.useSkipScanFilter()) {
+        if (scanRanges.isPointLookup()) {
+            int keyCount = scanRanges.getPointLookupCount();
+            buf.append("POINT LOOKUP ON " + keyCount + " KEY" + (keyCount > 1 ? "S " : " "));
+        } else if (scanRanges.useSkipScanFilter()) {
             buf.append("SKIP SCAN ");
             int count = 1;
             boolean hasRanges = false;
@@ -78,11 +81,10 @@ public abstract class ExplainTable {
             buf.append(count);
             buf.append(hasRanges ? " RANGE" : " KEY");
             buf.append(count > 1 ? "S " : " ");
-            return true;
         } else {
             buf.append("RANGE SCAN ");
         }
-        return false;
+        return scanRanges.useSkipScanFilter();
     }
     
     protected void explain(String prefix, List<String> planSteps) {
@@ -95,7 +97,9 @@ public abstract class ExplainTable {
             hasSkipScanFilter = explainSkipScan(buf);
         }
         buf.append("OVER " + tableRef.getTable().getName().getString());
-        appendKeyRanges(buf);
+        if (!scanRanges.isPointLookup()) {
+            appendKeyRanges(buf);
+        }
         planSteps.add(buf.toString());
         
         Scan scan = context.getScan();

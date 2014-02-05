@@ -24,6 +24,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -55,6 +56,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -232,10 +234,13 @@ public class DeleteCompiler {
 
                 @Override
                 public MutationState execute() {
-                    List<byte[]> keys = context.getScanRanges().getPointKeys(table.getBucketNum());
-                    Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutation = Maps.newHashMapWithExpectedSize(keys.size());
-                    for (byte[] key : keys) {
-                        mutation.put(new ImmutableBytesPtr(key), PRow.DELETE_MARKER);
+                    // We have a point lookup, so we know we have a simple set of fully qualified
+                    // keys for our ranges
+                    ScanRanges ranges = context.getScanRanges();
+                    Iterator<KeyRange> iterator = ranges.getPointLookupKeyIterator(); 
+                    Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutation = Maps.newHashMapWithExpectedSize(ranges.getPointLookupCount());
+                    while (iterator.hasNext()) {
+                        mutation.put(new ImmutableBytesPtr(iterator.next().getLowerRange()), PRow.DELETE_MARKER);
                     }
                     return new MutationState(tableRef, mutation, 0, maxSize, connection);
                 }

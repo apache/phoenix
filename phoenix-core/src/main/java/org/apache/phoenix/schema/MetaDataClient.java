@@ -1221,6 +1221,10 @@ public class MetaDataClient {
             TableName tableNameNode = statement.getTable().getName();
             String schemaName = tableNameNode.getSchemaName();
             String tableName = tableNameNode.getTableName();
+            // Outside of retry loop, as we're removing the property and wouldn't find it the second time
+            Boolean isImmutableRowsProp = (Boolean)statement.getProps().remove(PTable.IS_IMMUTABLE_ROWS_PROP_NAME);
+            Boolean multiTenantProp = (Boolean)statement.getProps().remove(PhoenixDatabaseMetaData.MULTI_TENANT);
+            boolean disableWAL = Boolean.TRUE.equals(statement.getProps().remove(DISABLE_WAL));
             
             boolean retried = false;
             while (true) {
@@ -1247,17 +1251,14 @@ public class MetaDataClient {
                 }
                           
                 boolean isImmutableRows = table.isImmutableRows();
-                Boolean isImmutableRowsProp = (Boolean)statement.getProps().remove(PTable.IS_IMMUTABLE_ROWS_PROP_NAME);
                 if (isImmutableRowsProp != null) {
                     isImmutableRows = isImmutableRowsProp;
                 }
                 boolean multiTenant = table.isMultiTenant();
-                Boolean multiTenantProp = (Boolean) statement.getProps().remove(PhoenixDatabaseMetaData.MULTI_TENANT);
                 if (multiTenantProp != null) {
                     multiTenant = Boolean.TRUE.equals(multiTenantProp);
                 }
                 
-                boolean disableWAL = Boolean.TRUE.equals(statement.getProps().remove(DISABLE_WAL));
                 if (statement.getProps().get(PhoenixDatabaseMetaData.SALT_BUCKETS) != null) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE)
                     .setTableName(table.getName().getString()).build().buildException();
@@ -1313,7 +1314,8 @@ public class MetaDataClient {
                         connection.rollback();
                     }
                 } else {
-                 // Only support setting IMMUTABLE_ROWS=true and DISABLE_WAL=true on ALTER TABLE SET command
+                    // Only support setting IMMUTABLE_ROWS=true and DISABLE_WAL=true on ALTER TABLE SET command
+                    // TODO: support setting HBase table properties too
                     if (!statement.getProps().isEmpty()) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.SET_UNSUPPORTED_PROP_ON_ALTER_TABLE)
                         .setTableName(table.getName().getString()).build().buildException();
@@ -1406,51 +1408,32 @@ public class MetaDataClient {
 
 
     private String dropColumnMutations(PTable table, List<PColumn> columnsToDrop, List<Mutation> tableMetaData) throws SQLException {
-        String tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getString();
+        String tenantId = connection.getTenantId() == null ? "" : connection.getTenantId().getString();
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
         String familyName = null;
+        /*
+         * Generate a fully qualified RVC with an IN clause, since that's what our optimizer can
+         * handle currently. If/when the optimizer handles (A and ((B AND C) OR (D AND E))) we
+         * can factor out the tenant ID, schema name, and table name columns
+         */
         StringBuilder buf = new StringBuilder("DELETE FROM " + TYPE_SCHEMA + ".\"" + TYPE_TABLE + "\" WHERE ");
-        buf.append(TENANT_ID);
-        if (tenantId == null || tenantId.length() == 0) {
-            buf.append(" IS NULL AND ");
-        } else {
-            buf.append(" = ? AND ");
+        buf.append("(" + 
+                TENANT_ID + "," + TABLE_SCHEM_NAME + "," + TABLE_NAME_NAME + "," + 
+                COLUMN_NAME + ", " + TABLE_CAT_NAME + ") IN (");
+        for(PColumn columnToDrop : columnsToDrop) {
+            buf.append("('" + tenantId + "'");
+            buf.append(",'" + schemaName + "'");
+            buf.append(",'" + tableName + "'");
+            buf.append(",'" + columnToDrop.getName().getString() + "'");
+            buf.append(",'" + (columnToDrop.getFamilyName() == null ? "" : columnToDrop.getFamilyName().getString()) + "'),");
         }
-        buf.append(TABLE_SCHEM_NAME);
-        if (schemaName == null || schemaName.length() == 0) {
-            buf.append(" IS NULL AND ");
-        } else {
-            buf.append(" = ? AND ");
-        }
-        buf.append (TABLE_NAME_NAME + " = ? AND " + COLUMN_NAME + " = ? AND " + TABLE_CAT_NAME);
-        buf.append(" = ?");
+        buf.setCharAt(buf.length()-1, ')');
         
-        // TODO: when DeleteCompiler supports running an fully qualified IN query on the client-side,
-        // we can use a single IN query here instead of executing a different query per column being dropped.
-        PreparedStatement colDelete = connection.prepareStatement(buf.toString());
-        try {
-            for(PColumn columnToDrop : columnsToDrop) {
-                int i = 1;
-                if (tenantId != null && tenantId.length() > 0) {
-                    colDelete.setString(i++, tenantId);
-                }
-                if (schemaName != null & schemaName.length() > 0) {
-                    colDelete.setString(i++, schemaName);    
-                }
-                colDelete.setString(i++, tableName);
-                colDelete.setString(i++, columnToDrop.getName().getString());
-                colDelete.setString(i++, columnToDrop.getFamilyName() == null ? null : columnToDrop.getFamilyName().getString());
-                colDelete.execute();
-            }
-        } finally {
-            if(colDelete != null) {
-                colDelete.close();
-            }
-        }
+        connection.createStatement().execute(buf.toString());
         
-       Collections.sort(columnsToDrop,new Comparator<PColumn> () {
-           @Override
+        Collections.sort(columnsToDrop,new Comparator<PColumn> () {
+            @Override
             public int compare(PColumn left, PColumn right) {
                return Ints.compare(left.getPosition(), right.getPosition());
             }
@@ -1458,7 +1441,7 @@ public class MetaDataClient {
     
         int columnsToDropIndex = 0;
         PreparedStatement colUpdate = connection.prepareStatement(UPDATE_COLUMN_POSITION);
-        colUpdate.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
+        colUpdate.setString(1, tenantId);
         colUpdate.setString(2, schemaName);
         colUpdate.setString(3, tableName);
         for (int i = columnsToDrop.get(columnsToDropIndex).getPosition() + 1; i < table.getColumns().size(); i++) {

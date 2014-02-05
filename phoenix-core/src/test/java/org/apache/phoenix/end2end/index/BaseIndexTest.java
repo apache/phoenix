@@ -17,28 +17,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.parse;
+package org.apache.phoenix.end2end.index;
 
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTest;
 import org.apache.phoenix.util.SchemaUtil;
 
-/**
- * 
- * Abstract node representing a table reference in the FROM clause in SQL
- *
- * @author jtaylor
- * @since 0.1
- */
-public abstract class ConcreteTableNode extends TableNode {
-    private final TableName name;
-    
-    ConcreteTableNode(String alias, TableName name, boolean isRewrite) {
-        super(SchemaUtil.normalizeIdentifier(alias), isRewrite);
-        this.name = name;
-    }
-
-    public TableName getName() {
-        return name;
-    }
-
+public class BaseIndexTest extends BaseHBaseManagedTimeTest {
+    public static final String SCHEMA_NAME = "";
+    public static final String DATA_TABLE_NAME = "T";
+    public static final String INDEX_TABLE_NAME = "I";
+    public static final String DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "T");
+    public static final String INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "I");
 }
-

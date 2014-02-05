@@ -43,8 +43,6 @@ import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.Lists;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.expression.AndExpression;
@@ -69,6 +67,8 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.tuple.Tuple;
+
+import com.google.common.collect.Lists;
 
 
 
@@ -163,11 +163,15 @@ public class TestUtil {
     public static final String INDEX_DATA_SCHEMA = "INDEX_TEST";
     public static final String INDEX_DATA_TABLE = "INDEX_DATA_TABLE";
     public static final String MUTABLE_INDEX_DATA_TABLE = "MUTABLE_INDEX_DATA_TABLE";
-    public static final String JOIN_ORDER_TABLE = "JOIN_ORDER_TABLE";
-    public static final String JOIN_CUSTOMER_TABLE = "JOIN_CUSTOMER_TABLE";
-    public static final String JOIN_ITEM_TABLE = "JOIN_ITEM_TABLE";
-    public static final String JOIN_SUPPLIER_TABLE = "JOIN_SUPPLIER_TABLE";
-
+    public static final String JOIN_ORDER_TABLE_NORMALIZED = "joinOrderTable";
+    public static final String JOIN_CUSTOMER_TABLE_NORMALIZED = "joinCustomerTable";
+    public static final String JOIN_ITEM_TABLE_NORMALIZED = "joinItemTable";
+    public static final String JOIN_SUPPLIER_TABLE_NORMALIZED = "joinSupplierTable";
+    public static final String JOIN_ORDER_TABLE = '"' + JOIN_ORDER_TABLE_NORMALIZED + '"';
+    public static final String JOIN_CUSTOMER_TABLE = '"' + JOIN_CUSTOMER_TABLE_NORMALIZED + '"';
+    public static final String JOIN_ITEM_TABLE = '"' + JOIN_ITEM_TABLE_NORMALIZED + '"';
+    public static final String JOIN_SUPPLIER_TABLE = '"' + JOIN_SUPPLIER_TABLE_NORMALIZED + '"';
+ 
     public static final Properties TEST_PROPERTIES = new Properties();
 
     public static byte[][] getSplits(String tenantId) {
@@ -240,7 +244,7 @@ public class TestUtil {
     }
 
     public static Expression in(Expression... expressions) throws SQLException {
-        return InListExpression.create(Arrays.asList(expressions), new ImmutableBytesWritable());
+        return InListExpression.create(Arrays.asList(expressions), new ImmutableBytesWritable(), false);
     }
 
     public static Expression in(Expression e, Object... literals) throws SQLException {
@@ -250,7 +254,7 @@ public class TestUtil {
         for (Object o : literals) {
             expressions.add(LiteralExpression.newConstant(o, childType));
         }
-        return InListExpression.create(expressions, new ImmutableBytesWritable());
+        return InListExpression.create(expressions, new ImmutableBytesWritable(), false);
     }
 
     public static void assertDegenerate(StatementContext context) {

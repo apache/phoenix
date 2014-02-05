@@ -84,6 +84,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ArrayListMultimap;
@@ -101,6 +102,7 @@ public class JoinCompiler {
     }
     
     public static class JoinSpec {
+        private TableNode mainTableNode;
         private TableRef mainTable;
         private List<AliasedNode> select; // all basic nodes related to mainTable, no aggregation.
         private List<ParseNode> preFilters;
@@ -115,7 +117,7 @@ public class JoinCompiler {
             assert (tableNodes.size() > 1);
             Iterator<TableNode> iter = tableNodes.iterator();
             Iterator<TableRef> tableRefIter = resolver.getTables().iterator();
-            iter.next();
+            this.mainTableNode = iter.next();
             this.mainTable = tableRefIter.next();
             this.select = extractFromSelect(selectList, mainTable, resolver);
             this.joinTables = new ArrayList<JoinTable>(tableNodes.size() - 1);
@@ -131,7 +133,7 @@ public class JoinCompiler {
             while (iter.hasNext()) {
                 tableNode = iter.next();
                 if (!(tableNode instanceof JoinTableNode))
-                    throw new SQLFeatureNotSupportedException("Full joins not supported.");
+                    throw new SQLFeatureNotSupportedException("Implicit joins not supported.");
                 JoinTableNode joinTableNode = (JoinTableNode) tableNode;
                 JoinTable joinTable = new JoinTable(joinTableNode, tableRefIter.next(), selectList, resolver);
                 for (ParseNode condition : joinTable.conditions) {
@@ -203,14 +205,19 @@ public class JoinCompiler {
             }            
         }
         
-        private JoinSpec(TableRef table, List<AliasedNode> select, List<ParseNode> preFilters, 
+        private JoinSpec(TableNode tableNode, TableRef table, List<AliasedNode> select, List<ParseNode> preFilters, 
                 List<ParseNode> postFilters, List<JoinTable> joinTables, Map<ColumnRef, ColumnRefType> columnRefs) {
+            this.mainTableNode = tableNode;
             this.mainTable = table;
             this.select = select;
             this.preFilters = preFilters;
             this.postFilters = postFilters;
             this.joinTables = joinTables;
             this.columnRefs = columnRefs;
+        }
+        
+        public TableNode getMainTableNode() {
+            return mainTableNode;
         }
         
         public TableRef getMainTable() {
@@ -274,7 +281,7 @@ public class JoinCompiler {
             }
         }
         
-        public ProjectedPTableWrapper createProjectedTable(TableRef tableRef, boolean retainPKColumns) throws SQLException {
+        public ProjectedPTableWrapper createProjectedTable(TableRef tableRef, boolean retainPKColumns, boolean isRewrite) throws SQLException {
         	List<PColumn> projectedColumns = new ArrayList<PColumn>();
         	List<Expression> sourceExpressions = new ArrayList<Expression>();
         	ListMultimap<String, String> columnNameMap = ArrayListMultimap.<String, String>create();
@@ -283,14 +290,14 @@ public class JoinCompiler {
             if (retainPKColumns) {
             	for (PColumn column : table.getPKColumns()) {
             		addProjectedColumn(projectedColumns, sourceExpressions, columnNameMap,
-            				column, tableRef, column.getFamilyName(), hasSaltingColumn);
+            				column, tableRef, column.getFamilyName(), hasSaltingColumn, isRewrite);
             	}
             }
             if (isWildCardSelect(select)) {
             	for (PColumn column : table.getColumns()) {
             		if (!retainPKColumns || !SchemaUtil.isPKColumn(column)) {
             			addProjectedColumn(projectedColumns, sourceExpressions, columnNameMap,
-            					column, tableRef, PNameFactory.newName(ScanProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn);
+            					column, tableRef, PNameFactory.newName(ScanProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn, isRewrite);
             		}
             	}
             } else {
@@ -301,7 +308,7 @@ public class JoinCompiler {
                             && (!retainPKColumns || !SchemaUtil.isPKColumn(columnRef.getColumn()))) {
                     	PColumn column = columnRef.getColumn();
             			addProjectedColumn(projectedColumns, sourceExpressions, columnNameMap,
-            					column, tableRef, PNameFactory.newName(ScanProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn);
+            					column, tableRef, PNameFactory.newName(ScanProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn, isRewrite);
                     }
                 }            	
             }
@@ -314,22 +321,33 @@ public class JoinCompiler {
         }
         
         private static void addProjectedColumn(List<PColumn> projectedColumns, List<Expression> sourceExpressions,
-        		ListMultimap<String, String> columnNameMap, PColumn sourceColumn, TableRef sourceTable, PName familyName, boolean hasSaltingColumn) 
+        		ListMultimap<String, String> columnNameMap, PColumn sourceColumn, TableRef sourceTable, PName familyName, boolean hasSaltingColumn, boolean isRewrite) 
         throws SQLException {
             if (sourceColumn == SALTING_COLUMN)
                 return;
             
         	int position = projectedColumns.size() + (hasSaltingColumn ? 1 : 0);
         	PTable table = sourceTable.getTable();
-        	PName colName = sourceColumn.getName();
-        	PName name = sourceTable.getTableAlias() == null ? null : PNameFactory.newName(getProjectedColumnName(null, sourceTable.getTableAlias(), colName.getString()));
-        	PName fullName = getProjectedColumnName(table.getSchemaName(), table.getTableName(), colName);
-        	if (name == null) {
-        	    name = fullName;
-        	} else {
-        		columnNameMap.put(fullName.getString(), name.getString());
+        	String schemaName = table.getSchemaName().getString();
+        	String tableName = table.getTableName().getString();
+        	String colName = sourceColumn.getName().getString();
+            String fullName = getProjectedColumnName(schemaName, tableName, colName);
+            String aliasedName = sourceTable.getTableAlias() == null ? fullName : getProjectedColumnName(null, sourceTable.getTableAlias(), colName);
+            String displayName = aliasedName;
+        	if (isRewrite) {
+        	    String dataColName = IndexUtil.getDataColumnName(colName);
+        	    displayName = sourceTable.getTableAlias() == null ? getProjectedColumnName(schemaName, table.getParentTableName().getString(), dataColName) : getProjectedColumnName(null, sourceTable.getTableAlias(), dataColName);
         	}
-            columnNameMap.put(colName.getString(), name.getString());
+        	
+            columnNameMap.put(colName, displayName);
+        	if (!fullName.equals(displayName)) {
+        		columnNameMap.put(fullName, displayName);
+        	}
+        	if (!aliasedName.equals(displayName) && !aliasedName.equals(fullName)) {
+        	    columnNameMap.put(aliasedName, displayName);
+        	}
+            
+        	PName name = PNameFactory.newName(displayName);
     		PColumnImpl column = new PColumnImpl(name, familyName, sourceColumn.getDataType(), 
     				sourceColumn.getMaxLength(), sourceColumn.getScale(), sourceColumn.isNullable(), 
     				position, sourceColumn.getColumnModifier(), sourceColumn.getArraySize());
@@ -465,7 +483,7 @@ public class JoinCompiler {
     }
     
     public static JoinSpec getSubJoinSpecWithoutPostFilters(JoinSpec join) {
-        return new JoinSpec(join.mainTable, join.select, join.preFilters, new ArrayList<ParseNode>(), 
+        return new JoinSpec(join.mainTableNode, join.mainTable, join.select, join.preFilters, new ArrayList<ParseNode>(), 
                 join.joinTables.subList(0, join.joinTables.size() - 1), join.columnRefs);
     }
     
@@ -898,7 +916,8 @@ public class JoinCompiler {
 
             @Override
             public void visit(BindTableNode boundTableNode) throws SQLException {
-                replaced = NODE_FACTORY.bindTable(boundTableNode.getAlias(), getReplacedTableName());
+                String alias = boundTableNode.getAlias();
+                replaced = BindTableNode.create(alias == null ? null : '"' + alias + '"', getReplacedTableName(), true);
             }
 
             @Override
@@ -910,7 +929,8 @@ public class JoinCompiler {
             @Override
             public void visit(NamedTableNode namedTableNode)
                     throws SQLException {
-                replaced = NODE_FACTORY.namedTable(namedTableNode.getAlias(), getReplacedTableName(), namedTableNode.getDynamicColumns());
+                String alias = namedTableNode.getAlias();
+                replaced = NamedTableNode.create(alias == null ? null : '"' + alias + '"', getReplacedTableName(), namedTableNode.getDynamicColumns(), true);
             }
 
             @Override
@@ -921,9 +941,7 @@ public class JoinCompiler {
             
             private TableName getReplacedTableName() {
                 String schemaName = table.getTable().getSchemaName().getString();
-                schemaName = schemaName.length() == 0 ? null : '"' + schemaName + '"';
-                String tableName = '"' + table.getTable().getTableName().getString() + '"';
-                return NODE_FACTORY.table(schemaName, tableName);
+                return TableName.create(schemaName.length() == 0 ? null : schemaName, table.getTable().getTableName().getString());
             }
         };
         
@@ -968,7 +986,8 @@ public class JoinCompiler {
     }
     
     private static SelectStatement getSubqueryForOptimizedPlan(SelectStatement select, TableRef table, Map<ColumnRef, ColumnRefType> columnRefs, ParseNode where) {
-        TableName tName = NODE_FACTORY.table(table.getTable().getSchemaName().getString(), table.getTable().getTableName().getString());
+        String schemaName = table.getTable().getSchemaName().getString();
+        TableName tName = TableName.create(schemaName.length() == 0 ? null : schemaName, table.getTable().getTableName().getString());
         List<AliasedNode> selectList = new ArrayList<AliasedNode>();
         if (isWildCardSelect(select.getSelect())) {
             selectList.add(NODE_FACTORY.aliasedNode(null, WildcardParseNode.INSTANCE));
@@ -979,7 +998,8 @@ public class JoinCompiler {
                 }
             }
         }
-        List<? extends TableNode> from = Collections.singletonList(NODE_FACTORY.namedTable(table.getTableAlias(), tName));
+        String tableAlias = table.getTableAlias();
+        List<? extends TableNode> from = Collections.singletonList(NODE_FACTORY.namedTable(tableAlias == null ? null : '"' + tableAlias + '"', tName));
 
         return NODE_FACTORY.select(from, select.getHint(), false, selectList, where, null, null, null, null, 0, false);
     }
@@ -1169,11 +1189,6 @@ public class JoinCompiler {
 			String colName) {
     	return SchemaUtil.getColumnName(SchemaUtil.getTableName(schemaName, tableName), colName);
     }
-    
-    private static PName getProjectedColumnName(PName schemaName, PName tableName,
-    		PName colName) {
-    	String name = getProjectedColumnName(schemaName.getString(), tableName.getString(), colName.getString());
-    	return PNameFactory.newName(name);
-    }
 }
+
 

@@ -392,7 +392,7 @@ public class WhereClauseOptimizerTest extends BaseConnectionlessQueryTest {
         compileStatement(query, scan, binds);
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(entityId));
         assertArrayEquals(startRow, scan.getStartRow());
-        assertArrayEquals(ByteUtil.nextKey(startRow), scan.getStopRow());
+        assertArrayEquals(ByteUtil.concat(startRow, QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
     }
 
     @Test
@@ -508,7 +508,7 @@ public class WhereClauseOptimizerTest extends BaseConnectionlessQueryTest {
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(entityId));
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(entityId));
-        assertArrayEquals(ByteUtil.nextKey(stopRow), scan.getStopRow());
+        assertArrayEquals(ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
     }
 
     @Test
@@ -554,7 +554,7 @@ public class WhereClauseOptimizerTest extends BaseConnectionlessQueryTest {
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(entityId));
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(entityId));
-        assertArrayEquals(ByteUtil.nextKey(stopRow), scan.getStopRow());
+        assertArrayEquals(ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
     }
 
     @Test
@@ -1209,7 +1209,7 @@ public class WhereClauseOptimizerTest extends BaseConnectionlessQueryTest {
         compileStatement(query, scan, binds, extractedFilters);
         assertTrue(extractedFilters.size() == 3);
         byte[] expectedStartRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), PDataType.VARCHAR.toBytes(entityId));
-        byte[] expectedStopRow = ByteUtil.nextKey(ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), PDataType.VARCHAR.toBytes(entityId2)));
+        byte[] expectedStopRow = ByteUtil.concat(ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), PDataType.VARCHAR.toBytes(entityId2)), QueryConstants.SEPARATOR_BYTE_ARRAY);
         assertArrayEquals(expectedStartRow, scan.getStartRow());
         assertArrayEquals(expectedStopRow, scan.getStopRow());
     }

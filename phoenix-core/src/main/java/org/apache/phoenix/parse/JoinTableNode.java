@@ -38,7 +38,7 @@ public class JoinTableNode extends TableNode {
     private final TableNode table;
     
     JoinTableNode(JoinType type, ParseNode on, TableNode table) {
-        super(table.getAlias());
+        super(table.getAlias(), table.isRewrite());
         this.type = type;
         this.on = on;
         this.table = table;
@@ -62,3 +62,4 @@ public class JoinTableNode extends TableNode {
     }
 
 }
+

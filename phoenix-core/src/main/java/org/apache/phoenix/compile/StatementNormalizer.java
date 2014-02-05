@@ -23,6 +23,7 @@ import java.sql.SQLException;
 import java.util.List;
 
 import com.google.common.collect.Lists;
+
 import org.apache.phoenix.parse.BetweenParseNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.ComparisonParseNode;
@@ -30,6 +31,7 @@ import org.apache.phoenix.parse.LessThanOrEqualParseNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeRewriter;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.util.SchemaUtil;
 
 
@@ -95,10 +97,11 @@ public class StatementNormalizer extends ParseNodeRewriter {
                 && node.getAlias() != null 
                 && node.getTableName() != null
                 && SchemaUtil.normalizeIdentifier(node.getAlias()).equals(node.getName())) {
-            node = NODE_FACTORY.column(NODE_FACTORY.table(node.getSchemaName(), node.getTableName()), 
+            node = NODE_FACTORY.column(TableName.create(node.getSchemaName(), node.getTableName()), 
                     node.isCaseSensitive() ? '"' + node.getName() + '"' : node.getName(), 
                     node.isCaseSensitive() ? '"' + node.getFullName() + '"' : node.getFullName());
         }
         return super.visit(node);
     }
 }
+
