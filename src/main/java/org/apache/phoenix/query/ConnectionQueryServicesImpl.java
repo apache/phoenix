@@ -19,7 +19,6 @@
  */
 package org.apache.phoenix.query;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
@@ -664,52 +663,31 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
 
                 boolean updateTo2_0 = false;
-                boolean updateTo1_2 = false;
                 boolean updateTo2_1 = false;
                 boolean updateTo2_2 = false;
                 if (isMetaTable) {
-                    /*
-                     *  FIXME: remove this once everyone has been upgraded to v 0.94.4+
-                     *  This hack checks to see if we've got "phoenix.jar" specified as
-                     *  the jar file path. We need to set this to null in this case due
-                     *  to a change in behavior of HBase.
-                     */
-                    String value = existingDesc.getValue("coprocessor$1");
-                    updateTo1_2 = (value != null && value.startsWith("phoenix.jar"));
-                    if (!updateTo1_2) {
+                    updateTo2_2 = existingDesc.getValue(SchemaUtil.UPGRADE_TO_2_2) == null;
+                    if (!updateTo2_2) {
                         checkClientServerCompatibility();
                     }
                     
                     updateTo2_0 = existingDesc.getValue(SchemaUtil.UPGRADE_TO_2_0) == null;
                     updateTo2_1 = existingDesc.getValue(SchemaUtil.UPGRADE_TO_2_1) == null;
-                    updateTo2_2 = existingDesc.getValue(SchemaUtil.UPGRADE_TO_2_2) == null;
                 }
                 
-                // We'll do this alter at the end of the upgrade
-                if (!updateTo2_1 && !updateTo2_0) {
-                    // Update metadata of table
-                    // TODO: Take advantage of online schema change ability by setting "hbase.online.schema.update.enable" to true
-                    admin.disableTable(tableName);
-                    // TODO: What if not all existing column families are present?
-                    admin.modifyTable(tableName, newDesc);
-                    admin.enableTable(tableName);
-                }
-                /*
-                 *  FIXME: remove this once everyone has been upgraded to v 0.94.4+
-                 * We've detected that the SYSTEM.TABLE needs to be upgraded, so let's
-                 * query and update all tables here.
-                 */
-                if (updateTo1_2) {
-                    upgradeTablesFrom0_94_2to0_94_4(admin);
-                    // Do the compatibility check here, now that the jar path has been corrected.
-                    // This will work with the new and the old jar, so do the compatibility check now.
-                    checkClientServerCompatibility();
-                }
-                if (updateTo2_1 && !updateTo2_0) {
-                    upgradeTablesFrom2_0to2_1(admin, newDesc);
-                }
+                // Update metadata of table
+                // TODO: Take advantage of online schema change ability by setting "hbase.online.schema.update.enable" to true
+                admin.disableTable(tableName);
+                // TODO: What if not all existing column families are present?
+                admin.modifyTable(tableName, newDesc);
+                admin.enableTable(tableName);
+                
                 if (updateTo2_2) {
+                    checkClientServerCompatibility();
                     upgradeTo2_2(admin);
+                }
+               if (updateTo2_1 && !updateTo2_0) {
+                    upgradeTablesFrom2_0to2_1(admin, newDesc);
                 }
                 return false;
             }
@@ -734,63 +712,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
         return true; // will never make it here
-    }
-
-    /**
-     * FIXME: Temporary code to convert tables to 0.94.4 format (i.e. no jar specified
-     * in coprocessor definition). This is necessary because of a change in
-     * HBase behavior between 0.94.3 and 0.94.4. Once everyone has been upgraded
-     * this code can be removed.
-     * @throws SQLException
-     */
-    private void upgradeTablesFrom0_94_2to0_94_4(HBaseAdmin admin) throws IOException {
-        if (logger.isInfoEnabled()) {
-            logger.info("Upgrading tables from HBase 0.94.2 to 0.94.4+");
-        }
-        /* Use regular HBase scan instead of query because the jar on the server may
-         * not be compatible (we don't know yet) and this is our one chance to do
-         * the conversion automatically.
-         */
-        Scan scan = new Scan();
-        scan.addColumn(TABLE_FAMILY_BYTES, COLUMN_COUNT_BYTES);
-        // Add filter so that we only get the table row and not the column rows
-        scan.setFilter(new SingleColumnValueFilter(TABLE_FAMILY_BYTES, COLUMN_COUNT_BYTES, CompareOp.GREATER_OR_EQUAL, PDataType.INTEGER.toBytes(0)));
-        HTableInterface table = HBaseFactoryProvider.getHTableFactory().getTable(TYPE_TABLE_NAME_BYTES, connection, getExecutor());
-        ResultScanner scanner = table.getScanner(scan);
-        Result result = null;
-        while ((result = scanner.next()) != null) {
-            byte[] rowKey = result.getRow();
-            byte[][] rowKeyMetaData = new byte[2][];
-            getVarChars(rowKey, rowKeyMetaData);
-            byte[] schemaBytes = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
-            byte[] tableBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
-            byte[] tableName = SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
-            if (!SchemaUtil.isMetaTable(tableName)) {
-                try {
-                    HTableDescriptor existingDesc = admin.getTableDescriptor(tableName);
-                    existingDesc.removeCoprocessor(ScanRegionObserver.class.getName());
-                    existingDesc.removeCoprocessor(UngroupedAggregateRegionObserver.class.getName());
-                    existingDesc.removeCoprocessor(GroupedAggregateRegionObserver.class.getName());
-                    existingDesc.removeCoprocessor(HashJoiningRegionObserver.class.getName());
-                    existingDesc.addCoprocessor(ScanRegionObserver.class.getName(), null, 1, null);
-                    existingDesc.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, 1, null);
-                    existingDesc.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, 1, null);
-                    existingDesc.addCoprocessor(HashJoiningRegionObserver.class.getName(), null, 1, null);
-                    boolean wasEnabled = admin.isTableEnabled(tableName);
-                    if (wasEnabled) {
-                        admin.disableTable(tableName);
-                    }
-                    admin.modifyTable(tableName, existingDesc);
-                    if (wasEnabled) {
-                        admin.enableTable(tableName);
-                    }
-                } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-                    logger.error("Unable to convert " + Bytes.toString(tableName), e);
-                } catch (IOException e) {
-                    logger.error("Unable to convert " + Bytes.toString(tableName), e);
-                }
-            }
-        }
     }
 
     /**
