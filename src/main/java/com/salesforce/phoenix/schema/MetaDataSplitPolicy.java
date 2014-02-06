@@ -1,6 +1,5 @@
 package com.salesforce.phoenix.schema;
 
-import org.apache.hadoop.hbase.regionserver.ConstantSizeRegionSplitPolicy;
 
 
 /**
@@ -9,5 +8,5 @@ import org.apache.hadoop.hbase.regionserver.ConstantSizeRegionSplitPolicy;
  * without requiring multiple Phoenix jars on the classpath.
  *
  */
-public class MetaDataSplitPolicy extends ConstantSizeRegionSplitPolicy {
+public class MetaDataSplitPolicy extends org.apache.phoenix.schema.MetaDataSplitPolicy {
 }
