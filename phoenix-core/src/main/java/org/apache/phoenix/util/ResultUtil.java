@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -31,7 +31,7 @@ import org.apache.hadoop.hbase.util.Bytes;
  * Static class for various methods that would be nice to have added to {@link org.apache.hadoop.hbase.client.Result}.
  * These methods work off of the raw bytes preventing the explosion of Result into object form.
  * 
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class ResultUtil {

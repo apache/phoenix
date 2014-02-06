@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -40,7 +40,7 @@ import org.apache.phoenix.util.SQLCloseables;
  * quorum server name, determines the hbase cluster to which queries
  * will be routed.
  * 
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public final class PhoenixDriver extends PhoenixEmbeddedDriver {

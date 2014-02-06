@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -28,7 +28,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  * 
  * Thread pool executor that executes scans in parallel
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 @SuppressWarnings("rawtypes")

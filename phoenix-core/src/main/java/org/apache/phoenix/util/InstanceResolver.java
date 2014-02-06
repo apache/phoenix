@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Resolves object instances registered using the JDK 6+ {@link java.util.ServiceLoader}.
  *
- * @author aaraujo
+ * 
  * @since 2.0
  */
 public class InstanceResolver {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -82,7 +82,7 @@ import org.junit.BeforeClass;
  * 
  * Base class for tests that need to be connected to an HBase server
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public abstract class BaseConnectedQueryTest extends BaseTest {

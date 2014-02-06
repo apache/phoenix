@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -109,7 +109,7 @@ public class HavingCompiler {
      * select count(1) from atable group by a_date,a_string having a_date > ? or min(a_string) = 'a'
      * select count(1) from atable group by a_date having round(min(a_date),'hour') < ?
      *
-     * @author jtaylor
+     * 
      * @since 0.1
      */
     private static class HavingClauseVisitor extends TraverseNoParseNodeVisitor<Void> {

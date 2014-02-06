@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -36,7 +36,7 @@ import org.apache.phoenix.schema.PDataType;
  * 
  * PERCENT_RANK(<expression>[,<expression>]) WITHIN GROUP (ORDER BY <expression>[,<expression>] ASC/DESC) aggregate function
  *
- * @author anoopsjohn
+ * 
  * @since 1.2.1
  */
 @BuiltInFunction(name = PercentRankAggregateFunction.NAME, args = { @Argument(),

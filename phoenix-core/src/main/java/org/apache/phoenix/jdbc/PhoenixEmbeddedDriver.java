@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -37,7 +37,7 @@ import org.apache.phoenix.util.*;
  * 
  * Abstract base class for JDBC Driver implementation of Phoenix
  * 
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoenix.jdbc.Jdbc7Shim.Driver, SQLCloseable {
@@ -156,7 +156,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
      * 
      * Class to encapsulate connection info for HBase
      *
-     * @author jtaylor
+     * 
      * @since 0.1.1
      */
     public static class ConnectionInfo {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -31,7 +31,7 @@ import org.apache.phoenix.util.TupleUtil;
  * returning the rows in row key ascending order. The iterators provided
  * must be in row key ascending order.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class MergeSortRowKeyResultIterator extends MergeSortResultIterator {

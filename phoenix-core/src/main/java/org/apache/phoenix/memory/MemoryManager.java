@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -27,7 +27,7 @@ import java.io.Closeable;
  * memory usage by blocking when the max memory is reached or
  * allocates up to a maximum without blocking.
  * 
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public interface MemoryManager {
@@ -65,7 +65,7 @@ public interface MemoryManager {
      * 
      * Chunk of allocated memory.  To reclaim the memory, call {@link #close()}
      *
-     * @author jtaylor
+     * 
      * @since 0.1
      */
     public static interface MemoryChunk extends Closeable {

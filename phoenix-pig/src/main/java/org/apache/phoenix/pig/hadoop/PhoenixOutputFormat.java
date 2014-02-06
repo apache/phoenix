@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -39,7 +39,7 @@ import org.apache.phoenix.pig.PhoenixPigConfiguration;
 /**
  * {@link OutputFormat} implementation for Phoenix
  * 
- * @author pkommireddi
+ * 
  *
  */
 public class PhoenixOutputFormat extends OutputFormat<NullWritable, PhoenixRecord> {

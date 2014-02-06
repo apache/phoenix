@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -27,7 +27,7 @@ import java.io.IOException;
  * Derived version of {@link java.io.ByteArrayOutputStream} that provides access
  * to underlying byte array buffer so that it doesn't have to be copied
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class TrustedByteArrayOutputStream extends ByteArrayOutputStream {

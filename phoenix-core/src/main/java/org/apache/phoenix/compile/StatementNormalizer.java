@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -41,7 +41,7 @@ import org.apache.phoenix.util.SchemaUtil;
  * on the RHS (i.e. if literal found on the LHS, then the operator is reversed and
  * the literal is put on the RHS)
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class StatementNormalizer extends ParseNodeRewriter {

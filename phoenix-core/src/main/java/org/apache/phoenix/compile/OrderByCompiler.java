@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -42,7 +42,7 @@ import org.apache.phoenix.schema.ColumnModifier;
 /**
  * Validates ORDER BY clause and builds up a list of referenced columns.
  * 
- * @author syyang
+ * 
  * @since 0.1
  */
 public class OrderByCompiler {

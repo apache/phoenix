@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -35,7 +35,7 @@ import org.apache.phoenix.schema.PColumn;
  * between a built-in function and the setting of the scan key
  * during query compilation.
  * 
- * @author jtaylor
+ * 
  * @since 0.12
  */
 public interface KeyPart {

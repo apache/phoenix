@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -35,7 +35,7 @@ import org.apache.phoenix.util.ByteUtil;
  * Simple flat schema over a byte array where fields may be any of {@link PDataType}.
  * Optimized for positional access by index.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 @Immutable

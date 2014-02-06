@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -62,7 +62,7 @@ import org.apache.phoenix.util.SQLCloseables;
  * 
  * Client for sending cache to each region server
  * 
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class ServerCacheClient {
@@ -92,7 +92,7 @@ public class ServerCacheClient {
      * Client-side representation of a server cache.  Call {@link #close()} when usage
      * is complete to free cache up on region server
      *
-     * @author jtaylor
+     * 
      * @since 0.1
      */
     public class ServerCache implements SQLCloseable {

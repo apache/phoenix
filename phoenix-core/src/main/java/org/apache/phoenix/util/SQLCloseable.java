@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -26,7 +26,7 @@ import java.sql.SQLException;
  * Interface for a SQL resource that should be closed
  * after it is no longer in use.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public interface SQLCloseable {

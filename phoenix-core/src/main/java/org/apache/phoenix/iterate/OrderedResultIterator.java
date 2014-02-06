@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -44,7 +44,7 @@ import org.apache.phoenix.util.SizedUtil;
  * <p>
  * Note that currently the sort is entirely done in memory. 
  *  
- * @author syyang, jtaylor
+ * 
  * @since 0.1
  */
 public class OrderedResultIterator implements PeekingResultIterator {

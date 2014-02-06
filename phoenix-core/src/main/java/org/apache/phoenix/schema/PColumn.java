@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -24,7 +24,7 @@ import org.apache.hadoop.io.Writable;
 /**
  * Definition of a Phoenix column
  *
- * @author wmacklem,jtaylor
+ * 
  * @since 0.1
  */
 public interface PColumn extends PDatum, Writable {

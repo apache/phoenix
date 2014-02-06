@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -30,7 +30,7 @@ import org.apache.phoenix.expression.Expression;
  * column qualifier parts of the key value to disambiguate with another similarly
  * named column qualifier in a different column family.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class SingleCFCQKeyValueComparisonFilter extends SingleKeyValueComparisonFilter {
