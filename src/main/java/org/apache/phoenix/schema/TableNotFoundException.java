@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -27,7 +27,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
  * 
  * Exception thrown when a table name could not be found in the schema
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class TableNotFoundException extends MetaDataEntityNotFoundException {

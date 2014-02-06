@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -28,7 +28,7 @@ import org.apache.phoenix.util.ByteUtil;
  * Interface to encapsulate both the client-side name
  * together with the server-side name for a named object
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public interface PName {

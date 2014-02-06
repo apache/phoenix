@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -21,7 +21,7 @@
 /**
  * Implementation for row value constructor (a,b,c) expression.
  * 
- * @author samarth.jain
+ * 
  * @since 0.1
  */
 package org.apache.phoenix.expression;

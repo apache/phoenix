@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -44,7 +44,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
  * changing it to do nothing. Once we add joins, we'll need to figure this out.
  * I suspect it is not being able to be instantiated because of Snappy.
  * 
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class HashJoiningRegionObserver extends BaseScannerRegionObserver  {

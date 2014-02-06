@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -28,7 +28,7 @@ import com.google.common.base.Preconditions;
  * The {@link ColumnModifier#apply apply} method is called when the bytes for a specific column are first written to HBase and again
  * when they are read back.  Phoenix attemps to minimize calls to apply when bytes are read out of HBase.   
  * 
- * @author simontoens
+ * 
  * @since 1.2
  */
 public enum ColumnModifier {

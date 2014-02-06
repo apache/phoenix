@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -29,7 +29,7 @@ import org.apache.phoenix.expression.KeyValueColumnExpression;
  * Implementation of ExpressionVisitor where only KeyValueDataAccessor
  * is being visited
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public abstract class KeyValueExpressionVisitor extends TraverseAllExpressionVisitor<Void> {

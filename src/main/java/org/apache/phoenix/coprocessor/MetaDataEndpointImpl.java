@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -107,7 +107,7 @@ import org.apache.phoenix.util.ServerUtil;
  * any in use on the data table, b/c otherwise we can end up with data rows that
  * are not valid against a schema row.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements MetaDataProtocol {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -27,7 +27,7 @@ import java.util.List;
  * Abstract base class for ResultIterator implementations that
  * do nothing on close and have no explain plan steps
  *
- * @author jtaylor
+ * 
  * @since 1.2
  */
 public abstract class BaseResultIterator implements ResultIterator {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -56,7 +56,7 @@ import org.apache.phoenix.util.SchemaUtil;
 /**
  * Basic tests for Phoenix dynamic family querying "cf.*"
  * 
- * @author nmaillard
+ * 
  * @since 1.2
  */
 

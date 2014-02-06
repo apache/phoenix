@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -37,7 +37,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
  * {@link OutputCommitter} implementation for Pig tasks using Phoenix
  * connections to upsert to HBase
  * 
- * @author pkommireddi
+ * 
  *
  */
 public class PhoenixOutputCommitter extends OutputCommitter {

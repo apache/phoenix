@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -27,7 +27,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * Interface for scanners that either do aggregation
  * or delegate to scanners that do aggregation.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public interface AggregatingResultIterator extends ResultIterator {

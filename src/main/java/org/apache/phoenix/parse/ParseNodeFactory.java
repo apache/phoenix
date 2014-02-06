@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -56,7 +56,7 @@ import org.apache.phoenix.util.SchemaUtil;
  *
  * Factory used by parser to construct object model while parsing a SQL statement
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class ParseNodeFactory {
@@ -75,7 +75,7 @@ public class ParseNodeFactory {
      * the lowercase name and the number of arguments. This disambiguates
      * the aggregate MAX(<col>) from the non aggregate MAX(<col1>,<col2>).
      *
-     * @author jtaylor
+     * 
      * @since 0.1
      */
     private static class BuiltInFunctionKey {

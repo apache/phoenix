@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -47,7 +47,7 @@ import org.apache.phoenix.util.StringUtil;
  * Test for failure of region server to write to index table. Keep in its own
  * separate test, as otherwise it makes tests run after it fail.
  *
- * @author jtaylor
+ * 
  * @since 2.1
  */
 public class MutableIndexFailureTest extends BaseMutableIndexTest {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -67,7 +67,7 @@ import org.apache.phoenix.util.TrustedByteArrayOutputStream;
  * storing data in a single column (ColumnLayout.SINGLE) or in
  * multiple columns (ColumnLayout.MULTI).
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class PTableImpl implements PTable {
@@ -424,7 +424,7 @@ public class PTableImpl implements PTable {
      * PRow implementation for ColumnLayout.MULTI mode which stores column
      * values across multiple hbase columns.
      *
-     * @author jtaylor
+     * 
      * @since 0.1
      */
     private class PRowImpl implements PRow {

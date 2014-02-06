@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -65,7 +65,7 @@ import org.apache.phoenix.util.TestUtil;
  * time so this is a good place for negative tests (since the mini-cluster
  * is not necessary enabling the tests to run faster).
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 @edu.umd.cs.findbugs.annotations.SuppressWarnings(

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -69,7 +69,7 @@ import org.apache.phoenix.util.TupleUtil;
 /**
  * Region observer that aggregates grouped rows (i.e. SQL query with GROUP BY clause)
  * 
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {

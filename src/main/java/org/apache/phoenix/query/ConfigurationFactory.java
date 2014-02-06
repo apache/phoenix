@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -25,7 +25,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 /**
  * Creates {@link Configuration} instances that contain HBase/Hadoop settings.
  *
- * @author aaraujo
+ * 
  * @since 2.0
  */
 public interface ConfigurationFactory {

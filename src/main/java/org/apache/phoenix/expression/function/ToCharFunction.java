@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -41,7 +41,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * Implementation of the TO_CHAR(&lt;date&gt;/&lt;number&gt;,[&lt;format-string&gt;] built-in function.
  * The first argument must be of type DATE or TIME or TIMESTAMP or DECIMAL or INTEGER, and the second argument must be a constant string. 
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 @BuiltInFunction(name=ToCharFunction.NAME, nodeClass=ToCharParseNode.class, args={

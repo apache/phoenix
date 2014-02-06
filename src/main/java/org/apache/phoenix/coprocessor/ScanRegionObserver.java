@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -59,7 +59,7 @@ import org.apache.phoenix.util.ServerUtil;
  * Unfortunately, until HBASE-7481 gets fixed, there's no way to do this from our
  * custom filters.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class ScanRegionObserver extends BaseScannerRegionObserver {

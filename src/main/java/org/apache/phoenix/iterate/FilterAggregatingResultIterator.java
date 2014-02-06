@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -37,7 +37,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * use the Result argument in {@link org.apache.phoenix.expression.Expression}
  * instead of our cached value in Aggregators, we could have a look ahead.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class FilterAggregatingResultIterator  implements AggregatingResultIterator {

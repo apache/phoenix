@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -38,7 +38,7 @@ import org.apache.phoenix.util.ServerUtil;
  * Wrapper for ResultScanner creation that closes HTableInterface
  * when ResultScanner is closed.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class TableResultIterator extends ExplainTable implements ResultIterator {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -25,7 +25,7 @@ import org.apache.phoenix.util.SchemaUtil;
  * 
  * Abstract node representing a table reference in the FROM clause in SQL
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public abstract class ConcreteTableNode extends TableNode {

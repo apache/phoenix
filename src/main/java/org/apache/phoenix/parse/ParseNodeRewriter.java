@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -36,7 +36,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
  * 
  * Base class for visitors that rewrite the expression node hierarchy
  *
- * @author jtaylor 
+ * 
  * @since 0.1
  */
 public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
