@@ -23,16 +23,15 @@ import java.math.*;
 import java.util.List;
 import java.util.Map.Entry;
 
+import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
-
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.BigDecimalUtil;
 import org.apache.phoenix.util.BigDecimalUtil.Operation;
 
 /**
@@ -42,7 +41,6 @@ import org.apache.phoenix.util.BigDecimalUtil.Operation;
  */
 public abstract class BaseDecimalStddevAggregator extends DistinctValueWithCountClientAggregator {
 
-    private BigDecimal cachedResult = null;
     private int colPrecision;
     private int colScale;
 
@@ -51,11 +49,6 @@ public abstract class BaseDecimalStddevAggregator extends DistinctValueWithCount
         ColumnExpression stdDevColExp = (ColumnExpression)exps.get(0);
         this.colPrecision = stdDevColExp.getMaxLength();
         this.colScale = stdDevColExp.getScale();
-    }
-
-    @Override
-    protected int getBufferLength() {
-        return PDataType.DECIMAL.getByteSize();
     }
 
     @Override
@@ -77,9 +70,10 @@ public abstract class BaseDecimalStddevAggregator extends DistinctValueWithCount
                         this.colScale, this.colPrecision, this.colScale, Operation.OTHERS);
                 resultPrecision = precisionScale.getFirst();
             }
-            cachedResult = new BigDecimal(Math.sqrt(ssd.doubleValue()), new MathContext(resultPrecision,
+            BigDecimal result = new BigDecimal(Math.sqrt(ssd.doubleValue()), new MathContext(resultPrecision,
                     RoundingMode.HALF_UP));
-            cachedResult.setScale(this.colScale, RoundingMode.HALF_UP);
+            result.setScale(this.colScale, RoundingMode.HALF_UP);
+            cachedResult = result;
         }
         if (buffer == null) {
             initBuffer();
@@ -112,8 +106,7 @@ public abstract class BaseDecimalStddevAggregator extends DistinctValueWithCount
     }
 
     @Override
-    public void reset() {
-        super.reset();
-        this.cachedResult = null;
+    protected PDataType getResultDataType() {
+        return PDataType.DECIMAL;
     }
 }

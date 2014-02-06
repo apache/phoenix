@@ -24,7 +24,6 @@ import java.util.*;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.*;
 import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PDataType;
@@ -39,7 +38,6 @@ import org.apache.phoenix.schema.tuple.Tuple;
 public class PercentileClientAggregator extends DistinctValueWithCountClientAggregator {
 
     private final List<Expression> exps;
-    private BigDecimal cachedResult = null;
 
     public PercentileClientAggregator(List<Expression> exps, ColumnModifier columnModifier) {
         super(columnModifier);
@@ -98,13 +96,7 @@ public class PercentileClientAggregator extends DistinctValueWithCountClientAggr
     }
 
     @Override
-    protected int getBufferLength() {
-        return PDataType.DECIMAL.getByteSize();
-    }
-    
-    @Override
-    public void reset() {
-        super.reset();
-        this.cachedResult = null;
+    protected PDataType getResultDataType() {
+        return PDataType.DECIMAL;
     }
 }

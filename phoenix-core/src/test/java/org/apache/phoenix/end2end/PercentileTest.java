@@ -27,10 +27,9 @@ import java.math.RoundingMode;
 import java.sql.*;
 import java.util.Properties;
 
-import org.junit.Test;
-
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.Test;
 
 public class PercentileTest extends BaseClientManagedTimeTest {
 
@@ -121,6 +120,42 @@ public class PercentileTest extends BaseClientManagedTimeTest {
     }
 
     @Test
+    public void testPercentileWithGroupbyAndOrderBy() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, ts);
+
+        String query = "SELECT A_STRING, PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY A_INTEGER ASC) AS PC FROM aTable GROUP BY A_STRING ORDER BY PC";
+
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
+                                                                                     // timestamp 2
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("a",rs.getString(1));
+            BigDecimal percentile = rs.getBigDecimal(2);
+            percentile = percentile.setScale(1, RoundingMode.HALF_UP);
+            assertEquals(7.0, percentile.doubleValue(),0.0);
+            assertTrue(rs.next());
+            assertEquals("c",rs.getString(1));
+            percentile = rs.getBigDecimal(2);
+            percentile = percentile.setScale(1, RoundingMode.HALF_UP);
+            assertEquals(8.0, percentile.doubleValue(),0.0);
+            assertTrue(rs.next());
+            assertEquals("b",rs.getString(1));
+            percentile = rs.getBigDecimal(2);
+            percentile = percentile.setScale(1, RoundingMode.HALF_UP);
+            assertEquals(9.0, percentile.doubleValue(),0.0);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
 	public void testPercentileDiscAsc() throws Exception {
 		long ts = nextTimestamp();
 		String tenantId = getOrganizationId();
@@ -197,6 +232,39 @@ public class PercentileTest extends BaseClientManagedTimeTest {
             assertEquals("c",rs.getString(1));
             percentile_disc = rs.getInt(2);
             assertEquals(8, percentile_disc);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testPercentileDiscWithGroupbyAndOrderBy() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, ts);
+
+        String query = "SELECT A_STRING, PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY A_INTEGER ASC) FROM aTable GROUP BY A_STRING ORDER BY A_STRING DESC";
+
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
+                                                                                     // timestamp 2
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("c",rs.getString(1));
+            int percentile_disc = rs.getInt(2);
+            assertEquals(8, percentile_disc);
+            assertTrue(rs.next());
+            assertEquals("b",rs.getString(1));
+            percentile_disc = rs.getInt(2);
+            assertEquals(5, percentile_disc);
+            assertTrue(rs.next());
+            assertEquals("a",rs.getString(1));
+            percentile_disc = rs.getInt(2);
+            assertEquals(2, percentile_disc);
             assertFalse(rs.next());
         } finally {
             conn.close();

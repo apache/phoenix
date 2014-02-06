@@ -23,9 +23,8 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map.Entry;
 
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PDataType;
@@ -39,16 +38,10 @@ import org.apache.phoenix.schema.tuple.Tuple;
 public abstract class BaseStddevAggregator extends DistinctValueWithCountClientAggregator {
 
     protected Expression stdDevColExp;
-    private BigDecimal cachedResult = null;
 
     public BaseStddevAggregator(List<Expression> exps, ColumnModifier columnModifier) {
         super(columnModifier);
         this.stdDevColExp = exps.get(0);
-    }
-
-    @Override
-    protected int getBufferLength() {
-        return PDataType.DECIMAL.getByteSize();
     }
 
     @Override
@@ -89,8 +82,7 @@ public abstract class BaseStddevAggregator extends DistinctValueWithCountClientA
     }
     
     @Override
-    public void reset() {
-        super.reset();
-        this.cachedResult = null;
+    protected PDataType getResultDataType() {
+        return PDataType.DECIMAL;
     }
 }

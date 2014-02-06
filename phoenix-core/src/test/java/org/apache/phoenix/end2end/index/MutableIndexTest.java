@@ -751,4 +751,23 @@ public class MutableIndexTest extends BaseMutableIndexTest {
             conn.close();
         }
     }
+
+    @Test
+    public void testInFilterOnIndexedTable() throws Exception {
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+	        String ddl = "CREATE TABLE TEST (PK1 CHAR(2) NOT NULL PRIMARY KEY, CF1.COL1 BIGINT)";
+	        conn.createStatement().execute(ddl);
+	        ddl = "CREATE INDEX IDX1 ON TEST (COL1)";
+	        conn.createStatement().execute(ddl);
+	
+	        String query = "SELECT COUNT(COL1) FROM TEST WHERE COL1 IN (1,25,50,75,100)"; 
+	        ResultSet rs = conn.createStatement().executeQuery(query);
+	        assertTrue(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
 }

@@ -90,25 +90,148 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
         List<Object> testCases = Lists.newArrayList();
         testCases.add(new String[][] {
                 {}, {
+                /* 
+                 * testLeftJoinWithAggregation()
+                 *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
+                 *     LEFT JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     GROUP BY i.name ORDER BY i.name
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED + "\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [I.NAME]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED,
+                /* 
+                 * testLeftJoinWithAggregation()
+                 *     SELECT i.item_id iid, sum(quantity) q FROM joinOrderTable o 
+                 *     LEFT JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     GROUP BY i.item_id ORDER BY q DESC"
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED + "\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.item_id]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
+                /* 
+                 * testLeftJoinWithAggregation()
+                 *     SELECT i.item_id iid, sum(quantity) q FROM joinItemTable i 
+                 *     LEFT JOIN joinOrderTable o ON o.item_id = i.item_id 
+                 *     GROUP BY i.item_id ORDER BY q DESC NULLS LAST, iid
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.item_id]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, I.item_id]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED,
+                /* 
+                 * testRightJoinWithAggregation()
+                 *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
+                 *     RIGHT JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     GROUP BY i.name ORDER BY i.name
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [I.NAME]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED,
+                /*
+                 * testRightJoinWithAggregation()
+                 *     SELECT i.item_id iid, sum(quantity) q FROM joinOrderTable o 
+                 *     RIGHT JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     GROUP BY i.item_id ORDER BY q DESC NULLS LAST, iid
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.item_id]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, I.item_id]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED,
+                /*
+                 * testJoinWithWildcard()
+                 *     SELECT * FROM joinItemTable LEFT JOIN joinSupplierTable supp 
+                 *     ON joinItemTable.supplier_id = supp.supplier_id 
+                 *     ORDER BY item_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" + 
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_NORMALIZED,
+                /*
+                 * testJoinPlanWithIndex()
+                 *     SELECT item.item_id, item.name, supp.supplier_id, supp.name 
+                 *     FROM joinItemTable item LEFT JOIN joinSupplierTable supp 
+                 *     ON substr(item.name, 2, 1) = substr(supp.name, 2, 1) 
+                 *         AND (supp.name BETWEEN 'S1' AND 'S5') 
+                 *     WHERE item.name BETWEEN 'T1' AND 'T5'
+                 */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
                 "    SERVER FILTER BY (NAME >= 'T1' AND NAME <= 'T5')\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_NORMALIZED + "\n" +
                 "            SERVER FILTER BY (NAME >= 'S1' AND NAME <= 'S5')",
+                /*
+                 * testJoinPlanWithIndex()
+                 *     SELECT item.item_id, item.name, supp.supplier_id, supp.name 
+                 *     FROM joinItemTable item INNER JOIN joinSupplierTable supp 
+                 *     ON item.supplier_id = supp.supplier_id 
+                 *     WHERE (item.name = 'T1' OR item.name = 'T5') 
+                 *         AND (supp.name = 'S1' OR supp.name = 'S5')
+                 */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
                 "    SERVER FILTER BY (NAME = 'T1' OR NAME = 'T5')\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_NORMALIZED + "\n" +
                 "            SERVER FILTER BY (NAME = 'S1' OR NAME = 'S5')",
+                /*
+                 * testJoinWithSkipMergeOptimization()
+                 *     SELECT s.name FROM joinItemTable i 
+                 *     JOIN joinOrderTable o ON o.item_id = i.item_id AND quantity < 5000 
+                 *     JOIN joinSupplierTable s ON i.supplier_id = s.supplier_id
+                 */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
                 "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0 (SKIP MERGE)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
                 "    BUILD HASH TABLE 1\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_NORMALIZED
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_NORMALIZED,
+                /*
+                 * testSelfJoin
+                 *     SELECT i2.item_id, i1.name FROM joinItemTable i1 
+                 *     JOIN joinItemTable i2 ON i1.item_id = i2.item_id 
+                 *     ORDER BY i1.item_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
+                /*
+                 * testSelfJoin
+                 *     SELECT i1.name, i2.name FROM joinItemTable i1 
+                 *     JOIN joinItemTable i2 ON i1.item_id = i2.supplier_id 
+                 *     ORDER BY i1.name, i2.name
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
+                "    SERVER SORTED BY [I1.NAME, I2.NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED,
                 }});
         testCases.add(new String[][] {
                 {
@@ -116,22 +239,147 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                 "CREATE INDEX IDX_ITEM ON " + JOIN_ITEM_TABLE + " (name) INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
                 "CREATE INDEX IDX_SUPPLIER ON " + JOIN_SUPPLIER_TABLE + " (name)"
                 }, {
-                "CLIENT PARALLEL 4-WAY RANGE SCAN OVER IDX_ITEM ['T1'] - ['T5']\n" +
+                /* 
+                 * testLeftJoinWithAggregation()
+                 *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
+                 *     LEFT JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     GROUP BY i.name ORDER BY i.name
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED + "\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [I.NAME]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER IDX_ITEM\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
+                /* 
+                 * testLeftJoinWithAggregation()
+                 *     SELECT i.item_id iid, sum(quantity) q FROM joinOrderTable o 
+                 *     LEFT JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     GROUP BY i.item_id ORDER BY q DESC"
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED + "\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.item_id]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER IDX_ITEM\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
+                /* 
+                 * testLeftJoinWithAggregation()
+                 *     SELECT i.item_id iid, sum(quantity) q FROM joinItemTable i 
+                 *     LEFT JOIN joinOrderTable o ON o.item_id = i.item_id 
+                 *     GROUP BY i.item_id ORDER BY q DESC NULLS LAST, iid
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.item_id]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, I.item_id]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED,
+                /* 
+                 * testRightJoinWithAggregation()
+                 *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
+                 *     RIGHT JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     GROUP BY i.name ORDER BY i.name
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER IDX_ITEM\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED,
+                /*
+                 * testRightJoinWithAggregation()
+                 *     SELECT i.item_id iid, sum(quantity) q FROM joinOrderTable o 
+                 *     RIGHT JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     GROUP BY i.item_id ORDER BY q DESC NULLS LAST, iid
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.item_id]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, I.item_id]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED,
+                /*
+                 * testJoinWithWildcard()
+                 *     SELECT * FROM joinItemTable LEFT JOIN joinSupplierTable supp 
+                 *     ON joinItemTable.supplier_id = supp.supplier_id 
+                 *     ORDER BY item_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_NORMALIZED,
+                /*
+                 * testJoinPlanWithIndex()
+                 *     SELECT item.item_id, item.name, supp.supplier_id, supp.name 
+                 *     FROM joinItemTable item LEFT JOIN joinSupplierTable supp 
+                 *     ON substr(item.name, 2, 1) = substr(supp.name, 2, 1) 
+                 *         AND (supp.name BETWEEN 'S1' AND 'S5') 
+                 *     WHERE item.name BETWEEN 'T1' AND 'T5'
+                 */
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX_ITEM ['T1'] - ['T5']\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX_SUPPLIER ['S1'] - ['S5']",
-                "CLIENT PARALLEL 4-WAY SKIP SCAN ON 2 KEYS OVER IDX_ITEM ['T1'] - ['T5']\n" +
+                /*
+                 * testJoinPlanWithIndex()
+                 *     SELECT item.item_id, item.name, supp.supplier_id, supp.name 
+                 *     FROM joinItemTable item INNER JOIN joinSupplierTable supp 
+                 *     ON item.supplier_id = supp.supplier_id 
+                 *     WHERE (item.name = 'T1' OR item.name = 'T5') 
+                 *         AND (supp.name = 'S1' OR supp.name = 'S5')
+                 */
+                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER IDX_ITEM ['T1'] - ['T5']\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER IDX_SUPPLIER ['S1'] - ['S5']",
-                "CLIENT PARALLEL 4-WAY FULL SCAN OVER IDX_ITEM\n" +
+                /*
+                 * testJoinWithSkipMergeOptimization()
+                 *     SELECT s.name FROM joinItemTable i 
+                 *     JOIN joinOrderTable o ON o.item_id = i.item_id AND quantity < 5000 
+                 *     JOIN joinSupplierTable s ON i.supplier_id = s.supplier_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER IDX_ITEM\n" +
                 "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0 (SKIP MERGE)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
                 "    BUILD HASH TABLE 1\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER IDX_SUPPLIER"
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER IDX_SUPPLIER",
+                /*
+                 * testSelfJoin
+                 *     SELECT i2.item_id, i1.name FROM joinItemTable i1 
+                 *     JOIN joinItemTable i2 ON i1.item_id = i2.item_id 
+                 *     ORDER BY i1.item_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER IDX_ITEM\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
+                /*
+                 * testSelfJoin
+                 *     SELECT i1.name, i2.name FROM joinItemTable i1 
+                 *     JOIN joinItemTable i2 ON i1.item_id = i2.supplier_id 
+                 *     ORDER BY i1.name, i2.name
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER IDX_ITEM\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER SORTED BY [I1.NAME, I2.NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER IDX_ITEM",
                 }});
         return testCases;
     }
@@ -817,12 +1065,16 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testLeftJoinWithAggregation() throws Exception {
-        String query = "SELECT i.name, sum(quantity) FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
+        String query1 = "SELECT i.name, sum(quantity) FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
             + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.name ORDER BY i.name";
+        String query2 = "SELECT i.\"item_id\" iid, sum(quantity) q FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
+                + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.\"item_id\" ORDER BY q DESC";
+        String query3 = "SELECT i.\"item_id\" iid, sum(quantity) q FROM " + JOIN_ITEM_TABLE + " i LEFT JOIN " 
+                + JOIN_ORDER_TABLE + " o ON o.\"item_id\" = i.\"item_id\" GROUP BY i.\"item_id\" ORDER BY q DESC NULLS LAST, iid";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
-            PreparedStatement statement = conn.prepareStatement(query);
+            PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
             assertEquals(rs.getString(1), "T1");
@@ -838,6 +1090,58 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             assertEquals(rs.getInt(2), 6000);
 
             assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query1);
+            assertEquals(plans[0], QueryUtil.getExplainPlan(rs));
+            
+            statement = conn.prepareStatement(query2);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000006");
+            assertEquals(rs.getInt("q"), 6000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000003");
+            assertEquals(rs.getInt("q"), 5000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000002");
+            assertEquals(rs.getInt("q"), 3000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000001");
+            assertEquals(rs.getInt("q"), 1000);
+
+            assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query2);
+            assertEquals(plans[1], QueryUtil.getExplainPlan(rs));
+            
+            statement = conn.prepareStatement(query3);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000006");
+            assertEquals(rs.getInt("q"), 6000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000003");
+            assertEquals(rs.getInt("q"), 5000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000002");
+            assertEquals(rs.getInt("q"), 3000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000001");
+            assertEquals(rs.getInt("q"), 1000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000004");
+            assertEquals(rs.getInt("q"), 0);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000005");
+            assertEquals(rs.getInt("q"), 0);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "invalid001");
+            assertEquals(rs.getInt("q"), 0);
+
+            assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query3);
+            assertEquals(plans[2], QueryUtil.getExplainPlan(rs));
         } finally {
             conn.close();
         }
@@ -845,12 +1149,14 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testRightJoinWithAggregation() throws Exception {
-        String query = "SELECT i.name, sum(quantity) FROM " + JOIN_ORDER_TABLE + " o RIGHT JOIN " 
+        String query1 = "SELECT i.name, sum(quantity) FROM " + JOIN_ORDER_TABLE + " o RIGHT JOIN " 
             + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.name ORDER BY i.name";
+        String query2 = "SELECT i.\"item_id\" iid, sum(quantity) q FROM " + JOIN_ORDER_TABLE + " o RIGHT JOIN " 
+            + JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.\"item_id\" ORDER BY q DESC NULLS LAST, iid";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
-            PreparedStatement statement = conn.prepareStatement(query);
+            PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
             assertEquals(rs.getString(1), "INVALID-1");
@@ -875,6 +1181,38 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             assertEquals(rs.getInt(2), 6000);
 
             assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query1);
+            assertEquals(plans[3], QueryUtil.getExplainPlan(rs));
+            
+            statement = conn.prepareStatement(query2);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000006");
+            assertEquals(rs.getInt("q"), 6000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000003");
+            assertEquals(rs.getInt("q"), 5000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000002");
+            assertEquals(rs.getInt("q"), 3000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000001");
+            assertEquals(rs.getInt("q"), 1000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000004");
+            assertEquals(rs.getInt("q"), 0);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "0000000005");
+            assertEquals(rs.getInt("q"), 0);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("iid"), "invalid001");
+            assertEquals(rs.getInt("q"), 0);
+
+            assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query2);
+            assertEquals(plans[4], QueryUtil.getExplainPlan(rs));
         } finally {
             conn.close();
         }
@@ -1164,6 +1502,9 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             assertNull(rs.getString("supp.loc_id"));
 
             assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals(plans[5], QueryUtil.getExplainPlan(rs));
         } finally {
             conn.close();
         }
@@ -1312,7 +1653,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             assertFalse(rs.next());
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query1);
-            assertEquals(plans[0], QueryUtil.getExplainPlan(rs));
+            assertEquals(plans[6], QueryUtil.getExplainPlan(rs));
             
             
             statement = conn.prepareStatement(query2);
@@ -1331,7 +1672,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             assertFalse(rs.next());
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query2);
-            assertEquals(plans[1], QueryUtil.getExplainPlan(rs));
+            assertEquals(plans[7], QueryUtil.getExplainPlan(rs));
         } finally {
             conn.close();
         }
@@ -1359,7 +1700,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             assertFalse(rs.next());
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals(plans[2], QueryUtil.getExplainPlan(rs));
+            assertEquals(plans[8], QueryUtil.getExplainPlan(rs));
         } finally {
             conn.close();
         }
@@ -1370,7 +1711,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
         String query1 = "SELECT i2.\"item_id\", i1.name FROM " + JOIN_ITEM_TABLE + " i1 JOIN " 
             + JOIN_ITEM_TABLE + " i2 ON i1.\"item_id\" = i2.\"item_id\" ORDER BY i1.\"item_id\"";
         String query2 = "SELECT i1.name, i2.name FROM " + JOIN_ITEM_TABLE + " i1 JOIN " 
-        + JOIN_ITEM_TABLE + " i2 ON i1.\"item_id\" = i2.\"supplier_id\" ORDER BY i1.name, i2.name";
+            + JOIN_ITEM_TABLE + " i2 ON i1.\"item_id\" = i2.\"supplier_id\" ORDER BY i1.name, i2.name";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
@@ -1400,6 +1741,9 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             
             assertFalse(rs.next());
             
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query1);
+            assertEquals(plans[9], QueryUtil.getExplainPlan(rs));
+
             statement = conn.prepareStatement(query2);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -1422,6 +1766,9 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
             assertEquals(rs.getString(2), "T6");
             
             assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query2);
+            assertEquals(plans[10], QueryUtil.getExplainPlan(rs));
         } finally {
             conn.close();
         }
@@ -1656,3 +2003,4 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
         }
     }
 }
+
