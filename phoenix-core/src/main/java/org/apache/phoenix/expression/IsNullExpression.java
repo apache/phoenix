@@ -19,11 +19,13 @@
  */
 package org.apache.phoenix.expression;
 
-import java.io.*;
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -39,10 +41,21 @@ import org.apache.phoenix.schema.tuple.Tuple;
 public class IsNullExpression extends BaseSingleExpression {
     private boolean isNegate;
 
+    public static Expression create(Expression child, boolean negate, ImmutableBytesWritable ptr) throws SQLException {
+        if (!child.isNullable()) {
+            return LiteralExpression.newConstant(negate, PDataType.BOOLEAN, child.isDeterministic());
+        }
+        if (child.isStateless()) {
+            boolean evaluated = child.evaluate(null, ptr);
+            return LiteralExpression.newConstant(negate ^ (!evaluated || ptr.getLength() == 0), PDataType.BOOLEAN, child.isDeterministic());
+        }
+        return new IsNullExpression(child, negate);
+    }
+    
     public IsNullExpression() {
     }
     
-    public IsNullExpression(Expression expression, boolean negate) {
+    private IsNullExpression(Expression expression, boolean negate) {
         super(expression);
         this.isNegate = negate;
     }

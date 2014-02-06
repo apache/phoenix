@@ -24,7 +24,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -345,14 +344,6 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
                 return NODE_FACTORY.inList(children, node.isNegate());
             }
         });
-        if (normNode.getChildren().size() == 2) { // Rewrite as equality or inequality
-            // Rewrite row value constructor in = or != expression, as this is the same as if it was
-            // used in an equality expression which will be more efficient
-            ParseNode lhs = normNode.getChildren().get(0);
-            ParseNode rhs = normNode.getChildren().get(1);
-            normNode = NODE_FACTORY.comparison(node.isNegate() ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, lhs, rhs);
-            normNode = normNode.accept(this);
-        }
         return normNode;
     }
     
@@ -366,51 +357,6 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         });
     }
     
-    /**
-     * Rewrites expressions of the form (a, b, c) = (1, 2) as a = 1 and b = 2 and c is null
-     * as this is equivalent and already optimized
-     * @param lhs
-     * @param rhs
-     * @param andNodes
-     * @throws SQLException 
-     */
-    private void rewriteRowValueConstuctorEqualityComparison(ParseNode lhs, ParseNode rhs, List<ParseNode> andNodes) throws SQLException {
-        if (lhs instanceof RowValueConstructorParseNode && rhs instanceof RowValueConstructorParseNode) {
-            int i = 0;
-            for (; i < Math.min(lhs.getChildren().size(),rhs.getChildren().size()); i++) {
-                rewriteRowValueConstuctorEqualityComparison(lhs.getChildren().get(i), rhs.getChildren().get(i), andNodes);
-            }
-            for (; i < lhs.getChildren().size(); i++) {
-                rewriteRowValueConstuctorEqualityComparison(lhs.getChildren().get(i), null, andNodes);
-            }
-            for (; i < rhs.getChildren().size(); i++) {
-                rewriteRowValueConstuctorEqualityComparison(null, rhs.getChildren().get(i), andNodes);
-            }
-        } else if (lhs instanceof RowValueConstructorParseNode) {
-            rewriteRowValueConstuctorEqualityComparison(lhs.getChildren().get(0), rhs, andNodes);
-            for (int i = 1; i < lhs.getChildren().size(); i++) {
-                rewriteRowValueConstuctorEqualityComparison(lhs.getChildren().get(i), null, andNodes);
-            }
-        } else if (rhs instanceof RowValueConstructorParseNode) {
-            rewriteRowValueConstuctorEqualityComparison(lhs, rhs.getChildren().get(0), andNodes);
-            for (int i = 1; i < rhs.getChildren().size(); i++) {
-                rewriteRowValueConstuctorEqualityComparison(null, rhs.getChildren().get(i), andNodes);
-            }
-        } else {
-            boolean isLHSNull = lhs == null || (lhs instanceof LiteralParseNode && ((LiteralParseNode)lhs).getValue() == null);
-            boolean isRHSNull = rhs == null || (rhs instanceof LiteralParseNode && ((LiteralParseNode)rhs).getValue() == null);
-            if (isLHSNull && isRHSNull) { // null == null will end up making the query degenerate
-                andNodes.add(NODE_FACTORY.comparison(CompareOp.EQUAL, lhs, rhs).accept(this));
-            } else if (isLHSNull) { // AND rhs IS NULL
-                andNodes.add(NODE_FACTORY.isNull(rhs, false).accept(this));
-            } else if (isRHSNull) { // AND lhs IS NULL
-                andNodes.add(NODE_FACTORY.isNull(lhs, false).accept(this));
-            } else { // AND lhs = rhs
-                andNodes.add(NODE_FACTORY.comparison(CompareOp.EQUAL, lhs, rhs).accept(this));
-            }
-        }
-    }
-    
     @Override
     public ParseNode visitLeave(final ComparisonParseNode node, List<ParseNode> nodes) throws SQLException {
         ParseNode normNode = leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
@@ -420,21 +366,6 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
             }
         });
         
-        CompareOp op = node.getFilterOp();
-        if (op == CompareOp.EQUAL || op == CompareOp.NOT_EQUAL) {
-            // Rewrite row value constructor in = or != expression, as this is the same as if it was
-            // used in an equality expression for each individual part.
-            ParseNode lhs = normNode.getChildren().get(0);
-            ParseNode rhs = normNode.getChildren().get(1);
-            if (lhs instanceof RowValueConstructorParseNode || rhs instanceof RowValueConstructorParseNode) {
-                List<ParseNode> andNodes = Lists.newArrayListWithExpectedSize(Math.max(lhs.getChildren().size(), rhs.getChildren().size()));
-                rewriteRowValueConstuctorEqualityComparison(lhs,rhs,andNodes);
-                normNode = NODE_FACTORY.and(andNodes);
-                if (op == CompareOp.NOT_EQUAL) {
-                    normNode = NODE_FACTORY.not(normNode);
-                }
-            }
-        }
         return normNode;
     }
     

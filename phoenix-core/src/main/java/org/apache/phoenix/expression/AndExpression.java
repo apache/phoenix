@@ -19,9 +19,13 @@
  */
 package org.apache.phoenix.expression;
 
+import java.sql.SQLException;
+import java.util.Iterator;
 import java.util.List;
 
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.TypeMismatchException;
 
 
 /**
@@ -33,6 +37,31 @@ import org.apache.phoenix.expression.visitor.ExpressionVisitor;
  */
 public class AndExpression extends AndOrExpression {
     private static final String AND = "AND";
+    
+    public static Expression create(List<Expression> children) throws SQLException {
+        boolean isDeterministic = true;
+        Iterator<Expression> iterator = children.iterator();
+        while (iterator.hasNext()) {
+            Expression child = iterator.next();
+            if (child.getDataType() != PDataType.BOOLEAN) {
+                throw TypeMismatchException.newException(PDataType.BOOLEAN, child.getDataType(), child.toString());
+            }
+            if (LiteralExpression.isFalse(child)) {
+                return child;
+            }
+            if (LiteralExpression.isTrue(child)) {
+                iterator.remove();
+            }
+            isDeterministic &= child.isDeterministic();
+        }
+        if (children.size() == 0) {
+            return LiteralExpression.newConstant(true, isDeterministic);
+        }
+        if (children.size() == 1) {
+            return children.get(0);
+        }
+        return new AndExpression(children);
+    }
     
     public static String combine(String expression1, String expression2) {
         if (expression1 == null) {

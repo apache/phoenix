@@ -22,18 +22,26 @@ package org.apache.phoenix.expression;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
+
+import com.google.common.collect.Lists;
 
 
 /**
@@ -52,6 +60,213 @@ public class ComparisonExpression extends BaseCompoundExpression {
         CompareOpString[CompareOp.LESS.ordinal()] = " < ";
         CompareOpString[CompareOp.GREATER_OR_EQUAL.ordinal()] = " >= ";
         CompareOpString[CompareOp.LESS_OR_EQUAL.ordinal()] = " <= ";
+    }
+    
+    private static void addEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr) throws SQLException {
+        boolean isLHSNull = lhs.isStateless() && (!lhs.evaluate(null, ptr) || ptr.getLength()==0);
+        boolean isRHSNull = rhs.isStateless() && (!rhs.evaluate(null, ptr) || ptr.getLength()==0);
+        if (isLHSNull && isRHSNull) { // null == null will end up making the query degenerate
+            andNodes.add(LiteralExpression.newConstant(false, PDataType.BOOLEAN));
+        } else if (isLHSNull) { // AND rhs IS NULL
+            andNodes.add(IsNullExpression.create(rhs, false, ptr));
+        } else if (isRHSNull) { // AND lhs IS NULL
+            andNodes.add(IsNullExpression.create(lhs, false, ptr));
+        } else { // AND lhs = rhs
+            andNodes.add(ComparisonExpression.create(CompareOp.EQUAL, Arrays.asList(lhs, rhs), ptr));
+        }
+    }
+    
+    /**
+     * Rewrites expressions of the form (a, b, c) = (1, 2) as a = 1 and b = 2 and c is null
+     * as this is equivalent and already optimized
+     * @param lhs
+     * @param rhs
+     * @param andNodes
+     * @throws SQLException 
+     */
+    private static void rewriteRVCAsEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr) throws SQLException {
+        if (lhs instanceof RowValueConstructorExpression && rhs instanceof RowValueConstructorExpression) {
+            int i = 0;
+            for (; i < Math.min(lhs.getChildren().size(),rhs.getChildren().size()); i++) {
+                addEqualityExpression(lhs.getChildren().get(i), rhs.getChildren().get(i), andNodes, ptr);
+            }
+            for (; i < lhs.getChildren().size(); i++) {
+                addEqualityExpression(lhs.getChildren().get(i), LiteralExpression.newConstant(null, lhs.getChildren().get(i).getDataType()), andNodes, ptr);
+            }
+            for (; i < rhs.getChildren().size(); i++) {
+                addEqualityExpression(LiteralExpression.newConstant(null, rhs.getChildren().get(i).getDataType()), rhs.getChildren().get(i), andNodes, ptr);
+            }
+        } else if (lhs instanceof RowValueConstructorExpression) {
+            addEqualityExpression(lhs.getChildren().get(0), rhs, andNodes, ptr);
+            for (int i = 1; i < lhs.getChildren().size(); i++) {
+                addEqualityExpression(lhs.getChildren().get(i), LiteralExpression.newConstant(null, lhs.getChildren().get(i).getDataType()), andNodes, ptr);
+            }
+        } else if (rhs instanceof RowValueConstructorExpression) {
+            addEqualityExpression(lhs, rhs.getChildren().get(0), andNodes, ptr);
+            for (int i = 1; i < rhs.getChildren().size(); i++) {
+                addEqualityExpression(LiteralExpression.newConstant(null, rhs.getChildren().get(i).getDataType()), rhs.getChildren().get(i), andNodes, ptr);
+            }
+        }
+    }
+    
+    public static Expression create(CompareOp op, List<Expression> children, ImmutableBytesWritable ptr) throws SQLException {
+        Expression lhsExpr = children.get(0);
+        Expression rhsExpr = children.get(1);
+        PDataType lhsExprDataType = lhsExpr.getDataType();
+        PDataType rhsExprDataType = rhsExpr.getDataType();
+        // We don't yet support comparison between entire arrays
+        if ( ( (lhsExprDataType != null && lhsExprDataType.isArrayType()) || 
+               (rhsExprDataType != null && rhsExprDataType.isArrayType()) ) &&
+             ( op != CompareOp.EQUAL && op != CompareOp.NOT_EQUAL ) ) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_ARRAY_COMPARISON)
+            .setMessage(ComparisonExpression.toString(op, children)).build().buildException();
+        }
+        
+        if (lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) {
+            if (op == CompareOp.EQUAL || op == CompareOp.NOT_EQUAL) {
+                List<Expression> andNodes = Lists.<Expression>newArrayListWithExpectedSize(Math.max(lhsExpr.getChildren().size(), rhsExpr.getChildren().size()));
+                rewriteRVCAsEqualityExpression(lhsExpr, rhsExpr, andNodes, ptr);
+                Expression expr = AndExpression.create(andNodes);
+                if (op == CompareOp.NOT_EQUAL) {
+                    expr = NotExpression.create(expr, ptr);
+                }
+                return expr;
+            }
+            rhsExpr = RowValueConstructorExpression.coerce(lhsExpr, rhsExpr, op);
+            // Always wrap both sides in row value constructor, so we don't have to consider comparing
+            // a non rvc with a rvc.
+            if ( ! ( lhsExpr instanceof RowValueConstructorExpression ) ) {
+                lhsExpr = new RowValueConstructorExpression(Collections.singletonList(lhsExpr), lhsExpr.isStateless());
+            }
+            children = Arrays.asList(lhsExpr, rhsExpr);
+        } else if(lhsExprDataType != null && rhsExprDataType != null && !lhsExprDataType.isComparableTo(rhsExprDataType)) {
+            throw TypeMismatchException.newException(lhsExprDataType, rhsExprDataType, toString(op, children));
+        }
+        boolean isDeterministic = lhsExpr.isDeterministic() || rhsExpr.isDeterministic();
+        
+        Object lhsValue = null;
+        // Can't use lhsNode.isConstant(), because we have cases in which we don't know
+        // in advance if a function evaluates to null (namely when bind variables are used)
+        // TODO: use lhsExpr.isStateless instead
+        if (lhsExpr instanceof LiteralExpression) {
+            lhsValue = ((LiteralExpression)lhsExpr).getValue();
+            if (lhsValue == null) {
+                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, lhsExpr.isDeterministic());
+            }
+        }
+        Object rhsValue = null;
+        // TODO: use lhsExpr.isStateless instead
+        if (rhsExpr instanceof LiteralExpression) {
+            rhsValue = ((LiteralExpression)rhsExpr).getValue();
+            if (rhsValue == null) {
+                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, rhsExpr.isDeterministic());
+            }
+        }
+        if (lhsValue != null && rhsValue != null) {
+            return LiteralExpression.newConstant(ByteUtil.compare(op,lhsExprDataType.compareTo(lhsValue, rhsValue, rhsExprDataType)), isDeterministic);
+        }
+        // Coerce constant to match type of lhs so that we don't need to
+        // convert at filter time. Since we normalize the select statement
+        // to put constants on the LHS, we don't need to check the RHS.
+        if (rhsValue != null) {
+            // Comparing an unsigned int/long against a negative int/long would be an example. We just need to take
+            // into account the comparison operator.
+            if (rhsExprDataType != lhsExprDataType 
+                    || rhsExpr.getColumnModifier() != lhsExpr.getColumnModifier()
+                    || (rhsExpr.getMaxLength() != null && lhsExpr.getMaxLength() != null && rhsExpr.getMaxLength() < lhsExpr.getMaxLength())) {
+                // TODO: if lengths are unequal and fixed width?
+                if (rhsExprDataType.isCoercibleTo(lhsExprDataType, rhsValue)) { // will convert 2.0 -> 2
+                    children = Arrays.asList(children.get(0), LiteralExpression.newConstant(rhsValue, lhsExprDataType, 
+                            lhsExpr.getMaxLength(), null, lhsExpr.getColumnModifier(), isDeterministic));
+                } else if (op == CompareOp.EQUAL) {
+                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, true);
+                } else if (op == CompareOp.NOT_EQUAL) {
+                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, true);
+                } else { // TODO: generalize this with PDataType.getMinValue(), PDataTypeType.getMaxValue() methods
+                    switch(rhsExprDataType) {
+                    case DECIMAL:
+                        /*
+                         * We're comparing an int/long to a constant decimal with a fraction part.
+                         * We need the types to match in case this is used to form a key. To form the start/stop key,
+                         * we need to adjust the decimal by truncating it or taking its ceiling, depending on the comparison
+                         * operator, to get a whole number.
+                         */
+                        int increment = 0;
+                        switch (op) {
+                        case GREATER_OR_EQUAL: 
+                        case LESS: // get next whole number
+                            increment = 1;
+                        default: // Else, we truncate the value
+                            BigDecimal bd = (BigDecimal)rhsValue;
+                            rhsValue = bd.longValue() + increment;
+                            children = Arrays.asList(lhsExpr, LiteralExpression.newConstant(rhsValue, lhsExprDataType, lhsExpr.getColumnModifier(), rhsExpr.isDeterministic()));
+                            break;
+                        }
+                        break;
+                    case LONG:
+                        /*
+                         * We are comparing an int, unsigned_int to a long, or an unsigned_long to a negative long.
+                         * int has range of -2147483648 to 2147483647, and unsigned_int has a value range of 0 to 4294967295.
+                         * 
+                         * If lhs is int or unsigned_int, since we already determined that we cannot coerce the rhs 
+                         * to become the lhs, we know the value on the rhs is greater than lhs if it's positive, or smaller than
+                         * lhs if it's negative.
+                         * 
+                         * If lhs is an unsigned_long, then we know the rhs is definitely a negative long. rhs in this case
+                         * will always be bigger than rhs.
+                         */
+                        if (lhsExprDataType == PDataType.INTEGER || 
+                        lhsExprDataType == PDataType.UNSIGNED_INT) {
+                            switch (op) {
+                            case LESS:
+                            case LESS_OR_EQUAL:
+                                if ((Long)rhsValue > 0) {
+                                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, isDeterministic);
+                                } else {
+                                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, isDeterministic);
+                                }
+                            case GREATER:
+                            case GREATER_OR_EQUAL:
+                                if ((Long)rhsValue > 0) {
+                                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, isDeterministic);
+                                } else {
+                                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, isDeterministic);
+                                }
+                            default:
+                                break;
+                            }
+                        } else if (lhsExprDataType == PDataType.UNSIGNED_LONG) {
+                            switch (op) {
+                            case LESS:
+                            case LESS_OR_EQUAL:
+                                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, isDeterministic);
+                            case GREATER:
+                            case GREATER_OR_EQUAL:
+                                return LiteralExpression.newConstant(true, PDataType.BOOLEAN, isDeterministic);
+                            default:
+                                break;
+                            }
+                        }
+                        children = Arrays.asList(lhsExpr, LiteralExpression.newConstant(rhsValue, rhsExprDataType, lhsExpr.getColumnModifier(), isDeterministic));
+                        break;
+                    }
+                }
+            }
+
+            // Determine if we know the expression must be TRUE or FALSE based on the max size of
+            // a fixed length expression.
+            if (children.get(1).getMaxLength() != null && lhsExpr.getMaxLength() != null && lhsExpr.getMaxLength() < children.get(1).getMaxLength()) {
+                switch (op) {
+                case EQUAL:
+                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, isDeterministic);
+                case NOT_EQUAL:
+                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, isDeterministic);
+                default:
+                    break;
+                }
+            }
+        }
+        return new ComparisonExpression(op, children);
     }
     
     public ComparisonExpression() {

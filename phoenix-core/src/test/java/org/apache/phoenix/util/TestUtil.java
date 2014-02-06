@@ -244,7 +244,7 @@ public class TestUtil {
     }
 
     public static Expression in(Expression... expressions) throws SQLException {
-        return InListExpression.create(Arrays.asList(expressions), new ImmutableBytesWritable(), false);
+        return InListExpression.create(Arrays.asList(expressions), false, new ImmutableBytesWritable());
     }
 
     public static Expression in(Expression e, Object... literals) throws SQLException {
@@ -254,7 +254,7 @@ public class TestUtil {
         for (Object o : literals) {
             expressions.add(LiteralExpression.newConstant(o, childType));
         }
-        return InListExpression.create(expressions, new ImmutableBytesWritable(), false);
+        return InListExpression.create(expressions, false, new ImmutableBytesWritable());
     }
 
     public static void assertDegenerate(StatementContext context) {

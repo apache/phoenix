@@ -265,7 +265,7 @@ public class JoinCompiler {
             if (expressions.size() == 1)
             	return expressions.get(0);
             
-            return new AndExpression(expressions);
+            return AndExpression.create(expressions);
         }
 
         public void projectColumns(Scan scan, TableRef table) {

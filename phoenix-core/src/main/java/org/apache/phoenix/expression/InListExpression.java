@@ -57,9 +57,16 @@ public class InListExpression extends BaseSingleExpression {
     private ImmutableBytesPtr value = new ImmutableBytesPtr();
     private List<Expression> keyExpressions; // client side only
 
-    public static Expression create (List<Expression> children, ImmutableBytesWritable ptr, boolean isNegate) throws SQLException {
+    public static Expression create (List<Expression> children, boolean isNegate, ImmutableBytesWritable ptr) throws SQLException {
         Expression firstChild = children.get(0);
         PDataType firstChildType = firstChild.getDataType();
+        
+        if (firstChild.isStateless() && (!firstChild.evaluate(null, ptr) || ptr.getLength() == 0)) {
+            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, firstChild.isDeterministic());
+        }
+        if (children.size() == 2) {
+            return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, children, ptr);
+        }
         
         boolean addedNull = false;
         List<Expression> keys = Lists.newArrayListWithExpectedSize(children.size());
@@ -97,19 +104,19 @@ public class InListExpression extends BaseSingleExpression {
         if (keys.size() == 2 && addedNull) {
             return LiteralExpression.newConstant(null, PDataType.BOOLEAN, true);
         }
-        Expression expression;
         // TODO: if inChildren.isEmpty() then Oracle throws a type mismatch exception. This means
         // that none of the list elements match in type and there's no null element. We'd return
         // false in this case. Should we throw?
-        // FIXME: We don't optimize RVC equality expression currently like we do with an IN
-        // expression, so don't convert in that case.
-        if (keys.size() == 2 && ! (firstChild instanceof RowValueConstructorExpression) ) {
-            expression = new ComparisonExpression(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, keys);
-        } else {
-            expression = new InListExpression(keys, coercedKeyExpressions);
-            if (isNegate) { 
-                expression = new NotExpression(expression);
+        Expression expression = new InListExpression(keys, coercedKeyExpressions);
+        if (isNegate) { 
+            expression = NotExpression.create(expression, ptr);
+        }
+        if (expression.isStateless()) {
+            if (!expression.evaluate(null, ptr) || ptr.getLength() == 0) {
+                return LiteralExpression.newConstant(null,expression.getDataType(), expression.isDeterministic());
             }
+            Object value = expression.getDataType().toObject(ptr);
+            return LiteralExpression.newConstant(value, expression.getDataType(), expression.isDeterministic());
         }
         return expression;
     }

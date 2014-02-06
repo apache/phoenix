@@ -25,7 +25,6 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
@@ -102,7 +101,6 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 
@@ -140,7 +138,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         return true;
     }
     
-    private void addBindParamMetaData(ParseNode parentNode, ParseNode lhsNode, ParseNode rhsNode, Expression lhsExpr, Expression rhsExpr) throws SQLException {
+    private void addBindParamMetaData(ParseNode lhsNode, ParseNode rhsNode, Expression lhsExpr, Expression rhsExpr) throws SQLException {
         if (lhsNode instanceof BindParseNode) {
             context.getBindManager().addParamMetaData((BindParseNode)lhsNode, rhsExpr);
         }
@@ -149,199 +147,39 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         }
     }
     
-    private static void checkComparability(ParseNode node, PDataType lhsDataType, PDataType rhsDataType) throws TypeMismatchException {
-        if(lhsDataType != null && rhsDataType != null && !lhsDataType.isComparableTo(rhsDataType)) {
-            throw TypeMismatchException.newException(lhsDataType, rhsDataType, node.toString());
-        }
-    }
-    
-    // TODO: this no longer needs to be recursive, as we flatten out rvc when we normalize the statement
-    private void checkComparability(ParseNode parentNode, ParseNode lhsNode, ParseNode rhsNode, Expression lhsExpr, Expression rhsExpr) throws SQLException {
-        if (lhsNode instanceof RowValueConstructorParseNode && rhsNode instanceof RowValueConstructorParseNode) {
-            int i = 0;
-            for (; i < Math.min(lhsExpr.getChildren().size(),rhsExpr.getChildren().size()); i++) {
-                checkComparability(parentNode, lhsNode.getChildren().get(i), rhsNode.getChildren().get(i), lhsExpr.getChildren().get(i), rhsExpr.getChildren().get(i));
-            }
-            for (; i < lhsExpr.getChildren().size(); i++) {
-                checkComparability(parentNode, lhsNode.getChildren().get(i), null, lhsExpr.getChildren().get(i), null);
-            }
-            for (; i < rhsExpr.getChildren().size(); i++) {
-                checkComparability(parentNode, null, rhsNode.getChildren().get(i), null, rhsExpr.getChildren().get(i));
-            }
-        } else if (lhsExpr instanceof RowValueConstructorExpression) {
-            checkComparability(parentNode, lhsNode.getChildren().get(0), rhsNode, lhsExpr.getChildren().get(0), rhsExpr);
-            for (int i = 1; i < lhsExpr.getChildren().size(); i++) {
-                checkComparability(parentNode, lhsNode.getChildren().get(i), null, lhsExpr.getChildren().get(i), null);
-            }
-        } else if (rhsExpr instanceof RowValueConstructorExpression) {
-            checkComparability(parentNode, lhsNode, rhsNode.getChildren().get(0), lhsExpr, rhsExpr.getChildren().get(0));
-            for (int i = 1; i < rhsExpr.getChildren().size(); i++) {
-                checkComparability(parentNode, null, rhsNode.getChildren().get(i), null, rhsExpr.getChildren().get(i));
-            }
-        } else if (lhsNode == null && rhsNode == null) { // null == null will end up making the query degenerate
-            
-        } else if (lhsNode == null) { // AND rhs IS NULL
-            addBindParamMetaData(parentNode, lhsNode, rhsNode, lhsExpr, rhsExpr);
-        } else if (rhsNode == null) { // AND lhs IS NULL
-            addBindParamMetaData(parentNode, lhsNode, rhsNode, lhsExpr, rhsExpr);
-        } else { // AND lhs = rhs
-            checkComparability(parentNode, lhsExpr.getDataType(), rhsExpr.getDataType());
-            addBindParamMetaData(parentNode, lhsNode, rhsNode, lhsExpr, rhsExpr);
-        }
-    }
-
     @Override
     public Expression visitLeave(ComparisonParseNode node, List<Expression> children) throws SQLException {
         ParseNode lhsNode = node.getChildren().get(0);
         ParseNode rhsNode = node.getChildren().get(1);
         Expression lhsExpr = children.get(0);
         Expression rhsExpr = children.get(1);
-        boolean isDeterministic = lhsExpr.isDeterministic() || rhsExpr.isDeterministic();
-
-        PDataType lhsExprDataType = lhsExpr.getDataType();
-        PDataType rhsExprDataType = rhsExpr.getDataType();
-        checkComparability(node, lhsNode, rhsNode, lhsExpr, rhsExpr);
-        // We don't yet support comparison between entire arrays
-        if ( ( (lhsExprDataType != null && lhsExprDataType.isArrayType()) || 
-               (rhsExprDataType != null && rhsExprDataType.isArrayType()) ) &&
-             ( node.getFilterOp() != CompareOp.EQUAL && node.getFilterOp() != CompareOp.NOT_EQUAL ) ) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_ARRAY_COMPARISON)
-            .setMessage(ComparisonExpression.toString(node.getFilterOp(), children)).build().buildException();
-        }
+        CompareOp op = node.getFilterOp();
         
-        if (lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) {
-            rhsExpr = RowValueConstructorExpression.coerce(lhsExpr, rhsExpr, node.getFilterOp());
-            // Always wrap both sides in row value constructor, so we don't have to consider comparing
-            // a non rvc with a rvc.
-            if ( ! ( lhsExpr instanceof RowValueConstructorExpression ) ) {
-                lhsExpr = new RowValueConstructorExpression(Collections.singletonList(lhsExpr), lhsExpr.isStateless());
+        if (lhsNode instanceof RowValueConstructorParseNode && rhsNode instanceof RowValueConstructorParseNode) {
+            int i = 0;
+            for (; i < Math.min(lhsExpr.getChildren().size(),rhsExpr.getChildren().size()); i++) {
+                addBindParamMetaData(lhsNode.getChildren().get(i), rhsNode.getChildren().get(i), lhsExpr.getChildren().get(i), rhsExpr.getChildren().get(i));
             }
-            children = Arrays.asList(lhsExpr, rhsExpr);
-        }
-        
-        Object lhsValue = null;
-        // Can't use lhsNode.isConstant(), because we have cases in which we don't know
-        // in advance if a function evaluates to null (namely when bind variables are used)
-        // TODO: use lhsExpr.isStateless instead
-        if (lhsExpr instanceof LiteralExpression) {
-            lhsValue = ((LiteralExpression)lhsExpr).getValue();
-            if (lhsValue == null) {
-                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, lhsExpr.isDeterministic());
+            for (; i < lhsExpr.getChildren().size(); i++) {
+                addBindParamMetaData(lhsNode.getChildren().get(i), null, lhsExpr.getChildren().get(i), null);
             }
-        }
-        Object rhsValue = null;
-        // TODO: use lhsExpr.isStateless instead
-        if (rhsExpr instanceof LiteralExpression) {
-            rhsValue = ((LiteralExpression)rhsExpr).getValue();
-            if (rhsValue == null) {
-                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, rhsExpr.isDeterministic());
+            for (; i < rhsExpr.getChildren().size(); i++) {
+                addBindParamMetaData(null, rhsNode.getChildren().get(i), null, rhsExpr.getChildren().get(i));
             }
-        }
-        if (lhsValue != null && rhsValue != null) {
-            return LiteralExpression.newConstant(ByteUtil.compare(node.getFilterOp(),lhsExprDataType.compareTo(lhsValue, rhsValue, rhsExprDataType)), isDeterministic);
-        }
-        // Coerce constant to match type of lhs so that we don't need to
-        // convert at filter time. Since we normalize the select statement
-        // to put constants on the LHS, we don't need to check the RHS.
-        if (rhsValue != null) {
-            // Comparing an unsigned int/long against a negative int/long would be an example. We just need to take
-            // into account the comparison operator.
-            if (rhsExprDataType != lhsExprDataType 
-                    || rhsExpr.getColumnModifier() != lhsExpr.getColumnModifier()
-                    || (rhsExpr.getMaxLength() != null && lhsExpr.getMaxLength() != null && rhsExpr.getMaxLength() < lhsExpr.getMaxLength())) {
-                // TODO: if lengths are unequal and fixed width?
-                if (rhsExprDataType.isCoercibleTo(lhsExprDataType, rhsValue)) { // will convert 2.0 -> 2
-                    children = Arrays.asList(children.get(0), LiteralExpression.newConstant(rhsValue, lhsExprDataType, 
-                            lhsExpr.getMaxLength(), null, lhsExpr.getColumnModifier(), isDeterministic));
-                } else if (node.getFilterOp() == CompareOp.EQUAL) {
-                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, true);
-                } else if (node.getFilterOp() == CompareOp.NOT_EQUAL) {
-                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, true);
-                } else { // TODO: generalize this with PDataType.getMinValue(), PDataTypeType.getMaxValue() methods
-                    switch(rhsExprDataType) {
-                    case DECIMAL:
-                        /*
-                         * We're comparing an int/long to a constant decimal with a fraction part.
-                         * We need the types to match in case this is used to form a key. To form the start/stop key,
-                         * we need to adjust the decimal by truncating it or taking its ceiling, depending on the comparison
-                         * operator, to get a whole number.
-                         */
-                        int increment = 0;
-                        switch (node.getFilterOp()) {
-                        case GREATER_OR_EQUAL: 
-                        case LESS: // get next whole number
-                            increment = 1;
-                        default: // Else, we truncate the value
-                            BigDecimal bd = (BigDecimal)rhsValue;
-                            rhsValue = bd.longValue() + increment;
-                            children = Arrays.asList(children.get(0), LiteralExpression.newConstant(rhsValue, lhsExprDataType, lhsExpr.getColumnModifier(), rhsExpr.isDeterministic()));
-                            break;
-                        }
-                        break;
-                    case LONG:
-                        /*
-                         * We are comparing an int, unsigned_int to a long, or an unsigned_long to a negative long.
-                         * int has range of -2147483648 to 2147483647, and unsigned_int has a value range of 0 to 4294967295.
-                         * 
-                         * If lhs is int or unsigned_int, since we already determined that we cannot coerce the rhs 
-                         * to become the lhs, we know the value on the rhs is greater than lhs if it's positive, or smaller than
-                         * lhs if it's negative.
-                         * 
-                         * If lhs is an unsigned_long, then we know the rhs is definitely a negative long. rhs in this case
-                         * will always be bigger than rhs.
-                         */
-                        if (lhsExprDataType == PDataType.INTEGER || 
-                        lhsExprDataType == PDataType.UNSIGNED_INT) {
-                            switch (node.getFilterOp()) {
-                            case LESS:
-                            case LESS_OR_EQUAL:
-                                if ((Long)rhsValue > 0) {
-                                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, isDeterministic);
-                                } else {
-                                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, isDeterministic);
-                                }
-                            case GREATER:
-                            case GREATER_OR_EQUAL:
-                                if ((Long)rhsValue > 0) {
-                                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, isDeterministic);
-                                } else {
-                                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, isDeterministic);
-                                }
-                            default:
-                                break;
-                            }
-                        } else if (lhsExprDataType == PDataType.UNSIGNED_LONG) {
-                            switch (node.getFilterOp()) {
-                            case LESS:
-                            case LESS_OR_EQUAL:
-                                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, isDeterministic);
-                            case GREATER:
-                            case GREATER_OR_EQUAL:
-                                return LiteralExpression.newConstant(true, PDataType.BOOLEAN, isDeterministic);
-                            default:
-                                break;
-                            }
-                        }
-                        children = Arrays.asList(children.get(0), LiteralExpression.newConstant(rhsValue, rhsExprDataType, lhsExpr.getColumnModifier(), isDeterministic));
-                        break;
-                    }
-                }
+        } else if (lhsExpr instanceof RowValueConstructorExpression) {
+            addBindParamMetaData(lhsNode.getChildren().get(0), rhsNode, lhsExpr.getChildren().get(0), rhsExpr);
+            for (int i = 1; i < lhsExpr.getChildren().size(); i++) {
+                addBindParamMetaData(lhsNode.getChildren().get(i), null, lhsExpr.getChildren().get(i), null);
             }
-
-            // Determine if we know the expression must be TRUE or FALSE based on the max size of
-            // a fixed length expression.
-            if (children.get(1).getMaxLength() != null && lhsExpr.getMaxLength() != null && lhsExpr.getMaxLength() < children.get(1).getMaxLength()) {
-                switch (node.getFilterOp()) {
-                case EQUAL:
-                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, isDeterministic);
-                case NOT_EQUAL:
-                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, isDeterministic);
-                default:
-                    break;
-                }
+        } else if (rhsExpr instanceof RowValueConstructorExpression) {
+            addBindParamMetaData(lhsNode, rhsNode.getChildren().get(0), lhsExpr, rhsExpr.getChildren().get(0));
+            for (int i = 1; i < rhsExpr.getChildren().size(); i++) {
+                addBindParamMetaData(null, rhsNode.getChildren().get(i), null, rhsExpr.getChildren().get(i));
             }
+        } else {
+            addBindParamMetaData(lhsNode, rhsNode, lhsExpr, rhsExpr);
         }
-        return new ComparisonExpression(node.getFilterOp(), children);
+        return ComparisonExpression.create(op, children, context.getTempPtr());
     }
 
     @Override
@@ -351,28 +189,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
 
     @Override
     public Expression visitLeave(AndParseNode node, List<Expression> children) throws SQLException {
-        boolean isDeterministic = true;
-        Iterator<Expression> iterator = children.iterator();
-        while (iterator.hasNext()) {
-            Expression child = iterator.next();
-            if (child.getDataType() != PDataType.BOOLEAN) {
-                throw TypeMismatchException.newException(PDataType.BOOLEAN, child.getDataType(), child.toString());
-            }
-            if (LiteralExpression.isFalse(child)) {
-                return child;
-            }
-            if (LiteralExpression.isTrue(child)) {
-                iterator.remove();
-            }
-            isDeterministic &= child.isDeterministic();
-        }
-        if (children.size() == 0) {
-            return LiteralExpression.newConstant(true, isDeterministic);
-        }
-        if (children.size() == 1) {
-            return children.get(0);
-        }
-        return new AndExpression(children);
+        return AndExpression.create(children);
     }
 
     @Override
@@ -668,17 +485,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (childNode instanceof BindParseNode) { // TODO: valid/possibe?
             context.getBindManager().addParamMetaData((BindParseNode)childNode, child);
         }
-        ImmutableBytesWritable ptr = context.getTempPtr();
-        // Can't use child.isConstant(), because we have cases in which we don't know
-        // in advance if a function evaluates to null (namely when bind variables are used)
-        // TODO: use child.isStateless
-        if (child.isStateless()) {
-            if (!child.evaluate(null, ptr) || ptr.getLength() == 0) {
-                return LiteralExpression.newConstant(null, PDataType.BOOLEAN, child.isDeterministic());
-            }
-            return LiteralExpression.newConstant(!(Boolean)PDataType.BOOLEAN.toObject(ptr), PDataType.BOOLEAN, child.isDeterministic());
-        }
-        return new NotExpression(child);
+        return NotExpression.create(child, context.getTempPtr());
     }
 
     @Override
@@ -737,20 +544,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 context.getBindManager().addParamMetaData((BindParseNode)childNode, firstChild);
             }
         }
-        if (firstChildNode.isStateless() && firstChild.evaluate(null, ptr) && ptr.getLength() == 0) {
-            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, firstChild.isDeterministic());
-        }
-        
-        Expression e = InListExpression.create(inChildren, ptr, node.isNegate());
-        if (node.isStateless()) {
-            if (!e.evaluate(null, ptr) || ptr.getLength() == 0) {
-                return LiteralExpression.newConstant(null, e.getDataType(), e.isDeterministic());
-            }
-            Object value = e.getDataType().toObject(ptr);
-            return LiteralExpression.newConstant(value, e.getDataType(), e.isDeterministic());
-        }
-        
-        return e;
+        return InListExpression.create(inChildren, node.isNegate(), ptr);
     }
 
     private static final PDatum DECIMAL_DATUM = new PDatum() {
@@ -818,18 +612,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (childNode instanceof BindParseNode) { // TODO: valid/possibe?
             context.getBindManager().addParamMetaData((BindParseNode)childNode, child);
         }
-        Boolean value = null;
-        // Can't use child.isConstant(), because we have cases in which we don't know
-        // in advance if a function evaluates to null (namely when bind variables are used)
-        // TODO: review: have ParseNode.getValue()?
-        if (child instanceof LiteralExpression) {
-            value = (Boolean)((LiteralExpression)child).getValue();
-            return node.isNegate() ^ value == null ? LiteralExpression.newConstant(false, PDataType.BOOLEAN, child.isDeterministic()) : LiteralExpression.newConstant(true, PDataType.BOOLEAN, child.isDeterministic());
-        }
-        if (!child.isNullable()) { // If child expression is not nullable, we can rewrite this
-            return node.isNegate() ? LiteralExpression.newConstant(true, PDataType.BOOLEAN, child.isDeterministic()) : LiteralExpression.newConstant(false, PDataType.BOOLEAN, child.isDeterministic());
-        }
-        return new IsNullExpression(child, node.isNegate());
+        return IsNullExpression.create(child, node.isNegate(), context.getTempPtr());
     }
 
     private static interface ArithmeticExpressionFactory {

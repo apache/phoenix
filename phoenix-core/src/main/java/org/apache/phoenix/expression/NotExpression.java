@@ -19,12 +19,13 @@
  */
 package org.apache.phoenix.expression;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -38,14 +39,24 @@ import org.apache.phoenix.schema.tuple.Tuple;
  */
 public class NotExpression extends BaseSingleExpression {
 
+    public static Expression create(Expression child, ImmutableBytesWritable ptr) throws SQLException {
+        if (child.getDataType() != PDataType.BOOLEAN) {
+            throw TypeMismatchException.newException(child.getDataType(), PDataType.BOOLEAN, "NOT");
+        }
+        if (child.isStateless()) {
+            if (!child.evaluate(null, ptr) || ptr.getLength() == 0) {
+                return LiteralExpression.newConstant(null, PDataType.BOOLEAN, child.isDeterministic());
+            }
+            return LiteralExpression.newConstant(!(Boolean)PDataType.BOOLEAN.toObject(ptr), PDataType.BOOLEAN, child.isDeterministic());
+        }
+        return new NotExpression(child);
+    }
+    
     public NotExpression() {
     }
 
     public NotExpression(Expression expression) {
         super(expression);
-        if (expression == null || expression.getDataType() != PDataType.BOOLEAN) {
-            throw new IllegalArgumentException("NOT expectes a single BOOLEAN expression, but got " + expression);
-        }
     }
 
     @Override
