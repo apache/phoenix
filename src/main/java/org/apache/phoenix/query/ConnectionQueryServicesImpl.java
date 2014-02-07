@@ -506,11 +506,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 descriptor.removeCoprocessor(ServerCachingEndpointImpl.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, 1, null);
             }
+            
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes. Also,
             // don't install on the metadata table until we fix the TODO there.
-            if (tableType != PTableType.INDEX && !descriptor.hasCoprocessor(Indexer.class.getName())
-                  && !SchemaUtil.isMetaTable(tableName)) {
+            if (tableType != PTableType.INDEX && !SchemaUtil.isMetaTable(tableName)) {
+                // Always remove, as we the package name is the same, so we don't know without extreme 
+                // hacking if the codec is the old com.salesforce one or the new org.apache one.
+                descriptor.removeCoprocessor(Indexer.class.getName());
                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                 opts.put(CoveredColumnsIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                 Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts);
