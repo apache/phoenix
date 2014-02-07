@@ -63,7 +63,6 @@ public class HashJoinRegionScanner implements RegionScanner {
     
     @SuppressWarnings("unchecked")
     public HashJoinRegionScanner(RegionScanner scanner, ScanProjector projector, HashJoinInfo joinInfo, ImmutableBytesWritable tenantId, RegionCoprocessorEnvironment env) throws IOException {
-        assert (projector != null);
         this.scanner = scanner;
         this.projector = projector;
         this.joinInfo = joinInfo;
