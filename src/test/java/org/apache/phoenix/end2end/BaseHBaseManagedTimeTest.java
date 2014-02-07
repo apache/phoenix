@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -32,7 +32,7 @@ import org.junit.Before;
  * will usually be smaller than these time stamps and the table
  * deletion/creation would fail.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public abstract class BaseHBaseManagedTimeTest extends BaseConnectedQueryTest {

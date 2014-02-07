@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -28,7 +28,7 @@ import com.google.common.collect.Iterables;
 /**
  * Utilities for operating on {@link SQLCloseable}s.
  * 
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class SQLCloseables {
@@ -67,7 +67,7 @@ public class SQLCloseables {
      * A subclass of {@link SQLException} that allows you to chain multiple 
      * causes together.
      * 
-     * @author jtaylor
+     * 
      * @since 0.1
      * @see SQLCloseables
      */

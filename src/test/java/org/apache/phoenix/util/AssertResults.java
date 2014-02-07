@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -33,7 +33,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * 
  * Utility class to assert that a scan returns the expected results
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class AssertResults {
@@ -70,7 +70,7 @@ public class AssertResults {
      * 
      * Use to iterate through results without checking the values against 
      *
-     * @author jtaylor
+     * 
      * @since 0.1
      */
     private static final class NoopAssertingIterator implements AssertingIterator {

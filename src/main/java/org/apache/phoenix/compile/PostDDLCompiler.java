@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -58,7 +58,7 @@ import org.apache.phoenix.util.ScanUtil;
  * The only time we may still need this is to manage updating the empty
  * key value, as we sometimes need to "go back through time" to adjust
  * this.
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class PostDDLCompiler {

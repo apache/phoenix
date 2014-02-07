@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -34,7 +34,7 @@ import java.util.List;
  * compound parse nodes and {@link #visit(ParseNode)}
  * for terminal parse nodes.
  * 
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public interface ParseNodeVisitor<E> {

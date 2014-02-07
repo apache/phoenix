@@ -9,7 +9,7 @@ import org.apache.hadoop.hbase.util.Bytes;
  * BitSet that can be initialized with primitive types, which
  * is only available in Java 7 or above.
  *
- * @author jtaylor
+ * 
  * @since 2.1.0
  */
 public class BitSet {

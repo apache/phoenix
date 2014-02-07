@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -27,7 +27,7 @@ import org.apache.phoenix.memory.MemoryManager;
  * Child QueryServices that delegates through to global QueryService.
  * Used to track memory used by each org to allow a max percentage threshold.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class ChildQueryServices extends DelegateConnectionQueryServices {

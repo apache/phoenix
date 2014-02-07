@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -32,7 +32,7 @@ import org.apache.phoenix.util.InstanceResolver;
  *
  * If a custom implementation is not registered, the default implementations will be used.
  *
- * @author aaraujo
+ * 
  * @since 0.2
  */
 public class HBaseFactoryProvider {

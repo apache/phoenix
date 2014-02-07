@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -36,7 +36,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * <p>
  * Note that the results are held in memory
  *  
- * @author jtaylor
+ * 
  * @since 1.2
  */
 public class DistinctAggregatingResultIterator implements AggregatingResultIterator {

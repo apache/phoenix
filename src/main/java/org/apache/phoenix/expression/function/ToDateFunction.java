@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -43,7 +43,7 @@ import org.apache.phoenix.util.DateUtil;
  * The second argument is optional and defaults to the phoenix.query.dateFormat value
  * from the HBase config. If present it must be a constant string.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 @BuiltInFunction(name=ToDateFunction.NAME, nodeClass=ToDateParseNode.class, args= {@Argument(allowedTypes={PDataType.VARCHAR}),@Argument(allowedTypes={PDataType.VARCHAR},isConstant=true,defaultValue="null")} )

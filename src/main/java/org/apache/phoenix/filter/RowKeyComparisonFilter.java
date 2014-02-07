@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -38,7 +38,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  *
  * Filter for use when expressions only reference row key columns
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class RowKeyComparisonFilter extends BooleanExpressionFilter {

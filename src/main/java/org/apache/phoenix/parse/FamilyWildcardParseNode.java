@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -26,7 +26,7 @@ import java.sql.SQLException;
  * 
  * Node representing the selection of all columns of a family (cf.*) in the SELECT clause of SQL
  *
- * @author nmaillard
+ * 
  * @since 1.2
  */
 

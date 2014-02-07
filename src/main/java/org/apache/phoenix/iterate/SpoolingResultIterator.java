@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -44,7 +44,7 @@ import org.apache.phoenix.util.*;
  * Result iterator that spools the results of a scan to disk once an in-memory threshold has been reached.
  * If the in-memory threshold is not reached, the results are held in memory with no disk writing perfomed.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class SpoolingResultIterator implements PeekingResultIterator {
@@ -155,7 +155,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
      * 
      * Backing result iterator if it was not necessary to spool results to disk.
      *
-     * @author jtaylor
+     * 
      * @since 0.1
      */
     private static class InMemoryResultIterator implements PeekingResultIterator {
@@ -208,7 +208,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
      * 
      * Backing result iterator if results were spooled to disk
      *
-     * @author jtaylor
+     * 
      * @since 0.1
      */
     private static class OnDiskResultIterator implements PeekingResultIterator {

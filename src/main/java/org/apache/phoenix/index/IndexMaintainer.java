@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -78,7 +78,7 @@ import org.apache.phoenix.util.TrustedByteArrayOutputStream;
  * Mutation attribute or as a separate RPC call using 
  * {@link org.apache.phoenix.cache.ServerCacheClient})
  *
- * @author jtaylor
+ * 
  * @since 2.1.0
  */
 public class IndexMaintainer implements Writable, Iterable<ColumnReference> {

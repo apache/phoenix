@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -124,7 +124,7 @@ import org.apache.phoenix.util.ServerUtil;
  * - ResultSet.TYPE_FORWARD_ONLY
  * - ResultSet.CLOSE_CURSORS_AT_COMMIT
  * 
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class PhoenixStatement implements Statement, SQLCloseable, org.apache.phoenix.jdbc.Jdbc7Shim.Statement {

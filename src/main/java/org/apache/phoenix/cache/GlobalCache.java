@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -43,7 +43,7 @@ import org.apache.phoenix.schema.PTable;
  * Global root cache for the server. Each tenant is managed as a child tenant cache of this one. Queries
  * not associated with a particular tenant use this as their tenant cache.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class GlobalCache extends TenantCacheImpl {

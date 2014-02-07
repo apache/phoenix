@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -37,7 +37,7 @@ import org.apache.phoenix.schema.ColumnModifier;
  * Base class for Expression hierarchy that provides common
  * default implementations for most methods
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public abstract class BaseExpression implements Expression {

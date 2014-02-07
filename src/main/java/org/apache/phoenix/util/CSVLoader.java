@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -39,7 +39,7 @@ import java.util.Map;
 /***
  * Upserts CSV data using Phoenix JDBC connection
  * 
- * @author mchohan
+ * 
  * 
  */
 public class CSVLoader {

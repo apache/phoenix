@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -38,7 +38,7 @@ import org.apache.phoenix.util.SchemaUtil;
  * Built-in function for COUNT(<expression>) aggregate function,
  * for example COUNT(foo), COUNT(1), COUNT(*)
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 @BuiltInFunction(name=CountAggregateFunction.NAME, args= {@Argument()} )

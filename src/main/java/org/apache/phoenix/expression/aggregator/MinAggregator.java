@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -31,7 +31,7 @@ import org.apache.phoenix.util.SizedUtil;
 /**
  * Aggregator that finds the min of values. Inverse of {@link MaxAggregator}.
  *
- * @author syyang
+ * 
  * @since 0.1
  */
 abstract public class MinAggregator extends BaseAggregator {
