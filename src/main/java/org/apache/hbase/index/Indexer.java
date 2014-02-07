@@ -59,8 +59,6 @@ import org.apache.hadoop.hbase.regionserver.wal.HLog;
 import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Pair;
-
-import com.google.common.collect.Multimap;
 import org.apache.hbase.index.builder.IndexBuildManager;
 import org.apache.hbase.index.builder.IndexBuilder;
 import org.apache.hbase.index.builder.IndexBuildingFailureException;
@@ -73,6 +71,8 @@ import org.apache.hbase.index.write.IndexWriter;
 import org.apache.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.apache.hbase.index.write.recovery.TrackingParallelWriterIndexCommitter;
+
+import com.google.common.collect.Multimap;
 
 /**
  * Do all the work of managing index updates from a single coprocessor. All Puts/Delets are passed
@@ -112,7 +112,7 @@ public class Indexer extends BaseRegionObserver {
    * Configuration key for if the indexer should check the version of HBase is running. Generally,
    * you only want to ignore this for testing or for custom versions of HBase.
    */
-  public static final String CHECK_VERSION_CONF_KEY = "com.saleforce.hbase.index.checkversion";
+  public static final String CHECK_VERSION_CONF_KEY = "org.apache.hbase.index.checkversion";
 
   private static final String INDEX_RECOVERY_FAILURE_POLICY_KEY = "org.apache.hbase.index.recovery.failurepolicy";
 
