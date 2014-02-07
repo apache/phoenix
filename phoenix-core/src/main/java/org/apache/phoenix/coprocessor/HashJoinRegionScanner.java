@@ -54,7 +54,7 @@ public class HashJoinRegionScanner implements RegionScanner {
     private final RegionScanner scanner;
     private final ScanProjector projector;
     private final HashJoinInfo joinInfo;
-    private Queue<ProjectedValueTuple> resultQueue;
+    private Queue<Tuple> resultQueue;
     private boolean hasMore;
     private HashCache[] hashCaches;
     private List<Tuple>[] tempTuples;
@@ -67,7 +67,7 @@ public class HashJoinRegionScanner implements RegionScanner {
         this.scanner = scanner;
         this.projector = projector;
         this.joinInfo = joinInfo;
-        this.resultQueue = new LinkedList<ProjectedValueTuple>();
+        this.resultQueue = new LinkedList<Tuple>();
         this.hasMore = true;
         if (joinInfo != null) {
             for (JoinType type : joinInfo.getJoinTypes()) {
@@ -76,7 +76,6 @@ public class HashJoinRegionScanner implements RegionScanner {
             }
             int count = joinInfo.getJoinIds().length;
             this.tempTuples = new List[count];
-            this.tempDestBitSet = ValueBitSet.newInstance(joinInfo.getJoinedSchema());
             this.hashCaches = new HashCache[count];
             this.tempSrcBitSet = new ValueBitSet[count];
             TenantCache cache = GlobalCache.getTenantCache(env, tenantId);
@@ -88,7 +87,10 @@ public class HashJoinRegionScanner implements RegionScanner {
                 hashCaches[i] = hashCache;
                 tempSrcBitSet[i] = ValueBitSet.newInstance(joinInfo.getSchemas()[i]);
             }
-            this.projector.setValueBitSet(tempDestBitSet);
+            if (this.projector != null) {
+                this.tempDestBitSet = ValueBitSet.newInstance(joinInfo.getJoinedSchema());
+                this.projector.setValueBitSet(tempDestBitSet);
+            }
         }
     }
     
@@ -96,9 +98,9 @@ public class HashJoinRegionScanner implements RegionScanner {
         if (result.isEmpty())
             return;
         
-        ProjectedValueTuple tuple = projector.projectResults(new ResultTuple(new Result(result)));
+        Tuple tuple = new ResultTuple(new Result(result));
         if (joinInfo == null) {
-            resultQueue.offer(tuple);
+            resultQueue.offer(projector.projectResults(tuple));
             return;
         }
         
@@ -113,47 +115,56 @@ public class HashJoinRegionScanner implements RegionScanner {
             ImmutableBytesPtr key = TupleUtil.getConcatenatedValue(tuple, joinInfo.getJoinExpressions()[i]);
             tempTuples[i] = hashCaches[i].get(key);
             JoinType type = joinInfo.getJoinTypes()[i];
-            if (type == JoinType.Inner && (tempTuples[i] == null || tempTuples[i].isEmpty())) {
+            if (type == JoinType.Inner && tempTuples[i] == null) {
                 cont = false;
                 break;
             }
         }
         if (cont) {
-            KeyValueSchema schema = joinInfo.getJoinedSchema();
-            resultQueue.offer(tuple);
-            for (int i = 0; i < count; i++) {
-                boolean earlyEvaluation = joinInfo.earlyEvaluation()[i];
-                if (earlyEvaluation && 
-                        (tempTuples[i] == null || tempTuples[i].isEmpty()))
-                    continue;
-                int j = resultQueue.size();
-                while (j-- > 0) {
-                    ProjectedValueTuple lhs = resultQueue.poll();
-                    if (!earlyEvaluation) {
-                        ImmutableBytesPtr key = TupleUtil.getConcatenatedValue(lhs, joinInfo.getJoinExpressions()[i]);
-                        tempTuples[i] = hashCaches[i].get(key);                        	
-                        if (tempTuples[i] == null || tempTuples[i].isEmpty()) {
-                            if (joinInfo.getJoinTypes()[i] != JoinType.Inner) {
-                                resultQueue.offer(lhs);
+            if (projector == null) {
+                int dup = 1;
+                for (int i = 0; i < count; i++) {
+                    dup *= (tempTuples[i] == null ? 1 : tempTuples[i].size());
+                }
+                for (int i = 0; i < dup; i++) {
+                    resultQueue.offer(tuple);
+                }
+            } else {
+                KeyValueSchema schema = joinInfo.getJoinedSchema();
+                resultQueue.offer(projector.projectResults(tuple));
+                for (int i = 0; i < count; i++) {
+                    boolean earlyEvaluation = joinInfo.earlyEvaluation()[i];
+                    if (earlyEvaluation && tempTuples[i] == null)
+                        continue;
+                    int j = resultQueue.size();
+                    while (j-- > 0) {
+                        Tuple lhs = resultQueue.poll();
+                        if (!earlyEvaluation) {
+                            ImmutableBytesPtr key = TupleUtil.getConcatenatedValue(lhs, joinInfo.getJoinExpressions()[i]);
+                            tempTuples[i] = hashCaches[i].get(key);                        	
+                            if (tempTuples[i] == null) {
+                                if (joinInfo.getJoinTypes()[i] != JoinType.Inner) {
+                                    resultQueue.offer(lhs);
+                                }
+                                continue;
                             }
-                            continue;
                         }
-                    }
-                    for (Tuple t : tempTuples[i]) {
-                        ProjectedValueTuple joined = tempSrcBitSet[i] == ValueBitSet.EMPTY_VALUE_BITSET ?
-                                lhs : ScanProjector.mergeProjectedValue(
-                                        lhs, schema, tempDestBitSet,
-                                        t, joinInfo.getSchemas()[i], tempSrcBitSet[i], 
-                                        joinInfo.getFieldPositions()[i]);
-                        resultQueue.offer(joined);
+                        for (Tuple t : tempTuples[i]) {
+                            Tuple joined = tempSrcBitSet[i] == ValueBitSet.EMPTY_VALUE_BITSET ?
+                                    lhs : ScanProjector.mergeProjectedValue(
+                                            (ProjectedValueTuple) lhs, schema, tempDestBitSet,
+                                            t, joinInfo.getSchemas()[i], tempSrcBitSet[i], 
+                                            joinInfo.getFieldPositions()[i]);
+                            resultQueue.offer(joined);
+                        }
                     }
                 }
             }
             // apply post-join filter
             Expression postFilter = joinInfo.getPostJoinFilterExpression();
             if (postFilter != null) {
-                for (Iterator<ProjectedValueTuple> iter = resultQueue.iterator(); iter.hasNext();) {
-                    ProjectedValueTuple t = iter.next();
+                for (Iterator<Tuple> iter = resultQueue.iterator(); iter.hasNext();) {
+                    Tuple t = iter.next();
                     ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
                     try {
                         if (!postFilter.evaluate(t, tempPtr)) {
@@ -184,7 +195,10 @@ public class HashJoinRegionScanner implements RegionScanner {
         if (resultQueue.isEmpty())
             return false;
         
-        results.add(resultQueue.poll().getValue(0));
+        Tuple tuple = resultQueue.poll();
+        for (int i = 0; i < tuple.size(); i++) {
+            results.add(tuple.getValue(i));
+        }
         return resultQueue.isEmpty() ? hasMore : true;
     }
 
@@ -282,3 +296,4 @@ public class HashJoinRegionScanner implements RegionScanner {
     }
 
 }
+

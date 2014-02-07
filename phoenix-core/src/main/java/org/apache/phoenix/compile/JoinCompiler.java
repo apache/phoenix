@@ -103,6 +103,7 @@ public class JoinCompiler {
     }
     
     public static class JoinSpec {
+        private ColumnResolver origResolver;
         private TableNode mainTableNode;
         private TableRef mainTable;
         private List<AliasedNode> select; // all basic nodes related to mainTable, no aggregation.
@@ -113,7 +114,8 @@ public class JoinCompiler {
         private Map<ColumnRef, ColumnRefType> columnRefs;
         
         private JoinSpec(SelectStatement statement, ColumnResolver resolver) throws SQLException {
-        	List<AliasedNode> selectList = statement.getSelect();
+            this.origResolver = resolver;
+            List<AliasedNode> selectList = statement.getSelect();
             List<TableNode> tableNodes = statement.getFrom();
             assert (tableNodes.size() > 1);
             Iterator<TableNode> iter = tableNodes.iterator();
@@ -206,8 +208,9 @@ public class JoinCompiler {
             }            
         }
         
-        private JoinSpec(TableNode tableNode, TableRef table, List<AliasedNode> select, List<ParseNode> preFilters, 
+        private JoinSpec(ColumnResolver resolver, TableNode tableNode, TableRef table, List<AliasedNode> select, List<ParseNode> preFilters, 
                 List<ParseNode> postFilters, List<JoinTable> joinTables, Map<ColumnRef, ColumnRefType> columnRefs) {
+            this.origResolver = resolver;
             this.mainTableNode = tableNode;
             this.mainTable = table;
             this.select = select;
@@ -215,6 +218,10 @@ public class JoinCompiler {
             this.postFilters = postFilters;
             this.joinTables = joinTables;
             this.columnRefs = columnRefs;
+        }
+        
+        public ColumnResolver getOriginalResolver() {
+            return origResolver;
         }
         
         public TableNode getMainTableNode() {
@@ -484,7 +491,7 @@ public class JoinCompiler {
     }
     
     public static JoinSpec getSubJoinSpecWithoutPostFilters(JoinSpec join) {
-        return new JoinSpec(join.mainTableNode, join.mainTable, join.select, join.preFilters, new ArrayList<ParseNode>(), 
+        return new JoinSpec(join.origResolver, join.mainTableNode, join.mainTable, join.select, join.preFilters, new ArrayList<ParseNode>(), 
                 join.joinTables.subList(0, join.joinTables.size() - 1), join.columnRefs);
     }
     
@@ -1235,4 +1242,5 @@ public class JoinCompiler {
     	return SchemaUtil.getColumnName(SchemaUtil.getTableName(schemaName, tableName), colName);
     }
 }
+
 

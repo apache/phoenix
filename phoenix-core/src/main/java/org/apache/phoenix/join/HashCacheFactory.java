@@ -102,7 +102,7 @@ public class HashCacheFactory implements ServerCacheFactory {
                     ImmutableBytesPtr key = TupleUtil.getConcatenatedValue(result, onExpressions);
                     List<Tuple> tuples = hashCacheMap.get(key);
                     if (tuples == null) {
-                        tuples = new ArrayList<Tuple>(1);
+                        tuples = new LinkedList<Tuple>();
                         hashCacheMap.put(key, tuples);
                     }
                     tuples.add(result);
@@ -125,3 +125,4 @@ public class HashCacheFactory implements ServerCacheFactory {
         }
     }
 }
+
