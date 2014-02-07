@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -49,7 +49,7 @@ import org.apache.phoenix.util.ByteUtil;
  * The integer multiplier is optional and is used to do rollups to a partial time unit (i.e. 10 minute rollup)
  * The function returns a {@link org.apache.phoenix.schema.PDataType#DATE}
 
- * @author jtaylor, samarth.jain
+ * 
  * @since 0.1
  */
 public class RoundDateExpression extends ScalarFunction {

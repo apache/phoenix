@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -44,7 +44,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * Implementation of TO_NUMBER(&lt;string&gt;/&lt;date&gt;/&lt;timestamp&gt;, [&lt;pattern-string&gt;]) built-in function.  The format for the optional
  * <code>pattern_string</code> param is specified in {@link DecimalFormat}.
  *
- * @author elevine
+ * 
  * @since 0.1
  */
 @BuiltInFunction(name=ToNumberFunction.NAME,  nodeClass=ToNumberParseNode.class, args= {

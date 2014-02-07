@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -30,7 +30,7 @@ import org.apache.phoenix.schema.PDataType;
  * 
  * Base class for built-in CEIL function.
  *
- * @author samarth.jain
+ * 
  * @since 3.0.0
  */
 @BuiltInFunction(name = CeilFunction.NAME,

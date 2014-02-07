@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -36,7 +36,7 @@ import org.apache.phoenix.util.DateUtil;
  * 
  * Class to encapsulate addition arithmetic for {@link PDataType#TIMESTAMP}.
  *
- * @author samarth.jain
+ * 
  * @since 2.1.3
  */
 

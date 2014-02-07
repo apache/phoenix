@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -53,7 +53,7 @@ import org.apache.phoenix.util.MetaDataUtil;
  * not the data table still uses it (based on the min time stamp of the data
  * table).
  * 
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public interface MetaDataProtocol extends CoprocessorProtocol {

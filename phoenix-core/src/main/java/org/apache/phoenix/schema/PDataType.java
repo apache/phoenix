@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -50,8 +50,8 @@ import com.google.common.primitives.Longs;
 /**
  * The data types of PColumns
  *
- * @author wmacklem
- * @author jtaylor
+ * 
+ * 
  * @since 0.1
  *
  * TODO: cleanup implementation to reduce copy/paste duplication

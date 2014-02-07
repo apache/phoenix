@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -26,7 +26,7 @@ import org.apache.phoenix.query.QueryConstants;
 /**
  * Node representing a reference to a column in a SQL expression
  * 
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class ColumnParseNode extends NamedParseNode {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -41,7 +41,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * Base class for aggregate functions that calculate an aggregation
  * using a single {{@link Aggregator}
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 abstract public class SingleAggregateFunction extends AggregateFunction {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -46,7 +46,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * 
  * The function returns a {@link org.apache.phoenix.schema.PDataType#VARCHAR}
  * 
- * @author zhuang
+ * 
  * @since 0.1
  */
 @BuiltInFunction(name=RegexpReplaceFunction.NAME, args= {

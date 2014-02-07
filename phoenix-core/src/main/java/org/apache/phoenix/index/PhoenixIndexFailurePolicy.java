@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -51,7 +51,7 @@ import org.apache.phoenix.util.SchemaUtil;
  *
  * TODO: use delegate pattern instead
  * 
- * @author jtaylor
+ * 
  * @since 2.1
  */
 public class PhoenixIndexFailurePolicy extends  KillServerOnFailurePolicy {

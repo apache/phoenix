@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -35,7 +35,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * retrieved (piggy-backed on the call to check that the metadata is up-to-date) and
  * passed into this function at create time.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 @BuiltInFunction(name=CurrentDateFunction.NAME, nodeClass=CurrentDateParseNode.class, args= {} )

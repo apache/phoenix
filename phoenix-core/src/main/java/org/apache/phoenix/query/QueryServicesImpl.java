@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -27,7 +27,7 @@ package org.apache.phoenix.query;
  * 
  * Real implementation of QueryServices for use in runtime and perf testing
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public final class QueryServicesImpl extends BaseQueryServicesImpl {

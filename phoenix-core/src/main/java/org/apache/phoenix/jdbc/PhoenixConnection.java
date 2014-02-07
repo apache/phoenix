@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -91,7 +91,7 @@ import org.apache.phoenix.util.SQLCloseables;
  * - ResultSet.TYPE_FORWARD_ONLY
  * - Connection.TRANSACTION_READ_COMMITTED
  * 
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jdbc7Shim.Connection, MetaDataMutated  {

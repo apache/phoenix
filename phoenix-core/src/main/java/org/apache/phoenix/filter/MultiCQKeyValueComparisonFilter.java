@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -29,7 +29,7 @@ import org.apache.phoenix.expression.Expression;
  * Filter that evaluates WHERE clause expression, used in the case where there
  * are references to multiple column qualifiers over a single column family.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class MultiCQKeyValueComparisonFilter extends MultiKeyValueComparisonFilter {

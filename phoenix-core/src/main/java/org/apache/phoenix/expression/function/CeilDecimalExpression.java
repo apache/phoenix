@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -32,7 +32,7 @@ import org.apache.phoenix.schema.PDataType;
  * 
  * Class encapsulating the CEIL operation on a {@link org.apache.phoenix.schema.PDataType#DECIMAL}
  *
- * @author samarth.jain
+ * 
  * @since 3.0.0
  */
 public class CeilDecimalExpression extends RoundDecimalExpression {

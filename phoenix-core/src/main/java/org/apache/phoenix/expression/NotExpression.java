@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -34,7 +34,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * Implementation of the NOT operator that negates it's
  * single boolean child expression.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class NotExpression extends BaseSingleExpression {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -42,7 +42,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * {@link TimeUnit#MILLISECOND}. If you want more options of rounding like 
  * using {@link TimeUnit#HOUR} use {@link RoundDateExpression}
  *
- * @author samarth.jain
+ * 
  * @since 3.0.0
  */
 

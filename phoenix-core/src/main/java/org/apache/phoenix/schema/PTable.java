@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -32,7 +32,7 @@ import org.apache.phoenix.schema.stat.PTableStats;
 /**
  * Definition of a Phoenix table
  *
- * @author wmacklem,jtaylor
+ * 
  * @since 0.1
  */
 public interface PTable extends Writable {

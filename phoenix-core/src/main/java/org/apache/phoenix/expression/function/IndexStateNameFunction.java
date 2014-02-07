@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -39,7 +39,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * IndexStateName('a')
  * will return 'ACTIVE'
  * 
- * @author jtaylor
+ * 
  * @since 2.1
  */
 @BuiltInFunction(name=IndexStateNameFunction.NAME, args= {

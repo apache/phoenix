@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -33,7 +33,7 @@ import org.apache.phoenix.schema.TypeMismatchException;
  * 
  * Node representing the CAST operator in SQL.
  * 
- * @author samarth.jain
+ * 
  * @since 0.1
  *
  */

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -39,7 +39,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 /**
  * Built-in function for finding MIN.
  * 
- * @author syyang
+ * 
  * @since 0.1
  */
 @BuiltInFunction(name=MinAggregateFunction.NAME, nodeClass=MinAggregateParseNode.class, args= {@Argument()} )

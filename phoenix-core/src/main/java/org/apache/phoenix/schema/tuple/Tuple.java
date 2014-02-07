@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -28,7 +28,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
  * result of a query. Each tuple represents a row (i.e. all its KeyValues
  * will have the same key), and each KeyValue represents a column value.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public interface Tuple {

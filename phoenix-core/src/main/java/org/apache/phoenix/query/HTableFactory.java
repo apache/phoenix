@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -29,7 +29,7 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 /**
  * Creates clients to access HBase tables.
  *
- * @author aaraujo
+ * 
  * @since 0.2
  */
 public interface HTableFactory {

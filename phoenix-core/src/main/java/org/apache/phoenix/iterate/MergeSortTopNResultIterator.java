@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -33,7 +33,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * returning the rows ordered by the OrderByExpression. The input
  * iterators must be ordered by the OrderByExpression.
  *
- * @author jtaylor
+ * 
  * @since 0.1
  */
 public class MergeSortTopNResultIterator extends MergeSortResultIterator {

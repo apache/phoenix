@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -42,7 +42,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  *
  * TODO: better bind parameter type matching, since arg2 must be coercible
  * to arg1. consider allowing a common base type?
- * @author jtaylor
+ * 
  * @since 0.1
  */
 @BuiltInFunction(name=CoalesceFunction.NAME, args= {

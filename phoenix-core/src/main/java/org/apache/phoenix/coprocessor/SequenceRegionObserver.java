@@ -45,7 +45,7 @@ import org.apache.phoenix.util.ServerUtil;
  * 3) For deleting a sequence, as checkAndDelete does not allow us to scope
  * the Get done for the check with a TimeRange.
  *
- * @author jtaylor
+ * 
  * @since 3.0.0
  */
 public class SequenceRegionObserver extends BaseRegionObserver {
@@ -71,7 +71,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
      * 2) Lack of the ability to set the timestamp of the updated key value.
      * Works the same as existing region.increment(), except assumes there is a single column to
      * increment and uses Phoenix LONG encoding.
-     * @author jtaylor
+     * 
      * @since 3.0.0
      */
     @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 The Apache Software Foundation
+ * Copyright 2014 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -37,7 +37,7 @@ import org.junit.Test;
 
 /**
  * TODO: derived from BaseClientMangedTimeTest, but not setting SCN
- * @author elilevine
+ * 
  * @since 2.0
  */
 public class TenantSpecificTablesDMLTest extends BaseTenantSpecificTablesTest {

@@ -12,7 +12,7 @@ import com.google.common.collect.*;
  * Read-only properties that avoids unnecessary synchronization in
  * java.util.Properties.
  *
- * @author jtaylor
+ * 
  * @since 1.2.2
  */
 public class ReadOnlyProps implements Iterable<Entry<String, String>> {
