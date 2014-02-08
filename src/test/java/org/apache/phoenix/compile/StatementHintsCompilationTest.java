@@ -110,7 +110,7 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
         assertFalse("The first filter should not be SkipScanFilter.", usingSkipScan(scan));
     }
     
-    @Test
+    @Ignore @Test
     public void testSelectForceRangeScanForEH() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("create table eh (organization_id char(15) not null,parent_id char(15) not null, created_date date not null, entity_history_id char(15) not null constraint pk primary key (organization_id, parent_id, created_date, entity_history_id))");
