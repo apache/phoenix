@@ -20,5 +20,7 @@ public class TestWALReplayWithIndexWritesAndUncompressedWALInHBase_094_9 extends
 
     // disable WAL compression
     conf.setBoolean(HConstants.ENABLE_WAL_COMPRESSION, false);
+    // disable replication
+    conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY, false);
   }
 }

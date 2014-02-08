@@ -19,9 +19,12 @@
  */
 package org.apache.phoenix.util;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -41,6 +44,20 @@ public class ResultUtil {
     };
     
     private ResultUtil() {
+    }
+    
+    public static Result toResult(ImmutableBytesWritable bytes) {
+        byte [] buf = bytes.get();
+        int offset = bytes.getOffset();
+        int finalOffset = bytes.getSize() + offset;
+        List<Cell> kvs = new ArrayList<Cell>();
+        while(offset < finalOffset) {
+          int keyLength = Bytes.toInt(buf, offset);
+          offset += Bytes.SIZEOF_INT;
+          kvs.add(new KeyValue(buf, offset, keyLength));
+          offset += keyLength;
+        }
+        return Result.create(kvs);
     }
     
     /**
@@ -92,11 +109,10 @@ public class ResultUtil {
     /**
      * Get the offset into the Result byte array to the key.
      * @param r
-     * @return
      */
     static int getKeyOffset(Result r) {
-        // Special case for when Result was instantiated via KeyValue array (no bytes in that case) versus returned from a scanner
-        return (r.getBytes() == null ? r.raw()[0].getOffset() : (r.getBytes().getOffset() + Bytes.SIZEOF_INT /* KV length in Result */)) + KeyValue.ROW_OFFSET /* key offset in KV */ + Bytes.SIZEOF_SHORT /* key length */;
+        KeyValue firstKV = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(r.rawCells()[0]);
+        return firstKV.getOffset();
     }
     
     static int getKeyLength(Result r) {
@@ -105,11 +121,8 @@ public class ResultUtil {
     }
     
     static byte[] getRawBytes(Result r) {
-        // Handle special case for when Result was instantiated via KeyValue array (no bytes in that case) versus returned from a scanner
-        ImmutableBytesWritable rPtr = r.getBytes();
-        if (rPtr != null)
-            return rPtr.get();
-        return r.raw()[0].getBuffer();
+        KeyValue firstKV = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(r.rawCells()[0]);
+        return firstKV.getBuffer();
     }
 
     public static int compareKeys(Result r1, Result r2) {

@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -224,12 +224,13 @@ public class IndexUpdateManager {
             + ((m instanceof Put) ? m.getTimeStamp() + " " : ""));
         sb.append(" row=" + Bytes.toString(m.getRow()));
         sb.append("\n");
-        if (m.getFamilyMap().isEmpty()) {
+        if (m.getFamilyCellMap().isEmpty()) {
           sb.append("\t\t=== EMPTY ===\n");
         }
-        for (List<KeyValue> kvs : m.getFamilyMap().values()) {
-          for (KeyValue kv : kvs) {
-            sb.append("\t\t" + kv.toString() + "/value=" + Bytes.toStringBinary(kv.getValue()));
+        for (List<Cell> kvs : m.getFamilyCellMap().values()) {
+          for (Cell kv : kvs) {
+            sb.append("\t\t" + kv.toString() + "/value=" + Bytes.toStringBinary(kv.getValueArray(), 
+            		kv.getValueOffset(), kv.getValueLength()));
             sb.append("\n");
           }
         }

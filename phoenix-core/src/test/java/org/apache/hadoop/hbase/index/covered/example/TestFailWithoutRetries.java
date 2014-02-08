@@ -86,6 +86,8 @@ public class TestFailWithoutRetries {
     Configuration conf = UTIL.getConfiguration();
     IndexTestingUtils.setupConfig(conf);
     IndexManagementUtil.ensureMutableIndexingCorrectlyConfigured(conf);
+    // disable replication
+    conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY, false);
     // start the cluster
     UTIL.startMiniCluster();
   }

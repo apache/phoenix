@@ -24,6 +24,7 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 import java.util.Collection;
 import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -151,11 +152,11 @@ public class MetaDataUtil {
     }
     
     public static long getSequenceNumber(Mutation tableMutation) {
-        List<KeyValue> kvs = tableMutation.getFamilyMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
+        List<Cell> kvs = tableMutation.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
         if (kvs != null) {
-            for (KeyValue kv : kvs) { // list is not ordered, so search. TODO: we could potentially assume the position
-                if (Bytes.compareTo(kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength(), PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, 0, PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES.length) == 0) {
-                    return PDataType.LONG.getCodec().decodeLong(kv.getBuffer(), kv.getValueOffset(), null);
+            for (Cell kv : kvs) { // list is not ordered, so search. TODO: we could potentially assume the position
+                if (Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, 0, PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES.length) == 0) {
+                    return PDataType.LONG.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), null);
                 }
             }
         }
@@ -167,8 +168,8 @@ public class MetaDataUtil {
     }
     
     public static PTableType getTableType(List<Mutation> tableMetaData) {
-        KeyValue kv = getMutationKeyValue(getPutOnlyTableHeaderRow(tableMetaData), PhoenixDatabaseMetaData.TABLE_TYPE_BYTES);
-        return kv == null ? null : PTableType.fromSerializedValue(kv.getBuffer()[kv.getValueOffset()]);
+        Cell kv = getMutationKeyValue(getPutOnlyTableHeaderRow(tableMetaData), PhoenixDatabaseMetaData.TABLE_TYPE_BYTES);
+        return kv == null ? null : PTableType.fromSerializedValue(kv.getValueArray()[kv.getValueOffset()]);
     }
     
     public static long getParentSequenceNumber(List<Mutation> tableMetaData) {
@@ -186,11 +187,11 @@ public class MetaDataUtil {
     }
 
     private static KeyValue getMutationKeyValue(Mutation headerRow, byte[] key) {
-        List<KeyValue> kvs = headerRow.getFamilyMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
+        List<Cell> kvs = headerRow.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
         if (kvs != null) {
-            for (KeyValue kv : kvs) {
-                if (Bytes.compareTo(kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength(), key, 0,
-                        key.length) == 0) { return kv; }
+            for (Cell kv : kvs) {
+                if (Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), key, 0,
+                        key.length) == 0) { return org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(kv); }
             }
         }
         return null;
@@ -217,7 +218,7 @@ public class MetaDataUtil {
     }    
 
     public static long getClientTimeStamp(Mutation m) {
-        Collection<List<KeyValue>> kvs = m.getFamilyMap().values();
+        Collection<List<Cell>> kvs = m.getFamilyCellMap().values();
         // Empty if Mutation is a Delete
         // TODO: confirm that Delete timestamp is reset like Put
         return kvs.isEmpty() ? m.getTimeStamp() : kvs.iterator().next().get(0).getTimestamp();

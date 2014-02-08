@@ -25,15 +25,14 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.HashCache;
 import org.apache.phoenix.cache.TenantCache;
@@ -93,11 +92,11 @@ public class HashJoinRegionScanner implements RegionScanner {
         }
     }
     
-    private void processResults(List<KeyValue> result, boolean hasLimit) throws IOException {
+    private void processResults(List<Cell> result, boolean hasLimit) throws IOException {
         if (result.isEmpty())
             return;
         
-        Tuple tuple = new ResultTuple(new Result(result));
+        Tuple tuple = new ResultTuple(Result.create(result));
         if (joinInfo == null) {
             resultQueue.offer(projector.projectResults(tuple));
             return;
@@ -190,7 +189,7 @@ public class HashJoinRegionScanner implements RegionScanner {
         return hasMore;
     }
     
-    private boolean nextInQueue(List<KeyValue> results) {
+    private boolean nextInQueue(List<Cell> results) {
         if (resultQueue.isEmpty())
             return false;
         
@@ -212,14 +211,14 @@ public class HashJoinRegionScanner implements RegionScanner {
     }
 
     @Override
-    public boolean isFilterDone() {
+    public boolean isFilterDone() throws IOException {
         return scanner.isFilterDone() && resultQueue.isEmpty();
     }
 
     @Override
-    public boolean nextRaw(List<KeyValue> result, String metric) throws IOException {
+    public boolean nextRaw(List<Cell> result) throws IOException {
         while (shouldAdvance()) {
-            hasMore = scanner.nextRaw(result, metric);
+            hasMore = scanner.nextRaw(result);
             processResults(result, false);
             result.clear();
         }
@@ -228,10 +227,10 @@ public class HashJoinRegionScanner implements RegionScanner {
     }
 
     @Override
-    public boolean nextRaw(List<KeyValue> result, int limit, String metric)
+    public boolean nextRaw(List<Cell> result, int limit)
             throws IOException {
         while (shouldAdvance()) {
-            hasMore = scanner.nextRaw(result, limit, metric);
+            hasMore = scanner.nextRaw(result, limit);
             processResults(result, true);
             result.clear();
         }
@@ -250,7 +249,7 @@ public class HashJoinRegionScanner implements RegionScanner {
     }
 
     @Override
-    public boolean next(List<KeyValue> result) throws IOException {
+    public boolean next(List<Cell> result) throws IOException {
         while (shouldAdvance()) {
             hasMore = scanner.next(result);
             processResults(result, false);
@@ -261,18 +260,7 @@ public class HashJoinRegionScanner implements RegionScanner {
     }
 
     @Override
-    public boolean next(List<KeyValue> result, String metric) throws IOException {
-        while (shouldAdvance()) {
-            hasMore = scanner.next(result, metric);
-            processResults(result, false);
-            result.clear();
-        }
-        
-        return nextInQueue(result);
-    }
-
-    @Override
-    public boolean next(List<KeyValue> result, int limit) throws IOException {
+    public boolean next(List<Cell> result, int limit) throws IOException {
         while (shouldAdvance()) {
             hasMore = scanner.next(result, limit);
             processResults(result, true);
@@ -283,15 +271,8 @@ public class HashJoinRegionScanner implements RegionScanner {
     }
 
     @Override
-    public boolean next(List<KeyValue> result, int limit, String metric)
-            throws IOException {
-        while (shouldAdvance()) {
-            hasMore = scanner.next(result, limit, metric);
-            processResults(result, true);
-            result.clear();
-        }
-        
-        return nextInQueue(result);
+    public long getMaxResultSize() {
+        return this.scanner.getMaxResultSize();
     }
 
 }

@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
@@ -47,14 +48,14 @@ import org.apache.phoenix.util.SchemaUtil;
 public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
 
     @Override
-    public void batchStarted(MiniBatchOperationInProgress<Pair<Mutation, Integer>> miniBatchOp) throws IOException {
+    public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
         // The entire purpose of this method impl is to get the existing rows for the
         // table rows being indexed into the block cache, as the index maintenance code
         // does a point scan per row
         List<KeyRange> keys = Lists.newArrayListWithExpectedSize(miniBatchOp.size());
         List<IndexMaintainer> maintainers = new ArrayList<IndexMaintainer>();
         for (int i = 0; i < miniBatchOp.size(); i++) {
-            Mutation m = miniBatchOp.getOperation(i).getFirst();
+            Mutation m = miniBatchOp.getOperation(i);
             keys.add(PDataType.VARBINARY.getKeyRange(m.getRow()));
             maintainers.addAll(getCodec().getIndexMaintainers(m.getAttributesMap()));
         }
@@ -65,16 +66,15 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
         HRegion region = this.env.getRegion();
         RegionScanner scanner = region.getScanner(scan);
         // Run through the scanner using internal nextRaw method
-        MultiVersionConsistencyControl.setThreadReadPoint(scanner.getMvccReadPoint());
         region.startRegionOperation();
         try {
             boolean hasMore;
             do {
-                List<KeyValue> results = Lists.newArrayList();
+                List<Cell> results = Lists.newArrayList();
                 // Results are potentially returned even when the return value of s.next is false
                 // since this is an indication of whether or not there are more values after the
                 // ones returned
-                hasMore = scanner.nextRaw(results, null);
+                hasMore = scanner.nextRaw(results);
             } while (hasMore);
         } finally {
             try {

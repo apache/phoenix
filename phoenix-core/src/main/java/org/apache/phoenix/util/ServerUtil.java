@@ -44,6 +44,10 @@ public class ServerUtil {
     }
 
     public static void throwIOException(String msg, Throwable t) throws IOException {
+        throw createIOException(msg, t);
+    }
+
+    public static IOException createIOException(String msg, Throwable t) {
         // First unwrap SQLExceptions if it's root cause is an IOException.
         if (t instanceof SQLException) {
             Throwable cause = t.getCause();
@@ -53,18 +57,18 @@ public class ServerUtil {
         }
         // Throw immediately if DoNotRetryIOException
         if (t instanceof DoNotRetryIOException) {
-            throw (DoNotRetryIOException)t;
+            return (DoNotRetryIOException) t;
         } else if (t instanceof IOException) {
             // If the IOException does not wrap any exception, then bubble it up.
             Throwable cause = t.getCause();
             if (cause == null || cause instanceof IOException) {
-                throw (IOException)t;
+                return (IOException) t;
             }
             // Else assume it's been wrapped, so throw as DoNotRetryIOException to prevent client hanging while retrying
-            throw new DoNotRetryIOException(t.getMessage(), cause);
+            return new DoNotRetryIOException(t.getMessage(), cause);
         } else if (t instanceof SQLException) {
             // If it's already an SQLException, construct an error message so we can parse and reconstruct on the client side.
-            throw new DoNotRetryIOException(constructSQLErrorMessage((SQLException) t, msg), t);
+            return new DoNotRetryIOException(constructSQLErrorMessage((SQLException) t, msg), t);
         } else {
             // Not a DoNotRetryIOException, IOException or SQLException. Map the exception type to a general SQLException 
             // and construct the error message so it can be reconstruct on the client side.
@@ -72,9 +76,9 @@ public class ServerUtil {
             // If no mapping exists, rethrow it as a generic exception.
             SQLExceptionCode code = errorcodeMap.get(t.getClass());
             if (code == null) {
-                throw new DoNotRetryIOException(msg + ": " + t.getMessage(), t);
+                return new DoNotRetryIOException(msg + ": " + t.getMessage(), t);
             } else {
-                throw new DoNotRetryIOException(constructSQLErrorMessage(code, t, msg), t);
+                return new DoNotRetryIOException(constructSQLErrorMessage(code, t, msg), t);
             }
         }
     }

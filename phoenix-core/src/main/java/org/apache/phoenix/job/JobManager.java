@@ -69,7 +69,7 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
     
             @Override
             protected <T> RunnableFuture<T> newTaskFor(Runnable runnable, T value) {
-                return new JobFutureTask<T>((JobRunnable)runnable, value);
+                return new JobFutureTask<T>(runnable, value);
             }
             
         };
@@ -84,9 +84,13 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
     static class JobFutureTask<T> extends FutureTask<T> {
         private final Object jobId;
         
-        public JobFutureTask(JobRunnable r, T t) {
+        public JobFutureTask(Runnable r, T t) {
             super(r, t);
-            this.jobId = r.getJobId();
+            if(r instanceof JobRunnable){
+              	this.jobId = ((JobRunnable)r).getJobId();
+            } else {
+            	this.jobId = this;
+            }
         }
         
         public JobFutureTask(Callable<T> c) {

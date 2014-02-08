@@ -32,7 +32,9 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -154,7 +156,7 @@ public class TestCoveredColumnIndexCodec {
     ColumnGroup group = new ColumnGroup("test-column-group");
     group.add(COLUMN_REF);
 
-    final Result emptyState = new Result(Collections.<KeyValue> emptyList());
+    final Result emptyState = Result.create(Collections.<Cell> emptyList());
     
     // setup the state we expect for the codec
     RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
@@ -169,7 +171,7 @@ public class TestCoveredColumnIndexCodec {
     // start with a basic put that has some keyvalues
     Put p = new Put(PK);
     // setup the kvs to add
-    List<KeyValue> kvs = new ArrayList<KeyValue>();
+    List<Cell> kvs = new ArrayList<Cell>();
     byte[] v1 = Bytes.toBytes("v1");
     KeyValue kv = new KeyValue(PK, FAMILY, QUAL, 1, v1);
     kvs.add(kv);
@@ -187,7 +189,7 @@ public class TestCoveredColumnIndexCodec {
 
     // get the updates with the pending update
     state.setCurrentTimestamp(1);
-    state.addPendingUpdates(kvs);
+    state.addPendingUpdates(KeyValueUtil.ensureKeyValues(kvs));
     updates = codec.getIndexUpserts(state);
     assertTrue("Didn't find index updates for pending primary table update!", updates.iterator()
         .hasNext());
@@ -207,7 +209,7 @@ public class TestCoveredColumnIndexCodec {
     d.deleteFamily(FAMILY, 2);
     // setup the next batch of 'current state', basically just ripping out the current state from
     // the last round
-    table = new SimpleTableState(new Result(kvs));
+    table = new SimpleTableState(Result.create(kvs));
     state = new LocalTableState(env, table, d);
     state.setCurrentTimestamp(2);
     // check the cleanup of the current table, after the puts (mocking a 'next' update)
@@ -234,13 +236,13 @@ public class TestCoveredColumnIndexCodec {
     ensureNoUpdatesWhenCoveredByDelete(env, codec, kvs, d);
   }
 
-  private void ensureNoUpdatesWhenCoveredByDelete(RegionCoprocessorEnvironment env, IndexCodec codec, List<KeyValue> currentState,
+  private void ensureNoUpdatesWhenCoveredByDelete(RegionCoprocessorEnvironment env, IndexCodec codec, List<Cell> currentState,
       Delete d) throws IOException {
-    LocalHBaseState table = new SimpleTableState(new Result(currentState));
+    LocalHBaseState table = new SimpleTableState(Result.create(currentState));
     LocalTableState state = new LocalTableState(env, table, d);
     state.setCurrentTimestamp(d.getTimeStamp());
     // now we shouldn't see anything when getting the index update
-    state.addPendingUpdates(d.getFamilyMap().get(FAMILY));
+    state.addPendingUpdates(KeyValueUtil.ensureKeyValues(d.getFamilyCellMap().get(FAMILY)));
     Iterable<IndexUpdate> updates = codec.getIndexUpserts(state);
     for (IndexUpdate update : updates) {
       assertFalse("Had some index updates, though it should have been covered by the delete",

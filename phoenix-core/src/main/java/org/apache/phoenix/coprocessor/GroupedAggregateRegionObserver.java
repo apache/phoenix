@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
@@ -64,6 +65,7 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.ScanProjector;
+import org.apache.phoenix.memory.GlobalMemoryManager;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
@@ -296,11 +298,16 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 }
 
                 @Override
-                public boolean next(List<KeyValue> results) throws IOException {
+                public boolean next(List<Cell> results) throws IOException {
                     if (index >= aggResults.size()) return false;
                     results.add(aggResults.get(index));
                     index++;
                     return index < aggResults.size();
+                }
+
+                @Override
+                public long getMaxResultSize() {
+                	return s.getMaxResultSize();
                 }
             };
         }
@@ -368,17 +375,16 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             }
 
             HRegion region = c.getEnvironment().getRegion();
-            MultiVersionConsistencyControl.setThreadReadPoint(s.getMvccReadPoint());
             region.startRegionOperation();
             try {
                 do {
-                    List<KeyValue> results = new ArrayList<KeyValue>();
+                    List<Cell> results = new ArrayList<Cell>();
                     // Results are potentially returned even when the return
                     // value of s.next is false
                     // since this is an indication of whether or not there are
                     // more values after the
                     // ones returned
-                    hasMore = s.nextRaw(results, null);
+                    hasMore = s.nextRaw(results);
                     if (!results.isEmpty()) {
                         result.setKeyValues(results);
                         ImmutableBytesWritable key =
@@ -433,24 +439,23 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             }
 
             @Override
-            public boolean next(List<KeyValue> results) throws IOException {
+            public boolean next(List<Cell> results) throws IOException {
                 boolean hasMore;
                 boolean aggBoundary = false;
                 MultiKeyValueTuple result = new MultiKeyValueTuple();
                 ImmutableBytesWritable key = null;
                 Aggregator[] rowAggregators = aggregators.getAggregators();
                 HRegion region = c.getEnvironment().getRegion();
-                MultiVersionConsistencyControl.setThreadReadPoint(s.getMvccReadPoint());
                 region.startRegionOperation();
                 try {
                     do {
-                        List<KeyValue> kvs = new ArrayList<KeyValue>();
+                        List<Cell> kvs = new ArrayList<Cell>();
                         // Results are potentially returned even when the return
                         // value of s.next is false
                         // since this is an indication of whether or not there
                         // are more values after the
                         // ones returned
-                        hasMore = s.nextRaw(kvs, null);
+                        hasMore = s.nextRaw(kvs);
                         if (!kvs.isEmpty()) {
                             result.setKeyValues(kvs);
                             key = TupleUtil.getConcatenatedValue(result, expressions);
@@ -501,6 +506,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 }
                 currentKey = null;
                 return false;
+            }
+            
+            @Override
+            public long getMaxResultSize() {
+                return s.getMaxResultSize();
             }
         };
     }

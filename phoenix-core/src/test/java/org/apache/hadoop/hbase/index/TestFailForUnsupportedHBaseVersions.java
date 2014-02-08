@@ -116,6 +116,8 @@ public class TestFailForUnsupportedHBaseVersions {
 
     // start the minicluster
     HBaseTestingUtility util = new HBaseTestingUtility(conf);
+    // disable replication
+    conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY, false);
     util.startMiniCluster();
 
     // setup the primary table

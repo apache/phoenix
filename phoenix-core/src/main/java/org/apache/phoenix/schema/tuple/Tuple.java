@@ -19,7 +19,7 @@
  */
 package org.apache.phoenix.schema.tuple;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 /**
@@ -58,7 +58,7 @@ public interface Tuple {
      * @return the KeyValue at the given index
      * @throws IndexOutOfBoundsException if an invalid index is used
      */
-    public KeyValue getValue(int index);
+    public Cell getValue(int index);
     
     /***
      * Get the KeyValue contained by the Tuple with the given family and
@@ -68,7 +68,7 @@ public interface Tuple {
      * @return the KeyValue with the given family and qualifier name or
      * null if not found.
      */
-    public KeyValue getValue(byte [] family, byte [] qualifier);
+    public Cell getValue(byte [] family, byte [] qualifier);
     
     /***
      * Get the value byte array of the KeyValue contained by the Tuple with 

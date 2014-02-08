@@ -125,7 +125,6 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
         this.delegate.close();
     }
 
-    /*
     @Override
     public boolean backwardSeek(KeyValue arg0) throws IOException {
         return this.delegate.backwardSeek(arg0);
@@ -140,5 +139,4 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
     public boolean seekToPreviousRow(KeyValue arg0) throws IOException {
         return this.delegate.seekToPreviousRow(arg0);
     }
-    */
 }

@@ -14,13 +14,12 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
-
 import org.apache.hadoop.hbase.index.covered.Batch;
 import org.apache.hadoop.hbase.index.covered.CoveredColumnsIndexBuilder;
 import org.apache.hadoop.hbase.index.covered.LocalTableState;
 import org.apache.hadoop.hbase.index.covered.update.IndexUpdateManager;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 
 /**
  * Index maintainer that maintains multiple indexes based on '{@link ColumnGroup}s'. Each group is a
@@ -108,10 +107,11 @@ public class CoveredColumnIndexer extends CoveredColumnsIndexBuilder {
     Collection<Batch> batches = batchByRow(filtered);
 
     for (Batch batch : batches) {
-      Put p = new Put(batch.getKvs().iterator().next().getRow());
+      KeyValue curKV = batch.getKvs().iterator().next();
+      Put p = new Put(curKV.getRowArray(), curKV.getRowOffset(), curKV.getRowLength());
       for (KeyValue kv : batch.getKvs()) {
         // we only need to cleanup Put entries
-        byte type = kv.getType();
+        byte type = kv.getTypeByte();
         Type t = KeyValue.Type.codeToType(type);
         if (!t.equals(Type.Put)) {
           continue;
@@ -136,7 +136,6 @@ public class CoveredColumnIndexer extends CoveredColumnsIndexBuilder {
 
   /**
    * @param filtered
-   * @return
    */
   private Collection<Batch>  batchByRow(Collection<KeyValue> filtered) {
     Map<Long, Batch> batches = new HashMap<Long, Batch>();

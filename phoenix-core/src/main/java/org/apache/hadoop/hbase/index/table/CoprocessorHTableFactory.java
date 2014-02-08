@@ -7,6 +7,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
 
@@ -40,7 +41,7 @@ public class CoprocessorHTableFactory implements HTableFactory {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Creating new HTable: " + Bytes.toString(tablename.copyBytesIfNecessary()));
     }
-    return this.e.getTable(tablename.copyBytesIfNecessary());
+    return this.e.getTable(TableName.valueOf(tablename.copyBytesIfNecessary()));
   }
 
   @Override

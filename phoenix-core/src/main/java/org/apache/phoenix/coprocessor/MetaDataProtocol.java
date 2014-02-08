@@ -19,24 +19,21 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.ipc.CoprocessorProtocol;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.io.WritableUtils;
-
-import com.google.common.collect.Lists;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+
+import com.google.common.collect.Lists;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.HBaseZeroCopyByteString;
 
 
 /**
@@ -56,7 +53,7 @@ import org.apache.phoenix.util.MetaDataUtil;
  * 
  * @since 0.1
  */
-public interface MetaDataProtocol extends CoprocessorProtocol {
+public abstract class MetaDataProtocol extends MetaDataService {
     public static final int PHOENIX_MAJOR_VERSION = 3;
     public static final int PHOENIX_MINOR_VERSION = 0;
     public static final int PHOENIX_PATCH_NUMBER = 0;
@@ -92,7 +89,7 @@ public interface MetaDataProtocol extends CoprocessorProtocol {
         PARENT_TABLE_NOT_FOUND
     };
     
-    public static class MetaDataMutationResult implements Writable {
+  public static class MetaDataMutationResult {
         private MutationCode returnCode;
         private long mutationTime;
         private PTable table;
@@ -156,114 +153,54 @@ public interface MetaDataProtocol extends CoprocessorProtocol {
             return familyName;
         }        
         
-        @Override
-        public void readFields(DataInput input) throws IOException {
-            this.returnCode = MutationCode.values()[WritableUtils.readVInt(input)];
-            this.mutationTime = input.readLong();
-            wasUpdated = input.readBoolean();
-            if (wasUpdated) {
-                this.table = new PTableImpl();
-                this.table.readFields(input);
+        public static MetaDataMutationResult constructFromProto(MetaDataResponse proto) {
+          MetaDataMutationResult result = new MetaDataMutationResult();
+          result.returnCode = MutationCode.values()[proto.getReturnCode().ordinal()];
+          result.mutationTime = proto.getMutationTime();
+          if (proto.hasTable()) {
+            result.wasUpdated = true;
+            result.table = PTableImpl.createFromProto(proto.getTable());
+          }
+          if (proto.getTablesToDeleteCount() > 0) {
+            result.tableNamesToDelete =
+                Lists.newArrayListWithExpectedSize(proto.getTablesToDeleteCount());
+            for (ByteString tableName : proto.getTablesToDeleteList()) {
+              result.tableNamesToDelete.add(tableName.toByteArray());
             }
-            columnName = Bytes.readByteArray(input);
-            if (columnName.length > 0) {
-                familyName = Bytes.readByteArray(input);
-            }
-            boolean hasTablesToDelete = input.readBoolean();
-            if (hasTablesToDelete) {
-                int count = input.readInt();
-                tableNamesToDelete = Lists.newArrayListWithExpectedSize(count);
-                for( int i = 0 ; i < count ; i++ ){
-                     byte[] tableName = Bytes.readByteArray(input);
-                     tableNamesToDelete.add(tableName);
-                }
-            }
+          }
+          result.columnName = ByteUtil.EMPTY_BYTE_ARRAY;
+          if(proto.hasColumnName()){
+            result.columnName = proto.getColumnName().toByteArray();
+          }
+          if(proto.hasFamilyName()){
+            result.familyName = proto.getFamilyName().toByteArray();
+          }
+          return result;
         }
-
-        @Override
-        public void write(DataOutput output) throws IOException {
-            WritableUtils.writeVInt(output, returnCode.ordinal());
-            output.writeLong(mutationTime);
-            output.writeBoolean(table != null);
-            if (table != null) {
-                table.write(output);
+    
+        public static MetaDataResponse toProto(MetaDataMutationResult result) {
+          MetaDataProtos.MetaDataResponse.Builder builder =
+              MetaDataProtos.MetaDataResponse.newBuilder();
+          if (result != null) {
+            builder.setReturnCode(MetaDataProtos.MutationCode.values()[result.getMutationCode()
+                .ordinal()]);
+            builder.setMutationTime(result.getMutationTime());
+            if (result.table != null) {
+              builder.setTable(PTableImpl.toProto(result.table));
             }
-            Bytes.writeByteArray(output, columnName == null ? ByteUtil.EMPTY_BYTE_ARRAY : columnName);
-            if (columnName != null) {
-                 Bytes.writeByteArray(output, familyName == null ? ByteUtil.EMPTY_BYTE_ARRAY : familyName);
+            if (result.getTableNamesToDelete() != null) {
+              for (byte[] tableName : result.tableNamesToDelete) {
+                builder.addTablesToDelete(HBaseZeroCopyByteString.wrap(tableName));
+              }
             }
-            if(tableNamesToDelete != null && tableNamesToDelete.size() > 0 ) {
-                output.writeBoolean(true);
-                output.writeInt(tableNamesToDelete.size());
-                for(byte[] tableName : tableNamesToDelete) {
-                    Bytes.writeByteArray(output,tableName);    
-                }
-                
-            } else {
-                output.writeBoolean(false);
+            if(result.getColumnName() != null){
+              builder.setColumnName(HBaseZeroCopyByteString.wrap(result.getColumnName()));
             }
-            
+            if(result.getFamilyName() != null){
+              builder.setFamilyName(HBaseZeroCopyByteString.wrap(result.getFamilyName()));
+            }
+          }
+          return builder.build();
         }
     }
-    
-    /**
-     * The the latest Phoenix table at or before the given clientTimestamp. If the
-     * client already has the latest (based on the tableTimestamp), then no table
-     * is returned.
-     * @param tenantId
-     * @param schemaName
-     * @param tableName
-     * @param tableTimestamp
-     * @param clientTimestamp
-     * @return MetaDataMutationResult
-     * @throws IOException
-     */
-    MetaDataMutationResult getTable(byte[] tenantId, byte[] schemaName, byte[] tableName, long tableTimestamp, long clientTimestamp) throws IOException;
-
-    /**
-     * Create a new Phoenix table
-     * @param tableMetadata
-     * @return MetaDataMutationResult
-     * @throws IOException
-     */
-    MetaDataMutationResult createTable(List<Mutation> tableMetadata) throws IOException;
-
-    /**
-     * Drop an existing Phoenix table
-     * @param tableMetadata
-     * @param tableType
-     * @return MetaDataMutationResult
-     * @throws IOException
-     */
-    MetaDataMutationResult dropTable(List<Mutation> tableMetadata, String tableType) throws IOException;
-
-    /**
-     * Add a column to an existing Phoenix table
-     * @param tableMetadata
-     * @return MetaDataMutationResult
-     * @throws IOException
-     */
-    MetaDataMutationResult addColumn(List<Mutation> tableMetadata) throws IOException;
-    
-    /**
-     * Drop a column from an existing Phoenix table
-     * @param tableMetadata
-     * @return MetaDataMutationResult
-     * @throws IOException
-     */
-    MetaDataMutationResult dropColumn(List<Mutation> tableMetadata) throws IOException;
-    
-    MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata) throws IOException;
-
-    /**
-     * Clears the server-side cache of table meta data. Used between test runs to
-     * ensure no side effects.
-     */
-    void clearCache();
-    
-    /**
-     * Get the version of the server-side HBase and phoenix.jar. Used when initially connecting
-     * to a cluster to ensure that the client and server jars are compatible.
-     */
-    long getVersion();
 }

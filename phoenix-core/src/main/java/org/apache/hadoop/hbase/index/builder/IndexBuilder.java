@@ -107,7 +107,7 @@ public interface IndexBuilder extends Stoppable {
    * Notification that a batch of updates has successfully been written.
    * @param miniBatchOp the full batch operation that was written
    */
-  public void batchCompleted(MiniBatchOperationInProgress<Pair<Mutation, Integer>> miniBatchOp);
+  public void batchCompleted(MiniBatchOperationInProgress<Mutation> miniBatchOp);
 
   /**
    * Notification that a batch has been started.
@@ -118,7 +118,7 @@ public interface IndexBuilder extends Stoppable {
    * @param miniBatchOp the full batch operation to be written
  * @throws IOException 
    */
-  public void batchStarted(MiniBatchOperationInProgress<Pair<Mutation, Integer>> miniBatchOp) throws IOException;
+  public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException;
 
   /**
    * This allows the codec to dynamically change whether or not indexing should take place for a

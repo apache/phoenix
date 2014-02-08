@@ -23,7 +23,6 @@ import java.io.Closeable;
 import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.ipc.CoprocessorProtocol;
 import org.apache.hadoop.io.Writable;
 
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
@@ -37,7 +36,7 @@ import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
  * 
  * @since 0.1
  */
-public interface ServerCachingProtocol extends CoprocessorProtocol {
+public interface ServerCachingProtocol {
     public static interface ServerCacheFactory extends Writable {
         public Closeable newCache(ImmutableBytesWritable cachePtr, MemoryChunk chunk) throws SQLException;
     }

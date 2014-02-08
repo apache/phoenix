@@ -35,7 +35,7 @@ import org.apache.phoenix.schema.stat.PTableStats;
  * 
  * @since 0.1
  */
-public interface PTable extends Writable {
+public interface PTable {
     public static final long INITIAL_SEQ_NUM = 0;
     public static final String IS_IMMUTABLE_ROWS_PROP_NAME = "IMMUTABLE_ROWS";
     public static final boolean DEFAULT_DISABLE_WAL = false;

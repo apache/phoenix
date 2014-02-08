@@ -26,6 +26,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -79,10 +80,10 @@ public class TupleUtil {
      */
     public static void getAggregateValue(Tuple r, ImmutableBytesWritable ptr) {
         if (r.size() == 1) {
-            KeyValue kv = r.getValue(0); // Just one KV for aggregation
-            if (Bytes.compareTo(SINGLE_COLUMN_FAMILY, 0, SINGLE_COLUMN_FAMILY.length, kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength()) == 0) {
-                if (Bytes.compareTo(SINGLE_COLUMN, 0, SINGLE_COLUMN.length, kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength()) == 0) {
-                    ptr.set(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength());
+            Cell kv = r.getValue(0); // Just one KV for aggregation
+            if (Bytes.compareTo(SINGLE_COLUMN_FAMILY, 0, SINGLE_COLUMN_FAMILY.length, kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength()) == 0) {
+                if (Bytes.compareTo(SINGLE_COLUMN, 0, SINGLE_COLUMN.length, kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength()) == 0) {
+                    ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
                     return;
                 }
             }
@@ -139,14 +140,14 @@ public class TupleUtil {
     public static int write(Tuple result, DataOutput out) throws IOException {
         int size = 0;
         for(int i = 0; i < result.size(); i++) {
-            KeyValue kv = result.getValue(i);
+            KeyValue kv = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(result.getValue(i));
             size += kv.getLength();
             size += Bytes.SIZEOF_INT; // kv.getLength
           }
 
         WritableUtils.writeVInt(out, size);
         for(int i = 0; i < result.size(); i++) {
-            KeyValue kv = result.getValue(i);
+            KeyValue kv = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(result.getValue(i));
             out.writeInt(kv.getLength());
             out.write(kv.getBuffer(), kv.getOffset(), kv.getLength());
           }

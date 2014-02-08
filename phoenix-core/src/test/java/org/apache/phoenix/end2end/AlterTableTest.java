@@ -79,10 +79,6 @@ public class AlterTableTest extends BaseHBaseManagedTimeTest {
             conn.close();
         }
     }
-    
-    
-   
-
 
     @Test
     public void testAddVarCharColToPK() throws Exception {

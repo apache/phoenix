@@ -54,8 +54,6 @@ import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.ValueSchema.Field;
 
-
-
 /**
  * 
  * Static class for various schema-related utilities

@@ -36,6 +36,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
@@ -47,10 +48,8 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.MultiVersionConsistencyControl;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,6 +57,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.apache.phoenix.client.KeyValueBuilder;
+import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -90,7 +90,8 @@ import org.apache.phoenix.util.SchemaUtil;
  * @since 0.1
  */
 public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver {
-    private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
+	private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
+
     // TODO: move all constants into a single class
     public static final String UNGROUPED_AGG = "UngroupedAgg";
     public static final String DELETE_AGG = "DeleteAgg";
@@ -107,16 +108,16 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         this.kvBuilder = KeyValueBuilder.get(e.getHBaseVersion());
     }
 
-    private static void commitBatch(HRegion region, List<Pair<Mutation,Integer>> mutations, byte[] indexUUID) throws IOException {
-        if (indexUUID != null) {
-            for (Pair<Mutation,Integer> pair : mutations) {
-                pair.getFirst().setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
-            }
-        }
-        @SuppressWarnings("unchecked")
-        Pair<Mutation,Integer>[] mutationArray = new Pair[mutations.size()];
-        // TODO: should we use the one that is all or none?
-        region.batchMutate(mutations.toArray(mutationArray));
+    private static void commitBatch(HRegion region, List<Mutation> mutations, byte[] indexUUID) throws IOException {
+      if (indexUUID != null) {
+          for (Mutation m : mutations) {
+              m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
+          }
+      }
+      @SuppressWarnings("unchecked")
+      Mutation[] mutationArray = new Mutation[mutations.size()];
+      // TODO: should we use the one that is all or none?
+      region.batchMutate(mutations.toArray(mutationArray));
     }
     
     public static void serializeIntoScan(Scan scan) {
@@ -168,7 +169,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         int batchSize = 0;
         long ts = scan.getTimeRange().getMax();
         HRegion region = c.getEnvironment().getRegion();
-        List<Pair<Mutation,Integer>> mutations = Collections.emptyList();
+        List<Mutation> mutations = Collections.emptyList();
         if (isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null) {
             // TODO: size better
             mutations = Lists.newArrayListWithExpectedSize(1024);
@@ -184,17 +185,16 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         	logger.info("Starting ungrouped coprocessor scan " + scan);
         }
         long rowCount = 0;
-        MultiVersionConsistencyControl.setThreadReadPoint(innerScanner.getMvccReadPoint());
         region.startRegionOperation();
         try {
             do {
-                List<KeyValue> results = new ArrayList<KeyValue>();
+                List<Cell> results = new ArrayList<Cell>();
                 // Results are potentially returned even when the return value of s.next is false
                 // since this is an indication of whether or not there are more values after the
                 // ones returned
-                hasMore = innerScanner.nextRaw(results, null);
+                hasMore = innerScanner.nextRaw(results);
                 if (!results.isEmpty()) {
-                	rowCount++;
+                    rowCount++;
                     result.setKeyValues(results);
                     try {
                         if (isDelete) {
@@ -202,8 +202,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             // FIXME: the version of the Delete constructor without the lock args was introduced
                             // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version
                             // of the client.
-                            Delete delete = new Delete(results.get(0).getRow(),ts,null);
-                            mutations.add(new Pair<Mutation,Integer>(delete,null));
+                            Cell firstKV = results.get(0);
+                            Delete delete = new Delete(firstKV.getRowArray(), firstKV.getRowOffset(), 
+                                firstKV.getRowLength(),ts);
+                            mutations.add(delete);
                         } else if (isUpsert) {
                             Arrays.fill(values, null);
                             int i = 0;
@@ -246,15 +248,16 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                             for (Mutation mutation : row.toRowMutations()) {
-                                mutations.add(new Pair<Mutation,Integer>(mutation,null));
+                                mutations.add(mutation);
                             }
                         } else if (deleteCF != null && deleteCQ != null) {
                             // No need to search for delete column, since we project only it
                             // if no empty key value is being set
                             if (emptyCF == null || result.getValue(deleteCF, deleteCQ) != null) {
-                                Delete delete = new Delete(results.get(0).getRow());
+                                Delete delete = new Delete(results.get(0).getRowArray(), results.get(0).getRowOffset(), 
+                                  results.get(0).getRowLength());
                                 delete.deleteColumns(deleteCF,  deleteCQ, ts);
-                                mutations.add(new Pair<Mutation,Integer>(delete,null));
+                                mutations.add(delete);
                             }
                         }
                         if (emptyCF != null) {
@@ -267,18 +270,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                              * We insert one empty key value per row per timestamp.
                              */
                             Set<Long> timeStamps = Sets.newHashSetWithExpectedSize(results.size());
-                            for (KeyValue kv : results) {
+                            for (Cell kv : results) {
                                 long kvts = kv.getTimestamp();
                                 if (!timeStamps.contains(kvts)) {
-                                    Put put = new Put(kv.getRow());
+                                    Put put = new Put(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
                                     put.add(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts, ByteUtil.EMPTY_BYTE_ARRAY);
-                                    mutations.add(new Pair<Mutation,Integer>(put,null));
+                                    mutations.add(put);
                                 }
                             }
                         }
                         // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                         if (!mutations.isEmpty() && batchSize > 0 && mutations.size() % batchSize == 0) {
-                            commitBatch(region,mutations, indexUUID);
+                            commitBatch(region, mutations, indexUUID);
                             mutations.clear();
                         }
                     } catch (ConstraintViolationException e) {
@@ -330,32 +333,28 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
 
             @Override
-            public boolean next(List<KeyValue> results) throws IOException {
+            public boolean next(List<Cell> results) throws IOException {
                 if (done) return false;
                 done = true;
                 results.add(aggKeyValue);
                 return false;
+            }
+            
+            @Override
+            public long getMaxResultSize() {
+            	return scan.getMaxResultSize();
             }
         };
         return scanner;
     }
     
     private static PTable deserializeTable(byte[] b) {
-        ByteArrayInputStream stream = new ByteArrayInputStream(b);
         try {
-            DataInputStream input = new DataInputStream(stream);
-            PTable table = new PTableImpl();
-            table.readFields(input);
-            return table;
+            PTableProtos.PTable ptableProto = PTableProtos.PTable.parseFrom(b);
+            return PTableImpl.createFromProto(ptableProto);
         } catch (IOException e) {
             throw new RuntimeException(e);
-        } finally {
-            try {
-                stream.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
+        } 
     }
 
     private static List<Expression> deserializeExpressions(byte[] b) {
@@ -383,20 +382,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     public static byte[] serialize(PTable projectedTable) {
-        ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        try {
-            DataOutputStream output = new DataOutputStream(stream);
-            projectedTable.write(output);
-            return stream.toByteArray();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        } finally {
-            try {
-                stream.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
+        PTableProtos.PTable ptableProto = PTableImpl.toProto(projectedTable);
+        return ptableProto.toByteArray();
     }
 
     public static byte[] serialize(List<Expression> selectExpressions) {

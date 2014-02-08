@@ -17,10 +17,10 @@
  */
 package org.apache.hadoop.hbase.index.covered.filter;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
+import org.apache.hadoop.hbase.filter.ByteArrayComparable;
 import org.apache.hadoop.hbase.filter.FamilyFilter;
-import org.apache.hadoop.hbase.filter.WritableByteArrayComparable;
 
 /**
  * Similar to the {@link FamilyFilter} but stops when the end of the family is reached and only
@@ -39,7 +39,7 @@ public class FamilyOnlyFilter extends FamilyFilter {
     this(new BinaryComparator(family));
   }
 
-  public FamilyOnlyFilter(final WritableByteArrayComparable familyComparator) {
+  public FamilyOnlyFilter(final ByteArrayComparable familyComparator) {
     super(CompareOp.EQUAL, familyComparator);
   }
 
@@ -56,7 +56,7 @@ public class FamilyOnlyFilter extends FamilyFilter {
   }
 
   @Override
-  public ReturnCode filterKeyValue(KeyValue v) {
+  public ReturnCode filterKeyValue(Cell v) {
     if (done) {
       return ReturnCode.SKIP;
     }

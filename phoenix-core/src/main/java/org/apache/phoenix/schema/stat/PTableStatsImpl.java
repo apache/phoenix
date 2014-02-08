@@ -52,19 +52,11 @@ public class PTableStatsImpl implements PTableStats {
     }
 
     @Override
-    public void write(DataOutput output) throws IOException {
-        if (regionGuidePosts == null) {
-            WritableUtils.writeVInt(output, 0);
-            return;
-        }
-        WritableUtils.writeVInt(output, regionGuidePosts.size());
-        for (Entry<String, byte[][]> entry : regionGuidePosts.entrySet()) {
-            WritableUtils.writeString(output, entry.getKey());
-            byte[][] value = entry.getValue();
-            WritableUtils.writeVInt(output, value.length);
-            for (int i=0; i<value.length; i++) {
-                Bytes.writeByteArray(output, value[i]);
-            }
-        }
+    public Map<String, byte[][]> getGuidePosts(){
+      if(regionGuidePosts != null) {
+        return ImmutableMap.copyOf(regionGuidePosts);
+      }
+      
+      return null;
     }
 }

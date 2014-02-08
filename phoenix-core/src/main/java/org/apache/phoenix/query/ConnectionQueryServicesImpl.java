@@ -41,10 +41,11 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableExistsException;
-import org.apache.hadoop.hbase.ZooKeeperConnectionException;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HConnection;
+import org.apache.hadoop.hbase.client.HConnectionManager;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -53,6 +54,9 @@ import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.index.Indexer;
 import org.apache.hadoop.hbase.index.covered.CoveredColumnsIndexBuilder;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
+import org.apache.hadoop.hbase.ipc.ServerRpcController;
+import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
@@ -69,6 +73,19 @@ import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.CreateTableRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.DropColumnRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.DropTableRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetTableRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -78,6 +95,7 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.schema.EmptySequenceCacheException;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
@@ -103,6 +121,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.protobuf.HBaseZeroCopyByteString;
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
@@ -112,7 +131,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     // Copy of config.getProps(), but read-only to prevent synchronization that we
     // don't need.
     private final ReadOnlyProps props;
-    private final HConnection connection;
+    private HConnection connection;
     private final StatsManager statsManager;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
     // Cache the latest meta data here for future connections
@@ -145,23 +164,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
         this.config = HBaseConfiguration.create(config);
-        this.props = new ReadOnlyProps(this.config.iterator());
-        try {
-            this.connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(this.config);
-        } catch (ZooKeeperConnectionException e) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
-                .setRootCause(e).build().buildException();
-        }
-        if (this.connection.isClosed()) { // TODO: why the heck doesn't this throw above?
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION).build().buildException();
-        }
+         // set default value for hbase.master.logcleaner.plugin if not set yet
+         if(this.config.get(HConstants.HBASE_MASTER_LOGCLEANER_PLUGINS) == null){
+               this.config.set(HConstants.HBASE_MASTER_LOGCLEANER_PLUGINS,
+                   "org.apache.hadoop.hbase.master.cleaner.TimeToLiveLogCleaner");
+         }
+         // disable replication for Phoenix component
+         this.config.setBoolean(HConstants.REPLICATION_ENABLE_KEY, false);
+         this.props = new ReadOnlyProps(this.config.iterator());
         // TODO: should we track connection wide memory usage or just org-wide usage?
         // If connection-wide, create a MemoryManager here, otherwise just use the one from the delegate
         this.childServices = new ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices>(INITIAL_CHILD_SERVICES_CAPACITY);
         int statsUpdateFrequencyMs = this.getProps().getInt(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
         int maxStatsAgeMs = this.getProps().getInt(QueryServices.MAX_STATS_AGE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_STATS_AGE_MS);
         this.statsManager = new StatsManagerImpl(this, statsUpdateFrequencyMs, maxStatsAgeMs);
-
+        
         // find the HBase version and use that to determine the KeyValueBuilder that should be used
         String hbaseVersion = VersionInfo.getVersion();
         this.kvBuilder = KeyValueBuilder.get(hbaseVersion);
@@ -253,7 +270,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public void clearTableRegionCache(byte[] tableName) throws SQLException {
-        connection.clearRegionCache(tableName);
+        connection.clearRegionCache(TableName.valueOf(tableName));
     }
     
     @Override
@@ -272,7 +289,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 List<HRegionLocation> locations = Lists.newArrayList();
                 byte[] currentKey = HConstants.EMPTY_START_ROW;
                 do {
-                  HRegionLocation regionLocation = connection.getRegionLocation(tableName, currentKey, reload);
+                  HRegionLocation regionLocation = connection.getRegionLocation(
+                    TableName.valueOf(tableName), currentKey, reload);
                   locations.add(regionLocation);
                   currentKey = regionLocation.getRegionInfo().getEndKey();
                 } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW));
@@ -429,7 +447,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     private HTableDescriptor generateTableDescriptor(byte[] tableName, HTableDescriptor existingDesc, PTableType tableType, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits) throws SQLException {
-        HTableDescriptor descriptor = (existingDesc != null) ? new HTableDescriptor(existingDesc) : new HTableDescriptor(tableName);
+        HTableDescriptor descriptor = (existingDesc != null) ? new HTableDescriptor(existingDesc) : 
+          new HTableDescriptor(TableName.valueOf(tableName));
         for (Entry<String,Object> entry : tableProps.entrySet()) {
             String key = entry.getKey();
             Object value = entry.getValue();
@@ -712,18 +731,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     serverMap.add(entry);
                 }
             }
-            final TreeMap<byte[],Long> results = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
-            connection.processExecs(MetaDataProtocol.class, regionKeys,
-                    PhoenixDatabaseMetaData.TYPE_TABLE_NAME_BYTES, this.getDelegate().getExecutor(), new Batch.Call<MetaDataProtocol,Long>() {
+            HTableInterface ht = this.getTable(PhoenixDatabaseMetaData.TYPE_TABLE_NAME_BYTES);
+            final Map<byte[], Long> results =
+                    ht.coprocessorService(MetaDataService.class, null, null, new Batch.Call<MetaDataService,Long>() {
                         @Override
-                        public Long call(MetaDataProtocol instance) throws IOException {
-                            return instance.getVersion();
-                        }
-                    }, 
-                    new Batch.Callback<Long>(){
-                        @Override
-                        public void update(byte[] region, byte[] row, Long value) {
-                          results.put(region, value);
+                        public Long call(MetaDataService instance) throws IOException {
+                            ServerRpcController controller = new ServerRpcController();
+                            BlockingRpcCallback<GetVersionResponse> rpcCallback =
+                                    new BlockingRpcCallback<GetVersionResponse>();
+                            GetVersionRequest.Builder builder = GetVersionRequest.newBuilder();
+                            
+                            instance.getVersion(controller, builder.build(), rpcCallback);
+                            if(controller.getFailedOn() != null) {
+                                throw controller.getFailedOn();
+                            }
+                            return rpcCallback.get().getVersion();
                         }
                     });
             for (Map.Entry<byte[],Long> result : results.entrySet()) {
@@ -756,29 +778,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * Invoke meta data coprocessor with one retry if the key was found to not be in the regions
      * (due to a table split)
      */
-    private MetaDataMutationResult metaDataCoprocessorExec(byte[] tableKey, Batch.Call<MetaDataProtocol, MetaDataMutationResult> callable) throws SQLException {
+    private MetaDataMutationResult metaDataCoprocessorExec(byte[] tableKey,
+            Batch.Call<MetaDataService, MetaDataResponse> callable) throws SQLException {
         try {
             boolean retried = false;
             while (true) {
-                HRegionLocation regionLocation = retried ? connection.relocateRegion(PhoenixDatabaseMetaData.TYPE_TABLE_NAME_BYTES, tableKey) : connection.locateRegion(PhoenixDatabaseMetaData.TYPE_TABLE_NAME_BYTES, tableKey);
-                List<byte[]> regionKeys = Collections.singletonList(regionLocation.getRegionInfo().getStartKey());
-                final Map<byte[],MetaDataMutationResult> results = Maps.newHashMapWithExpectedSize(1);
-                connection.processExecs(MetaDataProtocol.class, regionKeys,
-                        PhoenixDatabaseMetaData.TYPE_TABLE_NAME_BYTES, this.getDelegate().getExecutor(), callable, 
-                        new Batch.Callback<MetaDataMutationResult>(){
-                            @Override
-                            public void update(byte[] region, byte[] row, MetaDataMutationResult value) {
-                              results.put(region, value);
-                            }
-                        });
+                if (retried) {
+                    connection.relocateRegion(
+                        TableName.valueOf(PhoenixDatabaseMetaData.TYPE_TABLE_NAME_BYTES),
+                        tableKey);
+                }
+
+                HTableInterface ht = this.getTable(PhoenixDatabaseMetaData.TYPE_TABLE_NAME_BYTES);
+                final Map<byte[], MetaDataResponse> results =
+                        ht.coprocessorService(MetaDataService.class, tableKey, tableKey, callable);
+                
                 assert(results.size() == 1);
-                MetaDataMutationResult result = results.values().iterator().next();
-                if (result.getMutationCode() == MutationCode.TABLE_NOT_IN_REGION) {
-                    if (retried) return result;
+                MetaDataResponse result = results.values().iterator().next();
+                if (result.getReturnCode() == MetaDataProtos.MutationCode.TABLE_NOT_IN_REGION) {
+                    if (retried) return MetaDataMutationResult.constructFromProto(result);
                     retried = true;
                     continue;
                 }
-                return result;
+                return MetaDataMutationResult.constructFromProto(result);
             }
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
@@ -807,12 +829,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
         MetaDataMutationResult result = metaDataCoprocessorExec(tableKey,
-            new Batch.Call<MetaDataProtocol, MetaDataMutationResult>() {
-                @Override
-                public MetaDataMutationResult call(MetaDataProtocol instance) throws IOException {
-                  return instance.createTable(tableMetaData);
-                }
-            });
+            new Batch.Call<MetaDataService, MetaDataResponse>() {
+            @Override
+                    public MetaDataResponse call(MetaDataService instance) throws IOException {
+                        ServerRpcController controller = new ServerRpcController();
+                        BlockingRpcCallback<MetaDataResponse> rpcCallback =
+                                new BlockingRpcCallback<MetaDataResponse>();
+                        CreateTableRequest.Builder builder = CreateTableRequest.newBuilder();
+                        for (Mutation m : tableMetaData) {
+                            MutationProto mp = ProtobufUtil.toProto(m);
+                            builder.addTableMetadataMutations(mp.toByteString());
+                        }
+                        instance.createTable(controller, builder.build(), rpcCallback);
+                        if(controller.getFailedOn() != null) {
+                            throw controller.getFailedOn();
+                        }
+                        return rpcCallback.get();
+                    }
+        });
         return result;
     }
 
@@ -822,12 +856,26 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         final byte[] nonNullTenantId = tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId;
         byte[] tableKey = SchemaUtil.getTableKey(nonNullTenantId, schemaBytes, tableBytes);
         return metaDataCoprocessorExec(tableKey,
-                new Batch.Call<MetaDataProtocol, MetaDataMutationResult>() {
-                    @Override
-                    public MetaDataMutationResult call(MetaDataProtocol instance) throws IOException {
-                      return instance.getTable(nonNullTenantId, schemaBytes, tableBytes, tableTimestamp, clientTimestamp);
-                    }
-                });
+            new Batch.Call<MetaDataService, MetaDataResponse>() {
+                @Override
+                public MetaDataResponse call(MetaDataService instance) throws IOException {
+                    ServerRpcController controller = new ServerRpcController();
+                    BlockingRpcCallback<MetaDataResponse> rpcCallback =
+                            new BlockingRpcCallback<MetaDataResponse>();
+                    GetTableRequest.Builder builder = GetTableRequest.newBuilder();
+                    builder.setTenantId(HBaseZeroCopyByteString.wrap(nonNullTenantId));
+                    builder.setSchemaName(HBaseZeroCopyByteString.wrap(schemaBytes));
+                    builder.setTableName(HBaseZeroCopyByteString.wrap(tableBytes));
+                    builder.setTableTimestamp(tableTimestamp);
+                    builder.setClientTimestamp(clientTimestamp);
+                    
+                   instance.getTable(controller, builder.build(), rpcCallback);
+                   if(controller.getFailedOn() != null) {
+                       throw controller.getFailedOn();
+                   }
+                   return rpcCallback.get();
+                }
+            });
     }
 
     @Override
@@ -839,10 +887,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] tableBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantIdBytes, schemaBytes, tableBytes);
         final MetaDataMutationResult result =  metaDataCoprocessorExec(tableKey,
-                new Batch.Call<MetaDataProtocol, MetaDataMutationResult>() {
+                new Batch.Call<MetaDataService, MetaDataResponse>() {
                     @Override
-                    public MetaDataMutationResult call(MetaDataProtocol instance) throws IOException {
-                      return instance.dropTable(tableMetaData, tableType.getSerializedValue());
+                    public MetaDataResponse call(MetaDataService instance) throws IOException {
+                        ServerRpcController controller = new ServerRpcController();
+                        BlockingRpcCallback<MetaDataResponse> rpcCallback =
+                                new BlockingRpcCallback<MetaDataResponse>();
+                        DropTableRequest.Builder builder = DropTableRequest.newBuilder();
+                        for (Mutation m : tableMetaData) {
+                            MutationProto mp = ProtobufUtil.toProto(m);
+                            builder.addTableMetadataMutations(mp.toByteString());
+                        }
+                        builder.setTableType(tableType.getSerializedValue());
+                        
+                        instance.dropTable(controller, builder.build(), rpcCallback);
+                        if(controller.getFailedOn() != null) {
+                            throw controller.getFailedOn();
+                        }
+                        return rpcCallback.get();
                     }
                 });
         
@@ -921,10 +983,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             return null;
         }
         MetaDataMutationResult result =  metaDataCoprocessorExec(tableKey,
-            new Batch.Call<MetaDataProtocol, MetaDataMutationResult>() {
+            new Batch.Call<MetaDataService, MetaDataResponse>() {
                 @Override
-                public MetaDataMutationResult call(MetaDataProtocol instance) throws IOException {
-                    return instance.addColumn(tableMetaData);
+                public MetaDataResponse call(MetaDataService instance) throws IOException {
+                    ServerRpcController controller = new ServerRpcController();
+                    BlockingRpcCallback<MetaDataResponse> rpcCallback =
+                            new BlockingRpcCallback<MetaDataResponse>();
+                    AddColumnRequest.Builder builder = AddColumnRequest.newBuilder();
+                    for (Mutation m : tableMetaData) {
+                        MutationProto mp = ProtobufUtil.toProto(m);
+                        builder.addTableMetadataMutations(mp.toByteString());
+                    }
+                    
+                    instance.addColumn(controller, builder.build(), rpcCallback);
+                    if(controller.getFailedOn() != null) {
+                        throw controller.getFailedOn();
+                    }
+                    return rpcCallback.get();
                 }
             });
         return result;
@@ -939,10 +1014,22 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] tableBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
         MetaDataMutationResult result = metaDataCoprocessorExec(tableKey,
-            new Batch.Call<MetaDataProtocol, MetaDataMutationResult>() {
+            new Batch.Call<MetaDataService, MetaDataResponse>() {
                 @Override
-                public MetaDataMutationResult call(MetaDataProtocol instance) throws IOException {
-                    return instance.dropColumn(tableMetaData);
+                public MetaDataResponse call(MetaDataService instance) throws IOException {
+                    ServerRpcController controller = new ServerRpcController();
+                    BlockingRpcCallback<MetaDataResponse> rpcCallback =
+                            new BlockingRpcCallback<MetaDataResponse>();
+                    DropColumnRequest.Builder builder = DropColumnRequest.newBuilder();
+                    for (Mutation m : tableMetaData) {
+                        MutationProto mp = ProtobufUtil.toProto(m);
+                        builder.addTableMetadataMutations(mp.toByteString());
+                    }
+                    instance.dropColumn(controller, builder.build(), rpcCallback);
+                    if(controller.getFailedOn() != null) {
+                        throw controller.getFailedOn();
+                    }
+                    return rpcCallback.get();
                 }
             });
         final MutationCode code = result.getMutationCode();
@@ -991,6 +1078,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     @Override
     public void init(String url, Properties props) throws SQLException {
+        try {
+            this.connection = HConnectionManager.createConnection(this.config);
+        } catch (IOException ioe) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
+                    .setRootCause(ioe).build().buildException();
+        }
+        if (this.connection.isClosed()) { // TODO: why the heck doesn't this throw above?
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION).build().buildException();
+        }
+    	
         props = new Properties(props);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
         PhoenixConnection metaConnection = new PhoenixConnection(this, url, props, PMetaDataImpl.EMPTY_META_DATA);
@@ -1050,12 +1147,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             SQLException sqlE = null;
             HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.TYPE_TABLE_NAME_BYTES);
             try {
-                htable.coprocessorExec(MetaDataProtocol.class, HConstants.EMPTY_START_ROW,
-                        HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataProtocol, Void>() {
+                htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW,
+                        HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataService, ClearCacheResponse>() {
                     @Override
-                    public Void call(MetaDataProtocol instance) throws IOException {
-                      instance.clearCache();
-                      return null;
+                    public ClearCacheResponse call(MetaDataService instance) throws IOException {
+                        ServerRpcController controller = new ServerRpcController();
+                        BlockingRpcCallback<ClearCacheResponse> rpcCallback =
+                                new BlockingRpcCallback<ClearCacheResponse>();
+                        ClearCacheRequest.Builder builder = ClearCacheRequest.newBuilder();
+                        instance.clearCache(controller, builder.build(), rpcCallback);
+                        if(controller.getFailedOn() != null) {
+                            throw controller.getFailedOn();
+                        }
+                        return rpcCallback.get(); 
                     }
                   });
             } catch (IOException e) {
@@ -1097,10 +1201,22 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         SchemaUtil.getVarChars(tableMetaData.get(0).getRow(), rowKeyMetadata);
         byte[] tableKey = SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY, rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX], rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX]);
         return metaDataCoprocessorExec(tableKey,
-                new Batch.Call<MetaDataProtocol, MetaDataMutationResult>() {
+                new Batch.Call<MetaDataService, MetaDataResponse>() {
                     @Override
-                    public MetaDataMutationResult call(MetaDataProtocol instance) throws IOException {
-                      return instance.updateIndexState(tableMetaData);
+                    public MetaDataResponse call(MetaDataService instance) throws IOException {
+                        ServerRpcController controller = new ServerRpcController();
+                        BlockingRpcCallback<MetaDataResponse> rpcCallback =
+                                new BlockingRpcCallback<MetaDataResponse>();
+                        UpdateIndexStateRequest.Builder builder = UpdateIndexStateRequest.newBuilder();
+                        for (Mutation m : tableMetaData) {
+                            MutationProto mp = ProtobufUtil.toProto(m);
+                            builder.addTableMetadataMutations(mp.toByteString());
+                        }
+                        instance.updateIndexState(controller, builder.build(), rpcCallback);
+                        if(controller.getFailedOn() != null) {
+                            throw controller.getFailedOn();
+                        }
+                        return rpcCallback.get();
                     }
                 });
     }

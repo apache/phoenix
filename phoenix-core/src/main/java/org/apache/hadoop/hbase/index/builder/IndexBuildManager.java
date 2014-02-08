@@ -116,7 +116,7 @@ public class IndexBuildManager implements Stoppable {
 
 
   public Collection<Pair<Mutation, byte[]>> getIndexUpdate(
-      MiniBatchOperationInProgress<Pair<Mutation, Integer>> miniBatchOp,
+      MiniBatchOperationInProgress<Mutation> miniBatchOp,
       Collection<? extends Mutation> mutations) throws Throwable {
     // notify the delegate that we have started processing a batch
     this.delegate.batchStarted(miniBatchOp);
@@ -178,11 +178,11 @@ public class IndexBuildManager implements Stoppable {
     return delegate.getIndexUpdateForFilteredRows(filtered);
   }
 
-  public void batchCompleted(MiniBatchOperationInProgress<Pair<Mutation, Integer>> miniBatchOp) {
+  public void batchCompleted(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
     delegate.batchCompleted(miniBatchOp);
   }
 
-  public void batchStarted(MiniBatchOperationInProgress<Pair<Mutation, Integer>> miniBatchOp)
+  public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp)
       throws IOException {
     delegate.batchStarted(miniBatchOp);
   }

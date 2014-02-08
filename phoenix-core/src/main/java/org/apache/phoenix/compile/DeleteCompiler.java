@@ -28,6 +28,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.FilterList;
@@ -343,8 +344,8 @@ public class DeleteCompiler {
                         Tuple tuple;
                         long totalRowCount = 0;
                         while ((tuple=iterator.next()) != null) {// Runs query
-                            KeyValue kv = tuple.getValue(0);
-                            totalRowCount += PDataType.LONG.getCodec().decodeLong(kv.getBuffer(), kv.getValueOffset(), null);
+                            Cell kv = tuple.getValue(0);
+                            totalRowCount += PDataType.LONG.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), null);
                         }
                         // Return total number of rows that have been delete. In the case of auto commit being off
                         // the mutations will all be in the mutation state of the current connection.

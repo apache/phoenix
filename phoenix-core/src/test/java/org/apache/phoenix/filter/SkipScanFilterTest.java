@@ -1,5 +1,6 @@
 package org.apache.phoenix.filter;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -80,7 +81,7 @@ public class SkipScanFilterTest extends TestCase {
     }
 
     @Test
-    public void test() {
+    public void test() throws IOException {
         System.out.println("CNF: " + cnf + "\n" + "Expectations: " + expectations);
         for (Expectation expectation : expectations) {
             expectation.examine(skipper);
@@ -327,7 +328,7 @@ public class SkipScanFilterTest extends TestCase {
     };
 
     static interface Expectation {
-        void examine(SkipScanFilter skipper);
+        void examine(SkipScanFilter skipper) throws IOException;
     }
     private static final class SeekNext implements Expectation {
         private final byte[] rowkey, hint;
@@ -340,7 +341,7 @@ public class SkipScanFilterTest extends TestCase {
             this.hint = hint;
         }
 
-        @Override public void examine(SkipScanFilter skipper) {
+        @Override public void examine(SkipScanFilter skipper) throws IOException {
             KeyValue kv = KeyValue.createFirstOnRow(rowkey);
             skipper.reset();
             assertFalse(skipper.filterAllRemaining());
@@ -361,7 +362,7 @@ public class SkipScanFilterTest extends TestCase {
             this.rowkey = Bytes.toBytes(rowkey);
         }
         
-        @Override public void examine(SkipScanFilter skipper) {
+        @Override public void examine(SkipScanFilter skipper) throws IOException {
             KeyValue kv = KeyValue.createFirstOnRow(rowkey);
             skipper.reset();
             assertFalse(skipper.filterAllRemaining());
@@ -380,7 +381,7 @@ public class SkipScanFilterTest extends TestCase {
             this.rowkey = Bytes.toBytes(rowkey);
         }
 
-        @Override public void examine(SkipScanFilter skipper) {
+        @Override public void examine(SkipScanFilter skipper) throws IOException {
             KeyValue kv = KeyValue.createFirstOnRow(rowkey);
             skipper.reset();
             assertEquals(ReturnCode.NEXT_ROW,skipper.filterKeyValue(kv));

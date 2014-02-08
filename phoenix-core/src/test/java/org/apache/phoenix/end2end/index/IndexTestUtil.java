@@ -35,13 +35,11 @@ import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.Lists;
 import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnModifier;
@@ -55,6 +53,8 @@ import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.collect.Lists;
 
 public class IndexTestUtil {
 
@@ -125,22 +125,22 @@ public class IndexTestUtil {
         }
         PRow row;
         long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
-        if (dataMutation instanceof Delete && dataMutation.getFamilyMap().values().isEmpty()) {
+        if (dataMutation instanceof Delete && dataMutation.getFamilyCellMap().values().isEmpty()) {
             indexTable.newKey(ptr, indexValues);
             row = indexTable.newRow(builder, ts, ptr);
             row.delete();
         } else {
             // If no column families in table, then nothing to look for 
             if (!dataTable.getColumnFamilies().isEmpty()) {
-                for (Map.Entry<byte[],List<KeyValue>> entry : dataMutation.getFamilyMap().entrySet()) {
+                for (Map.Entry<byte[],List<Cell>> entry : dataMutation.getFamilyCellMap().entrySet()) {
                     PColumnFamily family = dataTable.getColumnFamily(entry.getKey());
-                    for (KeyValue kv : entry.getValue()) {
+                    for (Cell kv : entry.getValue()) {
                         byte[] cq = kv.getQualifier();
                         if (Bytes.compareTo(QueryConstants.EMPTY_COLUMN_BYTES, cq) != 0) {
                             try {
                                 PColumn dataColumn = family.getColumn(cq);
                                 PColumn indexColumn = indexTable.getColumn(IndexUtil.getIndexColumnName(family.getName().getString(), dataColumn.getName().getString()));
-                                ptr.set(kv.getBuffer(),kv.getValueOffset(),kv.getValueLength());
+                                ptr.set(kv.getValueArray(),kv.getValueOffset(),kv.getValueLength());
                                 coerceDataValueToIndexValue(dataColumn, indexColumn, ptr);
                                 indexValues[indexPKColumns.indexOf(indexColumn)-indexOffset] = ptr.copyBytes();
                                 if (!SchemaUtil.isPKColumn(indexColumn)) {

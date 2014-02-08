@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -310,11 +312,11 @@ public class MutationState implements SQLCloseable {
         long byteSize = 0;
         int keyValueCount = 0;
         for (Mutation mutation : mutations) {
-            if (mutation.getFamilyMap() != null) { // Not a Delete of the row
-                for (Entry<byte[], List<KeyValue>> entry : mutation.getFamilyMap().entrySet()) {
+            if (mutation.getFamilyCellMap() != null) { // Not a Delete of the row
+                for (Entry<byte[], List<Cell>> entry : mutation.getFamilyCellMap().entrySet()) {
                     if (entry.getValue() != null) {
-                        for (KeyValue kv : entry.getValue()) {
-                            byteSize += kv.getBuffer().length;
+                        for (Cell kv : entry.getValue()) {
+                            byteSize += CellUtil.estimatedSizeOf(kv);
                             keyValueCount++;
                         }
                     }

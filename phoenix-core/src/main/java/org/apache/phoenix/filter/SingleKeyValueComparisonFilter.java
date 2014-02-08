@@ -22,7 +22,10 @@ package org.apache.phoenix.filter;
 import java.io.DataInput;
 import java.io.IOException;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import org.apache.phoenix.expression.Expression;
@@ -74,7 +77,7 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
     }
 
     @Override
-    public ReturnCode filterKeyValue(KeyValue keyValue) {
+    public ReturnCode filterKeyValue(Cell keyValue) {
         if (this.matchedColumn) {
           // We already found and matched the single column, all keys now pass
           // TODO: why won't this cause earlier versions of a kv to be included?
@@ -84,16 +87,16 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
           // We found all the columns, but did not match the expression, so skip to next row
           return ReturnCode.NEXT_ROW;
         }
-        byte[] buf = keyValue.getBuffer();
+        byte[] buf = keyValue.getValueArray();
         if (compare(buf, keyValue.getFamilyOffset(), keyValue.getFamilyLength(), buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength()) != 0) {
             // Remember the key in case this is the only key value we see.
             // We'll need it if we have row key columns too.
-            inputTuple.setKey(keyValue);
+            inputTuple.setKey(KeyValueUtil.ensureKeyValue(keyValue));
             // This is a key value we're not interested in
             // TODO: use NEXT_COL when bug fix comes through that includes the row still
             return ReturnCode.INCLUDE;
         }
-        inputTuple.setKeyValue(keyValue);
+        inputTuple.setKeyValue(KeyValueUtil.ensureKeyValue(keyValue));
 
         // We have the columns, so evaluate here
         if (!Boolean.TRUE.equals(evaluate(inputTuple))) {

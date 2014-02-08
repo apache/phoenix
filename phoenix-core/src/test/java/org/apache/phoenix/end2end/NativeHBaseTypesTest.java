@@ -124,7 +124,7 @@ public class NativeHBaseTypesTest extends BaseClientManagedTimeTest {
             // FIXME: the version of the Delete constructor without the lock args was introduced
             // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version
             // of the client.
-            Delete del = new Delete(key, ts-2, null);
+            Delete del = new Delete(key, ts-2);
             mutations.add(del);
             put = new Put(key);
             put.add(family, uintCol, ts, Bytes.toBytes(2000));

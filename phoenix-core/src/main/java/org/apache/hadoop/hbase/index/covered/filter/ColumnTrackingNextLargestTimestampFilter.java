@@ -19,10 +19,7 @@
  */
 package org.apache.hadoop.hbase.index.covered.filter;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.filter.FilterBase;
 
@@ -53,7 +50,7 @@ public class ColumnTrackingNextLargestTimestampFilter extends FilterBase {
   }
 
   @Override
-  public ReturnCode filterKeyValue(KeyValue v) {
+  public ReturnCode filterKeyValue(Cell v) {
     long timestamp = v.getTimestamp();
     if (timestamp > ts) {
       this.column.setTs(timestamp);
@@ -62,13 +59,4 @@ public class ColumnTrackingNextLargestTimestampFilter extends FilterBase {
     return ReturnCode.INCLUDE;
   }
 
-  @Override
-  public void write(DataOutput out) throws IOException {
-    throw new UnsupportedOperationException("Server-side only filter, cannot be serialized!");
-  }
-
-  @Override
-  public void readFields(DataInput in) throws IOException {
-    throw new UnsupportedOperationException("Server-side only filter, cannot be deserialized!");
-  }
 }

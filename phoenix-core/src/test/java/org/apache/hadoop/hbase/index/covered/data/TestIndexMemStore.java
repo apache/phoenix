@@ -41,9 +41,9 @@ public class TestIndexMemStore {
     IndexMemStore store = new IndexMemStore(IndexMemStore.COMPARATOR);
     long ts = 10;
     KeyValue kv = new KeyValue(row, family, qual, ts, Type.Put, val);
-    kv.setMemstoreTS(2);
+    kv.setMvccVersion(2);
     KeyValue kv2 = new KeyValue(row, family, qual, ts, Type.Put, val2);
-    kv2.setMemstoreTS(0);
+    kv2.setMvccVersion(0);
     store.add(kv, true);
     // adding the exact same kv shouldn't change anything stored if not overwritting
     store.add(kv2, false);

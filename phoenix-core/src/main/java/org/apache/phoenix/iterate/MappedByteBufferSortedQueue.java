@@ -41,6 +41,7 @@ import com.google.common.collect.MinMaxPriorityQueue;
 import org.apache.phoenix.iterate.OrderedResultIterator.ResultEntry;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ResultUtil;
 
 public class MappedByteBufferSortedQueue extends AbstractQueue<ResultEntry> {
     private Comparator<ResultEntry> comparator;
@@ -224,7 +225,7 @@ public class MappedByteBufferSortedQueue extends AbstractQueue<ResultEntry> {
             int size = result.size();
             List<KeyValue> kvs = new ArrayList<KeyValue>(size);
             for (int i = 0; i < size; i++) {
-                kvs.add(result.getValue(i));
+                kvs.add(org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(result.getValue(i)));
             }
             return kvs;
         }
@@ -335,7 +336,7 @@ public class MappedByteBufferSortedQueue extends AbstractQueue<ResultEntry> {
             
             byte[] rb = new byte[length];
             readBuffer.get(rb);
-            Result result = new Result(new ImmutableBytesWritable(rb));
+            Result result = ResultUtil.toResult(new ImmutableBytesWritable(rb));
             ResultTuple rt = new ResultTuple(result);
             int sortKeySize = readBuffer.getInt();
             ImmutableBytesWritable[] sortKeys = new ImmutableBytesWritable[sortKeySize];

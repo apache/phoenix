@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 
@@ -49,16 +50,14 @@ public class KeyValueCodec {
    */
   public static KeyValue readKeyValue(DataInput in) throws IOException {
     int length = in.readInt();
-    KeyValue kv;
     // its a special IndexedKeyValue
     if (length == INDEX_TYPE_LENGTH_MARKER) {
-      kv = new IndexedKeyValue();
+      IndexedKeyValue kv = new IndexedKeyValue();
       kv.readFields(in);
+      return kv;
     } else {
-      kv = new KeyValue();
-      kv.readFields(length, in);
+      return KeyValue.create(length, in);
     }
-    return kv;
   }
 
   /**
@@ -73,7 +72,7 @@ public class KeyValueCodec {
       out.writeInt(INDEX_TYPE_LENGTH_MARKER);
       ((IndexedKeyValue) kv).writeData(out);
     } else {
-      kv.write(out);
+        KeyValue.write(kv, out);
     }
   }
 }

@@ -1,0 +1,72 @@
+/*
+ * Copyright 2010 The Apache Software Foundation
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+option java_package = "org.apache.phoenix.coprocessor.generated";
+option java_outer_classname = "PTableProtos";
+option java_generic_services = true;
+option java_generate_equals_and_hash = true;
+option optimize_for = SPEED;
+
+enum PTableType {
+  SYSTEM = 0;
+  USER = 1;
+  VIEW = 2;
+  INDEX = 3;
+  JOIN = 4;
+}
+
+message PColumn {
+  required bytes columnNameBytes = 1;
+  optional bytes familyNameBytes = 2;
+  required string dataType = 3; 
+  optional int32 maxLength = 4;
+  optional int32 scale = 5;
+  required bool nullable = 6;
+  required int32 position = 7;
+  required int32 columnModifier = 8;
+  optional int32 arraySize = 9;
+}
+
+message PTableStats {
+  required string key = 1;
+  repeated bytes values = 2;
+}
+
+message PTable {
+  required bytes schemaNameBytes = 1;
+  required bytes tableNameBytes = 2;
+  required PTableType tableType = 3;
+  optional string indexState = 4;
+  required int64 sequenceNumber = 5;
+  required int64 timeStamp = 6;
+  optional bytes pkNameBytes = 7;
+  required int32 bucketNum = 8;
+  repeated PColumn columns = 9;
+  repeated PTable indexes = 10;
+  required bool isImmutableRows = 11;
+  repeated PTableStats guidePosts = 12;
+  optional bytes dataTableNameBytes = 13;
+  optional bytes defaultFamilyName = 14;
+  required bool disableWAL = 15;
+  required bool multiTenant = 16;
+  optional bytes viewType = 17;
+  optional bytes viewStatement = 18;
+  repeated bytes physicalNames = 19; 
+}

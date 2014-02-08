@@ -71,6 +71,7 @@ public class IndexLogRollSynchronizer implements WALActionsListener {
 
   private static final Log LOG = LogFactory.getLog(IndexLogRollSynchronizer.class);
   private WriteLock logArchiveLock;
+    private boolean lockAcquired = false;
 
   public IndexLogRollSynchronizer(WriteLock logWriteLock){
     this.logArchiveLock = logWriteLock;
@@ -81,12 +82,21 @@ public class IndexLogRollSynchronizer implements WALActionsListener {
   public void preLogArchive(Path oldPath, Path newPath) throws IOException {
     //take a write lock on the index - any pending index updates will complete before we finish
     LOG.debug("Taking INDEX_UPDATE writelock");
-    logArchiveLock.lock();
-    LOG.debug("Got the INDEX_UPDATE writelock");
+    try {
+      logArchiveLock.lockInterruptibly();
+      lockAcquired = true;
+    } catch (InterruptedException e) {
+      LOG.info("Acquiring lock got interrupted!");
+      Thread.currentThread().interrupt();
+    }
+    if (lockAcquired) {
+      LOG.debug("Got the INDEX_UPDATE writelock");
+    }
   }
   
   @Override
   public void postLogArchive(Path oldPath, Path newPath) throws IOException {
+    if (!lockAcquired) return;
     // done archiving the logs, any WAL updates will be replayed on failure
     LOG.debug("Releasing INDEX_UPDATE writelock");
     logArchiveLock.unlock();

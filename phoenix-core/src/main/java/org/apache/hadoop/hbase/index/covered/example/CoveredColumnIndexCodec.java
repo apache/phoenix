@@ -244,7 +244,6 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
    * @param pk primary key of the original row
    * @param length total number of bytes of all the values that should be added
    * @param values to use when building the key
-   * @return
    */
   static byte[] composeRowKey(byte[] pk, int length, List<ColumnEntry> values) {
     // now build up expected row key, each of the values, in order, followed by the PK and then some

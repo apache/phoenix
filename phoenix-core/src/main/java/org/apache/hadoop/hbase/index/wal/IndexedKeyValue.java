@@ -8,8 +8,13 @@ import java.io.IOException;
 import java.util.Arrays;
 
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
+import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
+import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
@@ -46,12 +51,20 @@ public class IndexedKeyValue extends KeyValue {
     }
 
     /**
-     * This is a KeyValue that shouldn't actually be replayed, so we always mark it as an {@link HLog#METAFAMILY} so it
+     * This is a KeyValue that shouldn't actually be replayed, so we always mark it as an {@link WALEdit#METAFAMILY} so it
      * isn't replayed via the normal replay mechanism
      */
     @Override
     public boolean matchingFamily(final byte[] family) {
-        return Bytes.equals(family, HLog.METAFAMILY);
+        return Bytes.equals(family, WALEdit.METAFAMILY);
+    }
+    
+    /**
+     * Not a real KeyValue
+     */
+    @Override
+    public boolean matchingRow(final byte [] row) {
+        return false;
     }
 
     @Override
@@ -77,33 +90,17 @@ public class IndexedKeyValue extends KeyValue {
     }
 
     private byte[] getMutationBytes() {
-        ByteArrayOutputStream bos = null;
         try {
-            bos = new ByteArrayOutputStream();
-            this.mutation.write(new DataOutputStream(bos));
-            bos.flush();
-            return bos.toByteArray();
+            MutationProto m = toMutationProto(this.mutation);
+            return m.toByteArray();
         } catch (IOException e) {
             throw new IllegalArgumentException("Failed to get bytes for mutation!", e);
-        } finally {
-            if (bos != null) {
-                try {
-                    bos.close();
-                } catch (IOException e) {
-                    throw new IllegalArgumentException("Failed to get bytes for mutation!", e);
-                }
-            }
         }
     }
 
     @Override
     public int hashCode() {
         return hashCode;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        KeyValueCodec.write(out, this);
     }
 
     /**
@@ -118,8 +115,8 @@ public class IndexedKeyValue extends KeyValue {
      */
     void writeData(DataOutput out) throws IOException {
         Bytes.writeByteArray(out, this.indexTableName.get());
-        out.writeUTF(this.mutation.getClass().getName());
-        this.mutation.write(out);
+        MutationProto m = toMutationProto(this.mutation);
+        Bytes.writeByteArray(out, m.toByteArray());
     }
 
     /**
@@ -127,22 +124,12 @@ public class IndexedKeyValue extends KeyValue {
      * complement to {@link #writeData(DataOutput)}.
      */
     @SuppressWarnings("javadoc")
-    @Override
     public void readFields(DataInput in) throws IOException {
         this.indexTableName = new ImmutableBytesPtr(Bytes.readByteArray(in));
-        Class<? extends Mutation> clazz;
-        try {
-            clazz = Class.forName(in.readUTF()).asSubclass(Mutation.class);
-            this.mutation = clazz.newInstance();
-            this.mutation.readFields(in);
-            this.hashCode = calcHashCode(indexTableName, mutation);
-        } catch (ClassNotFoundException e) {
-            throw new IOException(e);
-        } catch (InstantiationException e) {
-            throw new IOException(e);
-        } catch (IllegalAccessException e) {
-            throw new IOException(e);
-        }
+        byte[] mutationData = Bytes.readByteArray(in);
+        MutationProto mProto = MutationProto.parseFrom(mutationData);
+        this.mutation = org.apache.hadoop.hbase.protobuf.ProtobufUtil.toMutation(mProto);
+        this.hashCode = calcHashCode(indexTableName, mutation);
     }
 
     public boolean getBatchFinished() {
@@ -151,5 +138,19 @@ public class IndexedKeyValue extends KeyValue {
 
     public void markBatchFinished() {
         this.batchFinished = true;
+    }
+    
+    protected MutationProto toMutationProto(Mutation mutation)  throws IOException {
+        MutationProto m = null;
+        if(mutation instanceof Put){
+            m = org.apache.hadoop.hbase.protobuf.ProtobufUtil.toMutation(MutationType.PUT, 
+                mutation);
+        } else if(mutation instanceof Delete) {
+            m = org.apache.hadoop.hbase.protobuf.ProtobufUtil.toMutation(MutationType.DELETE, 
+                mutation);
+        } else {
+            throw new IOException("Put/Delete mutations only supported");
+        }
+        return m;
     }
 }

@@ -142,14 +142,13 @@ public class TestClientKeyValueLocal {
   private void validate(KeyValue kv, byte[] row, byte[] family, byte[] qualifier, long ts,
       Type type, byte[] value) throws IOException {
     DataOutputBuffer out = new DataOutputBuffer();
-    kv.write(out);
+    KeyValue.write(kv, out);
     out.close();
     byte[] data = out.getData();
     // read it back in
-    KeyValue read = new KeyValue();
     DataInputBuffer in = new DataInputBuffer();
     in.reset(data, data.length);
-    read.readFields(in);
+    KeyValue read = KeyValue.create(in);
     in.close();
 
     // validate that its the same

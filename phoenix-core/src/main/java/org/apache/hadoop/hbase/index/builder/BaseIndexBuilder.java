@@ -54,12 +54,12 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
   }
 
   @Override
-  public void batchStarted(MiniBatchOperationInProgress<Pair<Mutation, Integer>> miniBatchOp) throws IOException {
+  public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
     // noop
   }
 
   @Override
-  public void batchCompleted(MiniBatchOperationInProgress<Pair<Mutation, Integer>> miniBatchOp) {
+  public void batchCompleted(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
     // noop
   }
   

@@ -33,8 +33,10 @@ import java.util.Map;
 import java.util.Queue;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -100,6 +102,8 @@ public class TestEndToEndCoveredColumnsIndexBuilder {
     // disable version checking, so we can test against whatever version of HBase happens to be
     // installed (right now, its generally going to be SNAPSHOT versions).
     conf.setBoolean(Indexer.CHECK_VERSION_CONF_KEY, false);
+    // disable replication
+    conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY, false);
     UTIL.startMiniCluster();
   }
 
@@ -130,11 +134,11 @@ public class TestEndToEndCoveredColumnsIndexBuilder {
    */
   private class ListMatchingVerifier implements TableStateVerifier {
 
-    private List<KeyValue> expectedKvs;
+    private List<Cell> expectedKvs;
     private ColumnReference[] columns;
     private String msg;
 
-    public ListMatchingVerifier(String msg, List<KeyValue> kvs, ColumnReference... columns) {
+    public ListMatchingVerifier(String msg, List<Cell> kvs, ColumnReference... columns) {
       this.expectedKvs = kvs;
       this.columns = columns;
       this.msg = msg;
@@ -149,7 +153,7 @@ public class TestEndToEndCoveredColumnsIndexBuilder {
         int count = 0;
         KeyValue kv;
         while ((kv = kvs.next()) != null) {
-          KeyValue next = expectedKvs.get(count++);
+          Cell next = expectedKvs.get(count++);
           assertEquals(
             msg + ": Unexpected kv in table state!\nexpected v1: "
                 + Bytes.toString(next.getValue()) + "\nactual v1:" + Bytes.toString(kv.getValue()),
@@ -199,8 +203,8 @@ public class TestEndToEndCoveredColumnsIndexBuilder {
     p.add(family, qual, Bytes.toBytes("v1"));
     
     // get all the underlying kvs for the put
-    final List<KeyValue> expectedKvs = new ArrayList<KeyValue>();
-    final List<KeyValue> allKvs = new ArrayList<KeyValue>();
+    final List<Cell> expectedKvs = new ArrayList<Cell>();
+    final List<Cell> allKvs = new ArrayList<Cell>();
     allKvs.addAll(p.getFamilyMap().get(family));
 
     // setup the verifier for the data we expect to write
@@ -255,9 +259,9 @@ public class TestEndToEndCoveredColumnsIndexBuilder {
     // since we need to iterate the batch.
 
     // get all the underlying kvs for the put
-    final List<KeyValue> allKvs = new ArrayList<KeyValue>(2);
-    allKvs.addAll(p2.getFamilyMap().get(family));
-    allKvs.addAll(p1.getFamilyMap().get(family));
+    final List<Cell> allKvs = new ArrayList<Cell>(2);
+    allKvs.addAll(p2.getFamilyCellMap().get(family));
+    allKvs.addAll(p1.getFamilyCellMap().get(family));
 
     // setup the verifier for the data we expect to write
     // both puts should be put into a single batch
@@ -266,11 +270,11 @@ public class TestEndToEndCoveredColumnsIndexBuilder {
     VerifyingIndexCodec codec = state.codec;
     // no previous state in the table
     codec.verifiers.add(new ListMatchingVerifier("cleanup state 1", Collections
-        .<KeyValue> emptyList(), familyRef));
-    codec.verifiers.add(new ListMatchingVerifier("put state 1", p1.getFamilyMap().get(family),
+        .<Cell> emptyList(), familyRef));
+    codec.verifiers.add(new ListMatchingVerifier("put state 1", p1.getFamilyCellMap().get(family),
         familyRef));
 
-    codec.verifiers.add(new ListMatchingVerifier("cleanup state 2", p1.getFamilyMap().get(family),
+    codec.verifiers.add(new ListMatchingVerifier("cleanup state 2", p1.getFamilyCellMap().get(family),
         familyRef));
     // kvs from both puts should be in the table now
     codec.verifiers.add(new ListMatchingVerifier("put state 2", allKvs, familyRef));

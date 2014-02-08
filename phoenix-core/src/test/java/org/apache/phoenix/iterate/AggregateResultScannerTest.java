@@ -112,13 +112,6 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
             }
             
             @Override
-            public void readFields(DataInput arg0) throws IOException {
-            }
-            @Override
-            public void write(DataOutput arg0) throws IOException {
-            }
-            
-            @Override
             public Integer getArraySize() {
                 return 0;
             }

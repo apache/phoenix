@@ -26,6 +26,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
@@ -186,7 +187,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             }
 
             @Override
-            public boolean next(List<KeyValue> results) throws IOException {
+            public boolean next(List<Cell> results) throws IOException {
                 try {
                     if (isFilterDone()) {
                         return false;
@@ -211,6 +212,11 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                 } finally {
                     chunk.close();                }
             }
+            
+            @Override
+            public long getMaxResultSize() {
+                return s.getMaxResultSize();
+            }
         };
     }
         
@@ -224,7 +230,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         return new RegionScanner() {
 
             @Override
-            public boolean next(List<KeyValue> results) throws IOException {
+            public boolean next(List<Cell> results) throws IOException {
                 try {
                     return s.next(results);
                 } catch (Throwable t) {
@@ -234,29 +240,9 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             }
 
             @Override
-            public boolean next(List<KeyValue> results, String metric) throws IOException {
-                try {
-                    return s.next(results, metric);
-                } catch (Throwable t) {
-                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
-                    return false; // impossible
-                }
-            }
-
-            @Override
-            public boolean next(List<KeyValue> result, int limit) throws IOException {
+            public boolean next(List<Cell> result, int limit) throws IOException {
                 try {
                     return s.next(result, limit);
-                } catch (Throwable t) {
-                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
-                    return false; // impossible
-                }
-            }
-
-            @Override
-            public boolean next(List<KeyValue> result, int limit, String metric) throws IOException {
-                try {
-                    return s.next(result, limit, metric);
                 } catch (Throwable t) {
                     ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
                     return false; // impossible
@@ -274,7 +260,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             }
 
             @Override
-            public boolean isFilterDone() {
+            public boolean isFilterDone() throws IOException {
                 return s.isFilterDone();
             }
 
@@ -289,9 +275,9 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             }
 
             @Override
-            public boolean nextRaw(List<KeyValue> result, String metric) throws IOException {
+            public boolean nextRaw(List<Cell> result) throws IOException {
                 try {
-                    return s.nextRaw(result, metric);
+                    return s.nextRaw(result);
                 } catch (Throwable t) {
                     ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
                     return false; // impossible
@@ -299,13 +285,18 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             }
 
             @Override
-            public boolean nextRaw(List<KeyValue> result, int limit, String metric) throws IOException {
+            public boolean nextRaw(List<Cell> result, int limit) throws IOException {
                 try {
-                    return s.nextRaw(result, limit, metric);
+                    return s.nextRaw(result, limit);
                 } catch (Throwable t) {
                     ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
                     return false; // impossible
                 }
+            }
+            
+            @Override
+            public long getMaxResultSize() {
+                return s.getMaxResultSize();
             }
         };
     }

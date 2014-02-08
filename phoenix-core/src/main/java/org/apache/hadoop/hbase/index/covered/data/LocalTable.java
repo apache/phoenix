@@ -25,6 +25,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
@@ -63,11 +64,11 @@ public class LocalTable implements LocalHBaseState {
     s.setStopRow(row);
     HRegion region = this.env.getRegion();
     RegionScanner scanner = region.getScanner(s);
-    List<KeyValue> kvs = new ArrayList<KeyValue>(1);
+    List<Cell> kvs = new ArrayList<Cell>(1);
     boolean more = scanner.next(kvs);
     assert !more : "Got more than one result when scanning" + " a single row in the primary table!";
 
-    Result r = new Result(kvs);
+    Result r = Result.create(kvs);
     scanner.close();
     return r;
   }

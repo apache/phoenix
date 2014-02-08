@@ -23,6 +23,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -44,7 +45,13 @@ public class MaxTimestampFilter extends FilterBase {
   public KeyValue getNextKeyHint(KeyValue currentKV) {
     // this might be a little excessive right now - better safe than sorry though, so we don't mess
     // with other filters too much.
-    KeyValue kv = currentKV.deepCopy();
+    KeyValue kv = null;
+    try {
+        kv = currentKV.clone();
+    } catch (CloneNotSupportedException e) {
+        // the exception should not happen at all
+        throw new IllegalArgumentException(e);
+    }
     int offset =kv.getTimestampOffset();
     //set the timestamp in the buffer
     byte[] buffer = kv.getBuffer();
@@ -55,22 +62,11 @@ public class MaxTimestampFilter extends FilterBase {
   }
 
   @Override
-  public ReturnCode filterKeyValue(KeyValue v) {
+  public ReturnCode filterKeyValue(Cell v) {
     long timestamp = v.getTimestamp();
     if (timestamp > ts) {
       return ReturnCode.SEEK_NEXT_USING_HINT;
     }
     return ReturnCode.INCLUDE;
-  }
-
-  @Override
-  public void write(DataOutput out) throws IOException {
-    throw new UnsupportedOperationException("Server-side only filter, cannot be serialized!");
-
-  }
-
-  @Override
-  public void readFields(DataInput in) throws IOException {
-    throw new UnsupportedOperationException("Server-side only filter, cannot be deserialized!");
   }
 }

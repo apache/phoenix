@@ -28,10 +28,23 @@ import java.util.List;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.wal.HLog;
+import org.apache.hadoop.hbase.regionserver.wal.HLogFactory;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.FSUtils;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -41,7 +54,8 @@ import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.index.write.recovery.PerRegionIndexWriteCache;
 
 public class TestPerRegionIndexWriteCache {
-
+  private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
+  private static final TableName tableName = TableName.valueOf("t1"); 
   private static final byte[] row = Bytes.toBytes("row");
   private static final byte[] family = Bytes.toBytes("family");
   private static final byte[] qual = Bytes.toBytes("qual");
@@ -54,30 +68,53 @@ public class TestPerRegionIndexWriteCache {
     p2.add(family, qual, val);
   }
 
+  HRegion r1;
+  HRegion r2;
 
-  HRegion r1 = new HRegion() {
-    @Override
-    public int hashCode() {
-      return 1;
-    }
+  @Before
+  public void setUp() throws Exception {
+      FileSystem newFS = FileSystem.get(TEST_UTIL.getConfiguration());
+      Path hbaseRootDir = TEST_UTIL.getDataTestDir();
+      
+      HRegionInfo hri = new HRegionInfo(tableName, null, null, false);
+      Path basedir = FSUtils.getTableDir(hbaseRootDir, tableName); 
+      HLog wal = HLogFactory.createHLog(newFS, 
+          hbaseRootDir, "logs", TEST_UTIL.getConfiguration());
+      HTableDescriptor htd = new HTableDescriptor(tableName);
+      HColumnDescriptor a = new HColumnDescriptor(Bytes.toBytes("a"));
+      htd.addFamily(a);
+      
+      r1 = new HRegion(basedir, wal, newFS, TEST_UTIL.getConfiguration(), hri, htd, null) {
+          @Override
+          public int hashCode() {
+            return 1;
+          }
 
-    @Override
-    public String toString() {
-      return "testRegion1";
-    }
-  };
-  HRegion r2 = new HRegion() {
-    @Override
-    public int hashCode() {
-      return 2;
-    }
+          @Override
+          public String toString() {
+            return "testRegion1";
+          }
+        };
+        
+      r2 = new HRegion(basedir, wal, newFS, TEST_UTIL.getConfiguration(), hri, htd, null) {
+          @Override
+          public int hashCode() {
+            return 2;
+          }
 
-    @Override
-    public String toString() {
-      return "testRegion1";
-    }
-  };
-
+          @Override
+          public String toString() {
+            return "testRegion1";
+          }
+        };
+  }
+  
+  @After
+  public void cleanUp() throws Exception {
+	  TEST_UTIL.cleanupTestDir();
+  }
+  
+  
   @Test
   public void testAddRemoveSingleRegion() {
     PerRegionIndexWriteCache cache = new PerRegionIndexWriteCache();

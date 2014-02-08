@@ -67,6 +67,7 @@ import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 
 public abstract class BaseTest {
     private static final Map<String,String> tableDDLMap;
@@ -413,6 +414,7 @@ public abstract class BaseTest {
         if (PhoenixEmbeddedDriver.isTestUrl(url)) {
             PhoenixTestDriver driver = initDriver(new QueryServicesTestImpl(props));
             assertTrue(DriverManager.getDriver(url) == driver);
+            driver.connect(url, TestUtil.TEST_PROPERTIES);
         }
     }
     

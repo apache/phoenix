@@ -22,7 +22,7 @@ package org.apache.hadoop.hbase.index.covered.example;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
-import org.apache.hadoop.hbase.regionserver.wal.WALEditCodec;
+import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 import org.junit.BeforeClass;
 
 import org.apache.hadoop.hbase.index.IndexTestingUtils;
@@ -41,10 +41,11 @@ public class TestEndtoEndIndexingWithCompression extends TestEndToEndCoveredInde
     // disable version checking, so we can test against whatever version of HBase happens to be
     // installed (right now, its generally going to be SNAPSHOT versions).
     conf.setBoolean(Indexer.CHECK_VERSION_CONF_KEY, false);
-    conf.set(WALEditCodec.WAL_EDIT_CODEC_CLASS_KEY,
+    conf.set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY,
     IndexedWALEditCodec.class.getName());
     conf.setBoolean(HConstants.ENABLE_WAL_COMPRESSION, true);
-    
+    // disable replication
+    conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY, false);
     //start the mini-cluster
     UTIL.startMiniCluster();
   }

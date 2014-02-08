@@ -19,6 +19,7 @@
  */
 package org.apache.hadoop.hbase.index.covered.data;
 
+import java.io.IOException;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.SortedSet;
@@ -26,7 +27,7 @@ import java.util.SortedSet;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValue.KeyComparator;
+import org.apache.hadoop.hbase.KeyValue.KVComparator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.IndexKeyValueSkipListSet;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
@@ -87,12 +88,12 @@ public class IndexMemStore implements KeyValueStore {
    */
   public static final Comparator<KeyValue> COMPARATOR = new Comparator<KeyValue>() {
 
-    private final KeyComparator rawcomparator = new KeyComparator();
+    private final KVComparator rawcomparator = new KVComparator();
 
     @Override
     public int compare(final KeyValue left, final KeyValue right) {
-      return rawcomparator.compare(left.getBuffer(), left.getOffset() + KeyValue.ROW_OFFSET,
-        left.getKeyLength(), right.getBuffer(), right.getOffset() + KeyValue.ROW_OFFSET,
+      return rawcomparator.compareFlatKey(left.getRowArray(), left.getOffset() + KeyValue.ROW_OFFSET,
+        left.getKeyLength(), right.getRowArray(), right.getOffset() + KeyValue.ROW_OFFSET,
         right.getKeyLength());
     }
   };
@@ -140,7 +141,8 @@ public class IndexMemStore implements KeyValueStore {
   }
 
   private String toString(KeyValue kv) {
-    return kv.toString() + "/value=" + Bytes.toString(kv.getValue());
+    return kv.toString() + "/value=" + 
+        Bytes.toString(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
   }
 
   @Override
@@ -159,7 +161,7 @@ public class IndexMemStore implements KeyValueStore {
   public KeyValueScanner getScanner() {
     return new MemStoreScanner();
   }
-
+  
   /*
    * MemStoreScanner implements the KeyValueScanner. It lets the caller scan the contents of a
    * memstore -- both current map and snapshot. This behaves as if it were a real scanner but does
@@ -306,14 +308,13 @@ public class IndexMemStore implements KeyValueStore {
     public long getSequenceID() {
       return Long.MAX_VALUE;
     }
-
+    
     @Override
     public boolean shouldUseScanner(Scan scan, SortedSet<byte[]> columns, long oldestUnexpiredTS) {
       throw new UnsupportedOperationException(this.getClass().getName()
           + " doesn't support checking to see if it should use a scanner!");
     }
 
-    /*
     @Override
     public boolean backwardSeek(KeyValue arg0) throws IOException {
         throw new UnsupportedOperationException();
@@ -328,6 +329,5 @@ public class IndexMemStore implements KeyValueStore {
     public boolean seekToPreviousRow(KeyValue arg0) throws IOException {
         throw new UnsupportedOperationException();
     }
-    */
   }
 }

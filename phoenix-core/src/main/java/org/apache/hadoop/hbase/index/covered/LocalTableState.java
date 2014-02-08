@@ -28,13 +28,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
-import org.apache.hadoop.hbase.util.Pair;
-
 import org.apache.hadoop.hbase.index.covered.data.IndexMemStore;
 import org.apache.hadoop.hbase.index.covered.data.LocalHBaseState;
 import org.apache.hadoop.hbase.index.covered.update.ColumnReference;
@@ -42,6 +41,8 @@ import org.apache.hadoop.hbase.index.covered.update.ColumnTracker;
 import org.apache.hadoop.hbase.index.covered.update.IndexedColumnGroup;
 import org.apache.hadoop.hbase.index.scanner.Scanner;
 import org.apache.hadoop.hbase.index.scanner.ScannerBuilder;
+import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
+import org.apache.hadoop.hbase.util.Pair;
 
 /**
  * Manage the state of the HRegion's view of the table, for the single row.
@@ -175,7 +176,7 @@ public class LocalTableState implements TableState {
 
   public Result getCurrentRowState() {
     KeyValueScanner scanner = this.memstore.getScanner();
-    List<KeyValue> kvs = new ArrayList<KeyValue>();
+    List<Cell> kvs = new ArrayList<Cell>();
     while (scanner.peek() != null) {
       try {
         kvs.add(scanner.next());
@@ -184,7 +185,7 @@ public class LocalTableState implements TableState {
         throw new RuntimeException("Local MemStore threw IOException!");
       }
     }
-    return new Result(kvs);
+    return Result.create(kvs);
   }
 
   /**
@@ -192,8 +193,8 @@ public class LocalTableState implements TableState {
    * @param pendingUpdate update to apply
    */
   public void addUpdateForTesting(Mutation pendingUpdate) {
-    for (Map.Entry<byte[], List<KeyValue>> e : pendingUpdate.getFamilyMap().entrySet()) {
-      List<KeyValue> edits = e.getValue();
+    for (Map.Entry<byte[], List<Cell>> e : pendingUpdate.getFamilyCellMap().entrySet()) {
+      List<KeyValue> edits = KeyValueUtil.ensureKeyValues(e.getValue());
       addUpdate(edits);
     }
   }

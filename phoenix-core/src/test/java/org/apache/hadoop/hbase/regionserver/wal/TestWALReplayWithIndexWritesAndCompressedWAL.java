@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionServerAccounting;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.FSUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -77,7 +78,7 @@ public class TestWALReplayWithIndexWritesAndCompressedWAL {
     this.oldLogDir = new Path(this.hbaseRootDir, HConstants.HREGION_OLDLOGDIR_NAME);
     this.logDir = new Path(this.hbaseRootDir, HConstants.HREGION_LOGDIR_NAME);
     // reset the log reader to ensure we pull the one from this config
-    HLog.resetLogReaderClass();
+    HLogFactory.resetLogReaderClass();
   }
 
   private void setupCluster() throws Exception {
@@ -91,6 +92,8 @@ public class TestWALReplayWithIndexWritesAndCompressedWAL {
 
     // enable WAL compression
     conf.setBoolean(HConstants.ENABLE_WAL_COMPRESSION, true);
+    // disable replication
+    conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY, false);
   }
 
   protected final void setDefaults(Configuration conf) {
@@ -140,8 +143,9 @@ public class TestWALReplayWithIndexWritesAndCompressedWAL {
   @Test
   public void testReplayEditsWrittenViaHRegion() throws Exception {
     final String tableNameStr = "testReplayEditsWrittenViaHRegion";
-    final HRegionInfo hri = new HRegionInfo(Bytes.toBytes(tableNameStr), null, null, false);
-    final Path basedir = new Path(this.hbaseRootDir, tableNameStr);
+    final HRegionInfo hri = new HRegionInfo(org.apache.hadoop.hbase.TableName.valueOf(tableNameStr), 
+        null, null, false);
+    final Path basedir = FSUtils.getTableDir(hbaseRootDir, org.apache.hadoop.hbase.TableName.valueOf(tableNameStr));
     deleteDir(basedir);
     final HTableDescriptor htd = createBasic3FamilyHTD(tableNameStr);
     
@@ -161,22 +165,20 @@ public class TestWALReplayWithIndexWritesAndCompressedWAL {
     HLog wal = createWAL(this.conf);
     RegionServerServices mockRS = Mockito.mock(RegionServerServices.class);
     // mock out some of the internals of the RSS, so we can run CPs
-    Mockito.when(mockRS.getWAL()).thenReturn(wal);
+    Mockito.when(mockRS.getWAL(null)).thenReturn(wal);
     RegionServerAccounting rsa = Mockito.mock(RegionServerAccounting.class);
     Mockito.when(mockRS.getRegionServerAccounting()).thenReturn(rsa);
     ServerName mockServerName = Mockito.mock(ServerName.class);
-    Mockito.when(mockServerName.getServerName()).thenReturn(tableNameStr + "-server-1234");
+    Mockito.when(mockServerName.getServerName()).thenReturn(tableNameStr + ",1234");
     Mockito.when(mockRS.getServerName()).thenReturn(mockServerName);
     HRegion region = new HRegion(basedir, wal, this.fs, this.conf, hri, htd, mockRS);
     long seqid = region.initialize();
-    // HRegionServer usually does this. It knows the largest seqid across all regions.
-    wal.setSequenceNumber(seqid);
     
     //make an attempted write to the primary that should also be indexed
     byte[] rowkey = Bytes.toBytes("indexed_row_key");
     Put p = new Put(rowkey);
     p.add(family, Bytes.toBytes("qual"), Bytes.toBytes("value"));
-    region.put(new Put[] { p });
+    region.put(p);
 
     // we should then see the server go down
     Mockito.verify(mockRS, Mockito.times(1)).abort(Mockito.anyString(),
@@ -232,10 +234,10 @@ public class TestWALReplayWithIndexWritesAndCompressedWAL {
    * @throws IOException
    */
   private HLog createWAL(final Configuration c) throws IOException {
-    HLog wal = new HLog(FileSystem.get(c), logDir, oldLogDir, c);
+    HLog wal = HLogFactory.createHLog(FileSystem.get(c), logDir, "localhost,1234", c);
     // Set down maximum recovery so we dfsclient doesn't linger retrying something
     // long gone.
-    HBaseTestingUtility.setMaxRecoveryErrorCount(wal.getOutputStream(), 1);
+    HBaseTestingUtility.setMaxRecoveryErrorCount(((FSHLog) wal).getOutputStream(), 1);
     return wal;
   }
 
@@ -247,9 +249,9 @@ public class TestWALReplayWithIndexWritesAndCompressedWAL {
    */
   private Path runWALSplit(final Configuration c) throws IOException {
     FileSystem fs = FileSystem.get(c);
-    HLogSplitter logSplitter = HLogSplitter.createLogSplitter(c, this.hbaseRootDir, this.logDir,
-      this.oldLogDir, fs);
-    List<Path> splits = logSplitter.splitLog();
+    
+    List<Path> splits = HLogSplitter.split(this.hbaseRootDir, new Path(this.logDir, "localhost,1234"),
+        this.oldLogDir, fs, c);
     // Split should generate only 1 file since there's only 1 region
     assertEquals("splits=" + splits, 1, splits.size());
     // Make sure the file exists

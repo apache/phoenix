@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedHLogReader;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
-import org.apache.hadoop.hbase.regionserver.wal.WALEditCodec;
+import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 import org.junit.Test;
 
 public class TestIndexManagementUtil {
@@ -32,7 +32,7 @@ public class TestIndexManagementUtil {
   public void testUncompressedWal() throws Exception {
     Configuration conf = new Configuration(false);
     // works with WALEditcodec
-    conf.set(WALEditCodec.WAL_EDIT_CODEC_CLASS_KEY, IndexedWALEditCodec.class.getName());
+    conf.set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY, IndexedWALEditCodec.class.getName());
     IndexManagementUtil.ensureMutableIndexingCorrectlyConfigured(conf);
     // clear the codec and set the wal reader
     conf = new Configuration(false);
@@ -49,7 +49,7 @@ public class TestIndexManagementUtil {
     Configuration conf = new Configuration(false);
     conf.setBoolean(HConstants.ENABLE_WAL_COMPRESSION, true);
     // works with WALEditcodec
-    conf.set(WALEditCodec.WAL_EDIT_CODEC_CLASS_KEY, IndexedWALEditCodec.class.getName());
+    conf.set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY, IndexedWALEditCodec.class.getName());
     IndexManagementUtil.ensureMutableIndexingCorrectlyConfigured(conf);
   }
 

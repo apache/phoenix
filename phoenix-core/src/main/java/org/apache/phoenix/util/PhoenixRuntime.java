@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.StringTokenizer;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -298,9 +299,9 @@ public class PhoenixRuntime {
                 Pair<byte[],List<Mutation>> pair = iterator.next();
                 List<KeyValue> keyValues = Lists.newArrayListWithExpectedSize(pair.getSecond().size() * 5); // Guess-timate 5 key values per row
                 for (Mutation mutation : pair.getSecond()) {
-                    for (List<KeyValue> keyValueList : mutation.getFamilyMap().values()) {
-                        for (KeyValue keyValue : keyValueList) {
-                            keyValues.add(keyValue);
+                    for (List<Cell> keyValueList : mutation.getFamilyCellMap().values()) {
+                        for (Cell keyValue : keyValueList) {
+                            keyValues.add(org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(keyValue));
                         }
                     }
                 }

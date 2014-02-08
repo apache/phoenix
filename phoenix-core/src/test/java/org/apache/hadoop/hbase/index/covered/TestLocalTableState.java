@@ -26,6 +26,7 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -75,7 +76,7 @@ public class TestLocalTableState {
       public Boolean answer(InvocationOnMock invocation) throws Throwable {
         List<KeyValue> list = (List<KeyValue>) invocation.getArguments()[0];
         KeyValue kv = new KeyValue(row, fam, qual, ts, Type.Put, stored);
-        kv.setMemstoreTS(0);
+        kv.setMvccVersion(0);
         list.add(kv);
         return false;
       }
@@ -85,7 +86,7 @@ public class TestLocalTableState {
     LocalHBaseState state = new LocalTable(env);
     LocalTableState table = new LocalTableState(env, state, m);
     //add the kvs from the mutation
-    table.addPendingUpdates(m.get(fam, qual));
+    table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
 
     // setup the lookup
     ColumnReference col = new ColumnReference(fam, qual);
@@ -114,7 +115,7 @@ public class TestLocalTableState {
     Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenReturn(scanner);
     final byte[] stored = Bytes.toBytes("stored-value");
     final KeyValue storedKv = new KeyValue(row, fam, qual, ts, Type.Put, stored);
-    storedKv.setMemstoreTS(2);
+    storedKv.setMvccVersion(2);
     Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<Boolean>() {
       @Override
       public Boolean answer(InvocationOnMock invocation) throws Throwable {
@@ -127,8 +128,8 @@ public class TestLocalTableState {
     LocalHBaseState state = new LocalTable(env);
     LocalTableState table = new LocalTableState(env, state, m);
     // add the kvs from the mutation
-    KeyValue kv = m.get(fam, qual).get(0);
-    kv.setMemstoreTS(0);
+    KeyValue kv = KeyValueUtil.ensureKeyValue(m.get(fam, qual).get(0));
+    kv.setMvccVersion(0);
     table.addPendingUpdates(kv);
 
     // setup the lookup
@@ -160,7 +161,7 @@ public class TestLocalTableState {
     Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenReturn(scanner);
     final KeyValue storedKv =
         new KeyValue(row, fam, qual, ts, Type.Put, Bytes.toBytes("stored-value"));
-    storedKv.setMemstoreTS(2);
+    storedKv.setMvccVersion(2);
     Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<Boolean>() {
       @Override
       public Boolean answer(InvocationOnMock invocation) throws Throwable {

@@ -19,18 +19,29 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import java.io.IOException;
 import java.sql.SQLException;
 
-import org.apache.hadoop.hbase.coprocessor.BaseEndpointCoprocessor;
+import org.apache.hadoop.hbase.Coprocessor;
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
+import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.TenantCache;
+import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
+import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.AddServerCacheRequest;
+import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.AddServerCacheResponse;
+import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.RemoveServerCacheRequest;
+import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.RemoveServerCacheResponse;
+import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ServerCachingService;
+import org.apache.phoenix.protobuf.ProtobufUtil;
 
-
-
+import com.google.protobuf.RpcCallback;
+import com.google.protobuf.RpcController;
+import com.google.protobuf.Service;
 
 /**
  * 
@@ -39,19 +50,74 @@ import org.apache.phoenix.cache.TenantCache;
  * 
  * @since 0.1
  */
-public class ServerCachingEndpointImpl extends BaseEndpointCoprocessor implements ServerCachingProtocol {
+public class ServerCachingEndpointImpl extends ServerCachingService implements CoprocessorService,
+    Coprocessor {
 
-    @Override
-    public boolean addServerCache(byte[] tenantId, byte[] cacheId, ImmutableBytesWritable cachePtr, ServerCacheFactory cacheFactory) throws SQLException {
-        TenantCache tenantCache = GlobalCache.getTenantCache((RegionCoprocessorEnvironment)this.getEnvironment(), tenantId == null ? null : new ImmutableBytesPtr(tenantId));
-        tenantCache.addServerCache(new ImmutableBytesPtr(cacheId), cachePtr, cacheFactory);
-        return true;
-    }
+  private RegionCoprocessorEnvironment env;
 
-    @Override
-    public boolean removeServerCache(byte[] tenantId, byte[] cacheId) throws SQLException {
-        TenantCache tenantCache = GlobalCache.getTenantCache((RegionCoprocessorEnvironment)this.getEnvironment(), tenantId == null ? null : new ImmutableBytesPtr(tenantId));
-        tenantCache.removeServerCache(new ImmutableBytesPtr(cacheId));
-        return true;
+  @Override
+  public void addServerCache(RpcController controller, AddServerCacheRequest request,
+      RpcCallback<AddServerCacheResponse> done) {
+    ImmutableBytesPtr tenantId = null;
+    if (request.hasTenantId()) {
+      tenantId = new ImmutableBytesPtr(request.getTenantId().toByteArray());
     }
+    TenantCache tenantCache = GlobalCache.getTenantCache(this.env, tenantId);
+    ImmutableBytesWritable cachePtr =
+        org.apache.phoenix.protobuf.ProtobufUtil
+            .toImmutableBytesWritable(request.getCachePtr());
+
+    try {
+      @SuppressWarnings("unchecked")
+      Class<ServerCacheFactory> serverCacheFactoryClass =
+          (Class<ServerCacheFactory>) Class.forName(request.getCacheFactory().getClassName());
+      ServerCacheFactory cacheFactory = serverCacheFactoryClass.newInstance();
+      tenantCache.addServerCache(new ImmutableBytesPtr(request.getCacheId().toByteArray()),
+        cachePtr, cacheFactory);
+    } catch (Throwable e) {
+      ProtobufUtil.setControllerException(controller, new IOException(e));
+    }
+    AddServerCacheResponse.Builder responseBuilder = AddServerCacheResponse.newBuilder();
+    responseBuilder.setReturn(true);
+    AddServerCacheResponse result = responseBuilder.build();
+    done.run(result);
+  }
+
+  @Override
+  public void removeServerCache(RpcController controller, RemoveServerCacheRequest request,
+      RpcCallback<RemoveServerCacheResponse> done) {
+    ImmutableBytesPtr tenantId = null;
+    if (request.hasTenantId()) {
+      tenantId = new ImmutableBytesPtr(request.getTenantId().toByteArray());
+    }
+    TenantCache tenantCache = GlobalCache.getTenantCache(this.env, tenantId);
+    try {
+      tenantCache.removeServerCache(new ImmutableBytesPtr(request.getCacheId().toByteArray()));
+    } catch (SQLException e) {
+      ProtobufUtil.setControllerException(controller, new IOException(e));
+    }
+    RemoveServerCacheResponse.Builder responseBuilder = RemoveServerCacheResponse.newBuilder();
+    responseBuilder.setReturn(true);
+    RemoveServerCacheResponse result = responseBuilder.build();
+    done.run(result);
+  }
+
+  @Override
+  public void start(CoprocessorEnvironment env) throws IOException {
+    if (env instanceof RegionCoprocessorEnvironment) {
+      this.env = (RegionCoprocessorEnvironment) env;
+    } else {
+      throw new CoprocessorException("Must be loaded on a table region!");
+    }
+  }
+
+  @Override
+  public void stop(CoprocessorEnvironment arg0) throws IOException {
+    // nothing to do
+  }
+
+  @Override
+  public Service getService() {
+    return this;
+  }
 }

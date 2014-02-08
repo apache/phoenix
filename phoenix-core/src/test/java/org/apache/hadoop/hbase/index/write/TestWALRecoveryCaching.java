@@ -50,6 +50,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
@@ -213,7 +214,7 @@ public class TestWALRecoveryCaching {
         LOG.info("\t== Offline: " + server.getServerName());
         continue;
       }
-      List<HRegionInfo> regions = server.getOnlineRegions();
+      List<HRegionInfo> regions = ProtobufUtil.getOnlineRegions(server);
       LOG.info("\t" + server.getServerName() + " regions: " + regions);
     }
 
@@ -270,7 +271,7 @@ public class TestWALRecoveryCaching {
     for (RegionServerThread rst : cluster.getRegionServerThreads()) {
       // if its the server we are going to kill, get the regions we want to reassign
       if (rst.getRegionServer().getServerName().equals(server)) {
-        online = rst.getRegionServer().getOnlineRegions(table);
+        online = rst.getRegionServer().getOnlineRegions(org.apache.hadoop.hbase.TableName.valueOf(table));
         break;
       }
     }
@@ -310,7 +311,7 @@ public class TestWALRecoveryCaching {
 
         // force reassign the regions from the table
         for (HRegion region : online) {
-          cluster.getMaster().assign(region.getRegionName());
+          cluster.getMaster().assignRegion(region.getRegionInfo());
         }
 
         LOG.info("Starting region server:" + server.getHostname());
