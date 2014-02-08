@@ -468,8 +468,10 @@ public class PTableImpl implements PTable {
         }
         if (size > 1) {
             for (PColumn column : columns) {
-                if (QueryConstants.DEFAULT_COLUMN_FAMILY.equals(column.getFamilyName().getString())) {
-                    // Allow ambiguity with default column, since a user would not know how to prefix it.
+                if (column.getFamilyName() == null || QueryConstants.DEFAULT_COLUMN_FAMILY.equals(column.getFamilyName().getString())) {
+                    // Allow ambiguity with PK column or column in the default column family,
+                    // since a PK column cannot be prefixed and a user would not know how to
+                    // prefix a column in the default column family.
                     return column;
                 }
             }

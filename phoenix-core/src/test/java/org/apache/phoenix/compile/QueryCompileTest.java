@@ -23,10 +23,10 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertDegenerate;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
@@ -45,12 +45,14 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.TimeUnit;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
@@ -133,6 +135,19 @@ public class QueryCompileTest extends BaseConnectionlessQueryTest {
             fail();
         } catch (SQLException e) {
             assertEquals(e.getErrorCode(), SQLExceptionCode.PRIMARY_KEY_WITH_FAMILY_NAME.getErrorCode());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testSameColumnNameInPKAndNonPK() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            String query = "CREATE TABLE t1 (k integer not null primary key, a.k decimal, b.k decimal)";
+            conn.createStatement().execute(query);
+            PColumn c = conn.unwrap(PhoenixConnection.class).getPMetaData().getTable("T1").getColumn("K");
+            assertTrue(SchemaUtil.isPKColumn(c));
         } finally {
             conn.close();
         }
