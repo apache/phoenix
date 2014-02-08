@@ -35,10 +35,20 @@ import java.util.StringTokenizer;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.TableNotFoundException;
 
 import com.google.common.collect.Lists;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 
 /**
  * 
@@ -304,5 +314,94 @@ public class PhoenixRuntime {
             }
             
         };
+    }
+    
+    private static PTable getTable(Connection conn, String name) throws SQLException {
+        PTable table = null;
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        try {
+            table = pconn.getPMetaData().getTable(name);
+        } catch (TableNotFoundException e) {
+            String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
+            String tableName = SchemaUtil.getTableNameFromFullName(name);
+            MetaDataMutationResult result = new MetaDataClient(pconn).updateCache(schemaName, tableName);
+            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+                throw e;
+            }
+            table = result.getTable();
+        }
+        return table;
+    }
+    
+    /**
+     * Encode the primary key values from the table as a byte array. The values must
+     * be in the same order as the primary key constraint. If the connection and
+     * table are both tenant-specific, the tenant ID column must not be present in
+     * the values. 
+     * @param conn an open connection
+     * @param fullTableName the full table name
+     * @param values the values of the primary key columns ordered in the same order
+     *  as the primary key constraint
+     * @return the encoded byte array
+     * @throws SQLException if the table cannot be found or the incorrect number of
+     *  of values are provided
+     * @see #decodePK(Connection, String, byte[]) to decode the byte[] back to the
+     *  values
+     */
+    public static byte[] encodePK(Connection conn, String fullTableName, Object[] values) throws SQLException {
+        PTable table = getTable(conn, fullTableName);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        int offset = (table.getBucketNum() == null ? 0 : 1) + (table.isMultiTenant() && pconn.getTenantId() != null ? 1 : 0);
+        List<PColumn> pkColumns = table.getPKColumns();
+        if (pkColumns.size() - offset != values.length) {
+            throw new SQLException("Expected " + (pkColumns.size() - offset) + " but got " + values.length);
+        }
+        PDataType type = null;
+        TrustedByteArrayOutputStream output = new TrustedByteArrayOutputStream(table.getRowKeySchema().getEstimatedValueLength());
+        try { 
+            for (int i = offset; i < pkColumns.size(); i++) {
+                if (type != null && !type.isFixedWidth()) {
+                    output.write(QueryConstants.SEPARATOR_BYTE);
+                }
+                type = pkColumns.get(i).getDataType();
+                byte[] value = type.toBytes(values[i - offset]);
+                output.write(value);
+            }
+            return output.toByteArray();
+        } finally {
+            try {
+                output.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e); // Impossible
+            }
+        }
+    }
+    
+    /**
+     * Decode a byte array value back into the Object values of the
+     * primary key constraint. If the connection and table are both
+     * tenant-specific, the tenant ID column is not expected to have
+     * been encoded and will not appear in the returned values.
+     * @param conn an open connection
+     * @param fullTableName the full table name
+     * @param value the value that was encoded with {@link #encodePK(Connection, String, Object[])}
+     * @return the Object values encoded in the byte array value
+     * @throws SQLException
+     */
+    public static Object[] decodePK(Connection conn, String name, byte[] value) throws SQLException {
+        PTable table = getTable(conn, name);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        int offset = (table.getBucketNum() == null ? 0 : 1) + (table.isMultiTenant() && pconn.getTenantId() != null ? 1 : 0);
+        RowKeySchema schema = table.getRowKeySchema();
+        int nValues = schema.getMaxFields()-offset;
+        Object[] values = new Object[nValues];
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        int i = 0;
+        schema.iterator(value, ptr, offset);
+        while (i < nValues && schema.next(ptr, i, value.length) != null) {
+            values[i] = schema.getField(i).getDataType().toObject(ptr);
+            i++;
+        }
+        return values;
     }
 }
