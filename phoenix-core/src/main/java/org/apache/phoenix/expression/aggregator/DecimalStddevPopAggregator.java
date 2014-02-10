@@ -22,7 +22,7 @@ package org.apache.phoenix.expression.aggregator;
 import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 
 /**
  * Client side Aggregator for STDDEV_POP aggregations for DECIMAL data type.
@@ -32,8 +32,8 @@ import org.apache.phoenix.schema.ColumnModifier;
  */
 public class DecimalStddevPopAggregator extends BaseDecimalStddevAggregator {
 
-    public DecimalStddevPopAggregator(List<Expression> exps, ColumnModifier columnModifier) {
-        super(exps, columnModifier);
+    public DecimalStddevPopAggregator(List<Expression> exps, SortOrder sortOrder) {
+        super(exps, sortOrder);
     }
 
     @Override

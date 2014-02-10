@@ -94,7 +94,7 @@ public class RoundDecimalExpression extends ScalarFunction {
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         Expression childExpr = children.get(0);
         if(childExpr.evaluate(tuple, ptr)) {
-            BigDecimal value = (BigDecimal)PDataType.DECIMAL.toObject(ptr, childExpr.getColumnModifier());
+            BigDecimal value = (BigDecimal)PDataType.DECIMAL.toObject(ptr, childExpr.getSortOrder());
             BigDecimal scaledValue = value.setScale(scale, getRoundingMode());
             ptr.set(getDataType().toBytes(scaledValue));
             return true;

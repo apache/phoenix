@@ -91,7 +91,7 @@ public class DistinctCountAggregateFunction extends DelegateConstantToCountAggre
 
     @Override 
     public DistinctCountClientAggregator newClientAggregator() {
-        return new DistinctCountClientAggregator(getAggregatorExpression().getColumnModifier());
+        return new DistinctCountClientAggregator(getAggregatorExpression().getSortOrder());
     }
     
     @Override 

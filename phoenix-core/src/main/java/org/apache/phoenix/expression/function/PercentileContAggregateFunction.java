@@ -60,7 +60,7 @@ public class PercentileContAggregateFunction extends DistinctValueWithCountAggre
 
     @Override
     public DistinctValueWithCountClientAggregator newClientAggregator() {
-        return new PercentileClientAggregator(children, getAggregatorExpression().getColumnModifier());
+        return new PercentileClientAggregator(children, getAggregatorExpression().getSortOrder());
     }
 
     @Override

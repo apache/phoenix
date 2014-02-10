@@ -121,8 +121,8 @@ public class PArrayDataType {
 	}
 
 	public Object toObject(byte[] bytes, int offset, int length, PDataType baseType, 
-			ColumnModifier columnModifier) {
-		return createPhoenixArray(bytes, offset, length, columnModifier,
+			SortOrder sortOrder) {
+		return createPhoenixArray(bytes, offset, length, sortOrder,
 				baseType);
 	}
 	
@@ -204,14 +204,14 @@ public class PArrayDataType {
 	}
 
 	public Object toObject(byte[] bytes, int offset, int length, PDataType baseType) {
-		return toObject(bytes, offset, length, baseType, null);
+		return toObject(bytes, offset, length, baseType, SortOrder.getDefault());
 	}
 	
 	public Object toObject(Object object, PDataType actualType) {
 		return object;
 	}
 
-	public Object toObject(Object object, PDataType actualType, ColumnModifier sortOrder) {
+	public Object toObject(Object object, PDataType actualType, SortOrder sortOrder) {
 		// How to use the sortOrder ? Just reverse the elements
 		return toObject(object, actualType);
 	}
@@ -274,7 +274,7 @@ public class PArrayDataType {
     }
 
 	private Object createPhoenixArray(byte[] bytes, int offset, int length,
-			ColumnModifier columnModifier, PDataType baseDataType) {
+			SortOrder sortOrder, PDataType baseDataType) {
 		if(bytes == null || bytes.length == 0) {
 			return null;
 		}
@@ -332,18 +332,18 @@ public class PArrayDataType {
 						byte[] val = new byte[elementLength];
 						buffer.get(val);
 						elements[i++] = baseDataType.toObject(val,
-								columnModifier);
+								sortOrder);
 					}
 				}
 				buffer.position(nextOff + initPos);
 				byte[] val = new byte[indexOffset - nextOff];
 				buffer.get(val);
-				elements[i++] = baseDataType.toObject(val, columnModifier);
+				elements[i++] = baseDataType.toObject(val, sortOrder);
 			} else {
 				byte[] val = new byte[indexOffset - valArrayPostion];
 				buffer.position(valArrayPostion + initPos);
 				buffer.get(val);
-				elements[i++] = baseDataType.toObject(val, columnModifier);
+				elements[i++] = baseDataType.toObject(val, sortOrder);
 			}
 		} else {
 			for (int i = 0; i < noOfElements; i++) {
@@ -354,7 +354,7 @@ public class PArrayDataType {
 					val = new byte[baseDataType.getByteSize()];
 				}
 				buffer.get(val);
-				elements[i] = baseDataType.toObject(val, columnModifier);
+				elements[i] = baseDataType.toObject(val, sortOrder);
 			}
 		}
 		return PArrayDataType

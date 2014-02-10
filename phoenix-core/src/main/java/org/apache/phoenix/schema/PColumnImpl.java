@@ -42,7 +42,7 @@ public class PColumnImpl implements PColumn {
     private Integer scale;
     private boolean nullable;
     private int position;
-    private ColumnModifier columnModifier;
+    private SortOrder sortOrder;
     private Integer arraySize;
 
     public PColumnImpl() {
@@ -55,13 +55,13 @@ public class PColumnImpl implements PColumn {
                        Integer scale,
                        boolean nullable,
                        int position,
-                       ColumnModifier sortOrder, Integer arrSize) {
+                       SortOrder sortOrder, Integer arrSize) {
         init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize);
     }
 
     public PColumnImpl(PColumn column, int position) {
         this(column.getName(), column.getFamilyName(), column.getDataType(), column.getMaxLength(),
-                column.getScale(), column.isNullable(), position, column.getColumnModifier(), column.getArraySize());
+                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize());
     }
 
     private void init(PName name,
@@ -71,8 +71,9 @@ public class PColumnImpl implements PColumn {
             Integer scale,
             boolean nullable,
             int position,
-            ColumnModifier columnModifier,
+            SortOrder sortOrder,
             Integer arrSize) {
+    	Preconditions.checkNotNull(sortOrder);
         this.dataType = dataType;
         if (familyName == null) {
             // Allow nullable columns in PK, but only if they're variable length.
@@ -89,7 +90,7 @@ public class PColumnImpl implements PColumn {
         this.scale = scale;
         this.nullable = nullable;
         this.position = position;
-        this.columnModifier = columnModifier;
+        this.sortOrder = sortOrder;
         this.arraySize = arrSize;
     }
 
@@ -136,8 +137,8 @@ public class PColumnImpl implements PColumn {
     }
     
     @Override
-    public ColumnModifier getColumnModifier() {
-    	return columnModifier;
+    public SortOrder getSortOrder() {
+    	return sortOrder;
     }
 
     @Override
@@ -157,10 +158,10 @@ public class PColumnImpl implements PColumn {
         int scale = WritableUtils.readVInt(input);
         boolean nullable = input.readBoolean();
         int position = WritableUtils.readVInt(input);
-        ColumnModifier columnModifier = ColumnModifier.fromSystemValue(WritableUtils.readVInt(input));
+        SortOrder sortOrder = SortOrder.fromSystemValue(WritableUtils.readVInt(input));
         int arrSize = WritableUtils.readVInt(input);
         init(columnName, familyName, dataType, maxLength == NO_MAXLENGTH ? null : maxLength,
-                scale == NO_SCALE ? null : scale, nullable, position, columnModifier, arrSize == -1 ? null : arrSize);
+                scale == NO_SCALE ? null : scale, nullable, position, sortOrder, arrSize == -1 ? null : arrSize);
     }
 
     @Override
@@ -172,7 +173,7 @@ public class PColumnImpl implements PColumn {
         WritableUtils.writeVInt(output, scale == null ? NO_SCALE : scale);
         output.writeBoolean(nullable);
         WritableUtils.writeVInt(output, position);
-        WritableUtils.writeVInt(output, ColumnModifier.toSystemValue(columnModifier));
+        WritableUtils.writeVInt(output, sortOrder.getSystemValue());
         WritableUtils.writeVInt(output, arraySize == null ? -1 : arraySize);
     }
     

@@ -17,7 +17,7 @@ import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.DivideParseNode;
 import org.apache.phoenix.parse.MultiplyParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -158,10 +158,10 @@ public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
         return true;
     }
     
-    public boolean addEntry(Expression expression, ColumnModifier modifier) {
+    public boolean addEntry(Expression expression, SortOrder sortOrder) {
         // If the expression is sorted in a different order than the specified sort order
         // then the expressions are not order preserving.
-        if (!Objects.equal(expression.getColumnModifier(), modifier)) {
+        if (expression.getSortOrder() != sortOrder) {
             if (isReverse == null) {
                 isReverse = true;
             } else if (!isReverse){

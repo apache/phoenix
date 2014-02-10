@@ -61,9 +61,9 @@ public class StddevSampFunction extends DistinctValueWithCountAggregateFunction 
     public DistinctValueWithCountClientAggregator newClientAggregator() {
         if (children.get(0).getDataType() == PDataType.DECIMAL) {
             // Special Aggregators for DECIMAL datatype for more precision than double
-            return new DecimalStddevSampAggregator(children, getAggregatorExpression().getColumnModifier());
+            return new DecimalStddevSampAggregator(children, getAggregatorExpression().getSortOrder());
         }
-        return new StddevSampAggregator(children, getAggregatorExpression().getColumnModifier());
+        return new StddevSampAggregator(children, getAggregatorExpression().getSortOrder());
     }
     
     @Override

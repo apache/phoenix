@@ -57,8 +57,8 @@ public class RowKeySchema extends ValueSchema {
         }
         
         @Override
-        public RowKeySchemaBuilder addField(PDatum datum, boolean isNullable, ColumnModifier columnModifier) {
-            super.addField(datum, isNullable, columnModifier);
+        public RowKeySchemaBuilder addField(PDatum datum, boolean isNullable, SortOrder sortOrder) {
+            super.addField(datum, isNullable, sortOrder);
             return this;
         }
 

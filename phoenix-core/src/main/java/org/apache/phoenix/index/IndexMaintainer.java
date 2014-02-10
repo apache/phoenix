@@ -46,7 +46,6 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDataType;
@@ -55,6 +54,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.util.BitSet;
@@ -104,7 +104,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 maintainer.getIndexedColumnSizes().add(column.getByteSize());
                 maintainer.getIndexedColumns().add(new ColumnReference(column.getFamilyName().getBytes(), column.getName().getBytes()));
             }
-            if (indexColumn.getColumnModifier() != null) {
+            if (indexColumn.getSortOrder() == SortOrder.DESC) {
                 rowKeyMetaData.getDescIndexColumnBitSet().set(indexPos);
             }
         }
@@ -290,7 +290,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 PDataType dataColumnType;
                 boolean isNullable = true;
                 boolean isDataColumnInverted = false;
-                ColumnModifier dataColumnModifier = null;
+                SortOrder dataSortOrder = SortOrder.getDefault();
                 if (dataPkPosition[i] == -1) {
                     dataColumnType = indexedColumnTypes.get(j);
                     ImmutableBytesPtr value = valueGetter.getLatestValue(iterator.next());
@@ -301,11 +301,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     }
                     j++;
                } else {
-                   Field field = dataRowKeySchema.getField(dataPkPosition[i]);
+                    Field field = dataRowKeySchema.getField(dataPkPosition[i]);
                     dataColumnType = field.getDataType();
                     ptr.set(rowKeyPtr.get(), dataRowKeyLocator[0][i], dataRowKeyLocator[1][i]);
-                    dataColumnModifier = field.getColumnModifier();
-                    isDataColumnInverted = dataColumnModifier != null;
+                    dataSortOrder = field.getSortOrder();
+                    isDataColumnInverted = dataSortOrder != SortOrder.ASC;
                     isNullable = field.isNullable();
                 }
                 PDataType indexColumnType = IndexUtil.getIndexColumnDataType(isNullable, dataColumnType);
@@ -314,7 +314,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
                 } else {
                     if (!isBytesComparable)  {
-                        indexColumnType.coerceBytes(ptr, dataColumnType, dataColumnModifier, null);
+                        indexColumnType.coerceBytes(ptr, dataColumnType, dataSortOrder, SortOrder.getDefault());
                     }
                     if (descIndexColumnBitSet.get(i) != isDataColumnInverted) {
                         writeInverted(ptr.get(), ptr.getOffset(), ptr.getLength(), output);
@@ -674,7 +674,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     private static void writeInverted(byte[] buf, int offset, int length, DataOutput output) throws IOException {
         for (int i = offset; i < offset + length; i++) {
-            byte b = ColumnModifier.SORT_DESC.apply(buf[i]);
+            byte b = SortOrder.invert(buf[i]);
             output.write(b);
         }
     }

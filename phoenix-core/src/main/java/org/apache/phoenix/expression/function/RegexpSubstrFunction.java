@@ -95,7 +95,7 @@ public class RegexpSubstrFunction extends PrefixFunction {
         if (!getSourceStrExpression().evaluate(tuple, ptr)) {
             return false;
         }
-        String sourceStr = (String)PDataType.VARCHAR.toObject(ptr, getSourceStrExpression().getColumnModifier());
+        String sourceStr = (String)PDataType.VARCHAR.toObject(ptr, getSourceStrExpression().getSortOrder());
         if (sourceStr == null) {
             return false;
         }
@@ -104,7 +104,7 @@ public class RegexpSubstrFunction extends PrefixFunction {
         if (!offsetExpression.evaluate(tuple, ptr)) {
             return false;
         }
-        int offset = offsetExpression.getDataType().getCodec().decodeInt(ptr, offsetExpression.getColumnModifier());
+        int offset = offsetExpression.getDataType().getCodec().decodeInt(ptr, offsetExpression.getSortOrder());
 
         int strlen = sourceStr.length();
         // Account for 1 versus 0-based offset

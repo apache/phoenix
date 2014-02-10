@@ -56,8 +56,8 @@ public class ValueBitSetTest {
                         return null;
                     }
 					@Override
-					public ColumnModifier getColumnModifier() {
-						return null;
+					public SortOrder getSortOrder() {
+						return SortOrder.getDefault();
 					}
                 };
                 builder.addField(datum);

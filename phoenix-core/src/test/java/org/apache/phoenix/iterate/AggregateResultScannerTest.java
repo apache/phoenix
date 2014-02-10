@@ -48,7 +48,7 @@ import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PLongColumn;
 import org.apache.phoenix.schema.PName;
@@ -107,8 +107,8 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
             }
             
             @Override
-            public ColumnModifier getColumnModifier() {
-            	return null;
+            public SortOrder getSortOrder() {
+            	return SortOrder.getDefault();
             }
             
             @Override

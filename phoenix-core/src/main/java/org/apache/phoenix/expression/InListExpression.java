@@ -33,9 +33,15 @@ import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+
+import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 
@@ -83,10 +89,10 @@ public class InListExpression extends BaseSingleExpression {
                         coercedKeyExpressions.add(LiteralExpression.newConstant(null, firstChildType, true));
                     }
                 } else {
-                    // Don't specify the firstChild column modifier here, as we specify it in the LiteralExpression creation below
+                    // Don't specify the firstChild SortOrder here, as we specify it in the LiteralExpression creation below
                     try {
-                        firstChildType.coerceBytes(ptr, rhs.getDataType(), rhs.getColumnModifier(), null);
-                        keys.add(LiteralExpression.newConstant(ByteUtil.copyKeyBytesIfNecessary(ptr), PDataType.VARBINARY, firstChild.getColumnModifier(), true));
+                        firstChildType.coerceBytes(ptr, rhs.getDataType(), rhs.getSortOrder(), SortOrder.getDefault());
+                        keys.add(LiteralExpression.newConstant(ByteUtil.copyKeyBytesIfNecessary(ptr), PDataType.VARBINARY, firstChild.getSortOrder(), true));
                         if(rhs.getDataType() == firstChildType) {
                             coercedKeyExpressions.add(rhs);
                         } else {
@@ -288,8 +294,8 @@ public class InListExpression extends BaseSingleExpression {
             buf.append("null,");
         }
         for (ImmutableBytesPtr value : values) {
-            if (firstChild.getColumnModifier() != null) {
-                type.coerceBytes(value, type, firstChild.getColumnModifier(), null);
+            if (firstChild.getSortOrder() != null) {
+                type.coerceBytes(value, type, firstChild.getSortOrder(), SortOrder.getDefault());
             }
             buf.append(type.toStringLiteral(value, null));
             buf.append(',');

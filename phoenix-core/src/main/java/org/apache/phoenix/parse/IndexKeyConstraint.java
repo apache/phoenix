@@ -24,16 +24,16 @@ import java.util.List;
 import org.apache.hadoop.hbase.util.Pair;
 
 import com.google.common.collect.ImmutableList;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 
 public class IndexKeyConstraint {
-    private final List<Pair<ColumnParseNode, ColumnModifier>> columnNameToModifier;
+    private final List<Pair<ColumnParseNode, SortOrder>> columnNameToSortOrder;
     
-    IndexKeyConstraint(List<Pair<ColumnParseNode, ColumnModifier>> columnNameAndModifier) {
-        this.columnNameToModifier = ImmutableList.copyOf(columnNameAndModifier);
+    IndexKeyConstraint(List<Pair<ColumnParseNode, SortOrder>> columnNameAndSortOrder) {
+        this.columnNameToSortOrder = ImmutableList.copyOf(columnNameAndSortOrder);
     }
 
-    public List<Pair<ColumnParseNode, ColumnModifier>> getColumns() {
-        return columnNameToModifier;
+    public List<Pair<ColumnParseNode, SortOrder>> getColumns() {
+        return columnNameToSortOrder;
     }
 }

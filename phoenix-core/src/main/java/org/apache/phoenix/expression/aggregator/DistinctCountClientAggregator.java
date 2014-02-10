@@ -20,7 +20,8 @@
 package org.apache.phoenix.expression.aggregator;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.schema.ColumnModifier;
+
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -32,8 +33,8 @@ import org.apache.phoenix.schema.tuple.Tuple;
  */
 public class DistinctCountClientAggregator extends DistinctValueWithCountClientAggregator {
 
-    public DistinctCountClientAggregator(ColumnModifier columnModifier) {
-        super(columnModifier);
+    public DistinctCountClientAggregator(SortOrder sortOrder) {
+        super(sortOrder);
     }
 
     @Override

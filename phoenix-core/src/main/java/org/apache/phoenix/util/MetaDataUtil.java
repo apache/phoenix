@@ -33,6 +33,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SortOrder;
 
 
 public class MetaDataUtil {
@@ -155,7 +156,7 @@ public class MetaDataUtil {
         if (kvs != null) {
             for (KeyValue kv : kvs) { // list is not ordered, so search. TODO: we could potentially assume the position
                 if (Bytes.compareTo(kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength(), PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, 0, PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES.length) == 0) {
-                    return PDataType.LONG.getCodec().decodeLong(kv.getBuffer(), kv.getValueOffset(), null);
+                    return PDataType.LONG.getCodec().decodeLong(kv.getBuffer(), kv.getValueOffset(), SortOrder.getDefault());
                 }
             }
         }

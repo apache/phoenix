@@ -51,7 +51,7 @@ import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
@@ -162,7 +162,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String SCOPE_TABLE = "SCOPE_TABLE";
     public static final String SOURCE_DATA_TYPE = "SOURCE_DATA_TYPE";
     public static final String IS_AUTOINCREMENT = "IS_AUTOINCREMENT";
-    public static final String COLUMN_MODIFIER = "COLUMN_MODIFIER";
+    public static final String SORT_ORDER = "SORT_ORDER";
     public static final String IMMUTABLE_ROWS = "IMMUTABLE_ROWS";
     public static final byte[] IMMUTABLE_ROWS_BYTES = Bytes.toBytes(IMMUTABLE_ROWS);
     public static final String DEFAULT_COLUMN_FAMILY_NAME = "DEFAULT_COLUMN_FAMILY";
@@ -454,7 +454,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 DatabaseMetaData.tableIndexOther + " TYPE,\n" + 
                 ORDINAL_POSITION + ",\n" +
                 COLUMN_NAME + ",\n" +
-                "CASE WHEN " + TABLE_CAT_NAME + " IS NOT NULL THEN null WHEN " + COLUMN_MODIFIER + " = " + ColumnModifier.toSystemValue(ColumnModifier.SORT_DESC) + " THEN 'D' ELSE 'A' END ASC_OR_DESC,\n" +
+                "CASE WHEN " + TABLE_CAT_NAME + " IS NOT NULL THEN null WHEN " + SORT_ORDER + " = " + (SortOrder.DESC.getSystemValue()) + " THEN 'D' ELSE 'A' END ASC_OR_DESC,\n" +
                 "null CARDINALITY,\n" +
                 "null PAGES,\n" +
                 "null FILTER_CONDITION,\n" +
@@ -605,7 +605,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 COLUMN_NAME + "," +
                 "null as KEY_SEQ," +
                 "PK_NAME" + "," +
-                "CASE WHEN " + COLUMN_MODIFIER + " = " + ColumnModifier.toSystemValue(ColumnModifier.SORT_DESC) + " THEN 'D' ELSE 'A' END ASC_OR_DESC," +
+                "CASE WHEN " + SORT_ORDER + " = " + (SortOrder.DESC.getSystemValue()) + " THEN 'D' ELSE 'A' END ASC_OR_DESC," +
                 DATA_TYPE + "," + // include type info, though not in spec
                 SqlTypeNameFunction.NAME + "(" + DATA_TYPE + ") AS " + TYPE_NAME +
                 " from " + TYPE_SCHEMA_AND_TABLE + " " + TYPE_SCHEMA_AND_TABLE_ALIAS +
@@ -851,8 +851,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
             return null;
         }
 		@Override
-		public ColumnModifier getColumnModifier() {
-			return null;
+		public SortOrder getSortOrder() {
+			return SortOrder.getDefault();
 		}
     };
     private static final RowProjector TABLE_TYPE_ROW_PROJECTOR = new RowProjector(Arrays.<ColumnProjector>asList(

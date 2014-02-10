@@ -37,7 +37,7 @@ import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
@@ -78,8 +78,8 @@ public class CreateSequenceCompiler {
         }
 
         @Override
-        public ColumnModifier getColumnModifier() {
-            return null;
+        public SortOrder getSortOrder() {
+            return SortOrder.getDefault();
         }
         
     }
@@ -111,8 +111,8 @@ public class CreateSequenceCompiler {
         }
 
         @Override
-        public ColumnModifier getColumnModifier() {
-            return null;
+        public SortOrder getSortOrder() {
+            return SortOrder.getDefault();
         }
         
     }

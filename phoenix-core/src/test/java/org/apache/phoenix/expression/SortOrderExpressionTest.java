@@ -49,15 +49,14 @@ import org.apache.phoenix.expression.function.ToDateFunction;
 import org.apache.phoenix.expression.function.ToNumberFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.DateUtil;
 
 /**
- * 
  * @since 1.2
  */
-public class DescColumnSortOrderExpressionTest {
+public class SortOrderExpressionTest {
     
     @Test
     public void substr() throws Exception {
@@ -292,8 +291,8 @@ public class DescColumnSortOrderExpressionTest {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         assertTrue(expression.evaluate(null, ptr));
         PDataType dataType = expression.getDataType();
-        ColumnModifier columnModifier = expression.getColumnModifier();
-        Object result = dataType.toObject(ptr.get(), ptr.getOffset(), ptr.getLength(), dataType, columnModifier);
+        SortOrder sortOrder = expression.getSortOrder();
+        Object result = dataType.toObject(ptr.get(), ptr.getOffset(), ptr.getLength(), dataType, sortOrder);
         assertEquals(context, expectedResult, result);
     }
     
@@ -306,7 +305,7 @@ public class DescColumnSortOrderExpressionTest {
     }    
     
     private Expression getInvertedLiteral(Object literal, PDataType dataType) throws Exception {
-        return LiteralExpression.newConstant(literal, dataType, ColumnModifier.SORT_DESC);
+        return LiteralExpression.newConstant(literal, dataType, SortOrder.DESC);
     }
     
     private static Date date(int month, int day, int year) {

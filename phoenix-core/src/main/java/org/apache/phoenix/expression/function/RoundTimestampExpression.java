@@ -29,7 +29,7 @@ import com.google.common.collect.Lists;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDataType.PDataCodec;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -89,11 +89,11 @@ public class RoundTimestampExpression extends RoundDateExpression {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (children.get(0).evaluate(tuple, ptr)) {
-            ColumnModifier columnModifier = children.get(0).getColumnModifier();
+            SortOrder sortOrder = children.get(0).getSortOrder();
             PDataType dataType = getDataType();
-            int nanos = dataType.getNanos(ptr, columnModifier);
+            int nanos = dataType.getNanos(ptr, sortOrder);
             if(nanos >= HALF_OF_NANOS_IN_MILLI) {
-                long timeMillis = dataType.getMillis(ptr, columnModifier);
+                long timeMillis = dataType.getMillis(ptr, sortOrder);
                 Timestamp roundedTs = new Timestamp(timeMillis + 1);
                 byte[] byteValue = dataType.toBytes(roundedTs);
                 ptr.set(byteValue);

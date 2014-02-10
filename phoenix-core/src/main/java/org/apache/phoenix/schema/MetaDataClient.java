@@ -25,7 +25,6 @@ import static com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_MODIFIER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
@@ -41,6 +40,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM_NAME;
@@ -195,7 +195,7 @@ public class MetaDataClient {
         COLUMN_SIZE + "," +
         DECIMAL_DIGITS + "," +
         ORDINAL_POSITION + "," + 
-        COLUMN_MODIFIER + "," +
+        SORT_ORDER + "," +
         DATA_TABLE_NAME + "," + // write this both in the column and table rows for access by metadata APIs
         ARRAY_SIZE +
         ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -332,7 +332,7 @@ public class MetaDataClient {
             colUpsert.setInt(9, column.getScale());
         }
         colUpsert.setInt(10, column.getPosition() + 1);
-        colUpsert.setInt(11, ColumnModifier.toSystemValue(column.getColumnModifier()));
+        colUpsert.setInt(11, column.getSortOrder().getSystemValue());
         colUpsert.setString(12, parentTableName);
         if (column.getArraySize() == null) {
             colUpsert.setNull(13, Types.INTEGER);
@@ -345,13 +345,13 @@ public class MetaDataClient {
     private PColumn newColumn(int position, ColumnDef def, PrimaryKeyConstraint pkConstraint, String defaultColumnFamily) throws SQLException {
         try {
             ColumnName columnDefName = def.getColumnDefName();
-            ColumnModifier columnModifier = def.getColumnModifier();
+            SortOrder sortOrder = def.getSortOrder();
             boolean isPK = def.isPK();
             if (pkConstraint != null) {
-                Pair<ColumnName,ColumnModifier> pkColumnModifier = pkConstraint.getColumn(columnDefName);
-                if (pkColumnModifier != null) {
+                Pair<ColumnName, SortOrder> pkSortOrder = pkConstraint.getColumn(columnDefName);
+                if (pkSortOrder != null) {
                     isPK = true;
-                    columnModifier = pkColumnModifier.getSecond();
+                    sortOrder = pkSortOrder.getSecond();
                 }
             }
             
@@ -376,7 +376,7 @@ public class MetaDataClient {
             }
             
             PColumn column = new PColumnImpl(PNameFactory.newName(columnName), familyName, def.getDataType(),
-                    def.getMaxLength(), def.getScale(), def.isNull(), position, columnModifier, def.getArraySize());
+                    def.getMaxLength(), def.getScale(), def.isNull(), position, sortOrder, def.getArraySize());
             return column;
         } catch (IllegalArgumentException e) { // Based on precondition check in constructor
             throw new SQLException(e);
@@ -480,7 +480,7 @@ public class MetaDataClient {
         PrimaryKeyConstraint pk = statement.getIndexConstraint();
         TableName indexTableName = statement.getIndexTableName();
         
-        List<Pair<ColumnName, ColumnModifier>> indexedPkColumns = pk.getColumnNames();
+        List<Pair<ColumnName, SortOrder>> indexedPkColumns = pk.getColumnNames();
         List<ColumnName> includedColumns = statement.getIncludeColumns();
         TableRef tableRef = null;
         PTable table = null;
@@ -508,27 +508,27 @@ public class MetaDataClient {
                 } else {
                     unusedPkColumns = new LinkedHashSet<PColumn>(dataTable.getPKColumns());
                 }
-                List<Pair<ColumnName, ColumnModifier>> allPkColumns = Lists.newArrayListWithExpectedSize(unusedPkColumns.size());
+                List<Pair<ColumnName, SortOrder>> allPkColumns = Lists.newArrayListWithExpectedSize(unusedPkColumns.size());
                 List<ColumnDef> columnDefs = Lists.newArrayListWithExpectedSize(includedColumns.size() + indexedPkColumns.size());
                 
                 // First columns are the indexed ones
-                for (Pair<ColumnName, ColumnModifier> pair : indexedPkColumns) {
+                for (Pair<ColumnName, SortOrder> pair : indexedPkColumns) {
                     ColumnName colName = pair.getFirst();
                     PColumn col = resolver.resolveColumn(null, colName.getFamilyName(), colName.getColumnName()).getColumn();
                     unusedPkColumns.remove(col);
                     PDataType dataType = IndexUtil.getIndexColumnDataType(col);
                     colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
-                    allPkColumns.add(new Pair<ColumnName, ColumnModifier>(colName, pair.getSecond()));
-                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, null));
+                    allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, pair.getSecond()));
+                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, SortOrder.getDefault()));
                 }
                 
                 // Next all the PK columns from the data table that aren't indexed
                 if (!unusedPkColumns.isEmpty()) {
                     for (PColumn col : unusedPkColumns) {
                         ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
-                        allPkColumns.add(new Pair<ColumnName, ColumnModifier>(colName, col.getColumnModifier()));
+                        allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, col.getSortOrder()));
                         PDataType dataType = IndexUtil.getIndexColumnDataType(col);
-                        columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, col.getColumnModifier()));
+                        columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, col.getSortOrder()));
                     }
                 }
                 pk = FACTORY.primaryKey(null, allPkColumns);
@@ -549,7 +549,7 @@ public class MetaDataClient {
                         if (!SchemaUtil.isPKColumn(col)) {
                             // Need to re-create ColumnName, since the above one won't have the column family name
                             colName = ColumnName.caseSensitiveColumnName(col.getFamilyName().getString(), IndexUtil.getIndexColumnName(col));
-                            columnDefs.add(FACTORY.columnDef(colName, col.getDataType().getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, col.getColumnModifier()));
+                            columnDefs.add(FACTORY.columnDef(colName, col.getDataType().getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, col.getSortOrder()));
                         }
                     }
                 }
@@ -665,8 +665,8 @@ public class MetaDataClient {
             
             PrimaryKeyConstraint pkConstraint = statement.getPrimaryKeyConstraint();
             String pkName = null;
-            List<Pair<ColumnName,ColumnModifier>> pkColumnsNames = Collections.<Pair<ColumnName,ColumnModifier>>emptyList();
-            Iterator<Pair<ColumnName,ColumnModifier>> pkColumnsIterator = Iterators.emptyIterator();
+            List<Pair<ColumnName,SortOrder>> pkColumnsNames = Collections.<Pair<ColumnName,SortOrder>>emptyList();
+            Iterator<Pair<ColumnName,SortOrder>> pkColumnsIterator = Iterators.emptyIterator();
             if (pkConstraint != null) {
                 pkColumnsNames = pkConstraint.getColumnNames();
                 pkColumnsIterator = pkColumnsNames.iterator();
@@ -858,7 +858,7 @@ public class MetaDataClient {
                     .build().buildException();
             }
             if (!pkColumnsNames.isEmpty() && pkColumnsNames.size() != pkColumns.size() - positionOffset) { // Then a column name in the primary key constraint wasn't resolved
-                Iterator<Pair<ColumnName,ColumnModifier>> pkColumnNamesIterator = pkColumnsNames.iterator();
+                Iterator<Pair<ColumnName,SortOrder>> pkColumnNamesIterator = pkColumnsNames.iterator();
                 while (pkColumnNamesIterator.hasNext()) {
                     ColumnName colName = pkColumnNamesIterator.next().getFirst();
                     ColumnDef colDef = findColumnDefOrNull(colDefs, colName);
@@ -1305,7 +1305,7 @@ public class MetaDataClient {
                                 int indexColPosition = index.getColumns().size();
                                 PDataType indexColDataType = IndexUtil.getIndexColumnDataType(column);
                                 ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(column));
-                                ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), column.isNullable(), column.getMaxLength(), column.getScale(), true, column.getColumnModifier());
+                                ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), column.isNullable(), column.getMaxLength(), column.getScale(), true, column.getSortOrder());
                                 PColumn indexColumn = newColumn(indexColPosition, indexColDef, PrimaryKeyConstraint.EMPTY, index.getDefaultFamilyName() == null ? null : index.getDefaultFamilyName().getString());
                                 addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString());
                             }

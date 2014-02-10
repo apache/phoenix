@@ -48,7 +48,7 @@ public interface PDatum {
     Integer getScale();
     
     /**
-     * @return The modifier for this column or null if it doesn't have a modifier
+     * @return The SortOrder for this column, never null
      */
-    ColumnModifier getColumnModifier();
+    SortOrder getSortOrder();
 }

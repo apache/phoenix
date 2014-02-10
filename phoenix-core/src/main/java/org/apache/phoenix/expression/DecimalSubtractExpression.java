@@ -25,7 +25,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.NumberUtil;
@@ -73,10 +73,10 @@ public class DecimalSubtractExpression extends SubtractExpression {
             
             PDataType childType = childExpr.getDataType();
             boolean isDate = childType.isCoercibleTo(PDataType.DATE);
-            ColumnModifier childColumnModifier = childExpr.getColumnModifier();
+            SortOrder childSortOrder = childExpr.getSortOrder();
             BigDecimal bd = isDate ?
-                    BigDecimal.valueOf(childType.getCodec().decodeLong(ptr, childColumnModifier)) :
-                    (BigDecimal)PDataType.DECIMAL.toObject(ptr, childType, childColumnModifier);
+                    BigDecimal.valueOf(childType.getCodec().decodeLong(ptr, childSortOrder)) :
+                    (BigDecimal)PDataType.DECIMAL.toObject(ptr, childType, childSortOrder);
             
             if (result == null) {
                 result = bd;

@@ -52,8 +52,8 @@ public class DelegateDatum implements PDatum {
     }
     
 	@Override
-	public ColumnModifier getColumnModifier() {
-		return delegate.getColumnModifier();
+	public SortOrder getSortOrder() {
+		return delegate.getSortOrder();
 	}
 
     protected PDatum getDelegate() {

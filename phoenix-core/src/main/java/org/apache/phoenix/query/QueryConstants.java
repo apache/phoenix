@@ -26,7 +26,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CACHE_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHAR_OCTET_LENGTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_MODIFIER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CURRENT_VALUE;
@@ -184,7 +184,7 @@ public interface QueryConstants {
             SOURCE_DATA_TYPE + " INTEGER," + // supposed to be SHORT
             IS_AUTOINCREMENT + " VARCHAR," +
             // Columns added in 1.2.1
-            COLUMN_MODIFIER + " INTEGER," +
+            SORT_ORDER + " INTEGER," +
             SALT_BUCKETS + " INTEGER," +
             // Columns added in 2.0.0
             DATA_TABLE_NAME + " VARCHAR," +

@@ -289,8 +289,8 @@ public class PTableImpl implements PTable {
         Map<PName, List<PColumn>> familyMap = Maps.newLinkedHashMap();
         for (PColumn column : allColumns) {
             PName familyName = column.getFamilyName();
-            if (familyName == null) {
-                builder.addField(column, column.isNullable(), column.getColumnModifier());
+            if (familyName == null) {            	
+                builder.addField(column, column.isNullable(), column.getSortOrder());
             } else {
                 List<PColumn> columnsInFamily = familyMap.get(familyName);
                 if (columnsInFamily == null) {

@@ -44,7 +44,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import com.google.common.collect.Lists;
 import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -78,9 +78,9 @@ public class IndexTestUtil {
     private static void coerceDataValueToIndexValue(PColumn dataColumn, PColumn indexColumn, ImmutableBytesWritable ptr) {
         PDataType dataType = dataColumn.getDataType();
         // TODO: push to RowKeySchema? 
-        ColumnModifier dataModifier = dataColumn.getColumnModifier();
+        SortOrder dataModifier = dataColumn.getSortOrder();
         PDataType indexType = indexColumn.getDataType();
-        ColumnModifier indexModifier = indexColumn.getColumnModifier();
+        SortOrder indexModifier = indexColumn.getSortOrder();
         // We know ordinal position will match pk position, because you cannot
         // alter an index table.
         indexType.coerceBytes(ptr, dataType, dataModifier, indexModifier);

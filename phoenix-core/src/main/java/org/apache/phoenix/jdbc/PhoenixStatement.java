@@ -91,7 +91,7 @@ import org.apache.phoenix.parse.UpsertStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.MetaDataClient;
@@ -810,8 +810,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
             return null;
         }
 		@Override
-		public ColumnModifier getColumnModifier() {
-			return null;
+		public SortOrder getSortOrder() {
+			return SortOrder.getDefault();
 		}
     };
     private static final RowProjector EXPLAIN_PLAN_ROW_PROJECTOR = new RowProjector(Arrays.<ColumnProjector>asList(

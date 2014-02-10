@@ -358,7 +358,7 @@ public class JoinCompiler {
         	PName name = PNameFactory.newName(displayName);
     		PColumnImpl column = new PColumnImpl(name, familyName, sourceColumn.getDataType(), 
     				sourceColumn.getMaxLength(), sourceColumn.getScale(), sourceColumn.isNullable(), 
-    				position, sourceColumn.getColumnModifier(), sourceColumn.getArraySize());
+    				position, sourceColumn.getSortOrder(), sourceColumn.getArraySize());
         	Expression sourceExpression = new ColumnRef(sourceTable, sourceColumn.getPosition()).newColumnExpression();
         	projectedColumns.add(column);
         	sourceExpressions.add(sourceExpression);
@@ -1133,7 +1133,7 @@ public class JoinCompiler {
     			PColumnImpl column = new PColumnImpl(c.getName(), 
     					PNameFactory.newName(ScanProjector.VALUE_COLUMN_FAMILY), c.getDataType(), 
     					c.getMaxLength(), c.getScale(), innerJoin ? c.isNullable() : true, position++, 
-    					c.getColumnModifier(), c.getArraySize());
+    					c.getSortOrder(), c.getArraySize());
     			merged.add(column);
     		}
     	}

@@ -51,7 +51,7 @@ import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PName;
@@ -381,14 +381,14 @@ public class WhereOptimizer {
                         // For the actual type of the coerceBytes call, we use the node type instead of the rhs type, because
                         // for IN, the rhs type will be VARBINARY and no coerce will be done in that case (and we need it to
                         // be done).
-                        node.getChild().getDataType().coerceBytes(ptr, node.getDataType(), rhs.getColumnModifier(), node.getChild().getColumnModifier());
+                        node.getChild().getDataType().coerceBytes(ptr, node.getDataType(), rhs.getSortOrder(), node.getChild().getSortOrder());
                         lower = ByteUtil.copyKeyBytesIfNecessary(ptr);
                     }
                     byte[] upper = range.getUpperRange();
                     if (!range.upperUnbound()) {
                         ptr.set(upper);
                         // Do the reverse translation so we can optimize out the coerce expression
-                        node.getChild().getDataType().coerceBytes(ptr, node.getDataType(), rhs.getColumnModifier(), node.getChild().getColumnModifier());
+                        node.getChild().getDataType().coerceBytes(ptr, node.getDataType(), rhs.getSortOrder(), node.getChild().getSortOrder());
                         upper = ByteUtil.copyKeyBytesIfNecessary(ptr);
                     }
                     return KeyRange.getKeyRange(lower, range.isLowerInclusive(), upper, range.isUpperInclusive());
@@ -669,13 +669,8 @@ public class WhereOptimizer {
             KeySlots childSlots = childParts.get(0);
             KeySlot childSlot = childSlots.iterator().next();
             KeyPart childPart = childSlot.getKeyPart();
-            ColumnModifier modifier = childPart.getColumn().getColumnModifier();
-            CompareOp op = node.getFilterOp();
-            // For descending columns, the operator needs to be transformed to
-            // it's opposite, since the range is backwards.
-            if (modifier != null) {
-                op = modifier.transform(op);
-            }
+            SortOrder sortOrder = childPart.getColumn().getSortOrder();
+            CompareOp op = sortOrder.transform(node.getFilterOp());
             KeyRange keyRange = childPart.getKeyRange(op, rhs);
             return newKeyParts(childSlot, node, keyRange);
         }
@@ -719,7 +714,7 @@ public class WhereOptimizer {
             KeySlots childSlots = childParts.get(0);
             KeySlot childSlot = childSlots.iterator().next();
             final String startsWith = node.getLiteralPrefix();
-            byte[] key = PDataType.CHAR.toBytes(startsWith, node.getChildren().get(0).getColumnModifier());
+            byte[] key = PDataType.CHAR.toBytes(startsWith, node.getChildren().get(0).getSortOrder());
             // If the expression is an equality expression against a fixed length column
             // and the key length doesn't match the column length, the expression can
             // never be true.
@@ -755,7 +750,7 @@ public class WhereOptimizer {
             List<KeyRange> ranges = Lists.newArrayListWithExpectedSize(keyExpressions.size());
             KeySlot childSlot = childParts.get(0).iterator().next();
             KeyPart childPart = childSlot.getKeyPart();
-            ColumnModifier mod = node.getChildren().get(0).getColumnModifier();
+            SortOrder sortOrder = node.getChildren().get(0).getSortOrder();
             // We can only optimize a row value constructor that is fully qualified
             if (childSlot.getPKSpan() > 1 && !isFullyQualified(childSlot.getPKSpan())) {
                 // Just return a key part that has the min/max of the IN list, but doesn't
@@ -769,7 +764,7 @@ public class WhereOptimizer {
             for (Expression key : keyExpressions) {
                 KeyRange range = childPart.getKeyRange(CompareOp.EQUAL, key);
                 if (range != KeyRange.EMPTY_RANGE) { // null means it can't possibly be in range
-                    if (mod != null) {
+                    if (sortOrder == SortOrder.DESC) {
                         range = range.invert();
                     }
                     ranges.add(range);
@@ -1109,8 +1104,8 @@ public class WhereOptimizer {
                                 }
 
                                 @Override
-                                public ColumnModifier getColumnModifier() {
-                                    return childPart.getColumn().getColumnModifier();
+                                public SortOrder getSortOrder() {
+                                    return childPart.getColumn().getSortOrder();
                                 }
                             };
                         }

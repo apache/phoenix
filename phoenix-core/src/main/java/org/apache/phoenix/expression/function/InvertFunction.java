@@ -30,7 +30,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -50,14 +50,14 @@ public class InvertFunction extends ScalarFunction {
         if (!getChildExpression().evaluate(tuple, ptr)) { return false; }
         if (ptr.getLength() == 0) { return true; }
         byte[] buf = new byte[ptr.getLength()];
-        ColumnModifier.SORT_DESC.apply(ptr.get(), ptr.getOffset(), buf, 0, ptr.getLength());
+        SortOrder.invert(ptr.get(), ptr.getOffset(), buf, 0, ptr.getLength());
         ptr.set(buf);
         return true;
     }
 
     @Override
-    public ColumnModifier getColumnModifier() {
-        return getChildExpression().getColumnModifier() == null ? ColumnModifier.SORT_DESC : null;
+    public SortOrder getSortOrder() {
+        return getChildExpression().getSortOrder() == SortOrder.ASC ? SortOrder.DESC : SortOrder.ASC;
     }
 
     @Override

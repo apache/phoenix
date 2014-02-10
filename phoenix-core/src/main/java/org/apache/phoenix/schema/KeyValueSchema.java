@@ -67,7 +67,7 @@ public class KeyValueSchema extends ValueSchema {
         }
         
         public KeyValueSchemaBuilder addField(PDatum datum) {
-            super.addField(datum, fields.size() <  this.minNullable, null);
+            super.addField(datum, fields.size() <  this.minNullable, SortOrder.getDefault());
             return this;
         }
     }

@@ -52,9 +52,9 @@ public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
         List<KeyValue> dataKeyValues = iterator.next().getSecond();
         KeyValue keyValue = dataKeyValues.get(0);
         
-        List<ColumnModifier> mods = Lists.newArrayListWithExpectedSize(table.getPKColumns().size());
+        List<SortOrder> sortOrders = Lists.newArrayListWithExpectedSize(table.getPKColumns().size());
         for (PColumn col : table.getPKColumns()) {
-            mods.add(col.getColumnModifier());
+            sortOrders.add(col.getSortOrder());
         }
         RowKeySchema schema = table.getRowKeySchema();
         int minOffset = keyValue.getRowOffset();
@@ -76,8 +76,8 @@ public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
             }
             assertTrue(hasValue);
             PDataType type = PDataType.fromLiteral(values[i]);
-            ColumnModifier mod = mods.get(i);
-            Object value = type.toObject(ptr, schema.getField(i).getDataType(), mod);
+            SortOrder sortOrder = sortOrders.get(i);
+            Object value = type.toObject(ptr, schema.getField(i).getDataType(), sortOrder);
             assertEquals(values[i], value);
         }
         assertEquals(nExpectedValues, i);
@@ -90,8 +90,8 @@ public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
             }
             assertTrue(hasValue);
             PDataType type = PDataType.fromLiteral(values[i]);
-            ColumnModifier mod = mods.get(i);
-            Object value = type.toObject(ptr, schema.getField(i).getDataType(), mod);
+            SortOrder sortOrder = sortOrders.get(i);
+            Object value = type.toObject(ptr, schema.getField(i).getDataType(), sortOrder);
             assertEquals(values[i], value);
         }
         assertEquals(-1, i);

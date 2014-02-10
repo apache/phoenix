@@ -70,7 +70,7 @@ import org.apache.phoenix.parse.UpsertStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
@@ -136,11 +136,9 @@ public class UpsertCompiler {
                     Integer precision = rsPrecision == 0 ? null : rsPrecision;
                     int rsScale = rs.getMetaData().getScale(i+1);
                     Integer scale = rsScale == 0 ? null : rsScale;
-                    // If ColumnModifier from expression in SELECT doesn't match the
-                    // column being projected into then invert the bits.
-                    if (column.getColumnModifier() == ColumnModifier.SORT_DESC) {
+                    if (column.getSortOrder() == SortOrder.DESC) {
                         byte[] tempByteValue = Arrays.copyOf(byteValue, byteValue.length);
-                        byteValue = ColumnModifier.SORT_DESC.apply(byteValue, 0, tempByteValue, 0, byteValue.length);
+                        byteValue = SortOrder.invert(byteValue, 0, tempByteValue, 0, byteValue.length);
                     }
                     // We are guaranteed that the two column will have compatible types,
                     // as we checked that before.
@@ -572,7 +570,7 @@ public class UpsertCompiler {
                     long totalRowCount = 0;
                     while ((tuple=iterator.next()) != null) {// Runs query
                         KeyValue kv = tuple.getValue(0);
-                        totalRowCount += PDataType.LONG.getCodec().decodeLong(kv.getBuffer(), kv.getValueOffset(), null);
+                        totalRowCount += PDataType.LONG.getCodec().decodeLong(kv.getBuffer(), kv.getValueOffset(), SortOrder.getDefault());
                     }
                     // Return total number of rows that have been updated. In the case of auto commit being off
                     // the mutations will all be in the mutation state of the current connection.
@@ -624,11 +622,11 @@ public class UpsertCompiler {
             Object value = null;
             byte[] byteValue = ByteUtil.copyKeyBytesIfNecessary(ptr);
             if (constantExpression.getDataType() != null) {
-                // If ColumnModifier from expression in SELECT doesn't match the
+                // If SortOrder from expression in SELECT doesn't match the
                 // column being projected into then invert the bits.
-                if (constantExpression.getColumnModifier() != column.getColumnModifier()) {
+                if (constantExpression.getSortOrder() != column.getSortOrder()) {
                     byte[] tempByteValue = Arrays.copyOf(byteValue, byteValue.length);
-                    byteValue = ColumnModifier.SORT_DESC.apply(byteValue, 0, tempByteValue, 0, byteValue.length);
+                    byteValue = SortOrder.invert(byteValue, 0, tempByteValue, 0, byteValue.length);
                 }
                 value = constantExpression.getDataType().toObject(byteValue);
                 if (!constantExpression.getDataType().isCoercibleTo(column.getDataType(), value)) { 
@@ -717,7 +715,7 @@ public class UpsertCompiler {
             if (isTopLevel()) {
                 context.getBindManager().addParamMetaData(node, column);
                 Object value = context.getBindManager().getBindValue(node);
-                return LiteralExpression.newConstant(value, column.getDataType(), column.getColumnModifier(), true);
+                return LiteralExpression.newConstant(value, column.getDataType(), column.getSortOrder(), true);
             }
             return super.visit(node);
         }    
@@ -725,7 +723,7 @@ public class UpsertCompiler {
         @Override
         public Expression visit(LiteralParseNode node) throws SQLException {
             if (isTopLevel()) {
-                return LiteralExpression.newConstant(node.getValue(), column.getDataType(), column.getColumnModifier(), true);
+                return LiteralExpression.newConstant(node.getValue(), column.getDataType(), column.getSortOrder(), true);
             }
             return super.visit(node);
         }
@@ -768,7 +766,7 @@ public class UpsertCompiler {
             ImmutableBytesWritable ptr = context.getTempPtr();
             literal.evaluate(null, ptr);
             PColumn column = columnRef.getColumn();
-            column.getDataType().coerceBytes(ptr, literal.getDataType(), literal.getColumnModifier(), column.getColumnModifier());
+            column.getDataType().coerceBytes(ptr, literal.getDataType(), literal.getSortOrder(), column.getSortOrder());
             viewColumns.put(columnRef, ByteUtil.copyKeyBytesIfNecessary(ptr));
             return super.visitLeave(node, children);
         }
