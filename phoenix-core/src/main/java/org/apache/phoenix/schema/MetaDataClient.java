@@ -555,7 +555,7 @@ public class MetaDataClient {
                 }
                 
                 // Set DEFAULT_COLUMN_FAMILY_NAME of index to match data table
-                if (dataTable.getDefaultFamilyName() != null) {
+                if (dataTable.getDefaultFamilyName() != null && dataTable.getType() != PTableType.VIEW) {
                     statement.getProps().put("", new Pair<String,Object>(DEFAULT_COLUMN_FAMILY_NAME,dataTable.getDefaultFamilyName().getString()));
                 }
                 CreateTableStatement tableStatement = FACTORY.createTable(indexTableName, statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX, statement.ifNotExists(), null, null, statement.getBindCount());
