@@ -25,6 +25,12 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.index.IndexTestingUtils;
+import org.apache.hadoop.hbase.index.TableName;
+import org.apache.hadoop.hbase.index.covered.example.ColumnGroup;
+import org.apache.hadoop.hbase.index.covered.example.CoveredColumn;
+import org.apache.hadoop.hbase.index.covered.example.CoveredColumnIndexSpecifierBuilder;
+import org.apache.hadoop.hbase.index.covered.example.CoveredColumnIndexer;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionServerAccounting;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
@@ -35,13 +41,6 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mockito;
-
-import org.apache.hadoop.hbase.index.IndexTestingUtils;
-import org.apache.hadoop.hbase.index.TableName;
-import org.apache.hadoop.hbase.index.covered.example.ColumnGroup;
-import org.apache.hadoop.hbase.index.covered.example.CoveredColumn;
-import org.apache.hadoop.hbase.index.covered.example.CoveredColumnIndexSpecifierBuilder;
-import org.apache.hadoop.hbase.index.covered.example.CoveredColumnIndexer;
 
 /**
  * For pre-0.94.9 instances, this class tests correctly deserializing WALEdits w/o compression. Post
@@ -172,8 +171,9 @@ public class TestWALReplayWithIndexWritesAndCompressedWAL {
     Mockito.when(mockServerName.getServerName()).thenReturn(tableNameStr + ",1234");
     Mockito.when(mockRS.getServerName()).thenReturn(mockServerName);
     HRegion region = new HRegion(basedir, wal, this.fs, this.conf, hri, htd, mockRS);
-    long seqid = region.initialize();
-    
+    region.initialize();
+    region.getSequenceId().set(0);
+
     //make an attempted write to the primary that should also be indexed
     byte[] rowkey = Bytes.toBytes("indexed_row_key");
     Put p = new Put(rowkey);
@@ -275,3 +275,4 @@ public class TestWALReplayWithIndexWritesAndCompressedWAL {
     return count;
   }
 }
+

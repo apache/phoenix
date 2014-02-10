@@ -17,10 +17,6 @@
  */
 package org.apache.phoenix.client;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.util.Arrays;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -53,7 +49,7 @@ public class ClientKeyValue extends KeyValue {
   private Type type;
   private long ts;
   private ImmutableBytesWritable value;
-  private byte[] bytes = null;
+  private KeyValue delegate = null;
 
   /**
    * @param row must not be <tt>null</tt>
@@ -306,39 +302,6 @@ public class ClientKeyValue extends KeyValue {
     return this.matchingFamily(family) && matchingQualifier(qualifier);
   }
 
-  public void write(DataOutput out) throws IOException {
-    // we need to simulate the keyvalue writing, but actually step through each buffer.
-    //start with keylength
-    long longkeylength = KeyValue.KEY_INFRASTRUCTURE_SIZE + row.getLength() + family.getLength()
-        + qualifier.getLength();
-    if (longkeylength > Integer.MAX_VALUE) {
-      throw new IllegalArgumentException("keylength " + longkeylength + " > " + Integer.MAX_VALUE);
-    }
-    // need to figure out the max length before we start
-    int length = this.getLength();
-    out.writeInt(length);
-
-    // write the actual data
-    int keylength = (int) longkeylength;
-    out.writeInt(keylength);
-    int vlength = value == null ? 0 : value.getLength();
-    out.writeInt(vlength);
-    out.writeShort((short) (row.getLength() & 0x0000ffff));
-    out.write(this.row.get(), this.row.getOffset(), this.row.getLength());
-    out.writeByte((byte) (family.getLength() & 0x0000ff));
-    if (family.getLength() != 0) {
-      out.write(this.family.get(), this.family.getOffset(), this.family.getLength());
-    }
-    if (qualifier != NULL) {
-      out.write(this.qualifier.get(), this.qualifier.getOffset(), this.qualifier.getLength());
-    }
-    out.writeLong(ts);
-    out.writeByte(this.type.getCode());
-    if (this.value != NULL) {
-      out.write(this.value.get(), this.value.getOffset(), this.value.getLength());
-    }
-  }
-
   @Override
   public int getLength() {
     return KEYVALUE_INFRASTRUCTURE_SIZE + KeyValue.ROW_LENGTH_SIZE + row.getLength()
@@ -450,27 +413,17 @@ public class ClientKeyValue extends KeyValue {
         + " does not support a single backing buffer.");
   }
 
+  @SuppressWarnings("deprecation")
   @Override
   public byte[] getBuffer() {
-	if(this.bytes != null) return this.bytes;
-	try {
-		ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
-		DataOutputStream out = new DataOutputStream(byteStream);
-		try {
-			write(out);
-			this.bytes = byteStream.toByteArray();
-			return this.bytes;
-		} finally {
-			if (out != null) {
-				out.close();
-				out = null;
-			}
-		}
-	} catch (IOException ioe) {
-		throw new UnsupportedOperationException(
-				ClientKeyValue.class.getSimpleName()
-						+ " can not being serialized to a single backing buffer. Due to " + ioe);
-	}
+    if (this.delegate != null) {
+      return this.delegate.getBuffer();
+    }
+    this.delegate =
+        new KeyValue(row.get(), row.getOffset(), row.getLength(), family.get(), family.getOffset(),
+            family.getLength(), qualifier.get(), qualifier.getOffset(), qualifier.getLength(),
+            this.ts, type, value.get(), value.getOffset(), value.getLength());
+    return this.delegate.getBuffer();
   }
-  
 }
+

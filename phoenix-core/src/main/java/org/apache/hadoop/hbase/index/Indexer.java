@@ -21,8 +21,6 @@ package org.apache.hadoop.hbase.index;
 
 import static org.apache.hadoop.hbase.index.util.IndexManagementUtil.rethrowIndexingException;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -50,17 +48,6 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.InternalScanner;
-import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
-import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
-import org.apache.hadoop.hbase.regionserver.ScanType;
-import org.apache.hadoop.hbase.regionserver.Store;
-import org.apache.hadoop.hbase.regionserver.wal.HLog;
-import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
-import org.apache.hadoop.hbase.util.Pair;
-
-import com.google.common.collect.Multimap;
 import org.apache.hadoop.hbase.index.builder.IndexBuildManager;
 import org.apache.hadoop.hbase.index.builder.IndexBuilder;
 import org.apache.hadoop.hbase.index.builder.IndexBuildingFailureException;
@@ -73,7 +60,18 @@ import org.apache.hadoop.hbase.index.write.IndexWriter;
 import org.apache.hadoop.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.hadoop.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.apache.hadoop.hbase.index.write.recovery.TrackingParallelWriterIndexCommitter;
+import org.apache.hadoop.hbase.regionserver.InternalScanner;
+import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.ScanType;
+import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.regionserver.wal.HLog;
+import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
+import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.util.MetaDataUtil;
+
+import com.google.common.collect.Multimap;
 
 /**
  * Do all the work of managing index updates from a single coprocessor. All Puts/Delets are passed
@@ -288,6 +286,12 @@ public class Indexer extends BaseRegionObserver {
     Map<ImmutableBytesPtr, MultiMutation> mutations =
         new HashMap<ImmutableBytesPtr, MultiMutation>();
 
+    Durability defaultDurability = Durability.SYNC_WAL;
+    if(c.getEnvironment().getRegion() != null) {
+    	defaultDurability = c.getEnvironment().getRegion().getTableDesc().getDurability();
+    	defaultDurability = (defaultDurability == Durability.USE_DEFAULT) ? 
+    			Durability.SYNC_WAL : defaultDurability;
+    }
     Durability durability = Durability.SKIP_WAL;
     for (int i = 0; i < miniBatchOp.size(); i++) {
       // remove the batch keyvalue marker - its added for all puts
@@ -311,9 +315,10 @@ public class Indexer extends BaseRegionObserver {
         continue;
       }
       
-      // figure out if this is batch is durable or not
-      if (m.getDurability().ordinal() > durability.ordinal()) {
-        durability = m.getDurability();
+      Durability effectiveDurablity = (m.getDurability() == Durability.USE_DEFAULT) ? 
+    		  defaultDurability : m.getDurability();
+      if (effectiveDurablity.ordinal() > durability.ordinal()) {
+        durability = effectiveDurablity;
       }
 
       // add the mutation to the batch set
@@ -695,3 +700,4 @@ public class Indexer extends BaseRegionObserver {
     desc.addCoprocessor(Indexer.class.getName(), null, Coprocessor.PRIORITY_USER, properties);
   }
 }
+
