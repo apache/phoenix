@@ -24,6 +24,7 @@ import static org.apache.phoenix.util.TestUtil.closeConnection;
 import static org.apache.phoenix.util.TestUtil.closeStatement;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -40,12 +41,12 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.Test;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Test;
 
 
 
@@ -170,8 +171,8 @@ public class AlterTableTest extends BaseHBaseManagedTimeTest {
                 
                 HTableInterface htable1 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("TEST_TABLE")); 
                 HTableDescriptor htableDesciptor1 = htable1.getTableDescriptor();
-                HColumnDescriptor hcolumnDescriptor1 = htableDesciptor1.getFamily(Bytes.toBytes("_0"));
-                assertTrue(hcolumnDescriptor1.isInMemory());
+                HColumnDescriptor hcolumnDescriptor1 = htableDesciptor1.getFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+                assertNotNull(hcolumnDescriptor1);
                
                 try {
                     

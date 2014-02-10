@@ -363,7 +363,8 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
                             LiteralExpression.newConstant(1),
                             LiteralExpression.newConstant(3))
                         ),
-                    keyPrefix), QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES),
+                    keyPrefix),
+                QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES),
             filter);
     }
 

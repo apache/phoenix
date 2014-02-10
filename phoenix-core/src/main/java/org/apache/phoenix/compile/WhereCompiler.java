@@ -26,9 +26,6 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
-
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Sets;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
@@ -55,6 +52,9 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Sets;
 
 
 /**
@@ -191,7 +191,7 @@ public class WhereCompiler {
                 PTable table = context.getResolver().getTables().get(0).getTable();
                 byte[] essentialCF = table.getType() == PTableType.VIEW 
                         ? ByteUtil.EMPTY_BYTE_ARRAY 
-                        : SchemaUtil.getEmptyColumnFamily(table.getColumnFamilies());
+                        : SchemaUtil.getEmptyColumnFamily(table);
                 filter = new RowKeyComparisonFilter(whereClause, essentialCF);
                 break;
             case SINGLE:

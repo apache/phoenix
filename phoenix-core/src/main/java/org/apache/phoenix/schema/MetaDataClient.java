@@ -342,7 +342,7 @@ public class MetaDataClient {
         colUpsert.execute();
     }
 
-    private PColumn newColumn(int position, ColumnDef def, PrimaryKeyConstraint pkConstraint) throws SQLException {
+    private PColumn newColumn(int position, ColumnDef def, PrimaryKeyConstraint pkConstraint, String defaultColumnFamily) throws SQLException {
         try {
             ColumnName columnDefName = def.getColumnDefName();
             ColumnModifier columnModifier = def.getColumnModifier();
@@ -372,7 +372,7 @@ public class MetaDataClient {
                 }
                 familyName = PNameFactory.newName(family);
             } else if (!isPK) {
-                familyName = PNameFactory.newName(QueryConstants.DEFAULT_COLUMN_FAMILY);
+                familyName = PNameFactory.newName(defaultColumnFamily == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : defaultColumnFamily);
             }
             
             PColumn column = new PColumnImpl(PNameFactory.newName(columnName), familyName, def.getDataType(),
@@ -400,7 +400,7 @@ public class MetaDataClient {
         // Getting the schema through the current connection doesn't work when the connection has an scn specified
         // Since the table won't be added to the current connection.
         TableRef tableRef = new TableRef(null, table, ts, false);
-        byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table.getColumnFamilies());
+        byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
         MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), emptyCF, null, null, tableRef.getTimeStamp());
         return connection.getQueryServices().updateData(plan);
     }
@@ -554,8 +554,12 @@ public class MetaDataClient {
                     }
                 }
                 
+                // Set DEFAULT_COLUMN_FAMILY_NAME of index to match data table
+                if (dataTable.getDefaultFamilyName() != null) {
+                    statement.getProps().put("", new Pair<String,Object>(DEFAULT_COLUMN_FAMILY_NAME,dataTable.getDefaultFamilyName().getString()));
+                }
                 CreateTableStatement tableStatement = FACTORY.createTable(indexTableName, statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX, statement.ifNotExists(), null, null, statement.getBindCount());
-                table = createTableInternal(tableStatement, splits, tableRef.getTable(), null, null); // TODO: tenant-specific index
+                table = createTableInternal(tableStatement, splits, dataTable, null, null); // TODO: tenant-specific index
                 break;
             } catch (ConcurrentTableMutationException e) { // Can happen if parent data table changes while above is in progress
                 if (retry) {
@@ -717,14 +721,11 @@ public class MetaDataClient {
                 }
                 isSalted = (saltBucketNum != null);
                 
-                defaultFamilyName = (String)tableProps.remove(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);
-                if (defaultFamilyName == null) {
-                    // Until we change this default, we need to have all tables set it
-                    defaultFamilyName = QueryConstants.DEFAULT_COLUMN_FAMILY;
-                }
-                
                 Boolean multiTenantProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.MULTI_TENANT);
                 multiTenant = Boolean.TRUE.equals(multiTenantProp);
+                
+                // Don't remove this prop, as we need it when we create the HBase metadata
+                defaultFamilyName = (String)tableProps.get(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);                
             }
             
             boolean disableWAL = false;
@@ -801,7 +802,7 @@ public class MetaDataClient {
                     }
                     isPK = true;
                 }
-                PColumn column = newColumn(position++, colDef, pkConstraint);
+                PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName);
                 if (SchemaUtil.isPKColumn(column)) {
                     // TODO: remove this constraint?
                     if (pkColumnsIterator.hasNext() && !column.getName().getString().equals(pkColumnsIterator.next().getFirst().getColumnName())) {
@@ -1291,7 +1292,7 @@ public class MetaDataClient {
                             }
                         }                        
                         throwIfAlteringViewPK(colDef, table);
-                        PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY);
+                        PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString());
                         columns.add(column);
                         addColumnMutation(schemaName, tableName, column, colUpsert, null);
 
@@ -1305,7 +1306,7 @@ public class MetaDataClient {
                                 PDataType indexColDataType = IndexUtil.getIndexColumnDataType(column);
                                 ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(column));
                                 ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), column.isNullable(), column.getMaxLength(), column.getScale(), true, column.getColumnModifier());
-                                PColumn indexColumn = newColumn(indexColPosition, indexColDef, PrimaryKeyConstraint.EMPTY);
+                                PColumn indexColumn = newColumn(indexColPosition, indexColDef, PrimaryKeyConstraint.EMPTY, index.getDefaultFamilyName() == null ? null : index.getDefaultFamilyName().getString());
                                 addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString());
                             }
                         }
@@ -1363,7 +1364,7 @@ public class MetaDataClient {
                             table.getColumnFamily(family.getFirst());
                         } catch (ColumnFamilyNotFoundException e) {
                             projectCF = family.getFirst();
-                            emptyCF = SchemaUtil.getEmptyColumnFamily(table.getColumnFamilies());
+                            emptyCF = SchemaUtil.getEmptyColumnFamily(table);
                         }
                     }
                 }
@@ -1467,7 +1468,7 @@ public class MetaDataClient {
      */
     private static byte[] getNewEmptyColumnFamilyOrNull (PTable table, PColumn columnToDrop) {
         if (table.getType() != PTableType.VIEW && !SchemaUtil.isPKColumn(columnToDrop) && table.getColumnFamilies().get(0).getName().equals(columnToDrop.getFamilyName()) && table.getColumnFamilies().get(0).getColumns().size() == 1) {
-            return SchemaUtil.getEmptyColumnFamily(table.getColumnFamilies().subList(1, table.getColumnFamilies().size()));
+            return SchemaUtil.getEmptyColumnFamily(table.getDefaultFamilyName(), table.getColumnFamilies().subList(1, table.getColumnFamilies().size()));
         }
         // If unchanged, return null
         return null;

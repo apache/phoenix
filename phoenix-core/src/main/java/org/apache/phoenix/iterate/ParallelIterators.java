@@ -37,10 +37,6 @@ import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.base.Function;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
@@ -59,6 +55,10 @@ import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Function;
 
 
 /**
@@ -104,7 +104,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                 scan.addFamily(table.getColumnFamilies().get(0).getName().getBytes());
                 ScanUtil.andFilterAtBeginning(scan, new FirstKeyOnlyFilter());
             } else {
-                byte[] ecf = SchemaUtil.getEmptyColumnFamily(table.getColumnFamilies());
+                byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
                 // Project empty key value unless the column family containing it has
                 // been projected in its entirety.
                 if (!familyMap.containsKey(ecf) || familyMap.get(ecf) != null) {

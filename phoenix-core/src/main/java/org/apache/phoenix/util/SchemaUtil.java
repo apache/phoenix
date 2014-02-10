@@ -203,11 +203,11 @@ public class SchemaUtil {
     }
 
     public static String getColumnDisplayName(byte[] cf, byte[] cq) {
-        return getName(cf == null || cf.length == 0 || Bytes.compareTo(cf, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES) == 0 ? ByteUtil.EMPTY_BYTE_ARRAY : cf, cq);
+        return getName(cf == null || cf.length == 0 ? ByteUtil.EMPTY_BYTE_ARRAY : cf, cq);
     }
 
     public static String getColumnDisplayName(String cf, String cq) {
-        return getName(cf == null || cf.isEmpty() || QueryConstants.DEFAULT_COLUMN_FAMILY.equals(cf) ? null : cf, cq);
+        return getName(cf == null || cf.isEmpty() ? null : cf, cq);
     }
 
     public static String getMetaDataEntityName(String schemaName, String tableName, String familyName, String columnName) {
@@ -331,12 +331,18 @@ public class SchemaUtil {
         return isString ? ("'" + type.toObject(value).toString() + "'") : type.toObject(value).toString();
     }
 
-    public static byte[] getEmptyColumnFamily(List<PColumnFamily> families) {
-        return families.isEmpty() ? QueryConstants.EMPTY_COLUMN_BYTES : families.get(0).getName().getBytes();
+    public static byte[] getEmptyColumnFamily(PName defaultColumnFamily, List<PColumnFamily> families) {
+        return families.isEmpty() ? defaultColumnFamily == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : defaultColumnFamily.getBytes() : families.get(0).getName().getBytes();
     }
 
-    public static ImmutableBytesPtr getEmptyColumnFamilyPtr(List<PColumnFamily> families) {
-        return families.isEmpty() ? QueryConstants.EMPTY_COLUMN_BYTES_PTR : families.get(0)
+    public static byte[] getEmptyColumnFamily(PTable table) {
+        List<PColumnFamily> families = table.getColumnFamilies();
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes() : families.get(0).getName().getBytes();
+    }
+
+    public static ImmutableBytesPtr getEmptyColumnFamilyPtr(PTable table) {
+        List<PColumnFamily> families = table.getColumnFamilies();
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES_PTR : table.getDefaultFamilyName().getBytesPtr() : families.get(0)
                 .getName().getBytesPtr();
     }
 

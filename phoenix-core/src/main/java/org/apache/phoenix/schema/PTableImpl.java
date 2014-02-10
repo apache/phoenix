@@ -532,7 +532,7 @@ public class PTableImpl implements PTable {
                 // we upsert it), se instead add a KV that is always emtpy. This allows us to imitate SQL semantics given the
                 // way HBase works.
                 addQuietly(setValues, kvBuilder, kvBuilder.buildPut(keyPtr,
-                    SchemaUtil.getEmptyColumnFamilyPtr(getColumnFamilies()),
+                    SchemaUtil.getEmptyColumnFamilyPtr(PTableImpl.this),
                     QueryConstants.EMPTY_COLUMN_BYTES_PTR, ts, ByteUtil.EMPTY_BYTE_ARRAY_PTR));
                 mutations.add(setValues);
                 if (!unsetValues.isEmpty()) {

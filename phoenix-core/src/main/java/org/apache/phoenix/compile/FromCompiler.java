@@ -282,7 +282,7 @@ public class FromCompiler {
                 List<PColumn> allcolumns = new ArrayList<PColumn>();
                 allcolumns.addAll(theTable.getColumns());
                 int position = allcolumns.size();
-                PName defaultFamilyName = PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(theTable.getColumnFamilies()));
+                PName defaultFamilyName = PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(theTable));
                 for (ColumnDef dynColumn : dynColumns) {
                     PName familyName = defaultFamilyName;
                     PName name = PNameFactory.newName(dynColumn.getColumnDefName().getColumnName());
