@@ -40,6 +40,7 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.RoundDateExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -47,6 +48,8 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.junit.Test;
 
 
@@ -152,7 +155,12 @@ public class HavingCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select count(1) from atable group by a_string having count(1) >= 1 or a_string = 'foo'";
         List<Object> binds = Collections.emptyList();
         Expressions expressions = compileStatement(query,binds);
-        Expression h = or(constantComparison(CompareOp.GREATER_OR_EQUAL, new CountAggregateFunction(),1L),constantComparison(CompareOp.EQUAL, BaseConnectionlessQueryTest.A_STRING,"foo"));
+        PColumn aCol = BaseConnectionlessQueryTest.ATABLE.getColumn("A_STRING");
+        Expression h = or(
+                constantComparison(CompareOp.GREATER_OR_EQUAL, new CountAggregateFunction(),1L),
+                constantComparison(CompareOp.EQUAL, 
+                        new RowKeyColumnExpression(aCol, // a_string comes from group by key in this case
+                                new RowKeyValueAccessor(Arrays.<PColumn>asList(aCol), 0)),"foo"));
         assertTrue(LiteralExpression.isTrue(expressions.whereClause));
         assertEquals(h, expressions.havingClause);
     }
