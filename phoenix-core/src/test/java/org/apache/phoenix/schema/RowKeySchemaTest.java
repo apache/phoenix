@@ -13,13 +13,13 @@ import java.util.List;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
-import org.junit.Test;
-
-import com.google.common.collect.Lists;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Test;
+
+import com.google.common.collect.Lists;
 
 public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
 
@@ -68,7 +68,7 @@ public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
             }
         }
         int i = 0;
-        int maxOffset = schema.iterator(keyValue.getBuffer(), minOffset, keyValue.getRowLength(), ptr);
+        int maxOffset = schema.iterator(keyValue.getRowArray(), minOffset, keyValue.getRowLength(), ptr);
         for (i = 0; i < schema.getFieldCount(); i++) {
             Boolean hasValue = schema.next(ptr, i, maxOffset);
             if (hasValue == null) {
