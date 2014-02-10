@@ -560,7 +560,7 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertEquals(DataBlockEncoding.NONE, cdA.getDataBlockEncoding()); // Overriden using WITH
         assertEquals(1,cdA.getMaxVersions());// Overriden using WITH
         HColumnDescriptor cdB = descriptor.getFamily(cfB);
-        assertTrue(cdB.getKeepDeletedCells());
+        assertFalse(cdB.getKeepDeletedCells()); // Allow KEEP_DELETED_CELLS to be false for VEIW
         assertEquals(DataBlockEncoding.NONE, cdB.getDataBlockEncoding()); // Should keep the original value.
         // CF c should stay the same since it's not a Phoenix cf.
         HColumnDescriptor cdC = descriptor.getFamily(cfC);
