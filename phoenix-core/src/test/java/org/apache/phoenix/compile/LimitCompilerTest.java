@@ -46,7 +46,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 
 
-public class LimitClauseTest extends BaseConnectionlessQueryTest {
+public class LimitCompilerTest extends BaseConnectionlessQueryTest {
     
     private static Integer compileStatement(String query, List<Object> binds, Scan scan) throws SQLException {
         SQLParser parser = new SQLParser(query);

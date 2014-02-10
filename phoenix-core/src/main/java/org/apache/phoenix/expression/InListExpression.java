@@ -33,11 +33,6 @@ import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PDataType;
@@ -47,6 +42,7 @@ import org.apache.phoenix.util.ByteUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+
 
 /*
  * Implementation of a SQL foo IN (a,b,c) expression. Other than the first

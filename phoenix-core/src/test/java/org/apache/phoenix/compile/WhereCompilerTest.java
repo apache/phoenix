@@ -26,7 +26,6 @@ import static org.apache.phoenix.util.TestUtil.assertDegenerate;
 import static org.apache.phoenix.util.TestUtil.columnComparison;
 import static org.apache.phoenix.util.TestUtil.constantComparison;
 import static org.apache.phoenix.util.TestUtil.in;
-import static org.apache.phoenix.util.TestUtil.kvColumn;
 import static org.apache.phoenix.util.TestUtil.multiKVFilter;
 import static org.apache.phoenix.util.TestUtil.not;
 import static org.apache.phoenix.util.TestUtil.or;
@@ -75,7 +74,7 @@ import org.junit.Test;
 import com.google.common.collect.ImmutableList;
 
 
-public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
+public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testSingleEqualFilter() throws SQLException {
@@ -584,7 +583,7 @@ public class WhereClauseCompileTest extends BaseConnectionlessQueryTest {
         Filter filter = scan.getFilter();
         assertEquals(
             singleKVFilter(in(
-                kvColumn(BaseConnectionlessQueryTest.A_STRING),
+                BaseConnectionlessQueryTest.A_STRING,
                 "a",
                 "b")),
             filter);

@@ -215,8 +215,8 @@ public class TestUtil {
         return  new ComparisonExpression(op, Arrays.asList(e, LiteralExpression.newConstant(o)));
     }
 
-    public static Expression columnComparison(CompareOp op, PColumn c1, PColumn c2) {
-        return  new ComparisonExpression(op, Arrays.<Expression>asList(new KeyValueColumnExpression(c1), new KeyValueColumnExpression(c2)));
+    public static Expression columnComparison(CompareOp op, Expression c1, Expression c2) {
+        return  new ComparisonExpression(op, Arrays.<Expression>asList(c1, c2));
     }
 
     public static SingleKeyValueComparisonFilter singleKVFilter(Expression e) {

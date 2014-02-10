@@ -74,7 +74,7 @@ import org.junit.Test;
 @edu.umd.cs.findbugs.annotations.SuppressWarnings(
         value="RV_RETURN_VALUE_IGNORED",
         justification="Test code.")
-public class QueryCompileTest extends BaseConnectionlessQueryTest {
+public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testParameterUnbound() throws Exception {
