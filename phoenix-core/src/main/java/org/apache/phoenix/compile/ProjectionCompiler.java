@@ -19,6 +19,9 @@
  */
 package org.apache.phoenix.compile;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,32 +32,38 @@ import java.util.NavigableSet;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.aggregator.ClientAggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
+import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
+import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
 import org.apache.phoenix.expression.visitor.SingleAggregateFunctionVisitor;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
+import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ArgumentTypeMismatchException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDataType;
@@ -64,9 +73,16 @@ import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.ValueBitSet;
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
+
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 
 /**
@@ -78,7 +94,8 @@ import org.apache.phoenix.util.SizedUtil;
  * @since 0.1
  */
 public class ProjectionCompiler {
-    
+    private static ValueBitSet arrayIndexesBitSet; 
+    private static KeyValueSchema arrayIndexesSchema;
     private ProjectionCompiler() {
     }
     
@@ -179,9 +196,11 @@ public class ProjectionCompiler {
      * @throws SQLException 
      */
     public static RowProjector compile(StatementContext context, SelectStatement statement, GroupBy groupBy, List<? extends PDatum> targetColumns) throws SQLException {
+        List<KeyValueColumnExpression> arrayKVRefs = new ArrayList<KeyValueColumnExpression>();
+        List<Expression> arrayKVFuncs = new ArrayList<Expression>();
         List<AliasedNode> aliasedNodes = statement.getSelect();
         // Setup projected columns in Scan
-        SelectClauseVisitor selectVisitor = new SelectClauseVisitor(context, groupBy);
+        SelectClauseVisitor selectVisitor = new SelectClauseVisitor(context, groupBy, arrayKVRefs, arrayKVFuncs, statement);
         List<ExpressionProjector> projectedColumns = new ArrayList<ExpressionProjector>();
         TableRef tableRef = context.getResolver().getTables().get(0);
         PTable table = tableRef.getTable();
@@ -248,6 +267,20 @@ public class ProjectionCompiler {
                 String name = columnAlias == null ? expression.toString() : columnAlias;
                 projectedColumns.add(new ExpressionProjector(name, table.getName().getString(), expression, isCaseSensitive));
             }
+            if(arrayKVFuncs.size() > 0 && arrayKVRefs.size() > 0) {
+                serailizeArrayIndexInformationAndSetInScan(context, arrayKVFuncs, arrayKVRefs);
+                KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
+                for (Expression expression : arrayKVRefs) {
+                    builder.addField(expression);
+                }
+                KeyValueSchema kvSchema = builder.build();
+                arrayIndexesBitSet = ValueBitSet.newInstance(kvSchema);
+                builder = new KeyValueSchemaBuilder(0);
+                for (Expression expression : arrayKVFuncs) {
+                    builder.addField(expression);
+                }
+                arrayIndexesSchema = builder.build();
+            }
             selectVisitor.reset();
             index++;
         }
@@ -291,7 +324,67 @@ public class ProjectionCompiler {
         }
         return new RowProjector(projectedColumns, estimatedByteSize, isProjectEmptyKeyValue);
     }
-        
+
+    // A replaced ArrayIndex function that retrieves the exact array value retrieved from the server
+    static class ArrayIndexExpression extends BaseTerminalExpression {
+        private final int position;
+        private final PDataType type;
+
+        public ArrayIndexExpression(int position, PDataType type) {
+            this.position = position;
+            this.type =  type;
+        }
+
+        @Override
+        public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+            if (!tuple.getValue(QueryConstants.ARRAY_VALUE_COLUMN_FAMILY, QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER,
+                    ptr)) { 
+              return false; 
+            }
+            int maxOffset = ptr.getOffset() + ptr.getLength();
+            arrayIndexesBitSet.or(ptr);
+            arrayIndexesSchema.iterator(ptr, position, arrayIndexesBitSet);
+            Boolean hasValue = arrayIndexesSchema.next(ptr, position, maxOffset, arrayIndexesBitSet);
+            arrayIndexesBitSet.clear();
+            if (hasValue == null) {
+                ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            }
+            return true;
+        }
+
+        @Override
+        public PDataType getDataType() {
+            return this.type;
+        }
+    }
+    private static void serailizeArrayIndexInformationAndSetInScan(StatementContext context, List<Expression> arrayKVFuncs,
+            List<KeyValueColumnExpression> arrayKVRefs) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        try {
+            DataOutputStream output = new DataOutputStream(stream);
+            // Write the arrayKVRef size followed by the keyvalues that needs to be of type arrayindex function
+            WritableUtils.writeVInt(output, arrayKVRefs.size());
+            for (Expression expression : arrayKVRefs) {
+                    expression.write(output);
+            }
+            // then write the number of arrayindex functions followeed by the expression itself
+            WritableUtils.writeVInt(output, arrayKVFuncs.size());
+            for (Expression expression : arrayKVFuncs) {
+                    expression.write(output);
+            }
+            
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } finally {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        context.getScan().setAttribute(QueryConstants.SPECIFIC_ARRAY_INDEX, stream.toByteArray());
+    }
+
     private static class SelectClauseVisitor extends ExpressionCompiler {
         private static int getMinNullableIndex(List<SingleAggregateFunction> aggFuncs, boolean isUngroupedAggregation) {
             int minNullableIndex = aggFuncs.size();
@@ -311,9 +404,16 @@ public class ProjectionCompiler {
          */
         private boolean isCaseSensitive;
         private int elementCount;
+        private List<KeyValueColumnExpression> arrayKVRefs;
+        private List<Expression> arrayKVFuncs;
+        private SelectStatement statement; 
         
-        private SelectClauseVisitor(StatementContext context, GroupBy groupBy) {
+        private SelectClauseVisitor(StatementContext context, GroupBy groupBy, 
+                List<KeyValueColumnExpression> arrayKVRefs, List<Expression> arrayKVFuncs, SelectStatement statement) {
             super(context, groupBy);
+            this.arrayKVRefs = arrayKVRefs;
+            this.arrayKVFuncs = arrayKVFuncs;
+            this.statement = statement;
             reset();
         }
 
@@ -381,5 +481,39 @@ public class ProjectionCompiler {
             }
             return context.getSequenceManager().newSequenceReference(node);
         }
+        
+        @Override
+        public Expression visitLeave(FunctionParseNode node, List<Expression> children) throws SQLException {
+            Expression func = super.visitLeave(node,children);
+            // this need not be done for group by clause with array. Hence the below check
+            if (!statement.isAggregate() && ArrayIndexFunction.NAME.equals(node.getName())) {
+                 final List<KeyValueColumnExpression> indexKVs = Lists.newArrayList();
+                 // Create anon visitor to find reference to array in a generic way
+                 children.get(0).accept(new KeyValueExpressionVisitor() {
+                     @Override
+                     public Void visit(KeyValueColumnExpression expression) {
+                         if (expression.getDataType().isArrayType()) {
+                             indexKVs.add(expression);
+                         }
+                         return null;
+                     }
+                 });
+                 // Add the keyvalues which is of type array
+                 if (!indexKVs.isEmpty()) {
+                    arrayKVRefs.addAll(indexKVs);
+                    // Track the array index function also 
+                    arrayKVFuncs.add(func);
+                    // Store the index of the array index function in the select query list
+                    func = replaceArrayIndexFunction(func, arrayKVFuncs.size() - 1);
+                    return func;
+                }
+            }
+            return func;
+        }
+        
+        public Expression replaceArrayIndexFunction(Expression func, int size) {
+            return new ArrayIndexExpression(size, func.getDataType());
+        }
     }
+
 }
