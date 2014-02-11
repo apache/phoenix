@@ -26,6 +26,7 @@ import java.io.IOException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -34,18 +35,19 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-
 import org.apache.hadoop.hbase.index.IndexTestingUtils;
+import org.apache.hadoop.hbase.index.Indexer;
 import org.apache.hadoop.hbase.index.TableName;
 import org.apache.hadoop.hbase.index.covered.IndexUpdate;
 import org.apache.hadoop.hbase.index.covered.TableState;
 import org.apache.hadoop.hbase.index.util.IndexManagementUtil;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.index.BaseIndexCodec;
+import org.apache.phoenix.util.ConfigUtil;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.Test;
 
 /**
  * If {@link DoNotRetryIOException} is not subclassed correctly (with the {@link String}
@@ -86,8 +88,8 @@ public class TestFailWithoutRetries {
     Configuration conf = UTIL.getConfiguration();
     IndexTestingUtils.setupConfig(conf);
     IndexManagementUtil.ensureMutableIndexingCorrectlyConfigured(conf);
-    // disable replication
-    conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY, false);
+    // set replication required parameter
+    ConfigUtil.setReplicationConfigIfAbsent(conf);
     // start the cluster
     UTIL.startMiniCluster();
   }

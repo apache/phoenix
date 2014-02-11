@@ -11,12 +11,11 @@ import java.util.List;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
-import org.junit.Test;
-
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Test;
 
 public class RowKeyValueAccessorTest  extends BaseConnectionlessQueryTest  {
 
@@ -51,9 +50,9 @@ public class RowKeyValueAccessorTest  extends BaseConnectionlessQueryTest  {
         
         List<PColumn> pkColumns = table.getPKColumns();
         RowKeyValueAccessor accessor = new RowKeyValueAccessor(pkColumns, 3);
-        int offset = accessor.getOffset(keyValue.getBuffer(), keyValue.getRowOffset());
-        int length = accessor.getLength(keyValue.getBuffer(), offset, keyValue.getOffset()+keyValue.getLength());
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable(keyValue.getBuffer(), offset, length);
+        int offset = accessor.getOffset(keyValue.getRowArray(), keyValue.getRowOffset());
+        int length = accessor.getLength(keyValue.getRowArray(), offset, keyValue.getOffset()+keyValue.getLength());
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable(keyValue.getRowArray(), offset, length);
         
         PDataType dataType = pkColumns.get(index).getDataType();
         Object expectedObject = dataType.toObject(values[index], PDataType.fromLiteral(values[index]));

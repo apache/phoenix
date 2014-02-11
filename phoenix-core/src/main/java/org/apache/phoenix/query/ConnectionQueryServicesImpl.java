@@ -109,6 +109,7 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -164,14 +165,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
         this.config = HBaseConfiguration.create(config);
-         // set default value for hbase.master.logcleaner.plugin if not set yet
-         if(this.config.get(HConstants.HBASE_MASTER_LOGCLEANER_PLUGINS) == null){
-               this.config.set(HConstants.HBASE_MASTER_LOGCLEANER_PLUGINS,
-                   "org.apache.hadoop.hbase.master.cleaner.TimeToLiveLogCleaner");
-         }
-         // disable replication for Phoenix component
-         this.config.setBoolean(HConstants.REPLICATION_ENABLE_KEY, false);
-         this.props = new ReadOnlyProps(this.config.iterator());
+        // set replication required parameter
+        ConfigUtil.setReplicationConfigIfAbsent(this.config);
+        this.props = new ReadOnlyProps(this.config.iterator());
         // TODO: should we track connection wide memory usage or just org-wide usage?
         // If connection-wide, create a MemoryManager here, otherwise just use the one from the delegate
         this.childServices = new ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices>(INITIAL_CHILD_SERVICES_CAPACITY);

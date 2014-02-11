@@ -32,14 +32,14 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.VersionInfo;
-import org.junit.Test;
-
 import org.apache.hadoop.hbase.index.covered.example.ColumnGroup;
 import org.apache.hadoop.hbase.index.covered.example.CoveredColumn;
 import org.apache.hadoop.hbase.index.covered.example.CoveredColumnIndexSpecifierBuilder;
+import org.apache.hadoop.hbase.regionserver.HRegionServer;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.util.ConfigUtil;
+import org.junit.Test;
 
 /**
  * Test that we correctly fail for versions of HBase that don't support current properties
@@ -116,8 +116,8 @@ public class TestFailForUnsupportedHBaseVersions {
 
     // start the minicluster
     HBaseTestingUtility util = new HBaseTestingUtility(conf);
-    // disable replication
-    conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY, false);
+    // set replication required parameter
+    ConfigUtil.setReplicationConfigIfAbsent(conf);
     util.startMiniCluster();
 
     // setup the primary table

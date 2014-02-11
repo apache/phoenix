@@ -36,27 +36,26 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.EnvironmentEdge;
-import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-
 import org.apache.hadoop.hbase.index.IndexTestingUtils;
 import org.apache.hadoop.hbase.index.Indexer;
 import org.apache.hadoop.hbase.index.TableName;
 import org.apache.hadoop.hbase.index.covered.update.ColumnReference;
 import org.apache.hadoop.hbase.index.scanner.Scanner;
+import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.EnvironmentEdge;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ConfigUtil;
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.Test;
 
 /**
  * End-to-End test of just the {@link CoveredColumnsIndexBuilder}, but with a simple
@@ -102,8 +101,8 @@ public class TestEndToEndCoveredColumnsIndexBuilder {
     // disable version checking, so we can test against whatever version of HBase happens to be
     // installed (right now, its generally going to be SNAPSHOT versions).
     conf.setBoolean(Indexer.CHECK_VERSION_CONF_KEY, false);
-    // disable replication
-    conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY, false);
+    // set replication required parameter
+    ConfigUtil.setReplicationConfigIfAbsent(conf);
     UTIL.startMiniCluster();
   }
 

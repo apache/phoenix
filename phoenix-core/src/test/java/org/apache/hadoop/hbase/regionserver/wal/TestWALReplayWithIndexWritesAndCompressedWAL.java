@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.regionserver.RegionServerAccounting;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
+import org.apache.phoenix.util.ConfigUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -91,8 +92,8 @@ public class TestWALReplayWithIndexWritesAndCompressedWAL {
 
     // enable WAL compression
     conf.setBoolean(HConstants.ENABLE_WAL_COMPRESSION, true);
-    // disable replication
-    conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY, false);
+    // set replication required parameter
+    ConfigUtil.setReplicationConfigIfAbsent(conf);
   }
 
   protected final void setDefaults(Configuration conf) {

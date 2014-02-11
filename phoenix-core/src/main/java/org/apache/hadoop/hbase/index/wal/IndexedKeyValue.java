@@ -1,9 +1,7 @@
 package org.apache.hadoop.hbase.index.wal;
 
-import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 
@@ -11,15 +9,15 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
-import org.apache.hadoop.hbase.regionserver.wal.HLog;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
-
 public class IndexedKeyValue extends KeyValue {
+    public static final byte [] COLUMN_FAMILY = Bytes.toBytes("INDEXEDKEYVALUE_FAKED_FAMILY");
+  
     private static int calcHashCode(ImmutableBytesPtr indexTableName, Mutation mutation) {
         final int prime = 31;
         int result = 1;
@@ -50,9 +48,17 @@ public class IndexedKeyValue extends KeyValue {
         return mutation;
     }
 
+    /*
+     * Returns a faked column family for an IndexedKeyValue instance
+     */
+    @Override
+    public byte [] getFamily() {
+      return COLUMN_FAMILY;
+    }
+    
     /**
-     * This is a KeyValue that shouldn't actually be replayed, so we always mark it as an {@link WALEdit#METAFAMILY} so it
-     * isn't replayed via the normal replay mechanism
+     * This is a KeyValue that shouldn't actually be replayed/replicated, so we always mark it as 
+     * an {@link WALEdit#METAFAMILY} so it isn't replayed/replicated via the normal replay mechanism
      */
     @Override
     public boolean matchingFamily(final byte[] family) {

@@ -21,12 +21,12 @@ package org.apache.hadoop.hbase.index.covered.example;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
-import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
-import org.junit.BeforeClass;
-
 import org.apache.hadoop.hbase.index.IndexTestingUtils;
 import org.apache.hadoop.hbase.index.Indexer;
+import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
+import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
+import org.apache.phoenix.util.ConfigUtil;
+import org.junit.BeforeClass;
 
 /**
  * Test secondary indexing from an end-to-end perspective (client to server to index table).
@@ -44,8 +44,8 @@ public class TestEndtoEndIndexingWithCompression extends TestEndToEndCoveredInde
     conf.set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY,
     IndexedWALEditCodec.class.getName());
     conf.setBoolean(HConstants.ENABLE_WAL_COMPRESSION, true);
-    // disable replication
-    conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY, false);
+    // set replication required parameter
+    ConfigUtil.setReplicationConfigIfAbsent(conf);
     //start the mini-cluster
     UTIL.startMiniCluster();
   }
