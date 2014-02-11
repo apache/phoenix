@@ -35,15 +35,6 @@ import java.util.Properties;
 
 import org.apache.flume.Context;
 import org.apache.flume.conf.ComponentConfiguration;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
-import com.google.common.base.Strings;
-import com.google.common.base.Throwables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.flume.DefaultKeyGenerator;
@@ -53,6 +44,15 @@ import org.apache.phoenix.flume.SchemaHandler;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
+import com.google.common.base.Strings;
+import com.google.common.base.Throwables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 public abstract class BaseEventSerializer implements EventSerializer {
 
@@ -144,7 +144,8 @@ public abstract class BaseEventSerializer implements EventSerializer {
             }
       
             
-            final Map<String,Integer> allColumnsInfoMap = Maps.newLinkedHashMap();
+            final Map<String,Integer> qualifiedColumnMap = Maps.newLinkedHashMap();
+            final Map<String,Integer> unqualifiedColumnMap = Maps.newLinkedHashMap();
             final String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
             final String tableName  = SchemaUtil.getTableNameFromFullName(fullTableName);
             
@@ -159,12 +160,14 @@ public abstract class BaseEventSerializer implements EventSerializer {
                 dt = rs.getInt(QueryUtil.DATA_TYPE_POSITION);
                 if(Strings.isNullOrEmpty(cf)) {
                     rowkey = cq; // this is required only when row key is auto generated
+                } else {
+                    qualifiedColumnMap.put(SchemaUtil.getColumnDisplayName(cf, cq), dt);
                 }
-                allColumnsInfoMap.put(SchemaUtil.getColumnDisplayName(cf, cq), dt);
+                unqualifiedColumnMap.put(SchemaUtil.getColumnDisplayName(null, cq), dt);
              }
             
             //can happen when table not found in Hbase.
-            if(allColumnsInfoMap.isEmpty()) {
+            if(unqualifiedColumnMap.isEmpty()) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.TABLE_UNDEFINED)
                         .setTableName(tableName).build().buildException();
             }
@@ -175,11 +178,11 @@ public abstract class BaseEventSerializer implements EventSerializer {
             columnMetadata = new ColumnInfo[totalSize] ;
            
             int position = 0;
-            position = this.addToColumnMetadataInfo(colNames, allColumnsInfoMap, position);
-            position = this.addToColumnMetadataInfo(headers,  allColumnsInfoMap, position);
+            position = this.addToColumnMetadataInfo(colNames, qualifiedColumnMap, unqualifiedColumnMap, position);
+            position = this.addToColumnMetadataInfo(headers,  qualifiedColumnMap, unqualifiedColumnMap, position);
            
             if(autoGenerateKey) {
-                Integer sqlType = allColumnsInfoMap.get(rowkey);
+                Integer sqlType = unqualifiedColumnMap.get(rowkey);
                 if (sqlType == null) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)
                          .setColumnName(rowkey).setTableName(fullTableName).build().buildException();
@@ -202,19 +205,22 @@ public abstract class BaseEventSerializer implements EventSerializer {
         doInitialize();
     }
     
-    private int addToColumnMetadataInfo(final List<String> columns , final Map<String,Integer> allColumnsInfoMap, int position) throws SQLException {
+    private int addToColumnMetadataInfo(final List<String> columns , final Map<String,Integer> qualifiedColumnsInfoMap, Map<String, Integer> unqualifiedColumnsInfoMap, int position) throws SQLException {
         Preconditions.checkNotNull(columns);
-        Preconditions.checkNotNull(allColumnsInfoMap);
+        Preconditions.checkNotNull(qualifiedColumnsInfoMap);
+        Preconditions.checkNotNull(unqualifiedColumnsInfoMap);
        for (int i = 0 ; i < columns.size() ; i++) {
             String columnName = SchemaUtil.normalizeIdentifier(columns.get(i).trim());
-            Integer sqlType = allColumnsInfoMap.get(columnName);
+            Integer sqlType = unqualifiedColumnsInfoMap.get(columnName);
             if (sqlType == null) {
+                sqlType = qualifiedColumnsInfoMap.get(columnName);
+                if (sqlType == null) {
                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_NOT_FOUND)
                         .setColumnName(columnName).setTableName(this.fullTableName).build().buildException();
-            } else {
-                columnMetadata[position] = new ColumnInfo(columnName, sqlType);
-                position++;
+                }
             }
+            columnMetadata[position] = new ColumnInfo(columnName, sqlType);
+            position++;
        }
        return position;
     }
