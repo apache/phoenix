@@ -87,6 +87,12 @@ public class FromCompiler {
         }
 
         @Override
+        public TableRef resolveTable(String schemaName, String tableName)
+                throws SQLException {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public ColumnRef resolveColumn(String schemaName, String tableName, String colName) throws SQLException {
             throw new UnsupportedOperationException();
         }
@@ -236,6 +242,12 @@ public class FromCompiler {
 		public List<TableRef> getTables() {
 			return tableRefs;
 		}
+
+        @Override
+        public TableRef resolveTable(String schemaName, String tableName)
+                throws SQLException {
+            throw new UnsupportedOperationException();
+        }
 
 		@Override
 		public ColumnRef resolveColumn(String schemaName, String tableName,
@@ -388,7 +400,7 @@ public class FromCompiler {
             }
         }
 
-        private TableRef resolveTable(String schemaName, String tableName) throws SQLException {
+        public TableRef resolveTable(String schemaName, String tableName) throws SQLException {
             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
             List<TableRef> tableRefs = tableMap.get(fullTableName);
             if (tableRefs.size() == 0) {

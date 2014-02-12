@@ -43,6 +43,16 @@ public interface ColumnResolver {
     public List<TableRef> getTables();
     
     /**
+     * Resolves table using name or alias.
+     * @param schemaName the schema name
+     * @param tableName the table name or table alias
+     * @return the resolved TableRef
+     * @throws TableNotFoundException if the table could not be resolved
+     * @throws AmbiguousTableException if the table name is ambiguous
+     */
+    public TableRef resolveTable(String schemaName, String tableName) throws SQLException;
+    
+    /**
      * Resolves column using name and alias.
      * @param schemaName TODO
      * @param tableName TODO

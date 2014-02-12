@@ -46,6 +46,7 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
@@ -345,6 +346,12 @@ public class SkipRangeParallelIteratorRegionSplitterTest extends BaseClientManag
             @Override
             public List<TableRef> getTables() {
                 return tableRefs;
+            }
+
+            @Override
+            public TableRef resolveTable(String schemaName, String tableName)
+                    throws SQLException {
+                throw new UnsupportedOperationException();
             }
 
             @Override

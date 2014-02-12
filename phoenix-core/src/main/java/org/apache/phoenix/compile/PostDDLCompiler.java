@@ -118,6 +118,11 @@ public class PostDDLCompiler {
                                 return Collections.singletonList(tableRef);
                             }
                             @Override
+                            public TableRef resolveTable(String schemaName, String tableName)
+                                    throws SQLException {
+                                throw new UnsupportedOperationException();
+                            }
+                            @Override
                             public ColumnRef resolveColumn(String schemaName, String tableName, String colName) throws SQLException {
                                 PColumn column = tableName != null
                                         ? tableRef.getTable().getColumnFamily(tableName).getColumn(colName)

@@ -144,17 +144,17 @@ public class QueryCompiler {
         byte[] emptyByteArray = new byte[0];
         List<JoinTable> joinTables = join.getJoinTables();
         if (joinTables.isEmpty()) {
-            ProjectedPTableWrapper projectedTable = join.createProjectedTable(join.getMainTable(), !asSubquery, join.getMainTableNode().isRewrite());
+            ProjectedPTableWrapper projectedTable = join.createProjectedTable(join.getMainTable(), !asSubquery);
             ScanProjector.serializeProjectorIntoScan(context.getScan(), JoinCompiler.getScanProjector(projectedTable));
             context.setCurrentTable(join.getMainTable());
-            context.setResolver(JoinCompiler.getColumnResolver(projectedTable));
+            context.setResolver(join.getColumnResolver(projectedTable));
             join.projectColumns(context.getScan(), join.getMainTable());
             return compileSingleQuery(context, select, binds, null);
         }
         
         boolean[] starJoinVector = JoinCompiler.getStarJoinVector(join);
         if (starJoinVector != null) {
-            ProjectedPTableWrapper initialProjectedTable = join.createProjectedTable(join.getMainTable(), !asSubquery, join.getMainTableNode().isRewrite());
+            ProjectedPTableWrapper initialProjectedTable = join.createProjectedTable(join.getMainTable(), !asSubquery);
             PTableWrapper projectedTable = initialProjectedTable;
             int count = joinTables.size();
             ImmutableBytesPtr[] joinIds = new ImmutableBytesPtr[count];
@@ -171,8 +171,8 @@ public class QueryCompiler {
                 SelectStatement subStatement = joinTable.getAsSubquery();
                 if (subStatement.getFrom().size() > 1)
                     throw new SQLFeatureNotSupportedException("Sub queries not supported.");
-                ProjectedPTableWrapper subProjTable = join.createProjectedTable(joinTable.getTable(), false, joinTable.getTableNode().isRewrite());
-                ColumnResolver resolver = JoinCompiler.getColumnResolver(subProjTable);
+                ProjectedPTableWrapper subProjTable = join.createProjectedTable(joinTable.getTable(), false);
+                ColumnResolver resolver = join.getColumnResolver(subProjTable);
                 Scan subScan = ScanUtil.newScan(scanCopy);
                 ScanProjector.serializeProjectorIntoScan(subScan, JoinCompiler.getScanProjector(subProjTable));
                 StatementContext subContext = new StatementContext(statement, resolver, binds, subScan);
@@ -190,7 +190,7 @@ public class QueryCompiler {
                 if (!starJoinVector[i]) {
                     needsProject = true;
                 }
-                ColumnResolver leftResolver = starJoinVector[i] ? join.getOriginalResolver() : JoinCompiler.getColumnResolver(projectedTable);
+                ColumnResolver leftResolver = starJoinVector[i] ? join.getOriginalResolver() : join.getColumnResolver(projectedTable);
                 joinIds[i] = new ImmutableBytesPtr(emptyByteArray); // place-holder
                 Pair<List<Expression>, List<Expression>> joinConditions = joinTable.compileJoinConditions(context, leftResolver, resolver);
                 joinExpressions[i] = joinConditions.getFirst();
@@ -204,7 +204,7 @@ public class QueryCompiler {
                 ScanProjector.serializeProjectorIntoScan(context.getScan(), JoinCompiler.getScanProjector(initialProjectedTable));
             }
             context.setCurrentTable(join.getMainTable());
-            context.setResolver(needsProject ? JoinCompiler.getColumnResolver(projectedTable) : join.getOriginalResolver());
+            context.setResolver(needsProject ? join.getColumnResolver(projectedTable) : join.getOriginalResolver());
             join.projectColumns(context.getScan(), join.getMainTable());
             BasicQueryPlan plan = compileSingleQuery(context, JoinCompiler.getSubqueryWithoutJoin(select, join), binds, parallelIteratorFactory);
             Expression postJoinFilterExpression = join.compilePostFilterExpression(context);
@@ -226,7 +226,7 @@ public class QueryCompiler {
             QueryPlan lhsPlan = compileJoinQuery(lhsCtx, lhs, binds, lhsJoin, true);
             ColumnResolver lhsResolver = lhsCtx.getResolver();
             PTableWrapper lhsProjTable = ((JoinedTableColumnResolver) (lhsResolver)).getPTableWrapper();
-            ProjectedPTableWrapper rhsProjTable = join.createProjectedTable(lastJoinTable.getTable(), !asSubquery, lastJoinTable.getTableNode().isRewrite());
+            ProjectedPTableWrapper rhsProjTable = join.createProjectedTable(lastJoinTable.getTable(), !asSubquery);
             ColumnResolver rhsResolver = join.getOriginalResolver();
             ImmutableBytesPtr[] joinIds = new ImmutableBytesPtr[] {new ImmutableBytesPtr(emptyByteArray)};
             Pair<List<Expression>, List<Expression>> joinConditions = lastJoinTable.compileJoinConditions(context, lhsResolver, rhsResolver);
@@ -236,7 +236,7 @@ public class QueryCompiler {
             PTableWrapper projectedTable = JoinCompiler.mergeProjectedTables(rhsProjTable, lhsProjTable, type == JoinType.Inner);
             ScanProjector.serializeProjectorIntoScan(context.getScan(), JoinCompiler.getScanProjector(rhsProjTable));
             context.setCurrentTable(lastJoinTable.getTable());
-            context.setResolver(JoinCompiler.getColumnResolver(projectedTable));
+            context.setResolver(join.getColumnResolver(projectedTable));
             join.projectColumns(context.getScan(), lastJoinTable.getTable());
             BasicQueryPlan rhsPlan = compileSingleQuery(context, rhs, binds, parallelIteratorFactory);
             Expression postJoinFilterExpression = join.compilePostFilterExpression(context);

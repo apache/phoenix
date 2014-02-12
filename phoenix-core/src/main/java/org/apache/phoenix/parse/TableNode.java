@@ -32,23 +32,13 @@ import java.sql.SQLException;
  */
 public abstract class TableNode {
     private final String alias;
-    private final boolean isRewrite;
 
     TableNode(String alias) {
-        this(alias, false);
-    }
-
-    TableNode(String alias, boolean isRewrite) {
         this.alias = alias;
-        this.isRewrite = isRewrite;
     }
 
     public String getAlias() {
         return alias;
-    }
-    
-    public boolean isRewrite() {
-        return isRewrite;
     }
 
     public abstract void accept(TableNodeVisitor visitor) throws SQLException;

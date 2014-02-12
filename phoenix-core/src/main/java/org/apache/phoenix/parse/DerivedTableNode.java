@@ -21,6 +21,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.util.SchemaUtil;
+
 
 
 /**
@@ -35,7 +37,7 @@ public class DerivedTableNode extends TableNode {
     private final SelectStatement select;
 
     DerivedTableNode(String alias, SelectStatement select) {
-        super(alias);
+        super(SchemaUtil.normalizeIdentifier(alias));
         this.select = select;
     }
 

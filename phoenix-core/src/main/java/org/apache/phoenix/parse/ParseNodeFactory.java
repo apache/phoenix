@@ -208,6 +208,10 @@ public class ParseNodeFactory {
     public FamilyWildcardParseNode family(String familyName){
     	    return new FamilyWildcardParseNode(familyName, false);
     }
+    
+    public TableWildcardParseNode tableWildcard(TableName tableName) {
+        return new TableWildcardParseNode(tableName, false);
+    }
 
     public WildcardParseNode wildcard() {
         return WildcardParseNode.INSTANCE;

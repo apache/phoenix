@@ -420,6 +420,11 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
     }
     
     @Override
+    public ParseNode visit(TableWildcardParseNode node) throws SQLException {
+        return node;
+    }
+    
+    @Override
     public ParseNode visit(FamilyWildcardParseNode node) throws SQLException {
         return node;
     }

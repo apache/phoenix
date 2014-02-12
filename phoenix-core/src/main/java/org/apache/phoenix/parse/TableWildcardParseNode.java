@@ -21,44 +21,31 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
-
-
-/**
- * 
- * Node representing the join specified in the FROM clause of SQL
- *
- * 
- * @since 0.1
- */
-public class JoinTableNode extends TableNode {
-    public enum JoinType {Inner, Left, Right, Full};
+public class TableWildcardParseNode extends NamedParseNode {
+    private final TableName tableName;
+    private final boolean isRewrite;
     
-    private final JoinType type;
-    private final ParseNode on;
-    private final TableNode table;
-    
-    JoinTableNode(JoinType type, ParseNode on, TableNode table) {
-        super(table.getAlias());
-        this.type = type;
-        this.on = on;
-        this.table = table;
+    public static TableWildcardParseNode create(TableName tableName, boolean isRewrite) {
+        return new TableWildcardParseNode(tableName, isRewrite);
     }
 
-    public JoinType getType() {
-        return type;
-    }
-
-    public ParseNode getOnNode() {
-        return on;
+    TableWildcardParseNode(TableName tableName, boolean isRewrite) {
+        super(tableName.toString());
+        this.tableName = tableName;
+        this.isRewrite = isRewrite;
     }
     
-    public TableNode getTable() {
-        return table;
+    public TableName getTableName() {
+        return tableName;
+    }
+    
+    public boolean isRewrite() {
+        return isRewrite;
     }
 
     @Override
-    public void accept(TableNodeVisitor visitor) throws SQLException {
-        visitor.visit(this);
+    public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
+        return visitor.visit(this);
     }
 
 }

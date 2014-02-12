@@ -71,6 +71,7 @@ import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
+import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.TraverseNoParseNodeVisitor;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -85,11 +86,9 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 
@@ -205,11 +204,11 @@ public class JoinCompiler {
             for (ColumnRef ref : prefilterRefVisitor.getColumnRefMap().keySet()) {
                 if (!columnRefs.containsKey(ref))
                     columnRefs.put(ref, ColumnRefType.PREFILTER);
-            }            
+            }
         }
         
         private JoinSpec(ColumnResolver resolver, TableNode tableNode, TableRef table, List<AliasedNode> select, List<ParseNode> preFilters, 
-                List<ParseNode> postFilters, List<JoinTable> joinTables, Map<ColumnRef, ColumnRefType> columnRefs) {
+                List<ParseNode> postFilters, List<JoinTable> joinTables, Map<TableRef, JoinTable> tableRefToJoinTableMap, Map<ColumnRef, ColumnRefType> columnRefs) {
             this.origResolver = resolver;
             this.mainTableNode = tableNode;
             this.mainTable = table;
@@ -217,6 +216,7 @@ public class JoinCompiler {
             this.preFilters = preFilters;
             this.postFilters = postFilters;
             this.joinTables = joinTables;
+            this.tableRefToJoinTableMap = tableRefToJoinTableMap;
             this.columnRefs = columnRefs;
         }
         
@@ -275,9 +275,14 @@ public class JoinCompiler {
             
             return AndExpression.create(expressions);
         }
+        
+        protected boolean isWildCardSelect(TableRef table) {
+            List<AliasedNode> selectList = table.equals(mainTable) ? this.select : tableRefToJoinTableMap.get(table).getSelect();
+            return (selectList.size() == 1 && selectList.get(0).getNode() instanceof TableWildcardParseNode);
+        }
 
         public void projectColumns(Scan scan, TableRef table) {
-            if (isWildCardSelect(select)) {
+            if (isWildCardSelect(table)) {
                 scan.getFamilyMap().clear();
                 return;
             }
@@ -289,7 +294,7 @@ public class JoinCompiler {
             }
         }
         
-        public ProjectedPTableWrapper createProjectedTable(TableRef tableRef, boolean retainPKColumns, boolean isRewrite) throws SQLException {
+        public ProjectedPTableWrapper createProjectedTable(TableRef tableRef, boolean retainPKColumns) throws SQLException {
         	List<PColumn> projectedColumns = new ArrayList<PColumn>();
         	List<Expression> sourceExpressions = new ArrayList<Expression>();
         	ListMultimap<String, String> columnNameMap = ArrayListMultimap.<String, String>create();
@@ -298,14 +303,14 @@ public class JoinCompiler {
             if (retainPKColumns) {
             	for (PColumn column : table.getPKColumns()) {
             		addProjectedColumn(projectedColumns, sourceExpressions, columnNameMap,
-            				column, tableRef, column.getFamilyName(), hasSaltingColumn, isRewrite);
+            				column, tableRef, column.getFamilyName(), hasSaltingColumn);
             	}
             }
-            if (isWildCardSelect(select)) {
+            if (isWildCardSelect(tableRef)) {
             	for (PColumn column : table.getColumns()) {
             		if (!retainPKColumns || !SchemaUtil.isPKColumn(column)) {
             			addProjectedColumn(projectedColumns, sourceExpressions, columnNameMap,
-            					column, tableRef, PNameFactory.newName(ScanProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn, isRewrite);
+            					column, tableRef, PNameFactory.newName(ScanProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn);
             		}
             	}
             } else {
@@ -316,7 +321,7 @@ public class JoinCompiler {
                             && (!retainPKColumns || !SchemaUtil.isPKColumn(columnRef.getColumn()))) {
                     	PColumn column = columnRef.getColumn();
             			addProjectedColumn(projectedColumns, sourceExpressions, columnNameMap,
-            					column, tableRef, PNameFactory.newName(ScanProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn, isRewrite);
+            					column, tableRef, PNameFactory.newName(ScanProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn);
                     }
                 }            	
             }
@@ -329,7 +334,7 @@ public class JoinCompiler {
         }
         
         private static void addProjectedColumn(List<PColumn> projectedColumns, List<Expression> sourceExpressions,
-        		ListMultimap<String, String> columnNameMap, PColumn sourceColumn, TableRef sourceTable, PName familyName, boolean hasSaltingColumn, boolean isRewrite) 
+        		ListMultimap<String, String> columnNameMap, PColumn sourceColumn, TableRef sourceTable, PName familyName, boolean hasSaltingColumn) 
         throws SQLException {
             if (sourceColumn == SALTING_COLUMN)
                 return;
@@ -341,21 +346,13 @@ public class JoinCompiler {
         	String colName = sourceColumn.getName().getString();
             String fullName = getProjectedColumnName(schemaName, tableName, colName);
             String aliasedName = sourceTable.getTableAlias() == null ? fullName : getProjectedColumnName(null, sourceTable.getTableAlias(), colName);
-            String displayName = aliasedName;
-        	if (isRewrite) {
-        	    String dataColName = IndexUtil.getDataColumnName(colName);
-        	    displayName = sourceTable.getTableAlias() == null ? getProjectedColumnName(schemaName, table.getParentTableName().getString(), dataColName) : getProjectedColumnName(null, sourceTable.getTableAlias(), dataColName);
-        	}
         	
-            columnNameMap.put(colName, displayName);
-        	if (!fullName.equals(displayName)) {
-        		columnNameMap.put(fullName, displayName);
-        	}
-        	if (!aliasedName.equals(displayName) && !aliasedName.equals(fullName)) {
-        	    columnNameMap.put(aliasedName, displayName);
+            columnNameMap.put(colName, aliasedName);
+        	if (!fullName.equals(aliasedName)) {
+        		columnNameMap.put(fullName, aliasedName);
         	}
             
-        	PName name = PNameFactory.newName(displayName);
+        	PName name = PNameFactory.newName(aliasedName);
     		PColumnImpl column = new PColumnImpl(name, familyName, sourceColumn.getDataType(), 
     				sourceColumn.getMaxLength(), sourceColumn.getScale(), sourceColumn.isNullable(), 
     				position, sourceColumn.getColumnModifier(), sourceColumn.getArraySize());
@@ -364,8 +361,12 @@ public class JoinCompiler {
         	sourceExpressions.add(sourceExpression);
         }
         
+        public ColumnResolver getColumnResolver(PTableWrapper table) {
+            return new JoinedTableColumnResolver(table, origResolver);
+        }
+        
         public boolean hasPostReference(TableRef table) {
-            if (isWildCardSelect(select)) 
+            if (isWildCardSelect(table)) 
                 return true;
             
             for (Map.Entry<ColumnRef, ColumnRefType> e : columnRefs.entrySet()) {
@@ -492,7 +493,7 @@ public class JoinCompiler {
     
     public static JoinSpec getSubJoinSpecWithoutPostFilters(JoinSpec join) {
         return new JoinSpec(join.origResolver, join.mainTableNode, join.mainTable, join.select, join.preFilters, new ArrayList<ParseNode>(), 
-                join.joinTables.subList(0, join.joinTables.size() - 1), join.columnRefs);
+                join.joinTables.subList(0, join.joinTables.size() - 1), join.tableRefToJoinTableMap, join.columnRefs);
     }
     
     public static class JoinTable {
@@ -870,23 +871,25 @@ public class JoinCompiler {
     // for creation of new statements
     private static ParseNodeFactory NODE_FACTORY = new ParseNodeFactory();
     
-    private static boolean isWildCardSelect(List<AliasedNode> select) {
-        return (select.size() == 1 && select.get(0).getNode() == WildcardParseNode.INSTANCE);
-    }
-    
     private static List<AliasedNode> extractFromSelect(List<AliasedNode> select, TableRef table, ColumnResolver resolver) throws SQLException {
         List<AliasedNode> ret = new ArrayList<AliasedNode>();
-        if (isWildCardSelect(select)) {
-            ret.add(NODE_FACTORY.aliasedNode(null, WildcardParseNode.INSTANCE));
-            return ret;
-        }
-        
         ColumnParseNodeVisitor visitor = new ColumnParseNodeVisitor(resolver);
-        for (AliasedNode node : select) {
-            node.getNode().accept(visitor);
+        for (AliasedNode aliasedNode : select) {
+            ParseNode node = aliasedNode.getNode();
+            if (node instanceof TableWildcardParseNode) {
+                TableName tableName = ((TableWildcardParseNode) node).getTableName();
+                if (table.equals(resolver.resolveTable(tableName.getSchemaName(), tableName.getTableName()))) {
+                    ret.clear();
+                    ret.add(aliasedNode);
+                    return ret;
+                }
+                continue;
+            }
+            
+            node.accept(visitor);
             ColumnParseNodeVisitor.ContentType type = visitor.getContentType(table);
             if (type == ColumnParseNodeVisitor.ContentType.SELF_ONLY) {
-                ret.add(node);
+                ret.add(aliasedNode);
             } else if (type == ColumnParseNodeVisitor.ContentType.COMPLEX) {
                 for (Map.Entry<ColumnRef, ColumnParseNode> entry : visitor.getColumnRefMap().entrySet()) {
                     if (entry.getKey().getTableRef().equals(table)) {
@@ -961,7 +964,7 @@ public class JoinCompiler {
             @Override
             public void visit(BindTableNode boundTableNode) throws SQLException {
                 String alias = boundTableNode.getAlias();
-                replaced = BindTableNode.create(alias == null ? null : '"' + alias + '"', getReplacedTableName(), true);
+                replaced = NODE_FACTORY.bindTable(alias == null ? null : '"' + alias + '"', getReplacedTableName());
             }
 
             @Override
@@ -974,7 +977,7 @@ public class JoinCompiler {
             public void visit(NamedTableNode namedTableNode)
                     throws SQLException {
                 String alias = namedTableNode.getAlias();
-                replaced = NamedTableNode.create(alias == null ? null : '"' + alias + '"', getReplacedTableName(), namedTableNode.getDynamicColumns(), true);
+                replaced = NODE_FACTORY.namedTable(alias == null ? null : '"' + alias + '"', getReplacedTableName(), namedTableNode.getDynamicColumns());
             }
 
             @Override
@@ -1000,7 +1003,7 @@ public class JoinCompiler {
                 TableRef table = jTable.getTable();
                 List<ParseNode> groupBy = table.equals(groupByTableRef) ? select.getGroupBy() : null;
                 List<OrderByNode> orderBy = table.equals(orderByTableRef) ? select.getOrderBy() : null;
-                SelectStatement stmt = getSubqueryForOptimizedPlan(select, table, join.columnRefs, jTable.getPreFiltersCombined(), groupBy, orderBy);
+                SelectStatement stmt = getSubqueryForOptimizedPlan(select, table, join.columnRefs, jTable.getPreFiltersCombined(), groupBy, orderBy, join.isWildCardSelect(table));
                 QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(stmt, statement);
                 if (!plan.getTableRef().equals(table)) {
                     TableNodeRewriter rewriter = new TableNodeRewriter(plan.getTableRef());
@@ -1016,7 +1019,7 @@ public class JoinCompiler {
         TableRef table = join.getMainTable();
         List<ParseNode> groupBy = table.equals(groupByTableRef) ? select.getGroupBy() : null;
         List<OrderByNode> orderBy = table.equals(orderByTableRef) ? select.getOrderBy() : null;
-        SelectStatement stmt = getSubqueryForOptimizedPlan(select, table, join.columnRefs, join.getPreFiltersCombined(), groupBy, orderBy);
+        SelectStatement stmt = getSubqueryForOptimizedPlan(select, table, join.columnRefs, join.getPreFiltersCombined(), groupBy, orderBy, join.isWildCardSelect(table));
         QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(stmt, statement);
         if (!plan.getTableRef().equals(table)) {
             TableNodeRewriter rewriter = new TableNodeRewriter(plan.getTableRef());
@@ -1033,11 +1036,11 @@ public class JoinCompiler {
         return IndexStatementRewriter.translate(NODE_FACTORY.select(select, newFrom), resolver, replacement);        
     }
     
-    private static SelectStatement getSubqueryForOptimizedPlan(SelectStatement select, TableRef table, Map<ColumnRef, ColumnRefType> columnRefs, ParseNode where, List<ParseNode> groupBy, List<OrderByNode> orderBy) {
+    private static SelectStatement getSubqueryForOptimizedPlan(SelectStatement select, TableRef table, Map<ColumnRef, ColumnRefType> columnRefs, ParseNode where, List<ParseNode> groupBy, List<OrderByNode> orderBy, boolean isWildCardSelect) {
         String schemaName = table.getTable().getSchemaName().getString();
         TableName tName = TableName.create(schemaName.length() == 0 ? null : schemaName, table.getTable().getTableName().getString());
         List<AliasedNode> selectList = new ArrayList<AliasedNode>();
-        if (isWildCardSelect(select.getSelect())) {
+        if (isWildCardSelect) {
             selectList.add(NODE_FACTORY.aliasedNode(null, WildcardParseNode.INSTANCE));
         } else {
             for (ColumnRef colRef : columnRefs.keySet()) {
@@ -1190,34 +1193,36 @@ public class JoinCompiler {
     	}
     }
     
-    public static ColumnResolver getColumnResolver(PTableWrapper table) {
-    	return new JoinedTableColumnResolver(table);
-    }
-    
     public static class JoinedTableColumnResolver implements ColumnResolver {
     	private PTableWrapper table;
-    	private List<TableRef> tableRefs;
+    	private ColumnResolver tableResolver;
+    	private TableRef tableRef;
     	
-    	private JoinedTableColumnResolver(PTableWrapper table) {
+    	private JoinedTableColumnResolver(PTableWrapper table, ColumnResolver tableResolver) {
     		this.table = table;
-    		TableRef tableRef = new TableRef(null, table.getTable(), 0, false);
-    		this.tableRefs = ImmutableList.of(tableRef);
+    		this.tableResolver = tableResolver;
+            this.tableRef = new TableRef(null, table.getTable(), 0, false);
     	}
+        
+        public PTableWrapper getPTableWrapper() {
+            return table;
+        }
 
 		@Override
 		public List<TableRef> getTables() {
-			return tableRefs;
+			return tableResolver.getTables();
 		}
-		
-		public PTableWrapper getPTableWrapper() {
-			return table;
-		}
+
+        @Override
+        public TableRef resolveTable(String schemaName, String tableName)
+                throws SQLException {
+            return tableResolver.resolveTable(schemaName, tableName);
+        }
 
 		@Override
 		public ColumnRef resolveColumn(String schemaName, String tableName,
 				String colName) throws SQLException {
 			String name = getProjectedColumnName(schemaName, tableName, colName);
-			TableRef tableRef = tableRefs.get(0);
 			try {
 				PColumn column = tableRef.getTable().getColumn(name);
 				return new ColumnRef(tableRef, column.getPosition());

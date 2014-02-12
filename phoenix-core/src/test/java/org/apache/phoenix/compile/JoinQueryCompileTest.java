@@ -19,14 +19,14 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE;
-import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_NORMALIZED;
-import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE;
-import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_NORMALIZED;
-import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE;
-import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_NORMALIZED;
-import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE;
-import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_NORMALIZED;
+import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_DISPLAY_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_DISPLAY_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_DISPLAY_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_DISPLAY_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 
@@ -55,32 +55,32 @@ public class JoinQueryCompileTest extends BaseConnectionlessQueryTest {
     @Test
     public void testExplainPlan() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String query = "EXPLAIN SELECT s.\"supplier_id\", \"order_id\", c.name, i.name, quantity, o.date FROM " + JOIN_ORDER_TABLE + " o LEFT JOIN " 
-    	+ JOIN_CUSTOMER_TABLE + " c ON o.\"customer_id\" = c.\"customer_id\" AND c.name LIKE 'C%' LEFT JOIN " 
-    	+ JOIN_ITEM_TABLE + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN " 
-    	+ JOIN_SUPPLIER_TABLE + " s ON s.\"supplier_id\" = i.\"supplier_id\" WHERE i.name LIKE 'T%'";
+        String query = "EXPLAIN SELECT s.\"supplier_id\", \"order_id\", c.name, i.name, quantity, o.date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " 
+    	+ JOIN_CUSTOMER_TABLE_FULL_NAME + " c ON o.\"customer_id\" = c.\"customer_id\" AND c.name LIKE 'C%' LEFT JOIN " 
+    	+ JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN " 
+    	+ JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON s.\"supplier_id\" = i.\"supplier_id\" WHERE i.name LIKE 'T%'";
         ResultSet rs = conn.createStatement().executeQuery(query);
         assertEquals(
-        		"CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_NORMALIZED + "\n" +
+        		"CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
         		"    SERVER FILTER BY FIRST KEY ONLY\n" +
         		"    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
         		"    BUILD HASH TABLE 0\n" +
-        		"        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_NORMALIZED + "\n" +
+        		"        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
         		"            PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
         		"            BUILD HASH TABLE 0\n" +
-        		"                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_CUSTOMER_TABLE_NORMALIZED + "\n" +
+        		"                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + "\n" +
         		"                    SERVER FILTER BY NAME LIKE 'C%'\n" +
         		"            BUILD HASH TABLE 1\n" +
-        		"                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_NORMALIZED + "\n" +
+        		"                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
         		"    AFTER-JOIN SERVER FILTER BY I.NAME LIKE 'T%'", QueryUtil.getExplainPlan(rs));
     }
 
     @Test
     public void testWhereClauseOptimization() throws Exception {
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
-        String queryTemplate = "SELECT t1.\"item_id\", t2.\"item_id\", t3.\"item_id\" FROM " + JOIN_ITEM_TABLE + " t1 " 
-                + "%s JOIN " + JOIN_ITEM_TABLE + " t2 ON t1.\"item_id\" = t2.\"item_id\" " 
-                + "%s JOIN " + JOIN_ITEM_TABLE + " t3 ON t1.\"item_id\" = t3.\"item_id\" " 
+        String queryTemplate = "SELECT t1.\"item_id\", t2.\"item_id\", t3.\"item_id\" FROM " + JOIN_ITEM_TABLE_FULL_NAME + " t1 " 
+                + "%s JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " t2 ON t1.\"item_id\" = t2.\"item_id\" " 
+                + "%s JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " t3 ON t1.\"item_id\" = t3.\"item_id\" " 
                 + "WHERE t1.\"item_id\" = '0000000001' AND t2.\"item_id\" = '0000000002' AND t3.\"item_id\" = '0000000003'";
 
         String query = String.format(queryTemplate, "INNER", "INNER");

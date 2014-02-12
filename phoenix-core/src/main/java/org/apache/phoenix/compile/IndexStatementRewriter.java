@@ -10,6 +10,7 @@ import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.ParseNodeRewriter;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PDataType;
@@ -54,20 +55,10 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
     @Override
     public ParseNode visit(ColumnParseNode node) throws SQLException {
         ColumnRef dataColRef = getResolver().resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
-        TableName tName = null;
-        if (multiTableRewriteMap != null) {
-            TableRef origRef = dataColRef.getTableRef();
-            TableRef tableRef = multiTableRewriteMap.get(origRef);
-            if (tableRef == null)
-                return node;
-            
-            if (origRef.getTableAlias() != null) {
-                tName = TableName.create(null, origRef.getTableAlias());
-            } else {
-                String schemaName = tableRef.getTable().getSchemaName().getString();
-                tName = TableName.create(schemaName.length() == 0 ? null : schemaName, tableRef.getTable().getTableName().getString());
-            }
-        }
+        TableName tName = getReplacedTableName(dataColRef.getTableRef());
+        if (multiTableRewriteMap != null && tName == null)
+            return node;
+
         String indexColName = IndexUtil.getIndexColumnName(dataColRef.getColumn());
         // Same alias as before, but use the index column name instead of the data column name
         ParseNode indexColNode = new ColumnParseNode(tName, node.isCaseSensitive() ? '"' + indexColName + '"' : indexColName, node.getAlias());
@@ -94,8 +85,29 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
     }
 
     @Override
+    public ParseNode visit(TableWildcardParseNode node) throws SQLException {
+        TableName tName = getReplacedTableName(getResolver().resolveTable(node.getTableName().getSchemaName(), node.getTableName().getTableName()));
+        return tName == null ? node : TableWildcardParseNode.create(tName, true);
+    }
+
+    @Override
     public ParseNode visit(FamilyWildcardParseNode node) throws SQLException {
         return multiTableRewriteMap != null ? node : new FamilyWildcardParseNode(node, true);
+    }
+    
+    private TableName getReplacedTableName(TableRef origRef) {
+        if (multiTableRewriteMap == null)
+            return null;
+        
+        TableRef tableRef = multiTableRewriteMap.get(origRef);
+        if (tableRef == null)
+            return null;
+        
+        if (origRef.getTableAlias() != null)
+            return TableName.create(null, origRef.getTableAlias());
+            
+        String schemaName = tableRef.getTable().getSchemaName().getString();
+        return TableName.create(schemaName.length() == 0 ? null : schemaName, tableRef.getTable().getTableName().getString());
     }
     
 }

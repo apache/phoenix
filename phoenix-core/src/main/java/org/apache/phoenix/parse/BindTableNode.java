@@ -31,17 +31,9 @@ import java.sql.SQLException;
  * @since 0.1
  */
 public class BindTableNode extends ConcreteTableNode {
-    
-    public static BindTableNode create(String alias, TableName name, boolean isRewrite) {
-        return new BindTableNode(alias, name, isRewrite);
-    }
 
     BindTableNode(String alias, TableName name) {
-        this(alias, name, false);
-    }
-    
-    BindTableNode(String alias, TableName name, boolean isRewrite) {
-        super(alias, name, isRewrite);
+        super(alias, name);
     }
 
     @Override

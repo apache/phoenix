@@ -132,6 +132,11 @@ public abstract class TraverseNoParseNodeVisitor<T> extends BaseParseNodeVisitor
     }
     
     @Override
+    public T visit(TableWildcardParseNode node) throws SQLException {
+        return null;
+    }
+    
+    @Override
     public T visit(FamilyWildcardParseNode node) throws SQLException {
         return null;
     }
