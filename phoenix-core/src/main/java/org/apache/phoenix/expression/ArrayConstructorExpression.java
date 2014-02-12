@@ -75,7 +75,7 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
                     return false;
                 }
             } else {
-                elements[i] = baseType.toObject(ptr, child.getDataType(), child.getColumnModifier());
+                elements[i] = baseType.toObject(ptr, child.getDataType(), child.getSortOrder());
             }
         }
         if (position >= 0) position = elements.length;

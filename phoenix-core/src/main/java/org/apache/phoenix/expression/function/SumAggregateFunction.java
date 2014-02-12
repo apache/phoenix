@@ -34,7 +34,7 @@ import org.apache.phoenix.expression.aggregator.NumberSumAggregator;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.SumAggregateParseNode;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -62,22 +62,22 @@ public class SumAggregateFunction extends DelegateConstantToCountAggregateFuncti
         super(childExpressions, delegate);
     }
     
-    private Aggregator newAggregator(final PDataType type, ColumnModifier columnModifier, ImmutableBytesWritable ptr) {
+    private Aggregator newAggregator(final PDataType type, SortOrder sortOrder, ImmutableBytesWritable ptr) {
         switch( type ) {
             case DECIMAL:
-                return new DecimalSumAggregator(columnModifier, ptr);
+                return new DecimalSumAggregator(sortOrder, ptr);
             case UNSIGNED_DOUBLE:
             case UNSIGNED_FLOAT:
             case DOUBLE:
             case FLOAT:
-                return new DoubleSumAggregator(columnModifier, ptr) {
+                return new DoubleSumAggregator(sortOrder, ptr) {
                     @Override
                     protected PDataType getInputDataType() {
                         return type;
                     }
                 };
             default:
-                return new NumberSumAggregator(columnModifier, ptr) {
+                return new NumberSumAggregator(sortOrder, ptr) {
                     @Override
                     protected PDataType getInputDataType() {
                         return type;
@@ -88,19 +88,19 @@ public class SumAggregateFunction extends DelegateConstantToCountAggregateFuncti
 
     @Override
     public Aggregator newClientAggregator() {
-        return newAggregator(getDataType(), null, null);
+        return newAggregator(getDataType(), SortOrder.getDefault(), null);
     }
     
     @Override
     public Aggregator newServerAggregator(Configuration conf) {
         Expression child = getAggregatorExpression();
-        return newAggregator(child.getDataType(), child.getColumnModifier(), null);
+        return newAggregator(child.getDataType(), child.getSortOrder(), null);
     }
     
     @Override
     public Aggregator newServerAggregator(Configuration conf, ImmutableBytesWritable ptr) {
         Expression child = getAggregatorExpression();
-        return newAggregator(child.getDataType(), child.getColumnModifier(), ptr);
+        return newAggregator(child.getDataType(), child.getSortOrder(), ptr);
     }
     
     @Override
@@ -116,7 +116,7 @@ public class SumAggregateFunction extends DelegateConstantToCountAggregateFuncti
                 ptr.set(PDataType.DECIMAL.toBytes(value));
             } else {
                 long constantLongValue = ((Number)constantValue).longValue();
-                long value = constantLongValue * type.getCodec().decodeLong(ptr, null);
+                long value = constantLongValue * type.getCodec().decodeLong(ptr, SortOrder.getDefault());
                 byte[] resultPtr = new byte[type.getByteSize()];
                 type.getCodec().encodeLong(value, resultPtr, 0);
                 ptr.set(resultPtr);

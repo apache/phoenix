@@ -48,7 +48,7 @@ public class LongMultiplyExpression extends MultiplyExpression {
             if (ptr.getLength() == 0) {
                 return false;
             }
-            long childvalue = child.getDataType().getCodec().decodeLong(ptr, child.getColumnModifier());
+            long childvalue = child.getDataType().getCodec().decodeLong(ptr, child.getSortOrder());
             finalResult *= childvalue;
         }
         byte[] resultPtr=new byte[getDataType().getByteSize()];

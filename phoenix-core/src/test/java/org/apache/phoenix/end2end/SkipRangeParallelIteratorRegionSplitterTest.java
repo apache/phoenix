@@ -57,7 +57,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
@@ -273,10 +273,10 @@ public class SkipRangeParallelIteratorRegionSplitterTest extends BaseClientManag
                     return null;
                 }
                 @Override
-                public ColumnModifier getColumnModifier() {
-                    return null;
+                public SortOrder getSortOrder() {
+                    return SortOrder.getDefault();
                 }
-            }, false, null);
+            }, false, SortOrder.getDefault());
         }
         return builder.build();
     }

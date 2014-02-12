@@ -23,7 +23,7 @@ import java.math.BigDecimal;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SizedUtil;
@@ -40,8 +40,8 @@ public class DecimalSumAggregator extends BaseAggregator {
     private BigDecimal sum = BigDecimal.ZERO;
     private byte[] sumBuffer;
     
-    public DecimalSumAggregator(ColumnModifier columnModifier, ImmutableBytesWritable ptr) {
-        super(columnModifier);
+    public DecimalSumAggregator(SortOrder sortOrder, ImmutableBytesWritable ptr) {
+        super(sortOrder);
         if (ptr != null) {
             initBuffer();
             sum = (BigDecimal)PDataType.DECIMAL.toObject(ptr);
@@ -62,7 +62,7 @@ public class DecimalSumAggregator extends BaseAggregator {
     
     @Override
     public void aggregate(Tuple tuple, ImmutableBytesWritable ptr) {
-        BigDecimal value = (BigDecimal)getDataType().toObject(ptr, getInputDataType(), columnModifier);
+        BigDecimal value = (BigDecimal)getDataType().toObject(ptr, getInputDataType(), sortOrder);
         sum = sum.add(value);
         if (sumBuffer == null) {
             sumBuffer = new byte[getDataType().getByteSize()];

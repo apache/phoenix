@@ -65,7 +65,7 @@ import com.google.common.collect.Sets;
 
 
 
-public class WhereClauseOptimizerTest extends BaseConnectionlessQueryTest {
+public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     
     private static StatementContext compileStatement(String query, Scan scan, List<Object> binds) throws SQLException {
         return compileStatement(query, scan, binds, null, null);

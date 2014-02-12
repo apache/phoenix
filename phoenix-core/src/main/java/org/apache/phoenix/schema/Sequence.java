@@ -174,7 +174,7 @@ public class Sequence {
         // before a next val was. Not sure how to prevent that.
         if (result.raw().length == 1) {
             KeyValue errorKV = result.raw()[0];
-            int errorCode = PDataType.INTEGER.getCodec().decodeInt(errorKV.getBuffer(), errorKV.getValueOffset(), null);
+            int errorCode = PDataType.INTEGER.getCodec().decodeInt(errorKV.getBuffer(), errorKV.getValueOffset(), SortOrder.getDefault());
             SQLExceptionCode code = SQLExceptionCode.fromErrorCode(errorCode);
             // TODO: We could have the server return the timestamps of the
             // delete markers and we could insert them here, but this seems
@@ -286,9 +286,9 @@ public class Sequence {
             KeyValue incrementByKV = getIncrementByKV(r);
             KeyValue cacheSizeKV = getCacheSizeKV(r);
             timestamp = currentValueKV.getTimestamp();
-            nextValue = PDataType.LONG.getCodec().decodeLong(currentValueKV.getBuffer(), currentValueKV.getValueOffset(), null);
-            incrementBy = PDataType.LONG.getCodec().decodeLong(incrementByKV.getBuffer(), incrementByKV.getValueOffset(), null);
-            cacheSize = PDataType.INTEGER.getCodec().decodeInt(cacheSizeKV.getBuffer(), cacheSizeKV.getValueOffset(), null);
+            nextValue = PDataType.LONG.getCodec().decodeLong(currentValueKV.getBuffer(), currentValueKV.getValueOffset(), SortOrder.getDefault());
+            incrementBy = PDataType.LONG.getCodec().decodeLong(incrementByKV.getBuffer(), incrementByKV.getValueOffset(), SortOrder.getDefault());
+            cacheSize = PDataType.INTEGER.getCodec().decodeInt(cacheSizeKV.getBuffer(), cacheSizeKV.getValueOffset(), SortOrder.getDefault());
             currentValue = nextValue - incrementBy * cacheSize;
         }
     }
@@ -299,7 +299,7 @@ public class Sequence {
             return false;
         }
         long timestamp = statusKV.getTimestamp();
-        int statusCode = PDataType.INTEGER.getCodec().decodeInt(statusKV.getBuffer(), statusKV.getValueOffset(), null);
+        int statusCode = PDataType.INTEGER.getCodec().decodeInt(statusKV.getBuffer(), statusKV.getValueOffset(), SortOrder.getDefault());
         if (statusCode == SUCCESS) {  // Success - update nextValue down to currentValue
             SequenceValue value = findSequenceValue(timestamp);
             if (value == null) {
@@ -342,7 +342,7 @@ public class Sequence {
     public long createSequence(Result result) throws SQLException {
         KeyValue statusKV = result.raw()[0];
         long timestamp = statusKV.getTimestamp();
-        int statusCode = PDataType.INTEGER.getCodec().decodeInt(statusKV.getBuffer(), statusKV.getValueOffset(), null);
+        int statusCode = PDataType.INTEGER.getCodec().decodeInt(statusKV.getBuffer(), statusKV.getValueOffset(), SortOrder.getDefault());
         if (statusCode == 0) {  // Success - add sequence value and return timestamp
             SequenceValue value = new SequenceValue(timestamp);
             insertSequenceValue(value);
@@ -371,7 +371,7 @@ public class Sequence {
     public long dropSequence(Result result) throws SQLException {
         KeyValue statusKV = result.raw()[0];
         long timestamp = statusKV.getTimestamp();
-        int statusCode = PDataType.INTEGER.getCodec().decodeInt(statusKV.getBuffer(), statusKV.getValueOffset(), null);
+        int statusCode = PDataType.INTEGER.getCodec().decodeInt(statusKV.getBuffer(), statusKV.getValueOffset(), SortOrder.getDefault());
         SQLExceptionCode code = statusCode == 0 ? null : SQLExceptionCode.fromErrorCode(statusCode);
         if (code == null) {
             // Insert delete marker so that point-in-time sequences work

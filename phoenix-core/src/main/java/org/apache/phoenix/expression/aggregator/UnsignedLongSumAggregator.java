@@ -19,7 +19,7 @@
  */
 package org.apache.phoenix.expression.aggregator;
 
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 
 /**
@@ -32,8 +32,8 @@ import org.apache.phoenix.schema.PDataType;
  */
 public class UnsignedLongSumAggregator extends NumberSumAggregator {
     
-    public UnsignedLongSumAggregator(ColumnModifier columnModifier) {
-        super(columnModifier);
+    public UnsignedLongSumAggregator(SortOrder sortOrder) {
+        super(sortOrder);
     }
     
     @Override

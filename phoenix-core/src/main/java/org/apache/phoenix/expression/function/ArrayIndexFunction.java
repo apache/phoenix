@@ -56,7 +56,7 @@ public class ArrayIndexFunction extends ScalarFunction {
 		  return true;
 		}
 		// Use Codec to prevent Integer object allocation
-		int index = PDataType.INTEGER.getCodec().decodeInt(ptr, indexExpr.getColumnModifier());
+		int index = PDataType.INTEGER.getCodec().decodeInt(ptr, indexExpr.getSortOrder());
 		if(index < 0) {
 			throw new ParseException("Index cannot be negative :" + index);
 		}

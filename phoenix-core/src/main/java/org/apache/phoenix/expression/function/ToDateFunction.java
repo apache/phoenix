@@ -88,7 +88,7 @@ public class ToDateFunction extends ScalarFunction {
             return false;
         }
         PDataType type = expression.getDataType();
-        String dateStr = (String)type.toObject(ptr, expression.getColumnModifier());
+        String dateStr = (String)type.toObject(ptr, expression.getSortOrder());
         try {
             Object value = dateParser.parseObject(dateStr);
             byte[] byteValue = getDataType().toBytes(value);

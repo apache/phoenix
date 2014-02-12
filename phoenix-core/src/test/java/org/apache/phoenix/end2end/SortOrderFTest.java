@@ -40,15 +40,14 @@ import org.junit.Test;
 import com.google.common.collect.Lists;
 
 /**
- * 
  * @since 1.2
  */
-public class DescColumnSortOrderTest extends BaseHBaseManagedTimeTest {
+public class SortOrderFTest extends BaseHBaseManagedTimeTest {
     
     private static final String TABLE = "DescColumnSortOrderTest";
 
     @Test
-    public void noOder() throws Exception {
+    public void noOrder() throws Exception {
         String ddl = "CREATE TABLE " + TABLE + " (pk VARCHAR NOT NULL PRIMARY KEY)";
         runQueryTest(ddl, "pk", new Object[][]{{"a"}, {"b"}, {"c"}}, new Object[][]{{"a"}, {"b"}, {"c"}});
     }                                                           

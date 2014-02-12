@@ -37,9 +37,9 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.StringUtil;
 
@@ -169,10 +169,10 @@ public abstract class ExplainTable {
         }
         ScanRanges scanRanges = context.getScanRanges();
         PDataType type = scanRanges.getSchema().getField(slotIndex).getDataType();
-        ColumnModifier modifier = tableRef.getTable().getPKColumns().get(slotIndex).getColumnModifier();
-        if (modifier != null) {
+        SortOrder sortOrder = tableRef.getTable().getPKColumns().get(slotIndex).getSortOrder();
+        if (sortOrder == SortOrder.DESC) {
             buf.append('~');
-            range = modifier.apply(range, 0, new byte[range.length], 0, range.length);
+            range = SortOrder.invert(range, 0, new byte[range.length], 0, range.length);
         }
         Format formatter = context.getConnection().getFormatter(type);
         buf.append(type.toStringLiteral(range, formatter));

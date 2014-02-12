@@ -47,7 +47,7 @@ public class DoubleDivideExpression extends DivideExpression {
                 return true;
             }
             double childvalue = child.getDataType().getCodec()
-                    .decodeDouble(ptr, child.getColumnModifier());
+                    .decodeDouble(ptr, child.getSortOrder());
             if (!Double.isNaN(childvalue)
                     && childvalue != Double.NEGATIVE_INFINITY
                     && childvalue != Double.POSITIVE_INFINITY) {

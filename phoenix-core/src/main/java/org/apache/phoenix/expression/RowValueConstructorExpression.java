@@ -81,7 +81,7 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
                 } else if ((rhsType == PDataType.TIMESTAMP || rhsType == PDataType.UNSIGNED_TIMESTAMP)  && (lhsType != PDataType.TIMESTAMP && lhsType != PDataType.UNSIGNED_TIMESTAMP)) {
                     e = FloorDateExpression.create(rhs, TimeUnit.MILLISECOND);
                 }
-                e = new CoerceExpression(e, lhsType, lhs.getColumnModifier(), lhs.getByteSize());
+                e = new CoerceExpression(e, lhsType, lhs.getSortOrder(), lhs.getByteSize());
                 return e;
             }
             
@@ -100,7 +100,7 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
                 } else if ((rhsType == PDataType.TIMESTAMP || rhsType == PDataType.UNSIGNED_TIMESTAMP)  && (lhsType != PDataType.TIMESTAMP && lhsType != PDataType.UNSIGNED_TIMESTAMP)) {
                     e = CeilTimestampExpression.create(rhs);
                 }
-                e = new CoerceExpression(e, lhsType, lhs.getColumnModifier(), lhs.getByteSize());
+                e = new CoerceExpression(e, lhsType, lhs.getSortOrder(), lhs.getByteSize());
                 return e;
             }
             

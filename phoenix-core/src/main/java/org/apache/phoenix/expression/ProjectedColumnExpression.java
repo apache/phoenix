@@ -24,15 +24,13 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.join.ScanProjector;
 import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ValueBitSet;
-import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -40,17 +38,17 @@ public class ProjectedColumnExpression extends ColumnExpression {
 	private KeyValueSchema schema;
 	ValueBitSet bitSet;
 	private int position;
-	private byte[] name; // for display purpose only
+	private String displayName;
 	
 	public ProjectedColumnExpression() {
 	}
 
-	public ProjectedColumnExpression(PColumn column, PTable table) {
+	public ProjectedColumnExpression(PColumn column, PTable table, String displayName) {
 		super(column);
 		this.schema = buildSchema(table);
 		this.bitSet = ValueBitSet.newInstance(schema);
 		this.position = column.getPosition() - table.getPKColumns().size();
-		this.name = column.getName().getBytes();
+		this.displayName = displayName;
 	}
     
     private static KeyValueSchema buildSchema(PTable table) {
@@ -71,11 +69,7 @@ public class ProjectedColumnExpression extends ColumnExpression {
     	return position;
     }
     
-    public byte[] getName() {
-    	return name;
-    }
-
-    @Override
+   @Override
     public int hashCode() {
         final int prime = 31;
         int result = 1;
@@ -97,7 +91,7 @@ public class ProjectedColumnExpression extends ColumnExpression {
 
     @Override
     public String toString() {
-        return Bytes.toString(name);
+        return displayName;
     }
 	
 	@Override
@@ -125,7 +119,7 @@ public class ProjectedColumnExpression extends ColumnExpression {
         schema.readFields(input);
         bitSet = ValueBitSet.newInstance(schema);
         position = input.readInt();
-        name = Bytes.readByteArray(input);
+        displayName = input.readUTF();
     }
 
     @Override
@@ -133,7 +127,7 @@ public class ProjectedColumnExpression extends ColumnExpression {
         super.write(output);
         schema.write(output);
         output.writeInt(position);
-        Bytes.writeByteArray(output, name);
+        output.writeUTF(displayName);
     }
 
     @Override

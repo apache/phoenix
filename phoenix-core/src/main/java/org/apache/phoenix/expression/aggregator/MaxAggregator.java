@@ -22,7 +22,7 @@ package org.apache.phoenix.expression.aggregator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 
 
 /**
@@ -33,8 +33,8 @@ import org.apache.phoenix.schema.ColumnModifier;
  */
 abstract public class MaxAggregator extends MinAggregator {
     
-    public MaxAggregator(ColumnModifier columnModifier) {
-        super(columnModifier);
+    public MaxAggregator(SortOrder sortOrder) {
+        super(sortOrder);
     }
     
     @Override

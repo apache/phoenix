@@ -47,19 +47,23 @@ import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.TableAlreadyExistsException;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
-
-import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.schema.TableAlreadyExistsException;
-import org.apache.phoenix.util.QueryUtil;
+import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class HashJoinTest extends BaseHBaseManagedTimeTest {
@@ -70,6 +74,17 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     public HashJoinTest(String[] indexDDL, String[] plans) {
         this.indexDDL = indexDDL;
         this.plans = plans;
+    }
+    
+    @BeforeClass 
+    public static void doSetup() throws Exception {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        // Don't split intra region so we can more easily know that the n-way parallelization is for the explain plan
+        props.put(QueryServices.MAX_INTRA_REGION_PARALLELIZATION_ATTRIB, Integer.toString(1));
+        // Forces server cache to be used
+        props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
+        // Must update config before starting server
+        startServer(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
     
     @Before

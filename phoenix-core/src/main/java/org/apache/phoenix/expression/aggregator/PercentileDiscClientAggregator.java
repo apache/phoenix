@@ -24,7 +24,7 @@ import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.*;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -40,8 +40,8 @@ public class PercentileDiscClientAggregator extends DistinctValueWithCountClient
 	private final List<Expression> exps;
 	ColumnExpression columnExp = null;
 
-	public PercentileDiscClientAggregator(List<Expression> exps, ColumnModifier columnModifier) {
-	    super(columnModifier);
+	public PercentileDiscClientAggregator(List<Expression> exps, SortOrder sortOrder) {
+	    super(sortOrder);
 		this.exps = exps;
 	}
 

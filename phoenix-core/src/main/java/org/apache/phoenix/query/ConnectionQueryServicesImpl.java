@@ -425,10 +425,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         Object value = entry.getValue();
         hcd.setValue(key, value == null ? null : value.toString());
       }
-      hcd.setKeepDeletedCells(true);
     }
     
     private HTableDescriptor generateTableDescriptor(byte[] tableName, HTableDescriptor existingDesc, PTableType tableType, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits) throws SQLException {
+        String defaultFamilyName = (String)tableProps.remove(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);                
         HTableDescriptor descriptor = (existingDesc != null) ? new HTableDescriptor(existingDesc) : new HTableDescriptor(tableName);
         for (Entry<String,Object> entry : tableProps.entrySet()) {
             String key = entry.getKey();
@@ -437,8 +437,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         if (families.isEmpty()) {
             if (tableType != PTableType.VIEW) {
+                byte[] defaultFamilyByes = defaultFamilyName == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : Bytes.toBytes(defaultFamilyName);
                 // Add dummy column family so we have key values for tables that 
-                HColumnDescriptor columnDescriptor = generateColumnFamilyDescriptor(new Pair<byte[],Map<String,Object>>(QueryConstants.EMPTY_COLUMN_BYTES,Collections.<String,Object>emptyMap()), tableType);
+                HColumnDescriptor columnDescriptor = generateColumnFamilyDescriptor(new Pair<byte[],Map<String,Object>>(defaultFamilyByes,Collections.<String,Object>emptyMap()), tableType);
                 descriptor.addFamily(columnDescriptor);
             }
         } else {
@@ -586,7 +587,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean isMetaTable = SchemaUtil.isMetaTable(tableName);
         boolean tableExist = true;
         try {
-            System.out.println("Found quorum: " + ZKConfig.getZKQuorumServersString(config));
+            logger.info("Found quorum: " + ZKConfig.getZKQuorumServersString(config));
             admin = new HBaseAdmin(config);
             try {
                 existingDesc = admin.getTableDescriptor(tableName);

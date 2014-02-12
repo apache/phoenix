@@ -89,7 +89,7 @@ import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.StringConcatParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.parse.UnsupportedAllParseNodeVisitor;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.DelegateDatum;
@@ -569,8 +569,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             return PDataType.DEFAULT_SCALE;
         }
         @Override
-        public ColumnModifier getColumnModifier() {
-            return null;
+        public SortOrder getSortOrder() {
+            return SortOrder.getDefault();
         }        
     };
 
@@ -696,8 +696,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                             return expression.getScale();
                         }
                         @Override
-                        public ColumnModifier getColumnModifier() {
-                            return expression.getColumnModifier();
+                        public SortOrder getSortOrder() {
+                            return expression.getSortOrder();
                         }                        
                     };
                 } else if (expression.getDataType() != null
@@ -725,8 +725,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                             return expression.getScale();
                         }
                         @Override
-                        public ColumnModifier getColumnModifier() {
-                            return expression.getColumnModifier();
+                        public SortOrder getSortOrder() {
+                            return expression.getSortOrder();
                         }
                     };
                 }
@@ -873,8 +873,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                             return expression.getScale();
                         }
                         @Override
-                        public ColumnModifier getColumnModifier() {
-                            return expression.getColumnModifier();
+                        public SortOrder getSortOrder() {
+                            return expression.getSortOrder();
                         }
                     };
                 }
@@ -1151,7 +1151,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 Expression child = children.get(i);
                 isDeterministic &= child.isDeterministic();
                 child.evaluate(null, ptr);
-                Object value = arrayElemDataType.toObject(ptr, child.getDataType(), child.getColumnModifier());
+                Object value = arrayElemDataType.toObject(ptr, child.getDataType(), child.getSortOrder());
                 elements[i] = LiteralExpression.newConstant(value, child.getDataType(), child.isDeterministic()).getValue();
             }
             Object value = PArrayDataType.instantiatePhoenixArray(arrayElemDataType, elements);

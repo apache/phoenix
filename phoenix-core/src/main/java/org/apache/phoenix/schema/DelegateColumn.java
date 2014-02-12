@@ -40,8 +40,8 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
     }
     
     @Override
-    public ColumnModifier getColumnModifier() {
-    	return getDelegate().getColumnModifier();
+    public SortOrder getSortOrder() {
+    	return getDelegate().getSortOrder();
     }
 
     @Override

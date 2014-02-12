@@ -29,7 +29,7 @@ import org.apache.phoenix.expression.aggregator.MaxAggregator;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.MaxAggregateParseNode;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 
 
@@ -54,8 +54,8 @@ public class MaxAggregateFunction extends MinAggregateFunction {
     @Override 
     public Aggregator newServerAggregator(Configuration conf) {
         final PDataType type = getAggregatorExpression().getDataType();
-        ColumnModifier columnModifier = getAggregatorExpression().getColumnModifier();
-        return new MaxAggregator(columnModifier) {
+        SortOrder sortOrder = getAggregatorExpression().getSortOrder();
+        return new MaxAggregator(sortOrder) {
             @Override
             public PDataType getDataType() {
                 return type;
@@ -69,7 +69,7 @@ public class MaxAggregateFunction extends MinAggregateFunction {
     }
     
     @Override
-    public ColumnModifier getColumnModifier() {
-       return getAggregatorExpression().getColumnModifier(); 
+    public SortOrder getSortOrder() {
+       return getAggregatorExpression().getSortOrder(); 
     }    
 }

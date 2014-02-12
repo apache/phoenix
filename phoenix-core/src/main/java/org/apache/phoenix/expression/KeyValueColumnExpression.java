@@ -26,7 +26,6 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -43,14 +42,20 @@ import org.apache.phoenix.util.SchemaUtil;
 public class KeyValueColumnExpression extends ColumnExpression {
     private byte[] cf;
     private byte[] cq;
+    private String displayName; // client-side only
 
     public KeyValueColumnExpression() {
     }
 
     public KeyValueColumnExpression(PColumn column) {
+        this(column, null);
+    }
+
+    public KeyValueColumnExpression(PColumn column, String displayName) {
         super(column);
         this.cf = column.getFamilyName().getBytes();
         this.cq = column.getName().getBytes();
+        this.displayName = displayName;
     }
 
     public byte[] getColumnFamily() {
@@ -84,7 +89,10 @@ public class KeyValueColumnExpression extends ColumnExpression {
 
     @Override
     public String toString() {
-        return SchemaUtil.getColumnDisplayName(cf, cq);
+        if (displayName == null) {
+            displayName = SchemaUtil.getColumnDisplayName(cf, cq);
+        }
+        return displayName;
     }
 
     @Override

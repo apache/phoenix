@@ -61,7 +61,7 @@ public class PercentileDiscAggregateFunction extends DistinctValueWithCountAggre
 	
 	@Override
 	public DistinctValueWithCountClientAggregator newClientAggregator() {
-		return new PercentileDiscClientAggregator(children, getAggregatorExpression().getColumnModifier());
+		return new PercentileDiscClientAggregator(children, getAggregatorExpression().getSortOrder());
 	}
 
 	@Override

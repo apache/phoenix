@@ -36,11 +36,13 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+
 
 /*
  * Implementation of a SQL foo IN (a,b,c) expression. Other than the first
@@ -83,10 +85,10 @@ public class InListExpression extends BaseSingleExpression {
                         coercedKeyExpressions.add(LiteralExpression.newConstant(null, firstChildType, true));
                     }
                 } else {
-                    // Don't specify the firstChild column modifier here, as we specify it in the LiteralExpression creation below
+                    // Don't specify the firstChild SortOrder here, as we specify it in the LiteralExpression creation below
                     try {
-                        firstChildType.coerceBytes(ptr, rhs.getDataType(), rhs.getColumnModifier(), null);
-                        keys.add(LiteralExpression.newConstant(ByteUtil.copyKeyBytesIfNecessary(ptr), PDataType.VARBINARY, firstChild.getColumnModifier(), true));
+                        firstChildType.coerceBytes(ptr, rhs.getDataType(), rhs.getSortOrder(), SortOrder.getDefault());
+                        keys.add(LiteralExpression.newConstant(ByteUtil.copyKeyBytesIfNecessary(ptr), PDataType.VARBINARY, firstChild.getSortOrder(), true));
                         if(rhs.getDataType() == firstChildType) {
                             coercedKeyExpressions.add(rhs);
                         } else {
@@ -288,8 +290,8 @@ public class InListExpression extends BaseSingleExpression {
             buf.append("null,");
         }
         for (ImmutableBytesPtr value : values) {
-            if (firstChild.getColumnModifier() != null) {
-                type.coerceBytes(value, type, firstChild.getColumnModifier(), null);
+            if (firstChild.getSortOrder() != null) {
+                type.coerceBytes(value, type, firstChild.getSortOrder(), SortOrder.getDefault());
             }
             buf.append(type.toStringLiteral(value, null));
             buf.append(',');

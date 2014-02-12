@@ -75,7 +75,7 @@ public class ExpressionProjector implements ColumnProjector {
             if (ptr.getLength() == 0) {
                 return null;
             }        
-            return type.toObject(ptr, expression.getDataType(), expression.getColumnModifier());
+            return type.toObject(ptr, expression.getDataType(), expression.getSortOrder());
         } catch (RuntimeException e) {
             // FIXME: Expression.evaluate does not throw SQLException
             // so this will unwrap throws from that.

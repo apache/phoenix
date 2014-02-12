@@ -50,7 +50,7 @@ import org.apache.phoenix.util.QueryUtil;
 /**
  * Test compilation of queries containing joins.
  */
-public class JoinQueryCompileTest extends BaseConnectionlessQueryTest {
+public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testExplainPlan() throws Exception {

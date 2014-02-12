@@ -59,7 +59,7 @@ public class PercentRankAggregateFunction extends DistinctValueWithCountAggregat
 
     @Override
     public DistinctValueWithCountClientAggregator newClientAggregator() {
-        return new PercentRankClientAggregator(children, getAggregatorExpression().getColumnModifier());
+        return new PercentRankClientAggregator(children, getAggregatorExpression().getSortOrder());
     }
 
     @Override

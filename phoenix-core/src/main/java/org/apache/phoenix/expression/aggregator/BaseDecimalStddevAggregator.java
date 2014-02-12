@@ -28,7 +28,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.BigDecimalUtil;
@@ -44,8 +44,8 @@ public abstract class BaseDecimalStddevAggregator extends DistinctValueWithCount
     private int colPrecision;
     private int colScale;
 
-    public BaseDecimalStddevAggregator(List<Expression> exps, ColumnModifier columnModifier) {
-        super(columnModifier);
+    public BaseDecimalStddevAggregator(List<Expression> exps, SortOrder sortOrder) {
+        super(sortOrder);
         ColumnExpression stdDevColExp = (ColumnExpression)exps.get(0);
         this.colPrecision = stdDevColExp.getMaxLength();
         this.colScale = stdDevColExp.getScale();

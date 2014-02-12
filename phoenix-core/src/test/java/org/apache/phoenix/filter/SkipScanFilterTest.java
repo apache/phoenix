@@ -18,7 +18,7 @@ import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
@@ -70,11 +70,11 @@ public class SkipScanFilterTest extends TestCase {
                 }
 
 				@Override
-				public ColumnModifier getColumnModifier() {
-					return null;
+				public SortOrder getSortOrder() {
+					return SortOrder.getDefault();
 				}
                 
-            }, width <= 0, null);
+            }, width <= 0, SortOrder.getDefault());
         }
         skipper = new SkipScanFilter(cnf, builder.build());
     }

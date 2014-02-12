@@ -120,7 +120,7 @@ public class RowKeyColumnExpression  extends ColumnExpression {
                 }
                 */
                 ptr.set(buffer,offset,length);
-                type.coerceBytes(ptr, fromType, getColumnModifier(), getColumnModifier());
+                type.coerceBytes(ptr, fromType, getSortOrder(), getSortOrder());
             } else {
                 ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             }

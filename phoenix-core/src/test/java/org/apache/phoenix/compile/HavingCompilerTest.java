@@ -22,9 +22,7 @@ package org.apache.phoenix.compile;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.and;
 import static org.apache.phoenix.util.TestUtil.constantComparison;
-import static org.apache.phoenix.util.TestUtil.kvColumn;
 import static org.apache.phoenix.util.TestUtil.or;
-import static org.apache.phoenix.util.TestUtil.pkColumn;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -39,11 +37,10 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
-import org.junit.Test;
-
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.RoundDateExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -51,9 +48,12 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.RowKeyValueAccessor;
+import org.junit.Test;
 
 
-public class HavingClauseTest extends BaseConnectionlessQueryTest {
+public class HavingCompilerTest extends BaseConnectionlessQueryTest {
     private static StatementContext context;
     
     private static class Expressions {
@@ -102,7 +102,7 @@ public class HavingClauseTest extends BaseConnectionlessQueryTest {
         Date date = new Date(System.currentTimeMillis());
         List<Object> binds = Arrays.<Object>asList(date);
         Expressions expressions = compileStatement(query,binds);
-        Expression w = constantComparison(CompareOp.GREATER, RoundDateExpression.create(Arrays.asList(kvColumn(BaseConnectionlessQueryTest.A_DATE),LiteralExpression.newConstant("hour"),LiteralExpression.newConstant(1))), date);
+        Expression w = constantComparison(CompareOp.GREATER, RoundDateExpression.create(Arrays.asList(BaseConnectionlessQueryTest.A_DATE,LiteralExpression.newConstant("hour"),LiteralExpression.newConstant(1))), date);
         assertEquals(w, expressions.whereClause);
         assertNull(expressions.havingClause);
     }
@@ -145,7 +145,7 @@ public class HavingClauseTest extends BaseConnectionlessQueryTest {
         String query = "select count(1) from atable group by a_string having count(a_string) >= 1";
         List<Object> binds = Collections.emptyList();
         Expressions expressions = compileStatement(query,binds);
-        Expression h = constantComparison(CompareOp.GREATER_OR_EQUAL, new CountAggregateFunction(Arrays.asList(kvColumn(BaseConnectionlessQueryTest.A_STRING))),1L);
+        Expression h = constantComparison(CompareOp.GREATER_OR_EQUAL, new CountAggregateFunction(Arrays.asList(BaseConnectionlessQueryTest.A_STRING)),1L);
         assertTrue(LiteralExpression.isTrue(expressions.whereClause));
         assertEquals(h, expressions.havingClause);
     }
@@ -155,7 +155,12 @@ public class HavingClauseTest extends BaseConnectionlessQueryTest {
         String query = "select count(1) from atable group by a_string having count(1) >= 1 or a_string = 'foo'";
         List<Object> binds = Collections.emptyList();
         Expressions expressions = compileStatement(query,binds);
-        Expression h = or(constantComparison(CompareOp.GREATER_OR_EQUAL, new CountAggregateFunction(),1L),constantComparison(CompareOp.EQUAL, pkColumn(BaseConnectionlessQueryTest.A_STRING,Arrays.asList(BaseConnectionlessQueryTest.A_STRING)),"foo"));
+        PColumn aCol = BaseConnectionlessQueryTest.ATABLE.getColumn("A_STRING");
+        Expression h = or(
+                constantComparison(CompareOp.GREATER_OR_EQUAL, new CountAggregateFunction(),1L),
+                constantComparison(CompareOp.EQUAL, 
+                        new RowKeyColumnExpression(aCol, // a_string comes from group by key in this case
+                                new RowKeyValueAccessor(Arrays.<PColumn>asList(aCol), 0)),"foo"));
         assertTrue(LiteralExpression.isTrue(expressions.whereClause));
         assertEquals(h, expressions.havingClause);
     }

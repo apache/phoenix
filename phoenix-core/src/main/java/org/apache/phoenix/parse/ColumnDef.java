@@ -23,9 +23,11 @@ import java.sql.SQLException;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.base.Preconditions;
 
 
 /**
@@ -42,13 +44,14 @@ public class ColumnDef {
     private final Integer maxLength;
     private final Integer scale;
     private final boolean isPK;
-    private final ColumnModifier columnModifier;
+    private final SortOrder sortOrder;
     private final boolean isArray;
     private final Integer arrSize;
  
     ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, boolean isNull, Integer maxLength,
-    		            Integer scale, boolean isPK, ColumnModifier columnModifier) {
+    		            Integer scale, boolean isPK, SortOrder sortOrder) {
    	 try {
+         Preconditions.checkNotNull(sortOrder);
    	     PDataType localType = null;
          this.columnDefName = columnDefName;
          this.isArray = isArray;
@@ -127,7 +130,7 @@ public class ColumnDef {
          this.maxLength = maxLength;
          this.scale = scale;
          this.isPK = isPK;
-         this.columnModifier = columnModifier;
+         this.sortOrder = sortOrder;
          if(this.isArray) {
              this.dataType = localType;
          }
@@ -136,8 +139,8 @@ public class ColumnDef {
      }
     }
     ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isNull, Integer maxLength,
-            Integer scale, boolean isPK, ColumnModifier columnModifier) {
-    	this(columnDefName, sqlTypeName, false, 0, isNull, maxLength, scale, isPK, columnModifier);
+            Integer scale, boolean isPK, SortOrder sortOrder) {
+    	this(columnDefName, sqlTypeName, false, 0, isNull, maxLength, scale, isPK, sortOrder);
     }
 
     public ColumnName getColumnDefName() {
@@ -164,8 +167,8 @@ public class ColumnDef {
         return isPK;
     }
     
-    public ColumnModifier getColumnModifier() {
-    	return columnModifier;
+    public SortOrder getSortOrder() {
+    	return sortOrder;
     }
         
 	public boolean isArray() {

@@ -26,7 +26,7 @@ import java.util.Map.Entry;
 import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -39,8 +39,8 @@ public abstract class BaseStddevAggregator extends DistinctValueWithCountClientA
 
     protected Expression stdDevColExp;
 
-    public BaseStddevAggregator(List<Expression> exps, ColumnModifier columnModifier) {
-        super(columnModifier);
+    public BaseStddevAggregator(List<Expression> exps, SortOrder sortOrder) {
+        super(sortOrder);
         this.stdDevColExp = exps.get(0);
     }
 

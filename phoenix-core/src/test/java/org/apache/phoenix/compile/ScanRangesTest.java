@@ -33,7 +33,7 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
@@ -499,10 +499,10 @@ public class ScanRangesTest {
                         return null;
                     }
                     @Override
-                    public ColumnModifier getColumnModifier() {
-                        return null;
+                    public SortOrder getSortOrder() {
+                        return SortOrder.getDefault();
                     }
-                }, false, null);
+                }, false, SortOrder.getDefault());
             } else {
                 builder.addField(new PDatum() {
                     @Override
@@ -526,10 +526,10 @@ public class ScanRangesTest {
                         return null;
                     }
                     @Override
-                    public ColumnModifier getColumnModifier() {
-                        return null;
+                    public SortOrder getSortOrder() {
+                        return SortOrder.getDefault();
                     }
-                }, false, null);
+                }, false, SortOrder.getDefault());
             }
         }
         ScanRanges scanRanges = ScanRanges.create(slots, builder.build());

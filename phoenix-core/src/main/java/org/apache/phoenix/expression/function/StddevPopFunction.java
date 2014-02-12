@@ -61,9 +61,9 @@ public class StddevPopFunction extends DistinctValueWithCountAggregateFunction {
     public DistinctValueWithCountClientAggregator newClientAggregator() {
         if (children.get(0).getDataType() == PDataType.DECIMAL) {
             // Special Aggregators for DECIMAL datatype for more precision than double
-            return new DecimalStddevPopAggregator(children, getAggregatorExpression().getColumnModifier());
+            return new DecimalStddevPopAggregator(children, getAggregatorExpression().getSortOrder());
         }
-        return new StddevPopAggregator(children, getAggregatorExpression().getColumnModifier());
+        return new StddevPopAggregator(children, getAggregatorExpression().getSortOrder());
     }
     
     @Override

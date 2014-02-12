@@ -22,7 +22,7 @@ package org.apache.phoenix.expression.aggregator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SizedUtil;
@@ -38,8 +38,8 @@ abstract public class MinAggregator extends BaseAggregator {
     /** Used to store the accumulate the results of the MIN function */
     protected final ImmutableBytesWritable value = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
     
-    public MinAggregator(ColumnModifier columnModifier) {
-        super(columnModifier);
+    public MinAggregator(SortOrder sortOrder) {
+        super(sortOrder);
     }
 
     @Override
@@ -63,7 +63,7 @@ abstract public class MinAggregator extends BaseAggregator {
      * @return true if the first bytes writable should be kept
      */
     protected boolean keepFirst(ImmutableBytesWritable ibw1, ImmutableBytesWritable ibw2) {
-        return 0 >= getDataType().compareTo(ibw1, columnModifier, ibw2, columnModifier, getDataType());
+        return 0 >= getDataType().compareTo(ibw1, sortOrder, ibw2, sortOrder, getDataType());
     }
 
     private boolean isNull() {

@@ -60,13 +60,13 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.IndexUtil;
@@ -107,9 +107,9 @@ public class DeleteCompiler {
                     byte[] byteValue = rs.getBytes(i+1-offset);
                     // The ResultSet.getBytes() call will have inverted it - we need to invert it back.
                     // TODO: consider going under the hood and just getting the bytes
-                    if (pkColumns.get(i).getColumnModifier() == ColumnModifier.SORT_DESC) {
+                    if (pkColumns.get(i).getSortOrder() == SortOrder.DESC) {
                         byte[] tempByteValue = Arrays.copyOf(byteValue, byteValue.length);
-                        byteValue = ColumnModifier.SORT_DESC.apply(byteValue, 0, tempByteValue, 0, byteValue.length);
+                        byteValue = SortOrder.invert(byteValue, 0, tempByteValue, 0, byteValue.length);
                     }
                     values[i] = byteValue;
                 }
@@ -344,7 +344,7 @@ public class DeleteCompiler {
                         long totalRowCount = 0;
                         while ((tuple=iterator.next()) != null) {// Runs query
                             KeyValue kv = tuple.getValue(0);
-                            totalRowCount += PDataType.LONG.getCodec().decodeLong(kv.getBuffer(), kv.getValueOffset(), null);
+                            totalRowCount += PDataType.LONG.getCodec().decodeLong(kv.getBuffer(), kv.getValueOffset(), SortOrder.getDefault());
                         }
                         // Return total number of rows that have been delete. In the case of auto commit being off
                         // the mutations will all be in the mutation state of the current connection.

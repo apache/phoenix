@@ -57,6 +57,7 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+
 import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
 import org.apache.phoenix.expression.Expression;
@@ -69,7 +70,7 @@ import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.ScanProjector;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
@@ -212,10 +213,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 Expression expression = selectExpressions.get(i);
                                 if (expression.evaluate(result, ptr)) {
                                     values[i] = ptr.copyBytes();
-                                    // If ColumnModifier from expression in SELECT doesn't match the
+                                    // If SortOrder from expression in SELECT doesn't match the
                                     // column being projected into then invert the bits.
-                                    if (expression.getColumnModifier() != projectedColumns.get(i).getColumnModifier()) {
-                                        ColumnModifier.SORT_DESC.apply(values[i], 0, values[i], 0, values[i].length);
+                                    if (expression.getSortOrder() != projectedColumns.get(i).getSortOrder()) {
+                                        SortOrder.invert(values[i], 0, values[i], 0, values[i].length);
                                     }
                                 }
                             }
@@ -226,11 +227,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 if (expression.evaluate(result, ptr)) {
                                     PColumn column = projectedColumns.get(i);
                                     byte[] bytes = ptr.copyBytes();
-                                    Object value = expression.getDataType().toObject(bytes, column.getColumnModifier());
-                                    // If ColumnModifier from expression in SELECT doesn't match the
+                                    Object value = expression.getDataType().toObject(bytes, column.getSortOrder());
+                                    // If SortOrder from expression in SELECT doesn't match the
                                     // column being projected into then invert the bits.
-                                    if (expression.getColumnModifier() != column.getColumnModifier()) {
-                                        ColumnModifier.SORT_DESC.apply(bytes, 0, bytes, 0, bytes.length);
+                                    if (expression.getSortOrder() != column.getSortOrder()) {
+                                        SortOrder.invert(bytes, 0, bytes, 0, bytes.length);
                                     }
                                     // We are guaranteed that the two column will have the same type.
                                     if (!column.getDataType().isSizeCompatible(column.getDataType(),

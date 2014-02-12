@@ -20,8 +20,8 @@
 package org.apache.phoenix.expression.aggregator;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SizedUtil;
 
@@ -38,7 +38,7 @@ public class CountAggregator extends BaseAggregator {
     private byte[] buffer = null;
 
     public CountAggregator() {
-        super(null);
+        super(SortOrder.getDefault());
     }
 
     public CountAggregator(LongSumAggregator clientAgg) {

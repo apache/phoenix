@@ -57,7 +57,7 @@ public class RowKeyValueAccessorTest  extends BaseConnectionlessQueryTest  {
         
         PDataType dataType = pkColumns.get(index).getDataType();
         Object expectedObject = dataType.toObject(values[index], PDataType.fromLiteral(values[index]));
-        dataType.coerceBytes(ptr, dataType, pkColumns.get(index).getColumnModifier(), null);
+        dataType.coerceBytes(ptr, dataType, pkColumns.get(index).getSortOrder(), SortOrder.getDefault());
         Object actualObject = dataType.toObject(ptr);
         assertEquals(expectedObject, actualObject);
     }

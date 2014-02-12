@@ -28,7 +28,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 
 
 
@@ -62,8 +62,8 @@ public abstract class BaseExpression implements Expression {
     }
     
     @Override
-    public ColumnModifier getColumnModifier() {
-    	    return null;
+    public SortOrder getSortOrder() {
+        return SortOrder.getDefault();
     }    
 
     @Override

@@ -37,7 +37,7 @@ import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.TestUtil;
 
-public class ViewCompileTest extends BaseConnectionlessQueryTest {
+public class ViewCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testViewTypeCalculation() throws Exception {
         assertViewType(new String[] {

@@ -28,7 +28,7 @@ public class UpperFunction extends ScalarFunction {
             return false;
         }
 
-        String sourceStr = (String)PDataType.VARCHAR.toObject(ptr, getStrExpression().getColumnModifier());
+        String sourceStr = (String)PDataType.VARCHAR.toObject(ptr, getStrExpression().getSortOrder());
         if (sourceStr == null) {
             return true;
         }

@@ -45,7 +45,7 @@ public class LongAddExpression extends AddExpression {
             if (!child.evaluate(tuple, ptr) || ptr.getLength() == 0) {
                 return false;
             }
-            long childvalue = child.getDataType().getCodec().decodeLong(ptr, child.getColumnModifier());
+            long childvalue = child.getDataType().getCodec().decodeLong(ptr, child.getSortOrder());
             finalResult += childvalue;
         }
         byte[] resultPtr=new byte[PDataType.LONG.getByteSize()];

@@ -289,8 +289,8 @@ public class PTableImpl implements PTable {
         Map<PName, List<PColumn>> familyMap = Maps.newLinkedHashMap();
         for (PColumn column : allColumns) {
             PName familyName = column.getFamilyName();
-            if (familyName == null) {
-                builder.addField(column, column.isNullable(), column.getColumnModifier());
+            if (familyName == null) {            	
+                builder.addField(column, column.isNullable(), column.getSortOrder());
             } else {
                 List<PColumn> columnsInFamily = familyMap.get(familyName);
                 if (columnsInFamily == null) {
@@ -468,8 +468,10 @@ public class PTableImpl implements PTable {
         }
         if (size > 1) {
             for (PColumn column : columns) {
-                if (QueryConstants.DEFAULT_COLUMN_FAMILY.equals(column.getFamilyName().getString())) {
-                    // Allow ambiguity with default column, since a user would not know how to prefix it.
+                if (column.getFamilyName() == null || QueryConstants.DEFAULT_COLUMN_FAMILY.equals(column.getFamilyName().getString())) {
+                    // Allow ambiguity with PK column or column in the default column family,
+                    // since a PK column cannot be prefixed and a user would not know how to
+                    // prefix a column in the default column family.
                     return column;
                 }
             }
@@ -530,7 +532,7 @@ public class PTableImpl implements PTable {
                 // we upsert it), se instead add a KV that is always emtpy. This allows us to imitate SQL semantics given the
                 // way HBase works.
                 addQuietly(setValues, kvBuilder, kvBuilder.buildPut(keyPtr,
-                    SchemaUtil.getEmptyColumnFamilyPtr(getColumnFamilies()),
+                    SchemaUtil.getEmptyColumnFamilyPtr(PTableImpl.this),
                     QueryConstants.EMPTY_COLUMN_BYTES_PTR, ts, ByteUtil.EMPTY_BYTE_ARRAY_PTR));
                 mutations.add(setValues);
                 if (!unsetValues.isEmpty()) {

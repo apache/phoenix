@@ -294,7 +294,7 @@ public class FromCompiler {
                 List<PColumn> allcolumns = new ArrayList<PColumn>();
                 allcolumns.addAll(theTable.getColumns());
                 int position = allcolumns.size();
-                PName defaultFamilyName = PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(theTable.getColumnFamilies()));
+                PName defaultFamilyName = PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(theTable));
                 for (ColumnDef dynColumn : dynColumns) {
                     PName familyName = defaultFamilyName;
                     PName name = PNameFactory.newName(dynColumn.getColumnDefName().getColumnName());
@@ -304,7 +304,7 @@ public class FromCompiler {
                         familyName = PNameFactory.newName(family);
                     }
                     allcolumns.add(new PColumnImpl(name, familyName, dynColumn.getDataType(), dynColumn.getMaxLength(),
-                            dynColumn.getScale(), dynColumn.isNull(), position, dynColumn.getColumnModifier(), dynColumn.getArraySize()));
+                            dynColumn.getScale(), dynColumn.isNull(), position, dynColumn.getSortOrder(), dynColumn.getArraySize()));
                     position++;
                 }
                 theTable = PTableImpl.makePTable(theTable, allcolumns);
