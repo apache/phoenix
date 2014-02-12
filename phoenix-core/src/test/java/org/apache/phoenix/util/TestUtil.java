@@ -163,7 +163,7 @@ public class TestUtil {
     public static final String INDEX_DATA_SCHEMA = "INDEX_TEST";
     public static final String INDEX_DATA_TABLE = "INDEX_DATA_TABLE";
     public static final String MUTABLE_INDEX_DATA_TABLE = "MUTABLE_INDEX_DATA_TABLE";
-    public static final String JOIN_SCHEMA = "JOIN";
+    public static final String JOIN_SCHEMA = "Join";
     public static final String JOIN_ORDER_TABLE = "OrderTable";
     public static final String JOIN_CUSTOMER_TABLE = "CustomerTable";
     public static final String JOIN_ITEM_TABLE = "ItemTable";

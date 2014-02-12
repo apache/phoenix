@@ -253,9 +253,9 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                 }});
         testCases.add(new String[][] {
                 {
-                "CREATE INDEX IDX_CUSTOMER ON " + JOIN_CUSTOMER_TABLE_FULL_NAME + " (name)",
-                "CREATE INDEX IDX_ITEM ON " + JOIN_ITEM_TABLE_FULL_NAME + " (name) INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
-                "CREATE INDEX IDX_SUPPLIER ON " + JOIN_SUPPLIER_TABLE_FULL_NAME + " (name)"
+                "CREATE INDEX \"idx_customer\" ON " + JOIN_CUSTOMER_TABLE_FULL_NAME + " (name)",
+                "CREATE INDEX \"idx_item\" ON " + JOIN_ITEM_TABLE_FULL_NAME + " (name) INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
+                "CREATE INDEX \"idx_supplier\" ON " + JOIN_SUPPLIER_TABLE_FULL_NAME + " (name)"
                 }, {
                 /* 
                  * testLeftJoinWithAggregation()
@@ -269,7 +269,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                 "CLIENT SORTED BY [I.0:NAME]\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".IDX_ITEM\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY",
                 /* 
                  * testLeftJoinWithAggregation()
@@ -283,7 +283,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                 "CLIENT SORTED BY [SUM(O.QUANTITY) DESC]\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".IDX_ITEM\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY",
                 /* 
                  * testLeftJoinWithAggregation()
@@ -305,7 +305,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                  *     RIGHT JOIN joinItemTable i ON o.item_id = i.item_id 
                  *     GROUP BY i.name ORDER BY i.name
                  */
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".IDX_ITEM\n" +
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.0:NAME]\n" +
                 "CLIENT MERGE SORT\n" +
@@ -344,11 +344,11 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                  *         AND (supp.name BETWEEN 'S1' AND 'S5') 
                  *     WHERE item.name BETWEEN 'T1' AND 'T5'
                  */
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SCHEMA + ".IDX_ITEM ['T1'] - ['T5']\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SCHEMA + ".idx_item ['T1'] - ['T5']\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SCHEMA + ".IDX_SUPPLIER ['S1'] - ['S5']",
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SCHEMA + ".idx_supplier ['S1'] - ['S5']",
                 /*
                  * testJoinPlanWithIndex()
                  *     SELECT item.item_id, item.name, supp.supplier_id, supp.name 
@@ -357,23 +357,23 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                  *     WHERE (item.name = 'T1' OR item.name = 'T5') 
                  *         AND (supp.name = 'S1' OR supp.name = 'S5')
                  */
-                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER " + JOIN_SCHEMA + ".IDX_ITEM ['T1'] - ['T5']\n" +
+                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER " + JOIN_SCHEMA + ".idx_item ['T1'] - ['T5']\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER " + JOIN_SCHEMA + ".IDX_SUPPLIER ['S1'] - ['S5']",
+                "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER " + JOIN_SCHEMA + ".idx_supplier ['S1'] - ['S5']",
                 /*
                  * testJoinWithSkipMergeOptimization()
                  *     SELECT s.name FROM joinItemTable i 
                  *     JOIN joinOrderTable o ON o.item_id = i.item_id AND quantity < 5000 
                  *     JOIN joinSupplierTable s ON i.supplier_id = s.supplier_id
                  */
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".IDX_ITEM\n" +
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0 (SKIP MERGE)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
                 "    BUILD HASH TABLE 1\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".IDX_SUPPLIER",
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_supplier",
                 /*
                  * testSelfJoin
                  *     SELECT i2.item_id, i1.name FROM joinItemTable i1 
@@ -383,7 +383,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".IDX_ITEM\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY",
                 /*
                  * testSelfJoin
@@ -391,13 +391,13 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                  *     JOIN joinItemTable i2 ON i1.item_id = i2.supplier_id 
                  *     ORDER BY i1.name, i2.name
                  */
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".IDX_ITEM\n" +
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER SORTED BY [I1.0:NAME, I2.0:NAME]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".IDX_ITEM",
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item",
                 }});
         return testCases;
     }
