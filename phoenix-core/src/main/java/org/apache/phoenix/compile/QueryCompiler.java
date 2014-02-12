@@ -46,6 +46,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.ScanProjector;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
@@ -79,7 +80,7 @@ public class QueryCompiler {
     private static final String LOAD_COLUMN_FAMILIES_ON_DEMAND_ATTR = "_ondemand_";
     private final PhoenixStatement statement;
     private final Scan scan;
-    private final Scan scanCopy;
+    private final Scan originalScan;
     private final ColumnResolver resolver;
     private final SelectStatement select;
     private final List<? extends PDatum> targetColumns;
@@ -99,7 +100,11 @@ public class QueryCompiler {
         if (statement.getConnection().getQueryServices().getLowestClusterHBaseVersion() >= PhoenixDatabaseMetaData.ESSENTIAL_FAMILY_VERSION_THRESHOLD) {
             this.scan.setAttribute(LOAD_COLUMN_FAMILIES_ON_DEMAND_ATTR, QueryConstants.TRUE);
         }
-        this.scanCopy = ScanUtil.newScan(scan);
+        if (select.getHint().hasHint(Hint.NO_CACHE)) {
+            scan.setCacheBlocks(false);
+        }
+
+        this.originalScan = ScanUtil.newScan(scan);
     }
 
     /**
@@ -163,7 +168,7 @@ public class QueryCompiler {
                     throw new SQLFeatureNotSupportedException("Sub queries not supported.");
                 ProjectedPTableWrapper subProjTable = join.createProjectedTable(joinTable.getTable(), false);
                 ColumnResolver resolver = join.getColumnResolver(subProjTable);
-                Scan subScan = ScanUtil.newScan(scanCopy);
+                Scan subScan = ScanUtil.newScan(originalScan);
                 ScanProjector.serializeProjectorIntoScan(subScan, JoinCompiler.getScanProjector(subProjTable));
                 StatementContext subContext = new StatementContext(statement, resolver, binds, subScan);
                 subContext.setCurrentTable(joinTable.getTable());
@@ -211,7 +216,7 @@ public class QueryCompiler {
             SelectStatement lhs = JoinCompiler.getSubQueryWithoutLastJoin(select, join);
             SelectStatement rhs = JoinCompiler.getSubqueryForLastJoinTable(select, join);
             JoinSpec lhsJoin = JoinCompiler.getSubJoinSpecWithoutPostFilters(join);
-            Scan subScan = ScanUtil.newScan(scanCopy);
+            Scan subScan = ScanUtil.newScan(originalScan);
             StatementContext lhsCtx = new StatementContext(statement, context.getResolver(), binds, subScan);
             QueryPlan lhsPlan = compileJoinQuery(lhsCtx, lhs, binds, lhsJoin, true);
             ColumnResolver lhsResolver = lhsCtx.getResolver();
