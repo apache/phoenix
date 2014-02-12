@@ -44,13 +44,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
 
-import org.junit.Test;
-
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Test;
 
 
 public class UpsertSelectTest extends BaseClientManagedTimeTest {
@@ -85,7 +84,7 @@ public class UpsertSelectTest extends BaseClientManagedTimeTest {
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         conn.setAutoCommit(true);
         String upsert = "UPSERT INTO " + CUSTOM_ENTITY_DATA_FULL_NAME + "(custom_entity_data_id, key_prefix, organization_id, created_by) " +
-            "SELECT substr(entity_id, 4), substr(entity_id, 1, 3), organization_id, a_string  FROM ATABLE WHERE a_string = ?";
+            "SELECT substr(entity_id, 4), substr(entity_id, 1, 3), organization_id, a_string  FROM ATABLE WHERE ?=a_string";
         if (createIndex) { // Confirm index is used
             upsertStmt = conn.prepareStatement("EXPLAIN " + upsert);
             upsertStmt.setString(1, tenantId);

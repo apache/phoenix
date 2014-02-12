@@ -35,9 +35,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.junit.Test;
-
 import org.apache.phoenix.util.QueryUtil;
+import org.junit.Test;
 
 public class DeleteTest extends BaseHBaseManagedTimeTest {
     private static final int NUMBER_OF_ROWS = 20;
@@ -80,7 +79,7 @@ public class DeleteTest extends BaseHBaseManagedTimeTest {
 
         String deleteStmt ;
         conn.setAutoCommit(autoCommit);
-        deleteStmt = "DELETE FROM IntIntKeyTest WHERE j = 20";
+        deleteStmt = "DELETE FROM IntIntKeyTest WHERE 20 = j";
         assertEquals(1,conn.createStatement().executeUpdate(deleteStmt));
         if (!autoCommit) {
             conn.commit();

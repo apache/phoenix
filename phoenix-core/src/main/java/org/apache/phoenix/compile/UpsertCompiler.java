@@ -70,7 +70,6 @@ import org.apache.phoenix.parse.UpsertStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
@@ -81,6 +80,7 @@ import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -329,9 +329,11 @@ public class UpsertCompiler {
         if (valueNodes == null) {
             SelectStatement select = upsert.getSelect();
             assert(select != null);
+            ColumnResolver selectResolver = FromCompiler.getResolver(select, connection);
+            select = StatementNormalizer.normalize(select, selectResolver);
             select = addTenantAndViewConstants(table, select, tenantId, addViewColumns);
             sameTable = select.getFrom().size() == 1
-                && tableRef.equals(FromCompiler.getResolver(select, connection).getTables().get(0));
+                && tableRef.equals(selectResolver.getTables().get(0));
             /* We can run the upsert in a coprocessor if:
              * 1) from has only 1 table and the into table matches from table
              * 2) the select query isn't doing aggregation
@@ -344,7 +346,6 @@ public class UpsertCompiler {
             */            
             runOnServer = sameTable && isAutoCommit && !table.isImmutableRows() && !select.isAggregate() && !select.isDistinct() && select.getLimit() == null && table.getBucketNum() == null;
             ParallelIteratorFactory parallelIteratorFactory;
-            // TODO: once MutationState is thread safe, then when auto commit is off, we can still run in parallel
             if (select.isAggregate() || select.isDistinct() || select.getLimit() != null) {
                 parallelIteratorFactory = null;
             } else {
@@ -364,7 +365,7 @@ public class UpsertCompiler {
             select = SelectStatement.create(select, hint);
             // Pass scan through if same table in upsert and select so that projection is computed correctly
             // Use optimizer to choose the best plan 
-            plan = new QueryOptimizer(services).optimize(select, statement, targetColumns, parallelIteratorFactory);
+            plan = new QueryOptimizer(services).optimize(statement, select, selectResolver, targetColumns, parallelIteratorFactory);
             runOnServer &= plan.getTableRef().equals(tableRef);
             rowProjectorToBe = plan.getProjector();
             nValuesToSet = rowProjectorToBe.getColumnCount();

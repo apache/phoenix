@@ -181,7 +181,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         }
         try {
             // Just compile top level query without optimizing to get ResultSetMetaData
-            QueryPlan plan = (QueryPlan)statement.compilePlan(this);
+            QueryPlan plan = statement.compilePlan(this);
             return new PhoenixResultSetMetaData(this.getConnection(), plan.getProjector());
         } finally {
             int lastSetBit = 0;

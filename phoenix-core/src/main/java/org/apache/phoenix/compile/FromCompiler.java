@@ -246,7 +246,24 @@ public class FromCompiler {
         @Override
         public TableRef resolveTable(String schemaName, String tableName)
                 throws SQLException {
-            throw new UnsupportedOperationException();
+            TableRef tableRef = tableRefs.get(0);
+            /*
+             * The only case we can definitely verify is when both a schemaName and a tableName
+             * are provided. Otherwise, the tableName might be a column family. In this case,
+             * this will be validated by resolveColumn.
+             */
+            if (schemaName != null || tableName != null) {
+                String resolvedTableName = tableRef.getTable().getTableName().getString();
+                String resolvedSchemaName = tableRef.getTable().getSchemaName().getString();
+                if (schemaName != null && tableName != null) {
+                    if ( ! ( schemaName.equals(resolvedSchemaName)  &&
+                             tableName.equals(resolvedTableName) )  && 
+                             ! schemaName.equals(alias) ) {
+                        throw new TableNotFoundException(schemaName, tableName);
+                    }
+                }
+            }
+            return tableRef;
         }
 
 		@Override
@@ -400,6 +417,7 @@ public class FromCompiler {
             }
         }
 
+        @Override
         public TableRef resolveTable(String schemaName, String tableName) throws SQLException {
             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
             List<TableRef> tableRefs = tableMap.get(fullTableName);

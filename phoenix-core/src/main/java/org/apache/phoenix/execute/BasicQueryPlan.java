@@ -38,6 +38,7 @@ import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.SQLCloseable;
@@ -137,6 +138,10 @@ public abstract class BasicQueryPlan implements QueryPlan {
         }
         
         Scan scan = context.getScan();
+        if (statement.getHint().hasHint(Hint.NO_CACHE)) {
+            scan.setCacheBlocks(false);
+        }
+
         // Set producer on scan so HBase server does round robin processing
         //setProducer(scan);
         // Set the time range on the scan so we don't get back rows newer than when the statement was compiled
@@ -190,7 +195,7 @@ public abstract class BasicQueryPlan implements QueryPlan {
         }
         
         // Optimize here when getting explain plan, as queries don't get optimized until after compilation
-        QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(this, context.getStatement());
+        QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(context.getStatement(), this);
         ResultIterator iterator = plan.iterator();
         List<String> planSteps = Lists.newArrayListWithExpectedSize(5);
         iterator.explain(planSteps);

@@ -6,6 +6,8 @@ import java.util.Comparator;
 import java.util.List;
 
 import org.apache.phoenix.compile.ColumnProjector;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexStatementRewriter;
 import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
@@ -38,20 +40,20 @@ public class QueryOptimizer {
         this.useIndexes = this.services.getProps().getBoolean(QueryServices.USE_INDEXES_ATTRIB, QueryServicesOptions.DEFAULT_USE_INDEXES);
     }
 
-    public QueryPlan optimize(QueryPlan dataPlan, PhoenixStatement statement) throws SQLException {
+    public QueryPlan optimize(PhoenixStatement statement, QueryPlan dataPlan) throws SQLException {
         if (dataPlan.getTableRef() == null) {
             return dataPlan;
         }
         return optimize(dataPlan, statement, Collections.<PColumn>emptyList(), null);
     }
 
-    public QueryPlan optimize(SelectStatement select, PhoenixStatement statement) throws SQLException {
-        return optimize(select, statement, Collections.<PColumn>emptyList(), null);
+    public QueryPlan optimize(PhoenixStatement statement, SelectStatement select) throws SQLException {
+        return optimize(statement, select, FromCompiler.getResolver(select, statement.getConnection()), Collections.<PColumn>emptyList(), null);
     }
 
-    public QueryPlan optimize(SelectStatement select, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
-        QueryCompiler compiler = new QueryCompiler(statement, targetColumns, parallelIteratorFactory);
-        QueryPlan dataPlan = compiler.compile(select);
+    public QueryPlan optimize(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
+        QueryCompiler compiler = new QueryCompiler(statement, select, resolver, targetColumns, parallelIteratorFactory);
+        QueryPlan dataPlan = compiler.compile();
         return optimize(dataPlan, statement, targetColumns, parallelIteratorFactory);
     }
     
@@ -161,9 +163,10 @@ public class QueryOptimizer {
         String tableName = '"' + index.getTableName().getString() + '"';
         List<? extends TableNode> tables = Collections.singletonList(FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName)));
         try {
-            SelectStatement indexSelect = FACTORY.select(select, tables);            
-            QueryCompiler compiler = new QueryCompiler(statement, targetColumns, parallelIteratorFactory);
-            QueryPlan plan = compiler.compile(indexSelect);
+            SelectStatement indexSelect = FACTORY.select(select, tables);
+            ColumnResolver resolver = FromCompiler.getResolver(indexSelect, statement.getConnection());
+            QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory);
+            QueryPlan plan = compiler.compile();
             // Checking the index status and number of columns handles the wildcard cases correctly
             // We can't check the status earlier, because the index table may be out-of-date.
             if (plan.getTableRef().getTable().getIndexState() == PIndexState.ACTIVE && plan.getProjector().getColumnCount() == nColumns) {

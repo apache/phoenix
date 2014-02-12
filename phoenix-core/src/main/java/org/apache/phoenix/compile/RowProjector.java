@@ -20,11 +20,14 @@
 package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
-import com.google.common.collect.Maps;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.collect.Maps;
 
 
 /**
@@ -114,7 +117,10 @@ public class RowProjector {
             buf.append(projector.getExpression());
             buf.append(',');
         }
-        buf.setCharAt(buf.length()-1, ']');
+        if (buf.length() > 1) {
+            buf.setLength(buf.length()-1);
+        }
+        buf.append(']');
         return buf.toString();
     }
 

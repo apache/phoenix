@@ -36,6 +36,7 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnProjector;
+import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.CreateIndexCompiler;
 import org.apache.phoenix.compile.CreateSequenceCompiler;
 import org.apache.phoenix.compile.CreateTableCompiler;
@@ -43,6 +44,7 @@ import org.apache.phoenix.compile.DeleteCompiler;
 import org.apache.phoenix.compile.DropSequenceCompiler;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExpressionProjector;
+import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -50,6 +52,7 @@ import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -190,13 +193,13 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     protected QueryPlan optimizeQuery(CompilableStatement stmt) throws SQLException {
         QueryPlan plan = stmt.compilePlan(this);
-        return connection.getQueryServices().getOptimizer().optimize(plan, this);
+        return connection.getQueryServices().getOptimizer().optimize(this, plan);
     }
     
     protected PhoenixResultSet executeQuery(CompilableStatement stmt) throws SQLException {
         try {
             QueryPlan plan = stmt.compilePlan(this);
-            plan = connection.getQueryServices().getOptimizer().optimize(plan, this);
+            plan = connection.getQueryServices().getOptimizer().optimize(this, plan);
             PhoenixResultSet rs = newResultSet(plan.iterator(), plan.getProjector());
             resultSets.add(rs);
             setLastQueryPlan(plan);
@@ -256,7 +259,9 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         @SuppressWarnings("unchecked")
         @Override
         public QueryPlan compilePlan(PhoenixStatement stmt) throws SQLException {
-            return new QueryCompiler(stmt).compile(this);
+            ColumnResolver resolver = FromCompiler.getResolver(this, stmt.getConnection());
+            SelectStatement select = StatementNormalizer.normalize(this, resolver);
+            return new QueryCompiler(stmt, select, resolver).compile();
         }
     }
     
@@ -823,7 +828,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     public QueryPlan optimizeQuery(String sql) throws SQLException {
         QueryPlan plan = compileQuery(sql);
-        return connection.getQueryServices().getOptimizer().optimize(plan, this);
+        return connection.getQueryServices().getOptimizer().optimize(this, plan);
     }
 
     public QueryPlan compileQuery(String sql) throws SQLException {

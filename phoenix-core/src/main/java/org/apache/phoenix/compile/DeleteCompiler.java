@@ -205,8 +205,9 @@ public class DeleteCompiler {
                 Collections.<ParseNode>emptyList(), null, 
                 delete.getOrderBy(), delete.getLimit(),
                 delete.getBindCount(), false);
+        select = StatementNormalizer.normalize(select, resolver);
         DeletingParallelIteratorFactory parallelIteratorFactory = hasLimit ? null : new DeletingParallelIteratorFactory(connection, tableRef);
-        final QueryPlan plan = new QueryOptimizer(services).optimize(select, statement, Collections.<PColumn>emptyList(), parallelIteratorFactory);
+        final QueryPlan plan = new QueryOptimizer(services).optimize(statement, select, resolver, Collections.<PColumn>emptyList(), parallelIteratorFactory);
         if (!plan.getTableRef().equals(tableRef)) {
             runOnServer = false;
             noQueryReqd = false;

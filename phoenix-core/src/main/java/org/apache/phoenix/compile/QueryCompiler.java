@@ -80,15 +80,19 @@ public class QueryCompiler {
     private final PhoenixStatement statement;
     private final Scan scan;
     private final Scan scanCopy;
+    private final ColumnResolver resolver;
+    private final SelectStatement select;
     private final List<? extends PDatum> targetColumns;
     private final ParallelIteratorFactory parallelIteratorFactory;
     
-    public QueryCompiler(PhoenixStatement statement) throws SQLException {
-        this(statement, Collections.<PDatum>emptyList(), null);
+    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver) throws SQLException {
+        this(statement, select, resolver, Collections.<PDatum>emptyList(), null);
     }
     
-    public QueryCompiler(PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
+    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
         this.statement = statement;
+        this.select = select;
+        this.resolver = resolver;
         this.scan = new Scan();
         this.targetColumns = targetColumns;
         this.parallelIteratorFactory = parallelIteratorFactory;
@@ -100,7 +104,6 @@ public class QueryCompiler {
 
     /**
      * Builds an executable query plan from a parsed SQL statement
-     * @param select parsed SQL statement
      * @return executable query plan
      * @throws SQLException if mismatched types are found, bind value do not match binds,
      * or invalid function arguments are encountered.
@@ -109,34 +112,21 @@ public class QueryCompiler {
      * @throws ColumnNotFoundException if column name could not be resolved
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */
-    public QueryPlan compile(SelectStatement select) throws SQLException{
-        return compile(select, scan, false);
-    }
-    
-    protected QueryPlan compile(SelectStatement select, Scan scan, boolean asSubquery) throws SQLException{        
-        PhoenixConnection connection = statement.getConnection();
+    public QueryPlan compile() throws SQLException{
+        SelectStatement select = this.select;
         List<Object> binds = statement.getParameters();
-        ColumnResolver resolver = FromCompiler.getResolver(select, connection);
-        // TODO: do this normalization outside of this so as it's not repeated by the optimizer
-        select = StatementNormalizer.normalize(select, resolver);
         StatementContext context = new StatementContext(statement, resolver, binds, scan);
-        context.setScanHints(select.getHint());
-
-        if (select.getFrom().size() == 1)
-            return compileSingleQuery(context, select, binds, parallelIteratorFactory);
-        
-        if (!asSubquery) {
-            SelectStatement optimized = JoinCompiler.optimize(context, select, statement);
-            if (optimized != select) {
-                select = optimized;
-                // TODO: this is a relatively expensive operation that shouldn't be
-                // done multiple times
-                resolver = FromCompiler.getResolver(select, connection);
-                context.setResolver(resolver);
+        if (select.getFrom().size() > 1) {
+            select = JoinCompiler.optimize(context, select, statement);
+            if (this.select != select) {
+                ColumnResolver resolver = FromCompiler.getResolver(select, statement.getConnection());
+                context = new StatementContext(statement, resolver, binds, scan);
             }
+            JoinSpec join = JoinCompiler.getJoinSpec(context, select);
+            return compileJoinQuery(context, select, binds, join, false);
+        } else {
+            return compileSingleQuery(context, select, binds, parallelIteratorFactory);
         }
-        JoinSpec join = JoinCompiler.getJoinSpec(context, select);
-        return compileJoinQuery(context, select, binds, join, asSubquery);
     }
     
     @SuppressWarnings("unchecked")

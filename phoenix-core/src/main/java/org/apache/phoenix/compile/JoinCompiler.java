@@ -931,10 +931,9 @@ public class JoinCompiler {
         }
         JoinSpec join = getJoinSpec(context, select);
         if (groupByTableRef != null || orderByTableRef != null) {
-            QueryCompiler compiler = new QueryCompiler(statement);
+            QueryCompiler compiler = new QueryCompiler(statement, select, resolver);
             List<Object> binds = statement.getParameters();
             StatementContext ctx = new StatementContext(statement, resolver, binds, new Scan());
-            context.setScanHints(select.getHint());
             QueryPlan plan = compiler.compileJoinQuery(ctx, select, binds, join, false);
             TableRef table = plan.getTableRef();
             if (groupByTableRef != null && !groupByTableRef.equals(table)) {
@@ -1004,7 +1003,7 @@ public class JoinCompiler {
                 List<ParseNode> groupBy = table.equals(groupByTableRef) ? select.getGroupBy() : null;
                 List<OrderByNode> orderBy = table.equals(orderByTableRef) ? select.getOrderBy() : null;
                 SelectStatement stmt = getSubqueryForOptimizedPlan(select, table, join.columnRefs, jTable.getPreFiltersCombined(), groupBy, orderBy, join.isWildCardSelect(table));
-                QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(stmt, statement);
+                QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(statement, stmt);
                 if (!plan.getTableRef().equals(table)) {
                     TableNodeRewriter rewriter = new TableNodeRewriter(plan.getTableRef());
                     jNode.accept(rewriter);
@@ -1020,7 +1019,7 @@ public class JoinCompiler {
         List<ParseNode> groupBy = table.equals(groupByTableRef) ? select.getGroupBy() : null;
         List<OrderByNode> orderBy = table.equals(orderByTableRef) ? select.getOrderBy() : null;
         SelectStatement stmt = getSubqueryForOptimizedPlan(select, table, join.columnRefs, join.getPreFiltersCombined(), groupBy, orderBy, join.isWildCardSelect(table));
-        QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(stmt, statement);
+        QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(statement, stmt);
         if (!plan.getTableRef().equals(table)) {
             TableNodeRewriter rewriter = new TableNodeRewriter(plan.getTableRef());
             from.get(0).accept(rewriter);
