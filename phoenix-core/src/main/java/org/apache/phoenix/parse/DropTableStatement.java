@@ -19,9 +19,10 @@
  */
 package org.apache.phoenix.parse;
 
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.schema.PTableType;
 
-public class DropTableStatement implements BindableStatement {
+public class DropTableStatement extends MutableStatement {
     private final TableName tableName;
     private final boolean ifExists;
     private final PTableType tableType;
@@ -47,5 +48,10 @@ public class DropTableStatement implements BindableStatement {
 
     public boolean ifExists() {
         return ifExists;
+    }
+    
+    @Override
+    public Operation getOperation() {
+        return Operation.DELETE;
     }
 }

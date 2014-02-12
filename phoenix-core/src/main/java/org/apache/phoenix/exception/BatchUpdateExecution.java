@@ -17,40 +17,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.parse;
+package org.apache.phoenix.exception;
 
-import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import java.sql.SQLException;
 
-public class DropIndexStatement extends MutableStatement {
-    private final TableName tableName;
-    private final NamedNode indexName;
-    private final boolean ifExists;
+public class BatchUpdateExecution extends SQLException {
+    private static final long serialVersionUID = 1L;
+    private static SQLExceptionCode code = SQLExceptionCode.BATCH_EXCEPTION;
+    private final int batchIndex;
 
-    public DropIndexStatement(NamedNode indexName, TableName tableName, boolean ifExists) {
-        this.indexName = indexName;
-        this.tableName = tableName;
-        this.ifExists = ifExists;
+    public BatchUpdateExecution(Throwable cause, int batchIndex) {
+        super(new SQLExceptionInfo.Builder(code).build().toString(),
+                code.getSQLState(), code.getErrorCode(), cause);
+        this.batchIndex = batchIndex;
     }
 
-    public TableName getTableName() {
-        return tableName;
-    }
-
-    public NamedNode getIndexName() {
-        return indexName;
-    }
-
-    @Override
-    public int getBindCount() {
-        return 0;
-    }
-
-    public boolean ifExists() {
-        return ifExists;
-    }
-
-    @Override
-    public Operation getOperation() {
-        return Operation.DELETE;
+    public int getBatchIndex() {
+        return batchIndex;
     }
 }

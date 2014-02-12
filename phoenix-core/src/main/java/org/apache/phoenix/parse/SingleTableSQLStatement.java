@@ -19,7 +19,7 @@
  */
 package org.apache.phoenix.parse;
 
-public abstract class SingleTableSQLStatement implements BindableStatement {
+public abstract class SingleTableSQLStatement extends MutableStatement {
     private final NamedTableNode table;
     private final int bindCount;
 

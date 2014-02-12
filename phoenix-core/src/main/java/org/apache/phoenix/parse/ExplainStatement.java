@@ -19,6 +19,8 @@
  */
 package org.apache.phoenix.parse;
 
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+
 public class ExplainStatement implements BindableStatement {
     private final BindableStatement statement;
     
@@ -33,5 +35,10 @@ public class ExplainStatement implements BindableStatement {
     @Override
     public int getBindCount() {
         return statement.getBindCount();
+    }
+
+    @Override
+    public Operation getOperation() {
+        return Operation.QUERY;
     }
 }

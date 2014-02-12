@@ -23,14 +23,14 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.schema.PTableType;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ListMultimap;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.schema.PTableType;
 
-public class CreateTableStatement implements BindableStatement {
+public class CreateTableStatement extends MutableStatement {
     private final TableName tableName;
     private final PTableType tableType;
     private final List<ColumnDef> columns;

@@ -247,6 +247,8 @@ public enum SQLExceptionCode {
     EXECUTE_QUERY_NOT_APPLICABLE(1103, "XCL03", "executeQuery may not be used."),
     EXECUTE_UPDATE_NOT_APPLICABLE(1104, "XCL03", "executeUpdate may not be used."),
     SPLIT_POINT_NOT_CONSTANT(1105, "XCL04", "Split points must be constants."),
+    BATCH_EXCEPTION(1106, "XCL05", "Exception while executing batch."),
+    EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH(1107, "XCL06", "An executeUpdate is prohibited when the batch is not empty. Use clearBatch to empty the batch first."),
     
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).

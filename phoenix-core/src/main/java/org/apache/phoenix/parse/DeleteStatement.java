@@ -22,6 +22,8 @@ package org.apache.phoenix.parse;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+
 public class DeleteStatement extends SingleTableSQLStatement implements FilterableStatement {
     private final ParseNode whereNode;
     private final List<OrderByNode> orderBy;
@@ -66,4 +68,8 @@ public class DeleteStatement extends SingleTableSQLStatement implements Filterab
         return false;
     }
 
+    @Override
+    public Operation getOperation() {
+        return Operation.DELETE;
+    }
 }

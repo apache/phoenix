@@ -38,6 +38,13 @@ public class QueryOptimizer {
         this.useIndexes = this.services.getProps().getBoolean(QueryServices.USE_INDEXES_ATTRIB, QueryServicesOptions.DEFAULT_USE_INDEXES);
     }
 
+    public QueryPlan optimize(QueryPlan dataPlan, PhoenixStatement statement) throws SQLException {
+        if (dataPlan.getTableRef() == null) {
+            return dataPlan;
+        }
+        return optimize(dataPlan, statement, Collections.<PColumn>emptyList(), null);
+    }
+
     public QueryPlan optimize(SelectStatement select, PhoenixStatement statement) throws SQLException {
         return optimize(select, statement, Collections.<PColumn>emptyList(), null);
     }
@@ -45,13 +52,17 @@ public class QueryOptimizer {
     public QueryPlan optimize(SelectStatement select, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
         QueryCompiler compiler = new QueryCompiler(statement, targetColumns, parallelIteratorFactory);
         QueryPlan dataPlan = compiler.compile(select);
+        return optimize(dataPlan, statement, targetColumns, parallelIteratorFactory);
+    }
+    
+    public QueryPlan optimize(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
+        // Get the statement as it's been normalized now
+        // TODO: the recompile for the index tables could skip the normalize step
+        SelectStatement select = (SelectStatement)dataPlan.getStatement();
         // TODO: consider not even compiling index plans if we have a point lookup
         if (!useIndexes || select.getFrom().size() > 1) {
             return dataPlan;
         }
-        // Get the statement as it's been normalized now
-        // TODO: the recompile for the index tables could skip the normalize step
-        select = (SelectStatement)dataPlan.getStatement();
         PTable dataTable = dataPlan.getTableRef().getTable();
         List<PTable>indexes = Lists.newArrayList(dataTable.getIndexes());
         if (indexes.isEmpty() || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX)) {

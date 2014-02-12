@@ -19,7 +19,7 @@
  */
 package org.apache.phoenix.parse;
 
-public class CreateSequenceStatement implements BindableStatement {
+public class CreateSequenceStatement extends MutableStatement {
 
 	private final TableName sequenceName;
 	private final ParseNode startWith;

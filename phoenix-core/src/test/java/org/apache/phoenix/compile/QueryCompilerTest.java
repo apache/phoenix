@@ -33,6 +33,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -1308,6 +1309,45 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         assertFalse(scan.getCacheBlocks());
         scan = compileQuery("select /*+ NO_CACHE */ p1.val from ptsdb p1 inner join ptsdb p2 on p1.inst = p2.inst", binds);
         assertFalse(scan.getCacheBlocks());
+    }
+
+    @Test
+    public void testExecuteWithNonEmptyBatch() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            Statement stmt = conn.createStatement();
+            stmt.addBatch("SELECT * FROM atable");
+            stmt.execute("UPSERT INTO atable VALUES('000000000000000','000000000000000')");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            Statement stmt = conn.createStatement();
+            stmt.addBatch("SELECT * FROM atable");
+            stmt.executeUpdate("UPSERT INTO atable VALUES('000000000000000','000000000000000')");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO atable VALUES('000000000000000','000000000000000')");
+            stmt.addBatch();
+            stmt.execute();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
+        }
+        conn.close();
+        try {
+            PreparedStatement stmt = conn.prepareStatement("SELECT * FROM atable");
+            stmt.addBatch();
+            stmt.executeUpdate();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
+        }
+        conn.close();
     }
 
 }

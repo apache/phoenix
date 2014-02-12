@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 
@@ -175,5 +176,10 @@ public class SelectStatement implements FilterableStatement {
     @Override
     public boolean isAggregate() {
         return isAggregate;
+    }
+
+    @Override
+    public Operation getOperation() {
+        return Operation.QUERY;
     }
 }
