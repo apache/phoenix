@@ -264,9 +264,9 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                  *     GROUP BY i.name ORDER BY i.name
                  */     
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I._0:NAME]\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.0:NAME]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [I._0:NAME]\n" +
+                "CLIENT SORTED BY [I.0:NAME]\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".IDX_ITEM\n" +
@@ -307,7 +307,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".IDX_ITEM\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I._0:NAME]\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.0:NAME]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
@@ -393,7 +393,7 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".IDX_ITEM\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER SORTED BY [I1._0:NAME, I2._0:NAME]\n" +
+                "    SERVER SORTED BY [I1.0:NAME, I2.0:NAME]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
