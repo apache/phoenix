@@ -95,6 +95,7 @@
     <maven-build-helper-plugin.version>1.7</maven-build-helper-plugin.version>
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <maven.assembly.version>2.4</maven.assembly.version>
+    <maven.rat.version>0.8</maven.rat.version>
 
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -147,6 +148,33 @@
         <plugin>
           <artifactId>maven-assembly-plugin</artifactId>
           <version>${maven.assembly.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.rat</groupId>
+          <artifactId>apache-rat-plugin</artifactId>
+          <version>${maven.rat.version}</version>
+          <configuration>
+            <excludes>
+              <exclude>CHANGES.txt</exclude>
+              <exclude>README.md</exclude>
+	      <exclude>dev/phoenix.importorder</exclude>
+              <exclude>**/target/**</exclude>
+              <exclude>**/*.versionsBackup</exclude>
+              <!-- exclude docs -->
+              <exclude>docs/**</exclude>
+              <!-- exclude examples -->
+              <exclude>examples/**</exclude>
+              <!-- exclude source control files -->
+              <exclude>.gitignore</exclude>
+              <exclude>.git/**</exclude>
+              <!-- exclude IDE files -->
+              <exclude>**/.idea/**</exclude>
+              <exclude>**/*.iml</exclude>
+              <exclude>.project</exclude>
+              <exclude>.classpath</exclude>
+              <exclude>.settings/**</exclude>
+            </excludes>
+          </configuration>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -533,5 +561,27 @@
         </pluginManagement>
       </build>
     </profile>
+
+    <!-- this profile should be activated for release builds -->
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.rat</groupId>
+            <artifactId>apache-rat-plugin</artifactId>
+            <executions>
+              <execution>
+                <phase>package</phase>
+                <goals>
+                  <goal>check</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
   </profiles>
 </project>
