@@ -32,9 +32,9 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Pair;
 
 import com.google.common.collect.Lists;
-import org.apache.hadoop.hbase.index.covered.CoveredColumnsIndexBuilder;
-import org.apache.hadoop.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.SchemaUtil;

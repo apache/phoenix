@@ -22,7 +22,7 @@ import java.util.List;
 
 import org.apache.http.annotation.Immutable;
 
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 

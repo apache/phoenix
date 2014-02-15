@@ -36,7 +36,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
+
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
  * Class implements an active spilled partition serialized tuples are first written into an in-memory data structure
