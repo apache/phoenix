@@ -29,11 +29,6 @@
           </fileSet>
         </fileSets>
       </sources>
-      <!-- Binaries for the dependencies also go in the lib directory -->
-      <binaries>
-        <outputDirectory>lib</outputDirectory>
-        <unpack>false</unpack>
-      </binaries>
     </moduleSet>
   </moduleSets>
 
@@ -96,6 +91,61 @@
       <includes>
         <include>phoenix-*-client.jar</include>
       </includes>
+    </fileSet>
+    <!-- This is only necessary until maven fixes the intra-project dependency bug
+      in maven 3.0. Until then, we have to include the jars for sub-projects explicitly.
+      Otherwise, test jars are pulled in wrongly.
+     -->
+    <fileSet>
+      <directory>${project.basedir}/../phoenix-hadoop-compat/target/</directory>
+      <outputDirectory>lib</outputDirectory>
+      <includes>
+        <include>phoenix-*.jar</include>
+      </includes>
+      <fileMode>0644</fileMode>
+    </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../phoenix-hadoop1-compat/target/</directory>
+      <outputDirectory>lib</outputDirectory>
+      <includes>
+        <include>phoenix-*.jar</include>
+      </includes>
+      <fileMode>0644</fileMode>
+    </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../phoenix-hadoop2-compat/target/</directory>
+      <outputDirectory>lib</outputDirectory>
+      <includes>
+        <include>phoenix-*.jar</include>
+      </includes>
+      <fileMode>0644</fileMode>
+    </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../phoenix-pig/target/</directory>
+      <outputDirectory>lib</outputDirectory>
+      <includes>
+        <include>phoenix-*.jar</include>
+      </includes>
+      <fileMode>0644</fileMode>
+    </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../phoenix-flume/target/</directory>
+      <outputDirectory>lib</outputDirectory>
+      <includes>
+        <include>phoenix-*.jar</include>
+      </includes>
+      <fileMode>0644</fileMode>
+    </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../phoenix-core/target/</directory>
+      <outputDirectory>lib</outputDirectory>
+      <includes>
+        <include>phoenix-*.jar</include>
+      </includes>
+      <excludes>
+        <exclude></exclude>
+      </excludes>
+      <fileMode>0644</fileMode>
     </fileSet>
   </fileSets>
 
