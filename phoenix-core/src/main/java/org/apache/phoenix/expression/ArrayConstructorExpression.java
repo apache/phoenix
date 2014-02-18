@@ -19,18 +19,20 @@ package org.apache.phoenix.expression;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-
 import org.apache.phoenix.schema.PArrayDataType;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 /**
  * Creates an expression for Upsert with Values/Select using ARRAY
@@ -65,22 +67,69 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
     
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        for (int i = position >= 0 ? position : 0; i < elements.length; i++) {
-            Expression child = children.get(i);
-            if (!child.evaluate(tuple, ptr)) {
-                if (tuple != null && !tuple.isImmutable()) {
-                    if (position >= 0) position = i;
-                    return false;
+        // For varlength basetype this would be 0
+        int estimatedSize = PArrayDataType.estimateSize(this.children.size(), this.baseType);
+        TrustedByteArrayOutputStream byteStream = null;
+        DataOutputStream oStream = null;
+        try {
+            boolean varLength = false;
+            for (Expression child : children) {
+                if (!child.getDataType().isFixedWidth() || child.getDataType().isCoercibleTo(PDataType.VARCHAR)) {
+                    varLength = true;
+                    break;
                 }
+            }
+            if (!varLength) {
+                byteStream = new TrustedByteArrayOutputStream(estimatedSize + Bytes.SIZEOF_BYTE + Bytes.SIZEOF_INT);
+                oStream = new DataOutputStream(byteStream);
+            }
+            for (int i = position >= 0 ? position : 0; i < elements.length; i++) {
+                Expression child = children.get(i);
+                if (!child.evaluate(tuple, ptr)) {
+                    if (tuple != null && !tuple.isImmutable()) {
+                        if (position >= 0) position = i;
+                        return false;
+                    }
+                } else {
+                    if (!varLength) {
+                        if (!child.isStateless()) {
+                            byte[] val = new byte[ptr.getLength()];
+                            // One copy is needed here
+                            System.arraycopy(ptr.get(), ptr.getOffset(), val, 0, ptr.getLength());
+                            oStream.write(val);
+                        } else {
+                            oStream.write(ptr.get());
+                        }
+                    } else {
+                        elements[i] = baseType.toObject(ptr, child.getDataType(), child.getSortOrder());
+                    }
+                }
+            }
+            if (position >= 0) position = elements.length;
+            if (varLength) {
+                // For variable length .. still not done the offset tracking. Using the method of create an array and
+                // again serializing back to bytes
+                PhoenixArray array = PArrayDataType.instantiatePhoenixArray(baseType, elements);
+                // FIXME: Need to see if this creation of an array and again back to byte[] can be avoided
+                ptr.set(getDataType().toBytes(array));
             } else {
-                elements[i] = baseType.toObject(ptr, child.getDataType(), child.getSortOrder());
+                // No of elements
+                oStream.writeInt(children.size());
+                // Version of the array
+                oStream.write(PArrayDataType.ARRAY_SERIALIZATION_VERSION);
+                ptr.set(byteStream.toByteArray());
+            }
+            return true;
+        } catch (Exception e) {
+            throw new RuntimeException("Exception while serializing the byte array");
+        } finally {
+            try {
+                byteStream.close();
+                oStream.close();
+            } catch (Exception e) {
+                // Should not happen
             }
         }
-        if (position >= 0) position = elements.length;
-        PhoenixArray array = PArrayDataType.instantiatePhoenixArray(baseType, elements);
-        // FIXME: Need to see if this creation of an array and again back to byte[] can be avoided
-        ptr.set(getDataType().toBytes(array));
-        return true;
     }
     
     @Override

@@ -22,7 +22,6 @@ import java.sql.Types;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.util.ByteUtil;
 
 /**
@@ -31,7 +30,7 @@ import org.apache.phoenix.util.ByteUtil;
 public class PArrayDataType {
 
     private static final int MAX_POSSIBLE_VINT_LENGTH = 2;
-    private static final byte ARRAY_SERIALIZATION_VERSION = 1;
+    public static final byte ARRAY_SERIALIZATION_VERSION = 1;
 	public PArrayDataType() {
 	}
 
@@ -57,9 +56,11 @@ public class PArrayDataType {
 				// Negate the number of elements
 				noOfElements = -noOfElements;
 			}
-			buffer = ByteBuffer.allocate(size + capacity + Bytes.SIZEOF_INT+ Bytes.SIZEOF_BYTE);
+			// Here the int for noofelements, byte for the version and int for the offsetarray position
+			buffer = ByteBuffer.allocate(size + capacity + Bytes.SIZEOF_INT+ Bytes.SIZEOF_BYTE + Bytes.SIZEOF_INT);
 		} else {
-			buffer = ByteBuffer.allocate(size);
+		    // Here the int for noofelements, byte for the version
+			buffer = ByteBuffer.allocate(size + Bytes.SIZEOF_INT+ Bytes.SIZEOF_BYTE);
 		}
 		return bytesFromByteBuffer((PhoenixArray)object, buffer, noOfElements, baseType, capacity);
 	}
@@ -128,8 +129,7 @@ public class PArrayDataType {
 		byte[] bytes = ptr.get();
 		int initPos = ptr.getOffset();
 		int noOfElements = 0;
-		noOfElements = Bytes.toInt(bytes, ptr.getOffset() + Bytes.SIZEOF_BYTE, Bytes.SIZEOF_INT);
-		int noOFElementsSize = Bytes.SIZEOF_INT;
+		noOfElements = Bytes.toInt(bytes, (ptr.getOffset() + ptr.getLength() - (Bytes.SIZEOF_BYTE + Bytes.SIZEOF_INT)), Bytes.SIZEOF_INT);
 		if(arrayIndex >= noOfElements) {
 			throw new IndexOutOfBoundsException(
 					"Invalid index "
@@ -146,10 +146,9 @@ public class PArrayDataType {
 		}
 
 		if (baseDataType.getByteSize() == null) {
-			int offset = ptr.getOffset() + noOFElementsSize + Bytes.SIZEOF_BYTE;
-			int indexOffset = Bytes.toInt(bytes, offset) + ptr.getOffset();
-			int valArrayPostion = offset + Bytes.SIZEOF_INT;
-			offset += Bytes.SIZEOF_INT;
+		    int offset = ptr.getOffset();
+		    int indexOffset = Bytes.toInt(bytes, (ptr.getOffset() + ptr.getLength() - (Bytes.SIZEOF_BYTE + 2*Bytes.SIZEOF_INT))) + ptr.getOffset();
+		    int valArrayPostion = offset;
 			int currOff = 0;
 			if (noOfElements > 1) {
 				while (offset <= (initPos+ptr.getLength())) {
@@ -197,7 +196,7 @@ public class PArrayDataType {
 		} else {
 			ptr.set(bytes,
 					ptr.getOffset() + arrayIndex * baseDataType.getByteSize()
-							+ noOFElementsSize + Bytes.SIZEOF_BYTE, baseDataType.getByteSize());
+							, baseDataType.getByteSize());
 		}
 	}
 
@@ -234,11 +233,7 @@ public class PArrayDataType {
 			int noOfElements, PDataType baseType, int capacity) {
 		int temp = noOfElements;
         if (buffer == null) return null;
-        buffer.put(ARRAY_SERIALIZATION_VERSION);
-        buffer.putInt(noOfElements);
         if (!baseType.isFixedWidth() || baseType.isCoercibleTo(PDataType.VARCHAR)) {
-            int fillerForOffsetByteArray = buffer.position();
-            buffer.position(fillerForOffsetByteArray + Bytes.SIZEOF_INT);
             ByteBuffer offsetArray = ByteBuffer.allocate(capacity);
             if(noOfElements < 0){
             	noOfElements = -noOfElements;
@@ -255,7 +250,6 @@ public class PArrayDataType {
             }
             int offsetArrayPosition = buffer.position();
             buffer.put(offsetArray.array());
-            buffer.position(fillerForOffsetByteArray);
             buffer.putInt(offsetArrayPosition);
         } else {
             for (int i = 0; i < noOfElements; i++) {
@@ -263,6 +257,8 @@ public class PArrayDataType {
                 buffer.put(bytes);
             }
         }
+        buffer.putInt(noOfElements);
+        buffer.put(ARRAY_SERIALIZATION_VERSION);
         return buffer.array();
 	}
 
@@ -278,7 +274,7 @@ public class PArrayDataType {
 		}
 		ByteBuffer buffer = ByteBuffer.wrap(bytes, offset, length);
 		int initPos = buffer.position();
-		buffer.get();
+		buffer.position((buffer.limit() - (Bytes.SIZEOF_BYTE + Bytes.SIZEOF_INT)));
 		int noOfElements = buffer.getInt();
 		boolean useShort = true;
 		int baseSize = Bytes.SIZEOF_SHORT;
@@ -290,7 +286,9 @@ public class PArrayDataType {
 		Object[] elements = (Object[]) java.lang.reflect.Array.newInstance(
 				baseDataType.getJavaClass(), noOfElements);
 		if (!baseDataType.isFixedWidth() || baseDataType.isCoercibleTo(PDataType.VARCHAR)) {
-			int indexOffset = buffer.getInt();
+		    buffer.position(buffer.limit() - (Bytes.SIZEOF_BYTE + (2 * Bytes.SIZEOF_INT)));
+		    int indexOffset = buffer.getInt();
+		    buffer.position(initPos);
 			int valArrayPostion = buffer.position();
 			buffer.position(indexOffset + initPos);
 			ByteBuffer indexArr = ByteBuffer
@@ -338,12 +336,14 @@ public class PArrayDataType {
 				buffer.get(val);
 				elements[i++] = baseDataType.toObject(val, sortOrder);
 			} else {
+			    buffer.position(initPos);
 				byte[] val = new byte[indexOffset - valArrayPostion];
 				buffer.position(valArrayPostion + initPos);
 				buffer.get(val);
 				elements[i++] = baseDataType.toObject(val, sortOrder);
 			}
 		} else {
+		    buffer.position(initPos);
 			for (int i = 0; i < noOfElements; i++) {
 				byte[] val;
 				if (baseDataType.getByteSize() == null) {
@@ -378,7 +378,16 @@ public class PArrayDataType {
 		if(baseType.isFixedWidth()) {
 			return ((ptr.getLength() - (Bytes.SIZEOF_BYTE + Bytes.SIZEOF_INT))/baseType.getByteSize());
 		}
-		return Bytes.toInt(bytes, ptr.getOffset() + Bytes.SIZEOF_BYTE);
+		return Bytes.toInt(bytes, (ptr.getOffset() + ptr.getLength() - (Bytes.SIZEOF_BYTE + Bytes.SIZEOF_INT)));
 	}
+
+    public static int estimateSize(int size, PDataType baseType) {
+        if(baseType.isFixedWidth()) {
+            return baseType.getByteSize() * size;
+        } else {
+            return 0;
+        }
+        
+    }
 
 }

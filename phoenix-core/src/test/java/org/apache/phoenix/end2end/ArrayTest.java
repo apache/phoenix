@@ -393,6 +393,37 @@ public class ArrayTest extends BaseClientManagedTimeTest {
     }
     
     @Test
+    public void testSelectWithArrayWithColumnRefWithVarLengthArray() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        createTableWithArray(BaseConnectedQueryTest.getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+        initTablesWithArrays(tenantId, null, ts, false);
+        String query = "SELECT b_string,ARRAY['abc','defgh',b_string] FROM table_with_array where organization_id =  '"
+                + tenantId + "'";
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            String val = rs.getString(1);
+            assertEquals(val, "b");
+            Array array = rs.getArray(2);
+            // Need to support primitive
+            String[] strArr = new String[3];
+            strArr[0] = "abc";
+            strArr[1] = "defgh";
+            strArr[2] = "b";
+            Array resultArr = conn.createArrayOf("VARCHAR", strArr);
+            assertEquals(resultArr, array);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
     public void testUpsertSelectWithColumnRef() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
