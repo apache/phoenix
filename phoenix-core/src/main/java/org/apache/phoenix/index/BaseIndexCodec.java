@@ -22,7 +22,7 @@ import java.io.IOException;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 
-import org.apache.hadoop.hbase.index.covered.IndexCodec;
+import org.apache.phoenix.hbase.index.covered.IndexCodec;
 
 /**
  *

@@ -122,7 +122,8 @@ public interface PTable extends Writable {
      */
     PName getName();
     PName getSchemaName(); 
-    PName getTableName(); 
+    PName getTableName();
+    PName getTenantId();
 
     /**
      * @return the table type
@@ -275,4 +276,5 @@ public interface PTable extends Writable {
 
     ViewType getViewType();
     String getViewStatement();
+    Short getViewIndexId();
 }

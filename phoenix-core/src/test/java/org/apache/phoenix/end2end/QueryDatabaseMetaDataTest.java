@@ -46,6 +46,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -61,6 +62,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -749,10 +751,57 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
             Connection conn9 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
             conn9.createStatement().execute("CREATE INDEX idx ON " + MDTEST_NAME + "(B.COL1)");
             
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+            Connection conn91 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            ps = conn91.prepareStatement(dropView);
+            ps.execute();
+            conn91.close();
+            
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 35));
+            Connection conn92 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            createStmt = "create view " + MDTEST_NAME + 
+                    "   (id char(1) not null primary key,\n" + 
+                    "    b.col1 integer,\n" +
+                    "    \"c\".col2 bigint) as\n" +
+                    " select * from " + MDTEST_NAME + 
+                    " where b.col1 = 1";
+            conn92.createStatement().execute(createStmt);
+            conn92.close();
+            
+            put = new Put(Bytes.toBytes("1"));
+            put.add(cfB, Bytes.toBytes("COL1"), ts+39, PDataType.INTEGER.toBytes(3));
+            put.add(cfC, Bytes.toBytes("COL2"), ts+39, PDataType.LONG.toBytes(4));
+            htable.put(put);
+
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+            Connection conn92a = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            rs = conn92a.createStatement().executeQuery("select count(*) from " + MDTEST_NAME);
+            assertTrue(rs.next());
+            assertEquals(1,rs.getInt(1));
+            conn92a.close();
+
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 45));
+            Connection conn93 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            try {
+                String alterView = "alter view " + MDTEST_NAME + " drop column b.col1";
+                conn93.createStatement().execute(alterView);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
+            conn93.close();
+            
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
+            Connection conn94 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            String alterView = "alter view " + MDTEST_NAME + " drop column \"c\".col2";
+            conn94.createStatement().execute(alterView);
+            conn94.close();
+            
         } finally {
             HTableInterface htable = pconn.getQueryServices().getTable(SchemaUtil.getTableNameAsBytes(MDTEST_SCHEMA_NAME,MDTEST_NAME));
-            Delete delete = new Delete(Bytes.toBytes("0"));
-            htable.delete(delete);
+            Delete delete1 = new Delete(Bytes.toBytes("0"));
+            Delete delete2 = new Delete(Bytes.toBytes("1"));
+            htable.batch(Arrays.asList(delete1, delete2));
         }
         
     }

@@ -64,4 +64,6 @@ public interface QueryPlan extends StatementPlan {
     StatementContext getContext();
     
     FilterableStatement getStatement();
+
+    public boolean isDegenerate();
 }

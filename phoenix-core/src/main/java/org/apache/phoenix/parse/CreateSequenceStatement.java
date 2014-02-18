@@ -19,6 +19,10 @@ package org.apache.phoenix.parse;
 
 public class CreateSequenceStatement extends MutableStatement {
 
+    public static CreateSequenceStatement create(TableName sequenceName) {
+        return new CreateSequenceStatement(sequenceName, null, null, null, true, 0);
+    }
+    
 	private final TableName sequenceName;
 	private final ParseNode startWith;
 	private final ParseNode incrementBy;

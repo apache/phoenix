@@ -66,4 +66,9 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
     public Integer getArraySize() {
         return getDelegate().getArraySize();
     }
+
+    @Override
+    public byte[] getViewConstant() {
+        return getDelegate().getViewConstant();
+    }
 }

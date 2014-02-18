@@ -46,7 +46,7 @@ import java.util.TreeMap;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.util.Bytes;
 
-import org.apache.hadoop.hbase.index.wal.KeyValueCodec;
+import org.apache.phoenix.hbase.index.wal.KeyValueCodec;
 
 /**
  * Read in data for a delegate {@link WALEdit}. This should only be used in concert with an IndexedHLogReader

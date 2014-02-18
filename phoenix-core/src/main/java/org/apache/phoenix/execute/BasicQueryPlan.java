@@ -82,6 +82,12 @@ public abstract class BasicQueryPlan implements QueryPlan {
     }
 
     @Override
+    public boolean isDegenerate() {
+        return context.getScanRanges() == ScanRanges.NOTHING;
+
+    }
+    
+    @Override
     public GroupBy getGroupBy() {
         return groupBy;
     }

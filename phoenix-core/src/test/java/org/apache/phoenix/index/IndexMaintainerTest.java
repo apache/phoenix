@@ -41,13 +41,13 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
-import org.apache.hadoop.hbase.index.ValueGetter;
-import org.apache.hadoop.hbase.index.covered.update.ColumnReference;
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.client.ClientKeyValueBuilder;
 import org.apache.phoenix.client.GenericKeyValueBuilder;
 import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
+import org.apache.phoenix.hbase.index.ValueGetter;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.PTable;

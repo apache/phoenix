@@ -20,7 +20,7 @@ package org.apache.phoenix.schema;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.http.annotation.Immutable;
 
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 @Immutable
 public class PNameImpl implements PName {

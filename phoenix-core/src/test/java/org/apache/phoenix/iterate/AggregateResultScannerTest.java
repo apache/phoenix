@@ -46,10 +46,10 @@ import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PLongColumn;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.AssertResults;
@@ -119,6 +119,11 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
             @Override
             public Integer getArraySize() {
                 return 0;
+            }
+            
+            @Override
+            public byte[] getViewConstant() {
+                return null;
             }
         })), null);
         aggregationManager.setAggregators(new ClientAggregators(Collections.<SingleAggregateFunction>singletonList(func), 1));

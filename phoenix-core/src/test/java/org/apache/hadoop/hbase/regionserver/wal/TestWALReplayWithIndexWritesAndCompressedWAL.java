@@ -53,12 +53,12 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-import org.apache.hadoop.hbase.index.IndexTestingUtils;
-import org.apache.hadoop.hbase.index.TableName;
-import org.apache.hadoop.hbase.index.covered.example.ColumnGroup;
-import org.apache.hadoop.hbase.index.covered.example.CoveredColumn;
-import org.apache.hadoop.hbase.index.covered.example.CoveredColumnIndexSpecifierBuilder;
-import org.apache.hadoop.hbase.index.covered.example.CoveredColumnIndexer;
+import org.apache.phoenix.hbase.index.IndexTestingUtils;
+import org.apache.phoenix.hbase.index.TableName;
+import org.apache.phoenix.hbase.index.covered.example.ColumnGroup;
+import org.apache.phoenix.hbase.index.covered.example.CoveredColumn;
+import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexSpecifierBuilder;
+import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexer;
 
 /**
  * For pre-0.94.9 instances, this class tests correctly deserializing WALEdits w/o compression. Post

@@ -31,8 +31,8 @@ import org.apache.hadoop.hbase.codec.BaseEncoder;
 import org.apache.hadoop.hbase.codec.Decoder;
 import org.apache.hadoop.hbase.codec.Encoder;
 
-import org.apache.hadoop.hbase.index.wal.IndexedKeyValue;
-import org.apache.hadoop.hbase.index.wal.KeyValueCodec;
+import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
+import org.apache.phoenix.hbase.index.wal.KeyValueCodec;
 
 
 /**

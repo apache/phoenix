@@ -30,7 +30,6 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
@@ -43,6 +42,7 @@ import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
@@ -83,6 +83,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
@@ -213,6 +214,7 @@ public class UpsertCompiler {
         }
         boolean isSalted = table.getBucketNum() != null;
         boolean isTenantSpecific = table.isMultiTenant() && connection.getTenantId() != null;
+        boolean isSharedViewIndex = table.getViewIndexId() != null;
         String tenantId = isTenantSpecific ? connection.getTenantId().getString() : null;
         int posOffset = isSalted ? 1 : 0;
         // Setup array of column indexes parallel to values that are going to be set
@@ -260,7 +262,7 @@ public class UpsertCompiler {
         } else {
             // Size for worse case
             int numColsInUpsert = columnNodes.size();
-            nColumnsToSet = numColsInUpsert + addViewColumns.size() + (isTenantSpecific ? 1 : 0);
+            nColumnsToSet = numColsInUpsert + addViewColumns.size() + (isTenantSpecific ? 1 : 0) +  + (isSharedViewIndex ? 1 : 0);
             columnIndexesToBe = new int[nColumnsToSet];
             pkSlotIndexesToBe = new int[columnIndexesToBe.length];
             targetColumns = Lists.newArrayListWithExpectedSize(columnIndexesToBe.length);
@@ -303,6 +305,13 @@ public class UpsertCompiler {
                 columnIndexesToBe[i] = tenantColumn.getPosition();
                 pkColumnsSet.set(pkSlotIndexesToBe[i] = posOffset);
                 targetColumns.set(i, tenantColumn);
+                i++;
+            }
+            if (isSharedViewIndex) {
+                PColumn indexIdColumn = table.getPKColumns().get(posOffset+1);
+                columnIndexesToBe[i] = indexIdColumn.getPosition();
+                pkColumnsSet.set(pkSlotIndexesToBe[i] = posOffset+1);
+                targetColumns.set(i, indexIdColumn);
                 i++;
             }
             i = posOffset;
@@ -370,7 +379,7 @@ public class UpsertCompiler {
             // Cannot auto commit if doing aggregation or topN or salted
             // Salted causes problems because the row may end up living on a different region
         } else {
-            nValuesToSet = valueNodes.size() + addViewColumns.size() + (isTenantSpecific ? 1 : 0);
+            nValuesToSet = valueNodes.size() + addViewColumns.size() + (isTenantSpecific ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
         }
         final RowProjector projector = rowProjectorToBe;
         final UpsertingParallelIteratorFactory upsertParallelIteratorFactory = upsertParallelIteratorFactoryToBe;
@@ -661,6 +670,9 @@ public class UpsertCompiler {
         if (isTenantSpecific) {
             values[nodeIndex++] = connection.getTenantId().getBytes();
         }
+        if (isSharedViewIndex) {
+            values[nodeIndex++] = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
+        }
         return new MutationPlan() {
 
             @Override
@@ -786,6 +798,9 @@ public class UpsertCompiler {
         }
         if (table.isMultiTenant() && tenantId != null) {
             selectNodes.add(new AliasedNode(null, new LiteralParseNode(tenantId)));
+        }
+        if (table.getViewIndexId() != null) {
+            selectNodes.add(new AliasedNode(null, new LiteralParseNode(table.getViewIndexId())));
         }
         
         return SelectStatement.create(select, selectNodes);

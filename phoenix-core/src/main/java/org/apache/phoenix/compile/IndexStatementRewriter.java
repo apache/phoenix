@@ -21,8 +21,10 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 import java.util.Map;
 
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
+import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.ParseNodeRewriter;
@@ -31,7 +33,10 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
 
@@ -39,6 +44,7 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
     
     private Map<TableRef, TableRef> multiTableRewriteMap;
+    private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     
     public IndexStatementRewriter(ColumnResolver dataResolver, Map<TableRef, TableRef> multiTableRewriteMap) {
         super(dataResolver);
@@ -73,14 +79,27 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
     @Override
     public ParseNode visit(ColumnParseNode node) throws SQLException {
         ColumnRef dataColRef = getResolver().resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
-        TableName tName = getReplacedTableName(dataColRef.getTableRef());
+        PColumn dataCol = dataColRef.getColumn();
+        TableRef dataTableRef = dataColRef.getTableRef();
+        PTable dataTable = dataTableRef.getTable();
+        // Rewrite view constants in updatable views as literals, as they won't be in the schema for
+        // an index on the view.
+        if (dataTable.getViewType() == ViewType.UPDATABLE && dataCol.getViewConstant() != null) {
+            byte[] viewConstant = dataCol.getViewConstant();
+            // Ignore last byte, as it's only there so we can have a way to differentiate null
+            // from the absence of a value.
+            ptr.set(viewConstant, 0, viewConstant.length-1);
+            Object literal = dataCol.getDataType().toObject(ptr);
+            return new LiteralParseNode(literal, dataCol.getDataType());
+        }
+        TableName tName = getReplacedTableName(dataTableRef);
         if (multiTableRewriteMap != null && tName == null)
             return node;
 
-        String indexColName = IndexUtil.getIndexColumnName(dataColRef.getColumn());
+        String indexColName = IndexUtil.getIndexColumnName(dataCol);
         // Same alias as before, but use the index column name instead of the data column name
         ParseNode indexColNode = new ColumnParseNode(tName, node.isCaseSensitive() ? '"' + indexColName + '"' : indexColName, node.getAlias());
-        PDataType indexColType = IndexUtil.getIndexColumnDataType(dataColRef.getColumn());
+        PDataType indexColType = IndexUtil.getIndexColumnDataType(dataCol);
         PDataType dataColType = dataColRef.getColumn().getDataType();
 
         // Coerce index column reference back to same type as data column so that

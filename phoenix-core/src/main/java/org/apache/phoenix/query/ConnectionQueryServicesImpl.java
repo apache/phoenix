@@ -38,6 +38,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.ZooKeeperConnectionException;
 import org.apache.hadoop.hbase.client.Append;
@@ -48,8 +49,6 @@ import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
-import org.apache.hadoop.hbase.index.Indexer;
-import org.apache.hadoop.hbase.index.covered.CoveredColumnsIndexBuilder;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -71,6 +70,8 @@ import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.Indexer;
+import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -80,13 +81,17 @@ import org.apache.phoenix.schema.EmptySequenceCacheException;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
+import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PMetaDataImpl;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
+import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.JDBCUtil;
@@ -275,6 +280,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                   currentKey = regionLocation.getRegionInfo().getEndKey();
                 } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW));
                 return locations;
+            } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
+                String fullName = Bytes.toString(tableName);
+                throw new TableNotFoundException(SchemaUtil.getSchemaNameFromFullName(fullName), SchemaUtil.getTableNameFromFullName(fullName));
             } catch (IOException e) {
                 if (retryCount++ < maxRetryCount) { // One retry, in case split occurs while navigating
                     reload = true;
@@ -522,7 +530,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if (tableType == PTableType.VIEW) {
                         String fullTableName = Bytes.toString(tableName);
                         throw new ReadOnlyTableException(
-                                "The HBase column families for a read-only table must already exist",
+                                "The HBase column families for a VIEW must already exist",
                                 SchemaUtil.getSchemaNameFromFullName(fullTableName),
                                 SchemaUtil.getTableNameFromFullName(fullTableName),
                                 Bytes.toString(family.getFirst()));
@@ -530,9 +538,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     columnDescriptor = generateColumnFamilyDescriptor(family, tableType );
                 } else {
                     columnDescriptor = new HColumnDescriptor(oldDescriptor);
-                    if (tableType != PTableType.VIEW) {
-                        modifyColumnFamilyDescriptor(columnDescriptor, family);
+                    // Don't attempt to make any metadata changes for a VIEW
+                    if (tableType == PTableType.VIEW) {
+                        return;
                     }
+                    modifyColumnFamilyDescriptor(columnDescriptor, family);
                 }
                 
                 if (columnDescriptor.equals(oldDescriptor)) {
@@ -573,12 +583,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     /**
      * 
      * @param tableName
-     * @param familyNames
      * @param splits
+     * @param modifyExistingMetaData TODO
+     * @param familyNames
      * @return true if table was created and false if it already exists
      * @throws SQLException
      */
-    private boolean ensureTableCreated(byte[] tableName, PTableType tableType , Map<String,Object> props, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits) throws SQLException {
+    private HTableDescriptor ensureTableCreated(byte[] tableName, PTableType tableType , Map<String,Object> props, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits, boolean modifyExistingMetaData) throws SQLException {
         HBaseAdmin admin = null;
         SQLException sqlE = null;
         HTableDescriptor existingDesc = null;
@@ -618,7 +629,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 } catch (TableExistsException e) {
                     // We can ignore this, as it just means that another client beat us
                     // to creating the HBase metadata.
-                    return false;
+                    return null;
                 }
                 if (isMetaTable) {
                     checkClientServerCompatibility();
@@ -633,14 +644,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     admin.modifyTable(tableName, newDesc);
                     admin.enableTable(tableName);
                 }
-                return true;
+                return null;
             } else {
-                if (existingDesc.equals(newDesc)) {
+                if (!modifyExistingMetaData || existingDesc.equals(newDesc)) {
                     // Table is already created. Note that the presplits are ignored in this case
                     if (isMetaTable) {
                         checkClientServerCompatibility();
                     }
-                    return false;
+                    return existingDesc;
                 }
 
                 if (isMetaTable) {
@@ -656,7 +667,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // TODO: What if not all existing column families are present?
                 admin.modifyTable(tableName, newDesc);
                 admin.enableTable(tableName);
-                return false;
+                return newDesc;
             }
 
         } catch (IOException e) {
@@ -678,7 +689,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
         }
-        return true; // will never make it here
+        return null; // will never make it here
     }
 
     private static boolean isInvalidMutableIndexConfig(Long serverVersion) {
@@ -786,22 +797,95 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    private void ensureViewIndexTableCreated(byte[] physicalTableName, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits, long timestamp) throws SQLException {
+        Long maxFileSize = (Long)tableProps.get(HTableDescriptor.MAX_FILESIZE);
+        if (maxFileSize == null) {
+            maxFileSize = this.config.getLong(HConstants.HREGION_MAX_FILESIZE, HConstants.DEFAULT_MAX_FILE_SIZE);
+        }
+        byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
+        
+        int indexMaxFileSizePerc;
+        // Get percentage to use from table props first and then fallback to config
+        Integer indexMaxFileSizePercProp = (Integer)tableProps.remove(QueryServices.INDEX_MAX_FILESIZE_PERC_ATTRIB);
+        if (indexMaxFileSizePercProp == null) {
+            indexMaxFileSizePerc = config.getInt(QueryServices.INDEX_MAX_FILESIZE_PERC_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_MAX_FILESIZE_PERC);
+        } else {
+            indexMaxFileSizePerc = indexMaxFileSizePercProp;
+        }
+        long indexMaxFileSize = maxFileSize * indexMaxFileSizePerc / 100;
+        tableProps.put(HTableDescriptor.MAX_FILESIZE, indexMaxFileSize);
+        tableProps.put(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME, PDataType.TRUE_BYTES);
+        // Only use splits if table is salted, otherwise it may not be applicable
+        HTableDescriptor desc = ensureTableCreated(physicalIndexName, PTableType.TABLE, tableProps, families, splits, false);
+        if (desc != null) {
+            if (!Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES)))) {
+                String fullTableName = Bytes.toString(physicalIndexName);
+                throw new TableAlreadyExistsException(
+                        "Unable to create shared physical table for indexes on views.",
+                        SchemaUtil.getSchemaNameFromFullName(fullTableName),
+                        SchemaUtil.getTableNameFromFullName(fullTableName));
+            }
+        }
+    }
 
+
+    private boolean ensureViewIndexTableDropped(byte[] physicalTableName, long timestamp) throws SQLException {
+        byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
+        HTableDescriptor desc = null;
+        HBaseAdmin admin = null;
+        boolean wasDeleted = false;
+        try {
+            admin = new HBaseAdmin(config);
+            try {
+                desc = admin.getTableDescriptor(physicalIndexName);
+                if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES)))) {
+                    final ReadOnlyProps props = this.getProps();
+                    final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
+                    if (dropMetadata) {
+                        admin.disableTable(physicalIndexName);
+                        admin.deleteTable(physicalIndexName);
+                        wasDeleted = true;
+                    }
+                }
+            } catch (org.apache.hadoop.hbase.TableNotFoundException ignore) {
+                // Ignore, as we may never have created a view index table
+            }
+        } catch (IOException e) {
+            throw ServerUtil.parseServerException(e); 
+        } finally {
+            try {
+                if (admin != null) admin.close();
+            } catch (IOException e) {
+                logger.warn("",e);
+            }
+        }
+        return wasDeleted;
+    }
+    
     @Override
     public MetaDataMutationResult createTable(final List<Mutation> tableMetaData, byte[] physicalTableName, PTableType tableType,
             Map<String,Object> tableProps, final List<Pair<byte[],Map<String,Object>>> families, byte[][] splits) throws SQLException {
         byte[][] rowKeyMetadata = new byte[3][];
-        Mutation m = tableMetaData.get(0);
+        Mutation m = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetaData);
         byte[] key = m.getRow();
         SchemaUtil.getVarChars(key, rowKeyMetadata);
         byte[] tenantIdBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
         byte[] schemaBytes = rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
         byte[] tableBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
-        if (tableType != PTableType.VIEW || physicalTableName != null) {
-            if (physicalTableName == null) {
-                physicalTableName = SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
+        byte[] tableName = physicalTableName != null ? physicalTableName : SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
+        if ((tableType == PTableType.VIEW && physicalTableName != null) || (tableType != PTableType.VIEW && physicalTableName == null)) {
+            // For views this will ensure that metadata already exists
+            ensureTableCreated(tableName, tableType, tableProps, families, splits, true);
+        }
+
+        if (tableType == PTableType.INDEX && physicalTableName != null) { // Index on view
+            // Physical index table created up front for multi tenant
+            // TODO: if viewIndexId is Short.MIN_VALUE, then we don't need to attempt to create it
+            if (!MetaDataUtil.isMultiTenant(m)) {
+                ensureViewIndexTableCreated(physicalTableName, MetaDataUtil.getClientTimeStamp(m));
             }
-            ensureTableCreated(physicalTableName, tableType, tableProps, families, splits);
+        } else if (tableType == PTableType.TABLE && MetaDataUtil.isMultiTenant(m)) { // Create view index table up front for multi tenant tables
+            ensureViewIndexTableCreated(tableName, tableProps, families, MetaDataUtil.isSalted(m) ? splits : null, MetaDataUtil.getClientTimeStamp(m));
         }
         
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
@@ -848,10 +932,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         final MutationCode code = result.getMutationCode();
         switch(code) {
         case TABLE_ALREADY_EXISTS:
-            final ReadOnlyProps props = this.getProps();
-            final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
+            ReadOnlyProps props = this.getProps();
+            boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
             if (dropMetadata) {
                 dropTables(result.getTableNamesToDelete());
+            }
+            if (tableType == PTableType.TABLE) {
+                byte[] physicalTableName = SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
+                long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
+                ensureViewIndexTableDropped(physicalTableName, timestamp);
             }
             break;
         default:
@@ -895,20 +984,76 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    private static Map<String,Object> createPropertiesMap(Map<ImmutableBytesWritable,ImmutableBytesWritable> htableProps) {
+        Map<String,Object> props = Maps.newHashMapWithExpectedSize(htableProps.size());
+        for (Map.Entry<ImmutableBytesWritable,ImmutableBytesWritable> entry : htableProps.entrySet()) {
+            ImmutableBytesWritable key = entry.getKey();
+            ImmutableBytesWritable value = entry.getValue();
+            props.put(Bytes.toString(key.get(), key.getOffset(), key.getLength()), Bytes.toString(value.get(), value.getOffset(), value.getLength()));
+        }
+        return props;
+    }
+    
+    private void ensureViewIndexTableCreated(byte[] physicalIndexTableName, long timestamp) throws SQLException {
+        PTable table;
+        String name = Bytes.toString(
+                physicalIndexTableName, 
+                MetaDataUtil.VIEW_INDEX_TABLE_PREFIX_BYTES.length,
+                physicalIndexTableName.length-MetaDataUtil.VIEW_INDEX_TABLE_PREFIX_BYTES.length);
+        try {
+            table = latestMetaData.getTable(name);
+            if (table.getTimeStamp() >= timestamp) { // Table in cache is newer than client timestamp which shouldn't be the case
+                throw new TableNotFoundException(table.getSchemaName().getString(), table.getTableName().getString());
+            }
+        } catch (TableNotFoundException e) {
+            byte[] schemaName = Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(name));
+            byte[] tableName = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(name));
+            MetaDataMutationResult result = this.getTable(null, schemaName, tableName, HConstants.LATEST_TIMESTAMP, timestamp);
+            table = result.getTable();
+            if (table == null) {
+                throw e;
+            }
+        }
+        ensureViewIndexTableCreated(table, timestamp);
+    }
+    
+    private void ensureViewIndexTableCreated(PTable table, long timestamp) throws SQLException {
+        byte[] physicalTableName = table.getPhysicalName().getBytes();
+        HTableDescriptor htableDesc = this.getTableDescriptor(physicalTableName);
+        Map<String,Object> tableProps = createPropertiesMap(htableDesc.getValues());
+        List<Pair<byte[],Map<String,Object>>> families = Lists.newArrayListWithExpectedSize(Math.max(1, table.getColumnFamilies().size()));
+        if (families.isEmpty()) {
+            byte[] familyName = SchemaUtil.getEmptyColumnFamily(table);
+            Map<String,Object> familyProps = createPropertiesMap(htableDesc.getFamily(familyName).getValues());
+            families.add(new Pair<byte[],Map<String,Object>>(familyName, familyProps));
+        } else {
+            for (PColumnFamily family : table.getColumnFamilies()) {
+                byte[] familyName = SchemaUtil.getEmptyColumnFamily(table);
+                Map<String,Object> familyProps = createPropertiesMap(htableDesc.getFamily(familyName).getValues());
+                families.add(new Pair<byte[],Map<String,Object>>(family.getName().getBytes(), familyProps));
+            }
+        }
+        byte[][] splits = null;
+        if (table.getBucketNum() != null) {
+            splits = SaltingUtil.getSalteByteSplitPoints(table.getBucketNum());
+        }
+        
+        ensureViewIndexTableCreated(physicalTableName, tableProps, families, splits, timestamp);
+    }
+    
     @Override
-    public MetaDataMutationResult addColumn(final List<Mutation> tableMetaData, PTableType tableType, List<Pair<byte[],Map<String,Object>>> families) throws SQLException {
+    public MetaDataMutationResult addColumn(final List<Mutation> tableMetaData, List<Pair<byte[],Map<String,Object>>> families, PTable table) throws SQLException {
         byte[][] rowKeyMetaData = new byte[3][];
+        PTableType tableType = table.getType();
 
-        byte[] rowKey = tableMetaData.get(0).getRow();
+        Mutation m = tableMetaData.get(0);
+        byte[] rowKey = m.getRow();
         SchemaUtil.getVarChars(rowKey, rowKeyMetaData);
         byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
         byte[] schemaBytes = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
         byte[] tableBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
-        byte[] tableName = SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
         for ( Pair<byte[],Map<String,Object>>  family : families) {
-            
-            PTable table = latestMetaData.getTable(Bytes.toString(tableName));
             ensureFamilyCreated(table.getPhysicalName().getBytes(), tableType, family);
         }
         // Special case for call during drop table to ensure that the empty column family exists.
@@ -926,6 +1071,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return instance.addColumn(tableMetaData);
                 }
             });
+        if (tableType == PTableType.TABLE && result.getMutationCode() == MutationCode.COLUMN_NOT_FOUND) { // Success
+            // If we're changing MULTI_TENANT to true or false, create or drop the view index table
+            KeyValue kv = MetaDataUtil.getMutationKeyValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES);
+            if (kv != null) {
+                long timestamp = MetaDataUtil.getClientTimeStamp(m);
+                if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength()))) {
+                    this.ensureViewIndexTableCreated(table, timestamp);
+                } else {
+                    this.ensureViewIndexTableDropped(table.getPhysicalName().getBytes(), timestamp);
+                }
+            }
+        }
         return result;
     }
 

@@ -20,6 +20,7 @@ package org.apache.phoenix.compile;
 import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.List;
 
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -79,7 +80,15 @@ public class PostIndexDDLCompiler {
                     //   that would allow the user to easily monitor the process of index creation.
                     StringBuilder indexColumns = new StringBuilder();
                     StringBuilder dataColumns = new StringBuilder();
-                    for (PColumn col: dataTableRef.getTable().getColumns()) {
+                    List<PColumn> dataTableColumns = dataTableRef.getTable().getColumns();
+                    PTable dataTable = dataTableRef.getTable();
+                    int nColumns = dataTable.getColumns().size();
+                    boolean isSalted = dataTable.getBucketNum() != null;
+                    boolean isMultiTenant = connection.getTenantId() != null && dataTable.isMultiTenant();
+                    boolean isSharedViewIndex = dataTable.getViewIndexId() != null;
+                    int posOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
+                    for (int i = posOffset; i < nColumns; i++) {
+                        PColumn col = dataTableColumns.get(i);
                         String indexColName = IndexUtil.getIndexColumnName(col);
                         try {
                             indexTable.getColumn(indexColName);

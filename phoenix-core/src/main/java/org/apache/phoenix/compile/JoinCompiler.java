@@ -324,10 +324,10 @@ public class JoinCompiler {
                 }            	
             }
             
-            PTable t = PTableImpl.makePTable(PNameFactory.newName(PROJECTED_TABLE_SCHEMA), table.getName(), PTableType.JOIN, table.getIndexState(),
-                        table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(), retainPKColumns ? table.getBucketNum() : null,
-                        projectedColumns, table.getParentTableName(), table.getIndexes(),
-                        table.isImmutableRows(), Collections.<PName>emptyList(), null, null, table.isWALDisabled(), table.isMultiTenant(), table.getViewType());
+            PTable t = PTableImpl.makePTable(table.getTenantId(), PNameFactory.newName(PROJECTED_TABLE_SCHEMA), table.getName(), PTableType.JOIN,
+                        table.getIndexState(), table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
+                        retainPKColumns ? table.getBucketNum() : null, projectedColumns, table.getParentTableName(),
+                        table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null, table.isWALDisabled(), table.isMultiTenant(), table.getViewType(), table.getViewIndexId());
             return new ProjectedPTableWrapper(t, columnNameMap, sourceExpressions);
         }
         
@@ -353,7 +353,7 @@ public class JoinCompiler {
         	PName name = PNameFactory.newName(aliasedName);
     		PColumnImpl column = new PColumnImpl(name, familyName, sourceColumn.getDataType(), 
     				sourceColumn.getMaxLength(), sourceColumn.getScale(), sourceColumn.isNullable(), 
-    				position, sourceColumn.getSortOrder(), sourceColumn.getArraySize());
+    				position, sourceColumn.getSortOrder(), sourceColumn.getArraySize(), sourceColumn.getViewConstant());
         	Expression sourceExpression = new ColumnRef(sourceTable, sourceColumn.getPosition()).newColumnExpression();
         	projectedColumns.add(column);
         	sourceExpressions.add(sourceExpression);
@@ -1133,16 +1133,16 @@ public class JoinCompiler {
     			PColumnImpl column = new PColumnImpl(c.getName(), 
     					PNameFactory.newName(ScanProjector.VALUE_COLUMN_FAMILY), c.getDataType(), 
     					c.getMaxLength(), c.getScale(), innerJoin ? c.isNullable() : true, position++, 
-    					c.getSortOrder(), c.getArraySize());
+    					c.getSortOrder(), c.getArraySize(), c.getViewConstant());
     			merged.add(column);
     		}
     	}
         if (left.getBucketNum() != null) {
             merged.remove(0);
         }
-        PTable t = PTableImpl.makePTable(left.getSchemaName(), PNameFactory.newName(SchemaUtil.getTableName(left.getName().getString(), right.getName().getString())),
-                left.getType(), left.getIndexState(), left.getTimeStamp(), left.getSequenceNumber(), left.getPKName(), left.getBucketNum(), merged, left.getParentTableName(),
-                left.getIndexes(), left.isImmutableRows(), Collections.<PName>emptyList(), null, null, PTable.DEFAULT_DISABLE_WAL, left.isMultiTenant(), left.getViewType());
+        PTable t = PTableImpl.makePTable(left.getTenantId(), left.getSchemaName(),
+                PNameFactory.newName(SchemaUtil.getTableName(left.getName().getString(), right.getName().getString())), left.getType(), left.getIndexState(), left.getTimeStamp(), left.getSequenceNumber(), left.getPKName(), left.getBucketNum(), merged,
+                left.getParentTableName(), left.getIndexes(), left.isImmutableRows(), Collections.<PName>emptyList(), null, null, PTable.DEFAULT_DISABLE_WAL, left.isMultiTenant(), left.getViewType(), left.getViewIndexId());
 
         ListMultimap<String, String> mergedMap = ArrayListMultimap.<String, String>create();
         mergedMap.putAll(lWrapper.getColumnNameMap());

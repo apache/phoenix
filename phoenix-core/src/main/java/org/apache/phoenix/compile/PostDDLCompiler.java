@@ -36,10 +36,14 @@ import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.AmbiguousColumnException;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ScanUtil;
@@ -139,7 +143,7 @@ public class PostDDLCompiler {
                                 if (deleteList.isEmpty()) {
                                     scan.setAttribute(UngroupedAggregateRegionObserver.DELETE_AGG, QueryConstants.TRUE);
                                     // In the case of a row deletion, add index metadata so mutable secondary indexing works
-                                    /* TODO
+                                    /* TODO: we currently manually run a scan to delete the index data here
                                     ImmutableBytesWritable ptr = context.getTempPtr();
                                     tableRef.getTable().getIndexMaintainers(ptr);
                                     if (ptr.getLength() > 0) {
@@ -181,29 +185,45 @@ public class PostDDLCompiler {
                                 }
                                 projector = new RowProjector(projector,false);
                             }
-                            WhereCompiler.compile(context, select); // Push where clause into scan
-                            QueryPlan plan = new AggregatePlan(context, select, tableRef, projector, null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
-                            ResultIterator iterator = plan.iterator();
+                            // Ignore exceptions due to not being able to resolve any view columns,
+                            // as this just means the view is invalid. Continue on and try to perform
+                            // any other Post DDL operations.
                             try {
-                                Tuple row = iterator.next();
-                                ImmutableBytesWritable ptr = context.getTempPtr();
-                                totalMutationCount += (Long)projector.getColumnProjector(0).getValue(row, PDataType.LONG, ptr);
-                            } catch (SQLException e) {
-                                sqlE = e;
-                            } finally {
+                                WhereCompiler.compile(context, select); // Push where clause into scan
+                            } catch (ColumnFamilyNotFoundException e) {
+                                continue;
+                            } catch (ColumnNotFoundException e) {
+                                continue;
+                            } catch (AmbiguousColumnException e) {
+                                continue;
+                            }
+                            QueryPlan plan = new AggregatePlan(context, select, tableRef, projector, null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
+                            try {
+                                ResultIterator iterator = plan.iterator();
                                 try {
-                                    iterator.close();
+                                    Tuple row = iterator.next();
+                                    ImmutableBytesWritable ptr = context.getTempPtr();
+                                    totalMutationCount += (Long)projector.getColumnProjector(0).getValue(row, PDataType.LONG, ptr);
                                 } catch (SQLException e) {
-                                    if (sqlE == null) {
-                                        sqlE = e;
-                                    } else {
-                                        sqlE.setNextException(e);
-                                    }
+                                    sqlE = e;
                                 } finally {
-                                    if (sqlE != null) {
-                                        throw sqlE;
+                                    try {
+                                        iterator.close();
+                                    } catch (SQLException e) {
+                                        if (sqlE == null) {
+                                            sqlE = e;
+                                        } else {
+                                            sqlE.setNextException(e);
+                                        }
+                                    } finally {
+                                        if (sqlE != null) {
+                                            throw sqlE;
+                                        }
                                     }
                                 }
+                            } catch (TableNotFoundException e) {
+                                // Ignore and continue, as HBase throws when table hasn't been written to
+                                // FIXME: Remove if this is fixed in 0.96
                             }
                         } finally {
                             if (cache != null) { // Remove server cache if there is one
