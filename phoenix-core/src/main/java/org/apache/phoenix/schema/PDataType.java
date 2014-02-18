@@ -5161,12 +5161,18 @@ public enum PDataType {
         if(isArrayType()) {
             PhoenixArray array = (PhoenixArray)o;
             int noOfElements = array.numElements;
+            //int vIntSize = WritableUtils.getVIntSize(noOfElements);
+            int vIntSize = Bytes.SIZEOF_INT;
 
             int totalVarSize = 0;
             for (int i = 0; i < noOfElements; i++) {
                 totalVarSize += array.estimateByteSize(i);
             }
-            return totalVarSize;
+            /**
+             * Calculate the totalVarSize including the vInt and byte needed for the 
+             * number of elements and version respectively
+             */
+            return vIntSize + (totalVarSize) + Bytes.SIZEOF_BYTE;
         }
         // Non fixed width types must override this
         throw new UnsupportedOperationException();

@@ -136,9 +136,6 @@ public class PhoenixArray implements Array,SQLCloseable {
 	}
 	
 	public int estimateByteSize(int pos) {
-	    if(((Object[])array)[pos] == null) {
-	        return 0;
-	    }
 		return this.baseType.estimateByteSize(((Object[])array)[pos]);
 	}
 	
