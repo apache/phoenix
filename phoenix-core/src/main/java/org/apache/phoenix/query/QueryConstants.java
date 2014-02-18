@@ -24,7 +24,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CACHE_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHAR_OCTET_LENGTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CURRENT_VALUE;
@@ -53,6 +52,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCOPE_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SELF_REFERENCING_COL_NAME_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SEQUENCE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SEQUENCE_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SOURCE_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SQL_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SQL_DATETIME_SUB;
@@ -67,6 +67,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 
@@ -167,6 +169,16 @@ public interface QueryConstants {
             REF_GENERATION_NAME + " VARCHAR," +
             TABLE_SEQ_NUM + " BIGINT," +
             COLUMN_COUNT + " INTEGER," +
+            SALT_BUCKETS + " INTEGER," +
+            DATA_TABLE_NAME + " VARCHAR," +
+            INDEX_STATE + " CHAR(1),\n" +
+            IMMUTABLE_ROWS + " BOOLEAN,\n" +
+            VIEW_STATEMENT + " VARCHAR,\n" +
+            DEFAULT_COLUMN_FAMILY_NAME + " VARCHAR,\n" +
+            DISABLE_WAL + " BOOLEAN,\n" +
+            MULTI_TENANT + " BOOLEAN,\n" +
+            VIEW_TYPE + " UNSIGNED_TINYINT,\n" +
+            VIEW_INDEX_ID + " SMALLINT,\n" +
             // Column metadata (will be null for table row)
             COLUMN_SIZE + " INTEGER," +
             BUFFER_LENGTH + " INTEGER," +
@@ -182,23 +194,13 @@ public interface QueryConstants {
             SCOPE_CATALOG + " VARCHAR," +
             SCOPE_SCHEMA + " VARCHAR," +
             SCOPE_TABLE + " VARCHAR," +
-            SOURCE_DATA_TYPE + " INTEGER," + // supposed to be SHORT
+            SOURCE_DATA_TYPE + " SMALLINT," +
             IS_AUTOINCREMENT + " VARCHAR," +
-            // Columns added in 1.2.1
             SORT_ORDER + " INTEGER," +
-            SALT_BUCKETS + " INTEGER," +
-            // Columns added in 2.0.0
-            DATA_TABLE_NAME + " VARCHAR," +
-            INDEX_STATE + " CHAR(1),\n" +
-            IMMUTABLE_ROWS + " BOOLEAN,\n" +
-            // Columns added in 3.0.0
-            VIEW_STATEMENT + " VARCHAR,\n" +
-            DEFAULT_COLUMN_FAMILY_NAME + " VARCHAR,\n" +
-            DISABLE_WAL + " BOOLEAN,\n" +
-            MULTI_TENANT + " BOOLEAN,\n" +
-            VIEW_TYPE + " UNSIGNED_TINYINT,\n" +
-            LINK_TYPE + " UNSIGNED_TINYINT,\n" +
             ARRAY_SIZE + " INTEGER,\n" +
+            VIEW_CONSTANT + " VARBINARY,\n" +
+            // Link metadata (only set on rows linking table to index or view)
+            LINK_TYPE + " UNSIGNED_TINYINT,\n" +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ","
             + TABLE_SCHEM_NAME + "," + TABLE_NAME_NAME + "," + COLUMN_NAME + "," + TABLE_CAT_NAME + "))\n" +
             HConstants.VERSIONS + "=" + MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS + ",\n" +

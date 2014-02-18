@@ -25,10 +25,11 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 
-import org.junit.Test;
-
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.ReadOnlyTableException;
+import org.junit.Test;
 
 public class ViewTest extends BaseHBaseManagedTimeTest {
 
@@ -173,5 +174,39 @@ public class ViewTest extends BaseHBaseManagedTimeTest {
         assertEquals(122, rs.getInt(2));
         assertEquals(5, rs.getInt(3));
         assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testDisallowDropOfReferencedColumn() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v1(v2 VARCHAR, v3 VARCHAR) AS SELECT * FROM t WHERE v1 = 1.0";
+        conn.createStatement().execute(ddl);
+        
+        try {
+            conn.createStatement().execute("ALTER VIEW v1 DROP COLUMN v1");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+        }
+        
+        ddl = "CREATE VIEW v2 AS SELECT * FROM v1 WHERE v2 != 'foo'";
+        conn.createStatement().execute(ddl);
+
+        try {
+            conn.createStatement().execute("ALTER VIEW v2 DROP COLUMN v1");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().execute("ALTER VIEW v2 DROP COLUMN v2");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+        }
+        conn.createStatement().execute("ALTER VIEW v2 DROP COLUMN v3");
+        
     }
 }

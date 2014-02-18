@@ -24,17 +24,16 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import org.apache.hadoop.hbase.client.Scan;
 
-import com.google.common.collect.Lists;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -46,6 +45,8 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.SQLCloseable;
+
+import com.google.common.collect.Lists;
 
 public class HashJoinPlan implements QueryPlan {
     
@@ -180,6 +181,12 @@ public class HashJoinPlan implements QueryPlan {
     @Override
     public FilterableStatement getStatement() {
         return plan.getStatement();
+    }
+
+    @Override
+    public boolean isDegenerate() {
+        // TODO can we determine this won't return anything?
+        return false;
     }
 
 }

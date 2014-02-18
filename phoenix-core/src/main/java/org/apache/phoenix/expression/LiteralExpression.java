@@ -27,9 +27,9 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
@@ -98,7 +98,7 @@ public class LiteralExpression extends BaseTerminalExpression {
         }
         PDataType type = PDataType.fromLiteral(value);
         byte[] b = type.toBytes(value);
-        if (b.length == 0) {
+        if (type.isNull(b)) {
             return TYPED_NULL_EXPRESSIONS[type.ordinal() + ( isDeterministic ? 0 : TYPED_NULL_EXPRESSIONS.length/2)];
         }
         if (type == PDataType.VARCHAR) {

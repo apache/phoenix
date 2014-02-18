@@ -42,6 +42,7 @@ public class PColumnImpl implements PColumn {
     private int position;
     private SortOrder sortOrder;
     private Integer arraySize;
+    private byte[] viewConstant;
 
     public PColumnImpl() {
     }
@@ -53,13 +54,13 @@ public class PColumnImpl implements PColumn {
                        Integer scale,
                        boolean nullable,
                        int position,
-                       SortOrder sortOrder, Integer arrSize) {
-        init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize);
+                       SortOrder sortOrder, Integer arrSize, byte[] viewConstant) {
+        init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize, viewConstant);
     }
 
     public PColumnImpl(PColumn column, int position) {
         this(column.getName(), column.getFamilyName(), column.getDataType(), column.getMaxLength(),
-                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize());
+                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), column.getViewConstant());
     }
 
     private void init(PName name,
@@ -70,7 +71,8 @@ public class PColumnImpl implements PColumn {
             boolean nullable,
             int position,
             SortOrder sortOrder,
-            Integer arrSize) {
+            Integer arrSize,
+            byte[] viewConstant) {
     	Preconditions.checkNotNull(sortOrder);
         this.dataType = dataType;
         if (familyName == null) {
@@ -90,6 +92,7 @@ public class PColumnImpl implements PColumn {
         this.position = position;
         this.sortOrder = sortOrder;
         this.arraySize = arrSize;
+        this.viewConstant = viewConstant;
     }
 
     @Override
@@ -156,10 +159,16 @@ public class PColumnImpl implements PColumn {
         int scale = WritableUtils.readVInt(input);
         boolean nullable = input.readBoolean();
         int position = WritableUtils.readVInt(input);
+        boolean hasViewConstant = (position < 0);
+        position = Math.abs(position)-1;
+        byte[] viewConstant = null;
+        if (hasViewConstant) {
+            viewConstant = Bytes.readByteArray(input);
+        }
         SortOrder sortOrder = SortOrder.fromSystemValue(WritableUtils.readVInt(input));
         int arrSize = WritableUtils.readVInt(input);
         init(columnName, familyName, dataType, maxLength == NO_MAXLENGTH ? null : maxLength,
-                scale == NO_SCALE ? null : scale, nullable, position, sortOrder, arrSize == -1 ? null : arrSize);
+                scale == NO_SCALE ? null : scale, nullable, position, sortOrder, arrSize == -1 ? null : arrSize, viewConstant);
     }
 
     @Override
@@ -170,7 +179,11 @@ public class PColumnImpl implements PColumn {
         WritableUtils.writeVInt(output, maxLength == null ? NO_MAXLENGTH : maxLength);
         WritableUtils.writeVInt(output, scale == null ? NO_SCALE : scale);
         output.writeBoolean(nullable);
-        WritableUtils.writeVInt(output, position);
+        boolean hasViewConstant = (viewConstant != null);
+        WritableUtils.writeVInt(output, (position+1) * (hasViewConstant ? -1 : 1));
+        if (hasViewConstant) {
+            Bytes.writeByteArray(output, viewConstant);
+        }
         WritableUtils.writeVInt(output, sortOrder.getSystemValue());
         WritableUtils.writeVInt(output, arraySize == null ? -1 : arraySize);
     }
@@ -202,5 +215,10 @@ public class PColumnImpl implements PColumn {
     @Override
     public Integer getArraySize() {
         return arraySize;
+    }
+
+    @Override
+    public byte[] getViewConstant() {
+        return viewConstant;
     }
 }

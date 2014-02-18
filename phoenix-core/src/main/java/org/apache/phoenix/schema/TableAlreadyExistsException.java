@@ -37,7 +37,11 @@ public class TableAlreadyExistsException extends SQLException {
     private final String tableName;
 
     public TableAlreadyExistsException(String schemaName, String tableName) {
-        super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(tableName).build().toString(),
+        this(schemaName, tableName, null);
+    }
+
+    public TableAlreadyExistsException(String schemaName, String tableName, String msg) {
+        super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(tableName).setMessage(msg).build().toString(),
                 code.getSQLState(), code.getErrorCode());
         this.schemaName = schemaName;
         this.tableName = tableName;

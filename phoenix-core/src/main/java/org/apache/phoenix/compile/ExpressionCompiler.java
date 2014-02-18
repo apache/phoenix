@@ -87,7 +87,6 @@ import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.StringConcatParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.parse.UnsupportedAllParseNodeVisitor;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.DelegateDatum;
@@ -97,6 +96,7 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.SchemaUtil;
@@ -312,11 +312,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ColumnRef ref = context.getResolver().resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
         PTable table = ref.getTable();
         int pkPosition = ref.getPKSlotPosition();
-        // Disallow explicit reference to SALT or TENANT_ID columns
+        // Disallow explicit reference to salting column, tenant ID column, and index ID column
         if (pkPosition >= 0) {
             boolean isSalted = table.getBucketNum() != null;
             boolean isMultiTenant = context.getConnection().getTenantId() != null && table.isMultiTenant();
-            int minPosition = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0);
+            boolean isSharedViewIndex = table.getViewIndexId() != null;
+            int minPosition = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
             if (pkPosition < minPosition) {
                 throw new ColumnNotFoundException(table.getSchemaName().getString(), table.getTableName().getString(), null, ref.getColumn().getName().getString());
             }

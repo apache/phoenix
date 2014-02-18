@@ -20,7 +20,6 @@ package org.apache.phoenix.query;
 import java.util.concurrent.ExecutorService;
 
 import org.apache.http.annotation.Immutable;
-
 import org.apache.phoenix.iterate.SpoolTooBigToDiskException;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.optimize.QueryOptimizer;
@@ -93,6 +92,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String ZOOKEEPER_ROOT_NODE_ATTRIB = "zookeeper.znode.parent";
     public static final String DISTINCT_VALUE_COMPRESS_THRESHOLD_ATTRIB = "phoenix.distinct.value.compress.threshold";
     public static final String SEQUENCE_CACHE_SIZE_ATTRIB = "phoenix.sequence.cacheSize";
+    public static final String INDEX_MAX_FILESIZE_PERC_ATTRIB = "phoenix.index.maxDataFileSizePerc";
 
     
     /**

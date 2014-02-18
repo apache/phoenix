@@ -388,6 +388,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 public FilterableStatement getStatement() {
                     return null;
                 }
+
+                @Override
+                public boolean isDegenerate() {
+                    return false;
+                }
                 
             };
         }

@@ -145,15 +145,19 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] DATA_TYPE_BYTES = Bytes.toBytes(DATA_TYPE);
     public static final String TYPE_NAME = "TYPE_NAME";
     public static final String COLUMN_SIZE = "COLUMN_SIZE";
+    public static final byte[] COLUMN_SIZE_BYTES = Bytes.toBytes(COLUMN_SIZE);
     public static final String BUFFER_LENGTH = "BUFFER_LENGTH";
     public static final String DECIMAL_DIGITS = "DECIMAL_DIGITS";
+    public static final byte[] DECIMAL_DIGITS_BYTES = Bytes.toBytes(DECIMAL_DIGITS);
     public static final String NUM_PREC_RADIX = "NUM_PREC_RADIX";
     public static final String NULLABLE = "NULLABLE";
+    public static final byte[] NULLABLE_BYTES = Bytes.toBytes(NULLABLE);
     public static final String COLUMN_DEF = "COLUMN_DEF";
     public static final String SQL_DATA_TYPE = "SQL_DATA_TYPE";
     public static final String SQL_DATETIME_SUB = "SQL_DATETIME_SUB";
     public static final String CHAR_OCTET_LENGTH = "CHAR_OCTET_LENGTH";
     public static final String ORDINAL_POSITION = "ORDINAL_POSITION";
+    public static final byte[] ORDINAL_POSITION_BYTES = Bytes.toBytes(ORDINAL_POSITION);
     public static final String IS_NULLABLE = "IS_NULLABLE";
     public static final String SCOPE_CATALOG = "SCOPE_CATALOG";
     public static final String SCOPE_SCHEMA = "SCOPE_SCHEMA";
@@ -161,6 +165,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String SOURCE_DATA_TYPE = "SOURCE_DATA_TYPE";
     public static final String IS_AUTOINCREMENT = "IS_AUTOINCREMENT";
     public static final String SORT_ORDER = "SORT_ORDER";
+    public static final byte[] SORT_ORDER_BYTES = Bytes.toBytes(SORT_ORDER);
     public static final String IMMUTABLE_ROWS = "IMMUTABLE_ROWS";
     public static final byte[] IMMUTABLE_ROWS_BYTES = Bytes.toBytes(IMMUTABLE_ROWS);
     public static final String DEFAULT_COLUMN_FAMILY_NAME = "DEFAULT_COLUMN_FAMILY";
@@ -177,6 +182,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] LINK_TYPE_BYTES = Bytes.toBytes(LINK_TYPE);
     public static final String ARRAY_SIZE = "ARRAY_SIZE";
     public static final byte[] ARRAY_SIZE_BYTES = Bytes.toBytes(ARRAY_SIZE);
+    public static final String VIEW_CONSTANT = "VIEW_CONSTANT";
+    public static final byte[] VIEW_CONSTANT_BYTES = Bytes.toBytes(VIEW_CONSTANT);
+    public static final String VIEW_INDEX_ID = "VIEW_INDEX_ID";
+    public static final byte[] VIEW_INDEX_ID_BYTES = Bytes.toBytes(VIEW_INDEX_ID);
 
     public static final String TABLE_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY;
     public static final byte[] TABLE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;

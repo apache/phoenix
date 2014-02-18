@@ -118,8 +118,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public MetaDataMutationResult addColumn(List<Mutation> tabeMetaData, PTableType tableType, List<Pair<byte[],Map<String,Object>>> families ) throws SQLException {
-        return getDelegate().addColumn(tabeMetaData, tableType, families);
+    public MetaDataMutationResult addColumn(List<Mutation> tabeMetaData, List<Pair<byte[],Map<String,Object>>> families, PTable table) throws SQLException {
+        return getDelegate().addColumn(tabeMetaData, families, table);
     }
 
 
