@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env python
 ############################################################################
 #
 # Licensed to the Apache Software Foundation (ASF) under one
@@ -19,12 +19,29 @@
 #
 ############################################################################
 
-# Phoenix client jar. To generate new jars: $ mvn package -DskipTests
-current_dir=$(cd $(dirname $0);pwd)
-phoenix_jar_path="$current_dir/../phoenix-assembly/target"
-phoenix_client_jar=$(find $phoenix_jar_path/phoenix-*-client.jar)
+import os
+import subprocess
+import fnmatch
+import sys
 
-# HBase configuration folder path (where hbase-site.xml reside) for HBase/Phoenix client side property override
-hbase_config_path="$current_dir"
 
-java -cp "$hbase_config_path:$phoenix_client_jar" -Dlog4j.configuration=file:$current_dir/log4j.properties org.apache.phoenix.util.PhoenixRuntime "$@"
+def find(pattern, path):
+    for root, dirs, files in os.walk(path):
+        for name in files:
+            if fnmatch.fnmatch(name, pattern):
+                return os.path.join(root, name)
+    return ""
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-assembly",
+                                "target")
+phoenix_client_jar = find("phoenix-*-client.jar", phoenix_jar_path)
+
+# HBase configuration folder path (where hbase-site.xml reside) for
+# HBase/Phoenix client side property override
+java_cmd = 'java -cp ".:' + current_dir + ":" + phoenix_client_jar + \
+    '" -Dlog4j.configuration=file:' + \
+    os.path.join(current_dir, "log4j.properties") + \
+    " org.apache.phoenix.util.PhoenixRuntime " + ' '.join(sys.argv[1:])
+
+subprocess.call(java_cmd, shell=True)
