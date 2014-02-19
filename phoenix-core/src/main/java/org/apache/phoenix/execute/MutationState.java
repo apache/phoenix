@@ -312,7 +312,14 @@ public class MutationState implements SQLCloseable {
                 for (Entry<byte[], List<KeyValue>> entry : mutation.getFamilyMap().entrySet()) {
                     if (entry.getValue() != null) {
                         for (KeyValue kv : entry.getValue()) {
-                            byteSize += kv.getBuffer().length;
+                            try {
+                                byteSize += kv.getBuffer().length;
+                            } catch(UnsupportedOperationException e) {
+                                // kv.getBuffer isn't supported, so we need to figure out the length of
+                                // the kv from the rest of the information
+                                byteSize += kv.getKeyLength();
+                                byteSize += kv.getValueLength();
+                            }
                             keyValueCount++;
                         }
                     }
