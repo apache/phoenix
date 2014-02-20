@@ -192,7 +192,7 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <version>2.16</version>
         <configuration>
-          <argLine>-enableassertions -Xmx2250m
+          <argLine>-enableassertions -Xmx4096m
             -Djava.security.egd=file:/dev/./urandom</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
         </configuration>
