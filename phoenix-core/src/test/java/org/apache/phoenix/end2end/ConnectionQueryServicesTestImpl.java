@@ -18,16 +18,12 @@
 package org.apache.phoenix.end2end;
 
 import java.sql.SQLException;
-import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
@@ -59,9 +55,9 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     public boolean isDistributedCluster() {
         Configuration conf = util.getConfiguration();
         boolean isDistributedCluster = false;
-        isDistributedCluster = Boolean.parseBoolean(System.getProperty(util.IS_DISTRIBUTED_CLUSTER, "false"));
+        isDistributedCluster = Boolean.parseBoolean(System.getProperty(IntegrationTestingUtility.IS_DISTRIBUTED_CLUSTER, "false"));
         if (!isDistributedCluster) {
-          isDistributedCluster = conf.getBoolean(util.IS_DISTRIBUTED_CLUSTER, false);
+          isDistributedCluster = conf.getBoolean(IntegrationTestingUtility.IS_DISTRIBUTED_CLUSTER, false);
         }
         return isDistributedCluster;
     }

@@ -106,6 +106,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.io.Closeables;
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
@@ -190,10 +191,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     @Override
     public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
+        HTableInterface htable = getTable(tableName);
         try {
-            return getTable(tableName).getTableDescriptor();
+            return htable.getTableDescriptor();
         } catch (IOException e) {
             throw new RuntimeException(e);
+        } finally {
+            Closeables.closeQuietly(htable);
         }
     }
 
@@ -1071,15 +1075,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return instance.addColumn(tableMetaData);
                 }
             });
-        if (tableType == PTableType.TABLE && result.getMutationCode() == MutationCode.COLUMN_NOT_FOUND) { // Success
-            // If we're changing MULTI_TENANT to true or false, create or drop the view index table
-            KeyValue kv = MetaDataUtil.getMutationKeyValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES);
-            if (kv != null) {
-                long timestamp = MetaDataUtil.getClientTimeStamp(m);
-                if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength()))) {
-                    this.ensureViewIndexTableCreated(table, timestamp);
-                } else {
-                    this.ensureViewIndexTableDropped(table.getPhysicalName().getBytes(), timestamp);
+
+        if (result.getMutationCode() == MutationCode.COLUMN_NOT_FOUND) { // Success
+            // Flush the table if transitioning DISABLE_WAL from TRUE to FALSE
+            if (Boolean.FALSE.equals(PDataType.BOOLEAN.toObject(
+                    MetaDataUtil.getMutationKVByteValue(m,PhoenixDatabaseMetaData.DISABLE_WAL_BYTES)))) {
+                flushTable(table.getPhysicalName().getBytes());
+            }
+            
+            if (tableType == PTableType.TABLE) {
+                // If we're changing MULTI_TENANT to true or false, create or drop the view index table
+                KeyValue kv = MetaDataUtil.getMutationKeyValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES);
+                if (kv != null) {
+                    long timestamp = MetaDataUtil.getClientTimeStamp(m);
+                    if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength()))) {
+                        this.ensureViewIndexTableCreated(table, timestamp);
+                    } else {
+                        this.ensureViewIndexTableDropped(table.getPhysicalName().getBytes(), timestamp);
+                    }
                 }
             }
         }
@@ -1235,6 +1248,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         } catch (Exception e) {
             throw new SQLException(ServerUtil.parseServerException(e));
+        }
+    }
+
+    private void flushTable(byte[] tableName) throws SQLException {
+        HBaseAdmin admin = getAdmin();
+        try {
+            admin.flush(tableName);
+        } catch (IOException e) {
+            throw new PhoenixIOException(e);
+        } catch (InterruptedException e) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build()
+                    .buildException();
+        } finally {
+            Closeables.closeQuietly(admin);
         }
     }
 
