@@ -87,13 +87,6 @@ import org.junit.BeforeClass;
  * @since 0.1
  */
 public abstract class BaseConnectedQueryTest extends BaseTest {
-
-    private static String TEST_URL = TestUtil.PHOENIX_JDBC_URL;
-
-    public static void setUrl(String url) {
-        BaseConnectedQueryTest.TEST_URL = url;
-    }
-
     protected static byte[][] getDefaultSplits(String tenantId) {
         return new byte[][] { 
             Bytes.toBytes(tenantId + "00A"),

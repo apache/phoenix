@@ -1425,7 +1425,7 @@ public class MetaDataClient {
                 Boolean disableWAL = null;
                 if (disableWALProp != null) {
                     if (disableWALProp.booleanValue() != table.isWALDisabled()) {
-                        disableWAL = isImmutableRowsProp;
+                        disableWAL = disableWALProp;
                     }
                 }
                 
