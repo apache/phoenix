@@ -147,7 +147,7 @@ public class DeleteCompiler {
         }
         
         @Override
-        protected MutationState mutate(PhoenixConnection connection, ResultIterator iterator) throws SQLException {
+        protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException {
             PhoenixStatement statement = new PhoenixStatement(connection);
             return deleteRows(statement, tableRef, iterator, projector);
         }

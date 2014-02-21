@@ -272,6 +272,10 @@ public class QueryCompiler {
                 limit = maxRows;
             }
         }
+        if (context.getSequenceManager().getSequenceCount() > 0) {
+            // Validates and reserves sequence values
+            context.getSequenceManager().reserveSequences();
+        }
         if (select.isAggregate() || select.isDistinct()) {
             return new AggregatePlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, groupBy, having);
         } else {

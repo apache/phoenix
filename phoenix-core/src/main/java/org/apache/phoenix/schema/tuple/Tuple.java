@@ -58,7 +58,7 @@ public interface Tuple {
      */
     public KeyValue getValue(int index);
     
-    /***
+    /**
      * Get the KeyValue contained by the Tuple with the given family and
      * qualifier name.
      * @param family the column family of the KeyValue being retrieved
@@ -68,7 +68,7 @@ public interface Tuple {
      */
     public KeyValue getValue(byte [] family, byte [] qualifier);
     
-    /***
+    /**
      * Get the value byte array of the KeyValue contained by the Tuple with 
      * the given family and qualifier name.
      * @param family the column family of the KeyValue being retrieved
@@ -79,4 +79,12 @@ public interface Tuple {
      * exists; otherwise false.
      */
     public boolean getValue(byte [] family, byte [] qualifier, ImmutableBytesWritable ptr);
+    
+    /**
+     * Get the sequence value given the sequence index. May only be evaluated
+     * on the client-side.
+     * @param index
+     * @return the current or next sequence value
+     */
+    public long getSequenceValue(int index);
 }
