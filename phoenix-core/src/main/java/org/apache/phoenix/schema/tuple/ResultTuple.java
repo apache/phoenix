@@ -21,11 +21,10 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.util.ResultUtil;
 
 
-public class ResultTuple implements Tuple {
+public class ResultTuple extends BaseTuple {
     private Result result;
     
     public ResultTuple(Result result) {

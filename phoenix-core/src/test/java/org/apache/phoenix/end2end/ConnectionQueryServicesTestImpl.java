@@ -71,7 +71,7 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
                 util.deleteTable(table.getName());
             }
         } else {
-            util.restoreCluster();
+            util.shutdownMiniCluster();
         }
     }
     

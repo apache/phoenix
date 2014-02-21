@@ -29,14 +29,14 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-
 import org.apache.phoenix.compile.JoinCompiler.ProjectedPTableWrapper;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.ValueBitSet;
-import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
+import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -131,7 +131,7 @@ public class ScanProjector {
         }
     }
     
-    public static class ProjectedValueTuple implements Tuple {
+    public static class ProjectedValueTuple extends BaseTuple {
         private ImmutableBytesWritable keyPtr = new ImmutableBytesWritable();
         private long timestamp;
         private byte[] projectedValue;

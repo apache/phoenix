@@ -47,6 +47,7 @@ import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -178,8 +179,12 @@ public class UpsertCompiler {
         }
 
         @Override
-        protected MutationState mutate(PhoenixConnection connection, ResultIterator iterator) throws SQLException {
+        protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException {
             PhoenixStatement statement = new PhoenixStatement(connection);
+            // Clone the connection as it's not thread safe and will be operated on in parallel
+            if (context.getSequenceManager().getSequenceCount() > 0) {
+                iterator = new SequenceResultIterator(iterator,context.getSequenceManager());
+            }
             return upsertSelect(statement, tableRef, projector, iterator, columnIndexes, pkSlotIndexes);
         }
         
@@ -620,13 +625,15 @@ public class UpsertCompiler {
             nodeIndex++;
         }
         final SequenceManager sequenceManager = context.getSequenceManager();
-        sequenceManager.initSequences();
+        sequenceManager.reserveSequences();
         // Next evaluate all the expressions
         nodeIndex = 0;
         final byte[][] values = new byte[nValuesToSet][];
+        Tuple tuple = sequenceManager.getSequenceCount() == 0 ? null :
+            sequenceManager.newSequenceTuple(null);
         for (Expression constantExpression : constantExpressions) {
             PColumn column = allColumns.get(columnIndexes[nodeIndex]);
-            constantExpression.evaluate(null, ptr);
+            constantExpression.evaluate(tuple, ptr);
             Object value = null;
             byte[] byteValue = ByteUtil.copyKeyBytesIfNecessary(ptr);
             if (constantExpression.getDataType() != null) {
@@ -686,12 +693,7 @@ public class UpsertCompiler {
             }
 
             @Override
-            public MutationState execute() { // TODO: add throws SQLException
-                try {
-                    sequenceManager.incrementSequenceValues();
-                } catch (SQLException e) {
-                    throw new RuntimeException(e); // Will get unwrapped
-                }
+            public MutationState execute() {
                 Map<ImmutableBytesPtr, Map<PColumn, byte[]>> mutation = Maps.newHashMapWithExpectedSize(1);
                 setValues(values, pkSlotIndexes, columnIndexes, tableRef.getTable(), mutation);
                 return new MutationState(tableRef, mutation, 0, maxSize, connection);

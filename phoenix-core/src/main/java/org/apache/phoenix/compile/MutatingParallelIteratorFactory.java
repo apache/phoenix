@@ -26,7 +26,6 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.KeyValue;
-
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.PeekingResultIterator;
@@ -56,13 +55,12 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
     /**
      * Method that does the actual mutation work
      */
-    abstract protected MutationState mutate(PhoenixConnection connection, ResultIterator iterator) throws SQLException;
+    abstract protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException;
     
     @Override
-    public PeekingResultIterator newIterator(ResultIterator iterator) throws SQLException {
-        // Clone the connection as it's not thread safe and will be operated on in parallel
+    public PeekingResultIterator newIterator(StatementContext context, ResultIterator iterator) throws SQLException {
         final PhoenixConnection connection = new PhoenixConnection(this.connection);
-        MutationState state = mutate(connection, iterator);
+        MutationState state = mutate(context, iterator, connection);
         long totalRowCount = state.getUpdateCount();
         if (connection.getAutoCommit()) {
             connection.getMutationState().join(state);

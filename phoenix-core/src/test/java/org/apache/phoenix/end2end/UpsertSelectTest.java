@@ -683,4 +683,47 @@ public class UpsertSelectTest extends BaseClientManagedTimeTest {
         conn.close();
 
     }
+    
+    @Test
+    public void testUpsertSelectWithSequence() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn.createStatement().execute("create table t1 (id bigint not null primary key, v varchar)");
+        conn.createStatement().execute("create table t2 (k varchar primary key)");
+        conn.createStatement().execute("create sequence s");
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn.createStatement().execute("upsert into t2 values ('a')");
+        conn.createStatement().execute("upsert into t2 values ('b')");
+        conn.createStatement().execute("upsert into t2 values ('c')");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn.createStatement().execute("upsert into t1 select next value for s, k from t2");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        ResultSet rs = conn.createStatement().executeQuery("select * from t1");
+        
+        assertTrue(rs.next());
+        assertEquals(1,rs.getLong(1));
+        assertEquals("a",rs.getString(2));
+        
+        assertTrue(rs.next());
+        assertEquals(2,rs.getLong(1));
+        assertEquals("b",rs.getString(2));
+        
+        assertTrue(rs.next());
+        assertEquals(3,rs.getLong(1));
+        assertEquals("c",rs.getString(2));
+        
+        assertFalse(rs.next());
+        conn.close();
+    }
 }

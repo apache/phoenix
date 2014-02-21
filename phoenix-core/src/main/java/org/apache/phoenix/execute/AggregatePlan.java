@@ -88,7 +88,7 @@ public class AggregatePlan extends BasicQueryPlan {
             this.services = services;
         }
         @Override
-        public PeekingResultIterator newIterator(ResultIterator scanner) throws SQLException {
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner) throws SQLException {
             Expression expression = RowKeyExpression.INSTANCE;
             OrderByExpression orderByExpression = new OrderByExpression(expression, false, true);
             int threshold = services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
@@ -105,9 +105,9 @@ public class AggregatePlan extends BasicQueryPlan {
             this.outerFactory = outerFactory;
         }
         @Override
-        public PeekingResultIterator newIterator(ResultIterator scanner) throws SQLException {
-            PeekingResultIterator iterator = innerFactory.newIterator(scanner);
-            return outerFactory.newIterator(iterator);
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner) throws SQLException {
+            PeekingResultIterator iterator = innerFactory.newIterator(context, scanner);
+            return outerFactory.newIterator(context, iterator);
         }
     }
 
@@ -160,7 +160,6 @@ public class AggregatePlan extends BasicQueryPlan {
                     QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
             resultScanner = new OrderedAggregatingResultIterator(aggResultIterator, orderBy.getOrderByExpressions(), thresholdBytes, limit);
         }
-        
         if (context.getSequenceManager().getSequenceCount() > 0) {
             resultScanner = new SequenceResultIterator(resultScanner, context.getSequenceManager());
         }
