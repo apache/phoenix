@@ -142,7 +142,7 @@ public class QueryCompiler {
             return compileSingleQuery(context, select, binds, null);
         }
         
-        boolean[] starJoinVector = JoinCompiler.getStarJoinVector(join);
+        boolean[] starJoinVector = join.getStarJoinVector();
         if (starJoinVector != null) {
             ProjectedPTableWrapper initialProjectedTable = join.createProjectedTable(join.getMainTable(), !asSubquery);
             PTableWrapper projectedTable = initialProjectedTable;
