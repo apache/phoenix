@@ -35,17 +35,6 @@
     <componentDescriptor>src/build/components-major-client.xml</componentDescriptor>
   </componentDescriptors>
 
-  <!-- Unpack all the modules into the target jar -->
-  <moduleSets>
-    <moduleSet>
-      <useAllReactorProjects>true</useAllReactorProjects>
-      <binaries>
-      <outputDirectory>/</outputDirectory>
-        <unpack>true</unpack>
-      </binaries>
-    </moduleSet>
-  </moduleSets>
-
   <dependencySets>
     <dependencySet>
       <!-- Unpack all the dependencies to class files, since java doesn't support 
@@ -57,6 +46,16 @@
         <include>jline:jline</include>
         <include>sqlline:sqlline</include>
         <include>org.apache.hbase:hbase*</include>
+      </includes>
+    </dependencySet>
+
+    <!-- Make sure we get all the components, not just the minimal client ones (e.g.
+      phoenix-flume, phoenix-pig, etc) -->
+    <dependencySet>
+      <outputDirectory>/</outputDirectory>
+      <unpack>true</unpack>
+      <includes>
+        <include>org.apache:phoenix-*</include>
       </includes>
     </dependencySet>
   </dependencySets>
