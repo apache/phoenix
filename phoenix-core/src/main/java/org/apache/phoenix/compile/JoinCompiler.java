@@ -117,7 +117,6 @@ public class JoinCompiler {
             this.origResolver = resolver;
             List<AliasedNode> selectList = statement.getSelect();
             List<TableNode> tableNodes = statement.getFrom();
-            HintNode hint = statement.getHint();
             assert (tableNodes.size() > 1);
             Iterator<TableNode> iter = tableNodes.iterator();
             Iterator<TableRef> tableRefIter = resolver.getTables().iterator();
@@ -127,7 +126,7 @@ public class JoinCompiler {
             this.joinTables = new ArrayList<JoinTable>(tableNodes.size() - 1);
             this.preFilters = new ArrayList<ParseNode>();
             this.postFilters = new ArrayList<ParseNode>();
-            this.useStarJoin = !hint.hasHint(Hint.NO_STAR_JOIN);
+            this.useStarJoin = !statement.getHint().hasHint(Hint.NO_STAR_JOIN);
             this.tableRefToJoinTableMap = new HashMap<TableRef, JoinTable>();
             ColumnParseNodeVisitor generalRefVisitor = new ColumnParseNodeVisitor(resolver);
             ColumnParseNodeVisitor joinLocalRefVisitor = new ColumnParseNodeVisitor(resolver);
@@ -140,7 +139,7 @@ public class JoinCompiler {
                 if (!(tableNode instanceof JoinTableNode))
                     throw new SQLFeatureNotSupportedException("Implicit joins not supported.");
                 JoinTableNode joinTableNode = (JoinTableNode) tableNode;
-                JoinTable joinTable = new JoinTable(joinTableNode, tableRefIter.next(), selectList, hint, resolver);
+                JoinTable joinTable = new JoinTable(joinTableNode, tableRefIter.next(), statement, resolver);
                 for (ParseNode condition : joinTable.conditions) {
                     ComparisonParseNode comparisonNode = (ComparisonParseNode) condition;
                     comparisonNode.getLHS().accept(generalRefVisitor);
@@ -547,15 +546,15 @@ public class JoinCompiler {
         
         private Set<TableRef> leftTableRefs;
         
-        public JoinTable(JoinTableNode node, TableRef tableRef, List<AliasedNode> select, HintNode hint, ColumnResolver resolver) throws SQLException {
+        public JoinTable(JoinTableNode node, TableRef tableRef, SelectStatement statement, ColumnResolver resolver) throws SQLException {
             if (!(node.getTable() instanceof ConcreteTableNode))
                 throw new SQLFeatureNotSupportedException("Subqueries not supported.");
             
             this.type = node.getType();
             this.tableNode = node.getTable();
             this.table = tableRef;
-            this.select = extractFromSelect(select,tableRef,resolver);
-            this.hint = hint;
+            this.select = extractFromSelect(statement.getSelect(),tableRef,resolver);
+            this.hint = statement.getHint();
             this.preFilters = new ArrayList<ParseNode>();
             this.conditions = new ArrayList<ParseNode>();
             this.leftTableRefs = new HashSet<TableRef>();
