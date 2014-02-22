@@ -51,6 +51,7 @@ public class SequenceResultIterator extends DelegateResultIterator {
     @Override
     public void explain(List<String> planSteps) {
         super.explain(planSteps);
-        planSteps.add("CLIENT RESERVE " + sequenceManager.getSequenceCount() + " SEQUENCES");
+        int nSequences = sequenceManager.getSequenceCount();
+        planSteps.add("CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S"));
     }
 }

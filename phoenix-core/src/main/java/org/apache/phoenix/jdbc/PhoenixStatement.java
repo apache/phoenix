@@ -198,6 +198,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         try {
             QueryPlan plan = stmt.compilePlan(this);
             plan = connection.getQueryServices().getOptimizer().optimize(this, plan);
+            plan.getContext().getSequenceManager().validateSequences(stmt.getSequenceAction());;
             PhoenixResultSet rs = newResultSet(plan.iterator(), plan.getProjector());
             resultSets.add(rs);
             setLastQueryPlan(plan);
@@ -221,6 +222,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         // the latest state
         try {
             MutationPlan plan = stmt.compilePlan(this);
+            plan.getContext().getSequenceManager().validateSequences(stmt.getSequenceAction());;
             MutationState state = plan.execute();
             connection.getMutationState().join(state);
             if (connection.getAutoCommit()) {
@@ -319,7 +321,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         @Override
         public QueryPlan compilePlan(PhoenixStatement stmt) throws SQLException {
             CompilableStatement compilableStmt = getStatement();
-            StatementPlan plan = compilableStmt.compilePlan(stmt);
+            final StatementPlan plan = compilableStmt.compilePlan(stmt);
             List<String> planSteps = plan.getExplainPlan().getPlanSteps();
             List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
             for (String planStep : planSteps) {
@@ -381,7 +383,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
                 @Override
                 public StatementContext getContext() {
-                    return null;
+                    return plan.getContext();
                 }
 
                 @Override
@@ -492,7 +494,13 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         @SuppressWarnings("unchecked")
         @Override
         public MutationPlan compilePlan(final PhoenixStatement stmt) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
             return new MutationPlan() {
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
 
                 @Override
                 public ParameterMetaData getParameterMetaData() {
@@ -527,9 +535,15 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         @SuppressWarnings("unchecked")
         @Override
         public MutationPlan compilePlan(final PhoenixStatement stmt) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
             return new MutationPlan() {
                 
                 @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+               @Override
                 public ParameterMetaData getParameterMetaData() {
                     return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
                 }
@@ -562,8 +576,14 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         @SuppressWarnings("unchecked")
         @Override
         public MutationPlan compilePlan(final PhoenixStatement stmt) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
             return new MutationPlan() {
                 
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
                 @Override
                 public ParameterMetaData getParameterMetaData() {
                     return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
@@ -597,7 +617,13 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         @SuppressWarnings("unchecked")
         @Override
         public MutationPlan compilePlan(final PhoenixStatement stmt) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
             return new MutationPlan() {
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
 
                 @Override
                 public ParameterMetaData getParameterMetaData() {
@@ -632,9 +658,15 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         @SuppressWarnings("unchecked")
         @Override
         public MutationPlan compilePlan(final PhoenixStatement stmt) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
             return new MutationPlan() {
 
                 @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+               @Override
                 public ParameterMetaData getParameterMetaData() {
                     return new PhoenixParameterMetaData(0);
                 }
@@ -838,6 +870,14 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         CompilableStatement stmt = parseStatement(sql);
         if (stmt.getOperation().isMutation()) {
             throw new ExecuteQueryNotApplicableException(sql);
+        }
+        return stmt.compilePlan(this);
+    }
+
+    public MutationPlan compileMutation(String sql) throws SQLException {
+        CompilableStatement stmt = parseStatement(sql);
+        if (!stmt.getOperation().isMutation()) {
+            throw new ExecuteUpdateNotApplicableException(sql);
         }
         return stmt.compilePlan(this);
     }

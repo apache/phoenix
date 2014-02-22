@@ -40,6 +40,7 @@ public class DropSequenceCompiler {
     public MutationPlan compile(final DropSequenceStatement sequence) throws SQLException {
         final PhoenixConnection connection = statement.getConnection();
         final MetaDataClient client = new MetaDataClient(connection);        
+        final StatementContext context = new StatementContext(statement);
         return new MutationPlan() {           
 
             @Override
@@ -50,6 +51,11 @@ public class DropSequenceCompiler {
             @Override
             public ExplainPlan getExplainPlan() throws SQLException {
                 return new ExplainPlan(Collections.singletonList("DROP SEQUENCE"));
+            }
+
+            @Override
+            public StatementContext getContext() {
+                return context;
             }
 
             @Override

@@ -189,6 +189,10 @@ public class CreateTableCompiler {
                 return connection;
             }
             
+            @Override
+            public StatementContext getContext() {
+                return context;
+            }
         };
     }
     

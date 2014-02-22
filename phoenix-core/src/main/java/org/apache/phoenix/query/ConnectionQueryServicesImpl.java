@@ -1341,11 +1341,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * Gets the current sequence value
      * @param tenantId
      * @param sequence
-     * @return
      * @throws SQLException if cached sequence cannot be found 
      */
     @Override
-    public long getSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException {
+    public long currentSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException {
         Sequence sequence = sequenceMap.get(sequenceKey);
         if (sequence == null) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CALL_CURRENT_BEFORE_NEXT_VALUE)
@@ -1365,15 +1364,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     /**
-     * Verifies that sequences exist and reserves values for them.
-     * @param tenantId
-     * @param sequences
-     * @param timestamp
-     * @throws SQLException if any sequence does not exist
+     * Verifies that sequences exist and reserves values for them if reserveValues is true
      */
     @Override
-    public void reserveSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException {
-        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 0);
+    public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions, Sequence.Action action) throws SQLException {
+        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 0, action);
     }
     
     /**
@@ -1384,18 +1379,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @param sequenceKeys sorted list of sequence kyes
      * @param batchSize
      * @param timestamp
-     * @return
      * @throws SQLException if any of the sequences cannot be found
      * 
-     * PSequences -> Sequence
-     * PSequenceKey -> SequenceKey
      */
     @Override
-    public void incrementSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException {
-        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 1);
+    public void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException {
+        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 1, Sequence.Action.RESERVE);
     }
 
-    private void incrementSequenceValues(List<SequenceKey> keys, long timestamp, long[] values, SQLException[] exceptions, int factor) throws SQLException {
+    private void incrementSequenceValues(List<SequenceKey> keys, long timestamp, long[] values, SQLException[] exceptions, int factor, Sequence.Action action) throws SQLException {
         List<Sequence> sequences = Lists.newArrayListWithExpectedSize(keys.size());
         for (SequenceKey key : keys) {
             Sequence newSequences = new Sequence(key);
@@ -1416,11 +1408,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             for (int i = 0; i < sequences.size(); i++) {
                 Sequence sequence = sequences.get(i);
                 try {
-                    values[i] = sequence.incrementValue(timestamp, factor);
+                    values[i] = sequence.incrementValue(timestamp, factor, action);
                 } catch (EmptySequenceCacheException e) {
                     indexes[toIncrementList.size()] = i;
                     toIncrementList.add(sequence);
-                    Increment inc = sequence.newIncrement(timestamp);
+                    Increment inc = sequence.newIncrement(timestamp, action);
                     incrementBatch.add(inc);
                 }
             }
@@ -1468,7 +1460,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public void returnSequenceValues(List<SequenceKey> keys, long timestamp, SQLException[] exceptions) throws SQLException {
+    public void returnSequences(List<SequenceKey> keys, long timestamp, SQLException[] exceptions) throws SQLException {
         List<Sequence> sequences = Lists.newArrayListWithExpectedSize(keys.size());
         for (SequenceKey key : keys) {
             Sequence newSequences = new Sequence(key);
@@ -1540,7 +1532,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     // Take no locks, as this only gets run when there are no open connections
     // so there's no danger of contention.
-    private void returnAllSequenceValues(ConcurrentMap<SequenceKey,Sequence> sequenceMap) throws SQLException {
+    private void returnAllSequences(ConcurrentMap<SequenceKey,Sequence> sequenceMap) throws SQLException {
         List<Append> mutations = Lists.newArrayListWithExpectedSize(sequenceMap.size());
         for (Sequence sequence : sequenceMap.values()) {
             mutations.addAll(sequence.newReturns());
@@ -1593,7 +1585,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // the lock.
         if (formerSequenceMap != null) {
             // When there are no more connections, attempt to return any sequences
-            returnAllSequenceValues(formerSequenceMap);
+            returnAllSequences(formerSequenceMap);
         }
     }
 

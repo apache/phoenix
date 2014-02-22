@@ -23,7 +23,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -80,6 +79,11 @@ public class CreateIndexCompiler {
             @Override
             public ExplainPlan getExplainPlan() throws SQLException {
                 return new ExplainPlan(Collections.singletonList("CREATE INDEX"));
+            }
+
+            @Override
+            public StatementContext getContext() {
+                return context;
             }
         };
     }

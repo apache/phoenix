@@ -41,7 +41,6 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hbase.util.Pair;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
@@ -112,17 +111,22 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                     maxTimestamp = EnvironmentEdgeManager.currentTimeMillis();
                     tr = new TimeRange(tr.getMin(), maxTimestamp);
                 }
+                boolean validateOnly = true;
                 Get get = new Get(row);
                 get.setTimeRange(tr.getMin(), tr.getMax());
                 for (Map.Entry<byte[],NavigableMap<byte[], Long>> entry : increment.getFamilyMap().entrySet()) {
                     byte[] cf = entry.getKey();
-                    for (byte[] cq : entry.getValue().keySet()) {
-                        get.addColumn(cf, cq);
+                    for (Map.Entry<byte[],Long> kvEntry : entry.getValue().entrySet()) {
+                        get.addColumn(cf, kvEntry.getKey());
+                        validateOnly &= (Sequence.Action.VALIDATE.ordinal() == kvEntry.getValue().intValue());
                     }
                 }
                 Result result = region.get(get);
                 if (result.isEmpty()) {
                     return getErrorResult(row, maxTimestamp, SQLExceptionCode.SEQUENCE_UNDEFINED.getErrorCode());
+                }
+                if (validateOnly) {
+                    return result;
                 }
                 KeyValue currentValueKV = Sequence.getCurrentValueKV(result);
                 KeyValue incrementByKV = Sequence.getIncrementByKV(result);

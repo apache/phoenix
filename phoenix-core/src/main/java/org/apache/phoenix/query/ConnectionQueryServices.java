@@ -36,6 +36,7 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 
 
@@ -84,10 +85,11 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     
     long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, int batchSize, long timestamp) throws SQLException;
     long dropSequence(String tenantId, String schemaName, String sequenceName, long timestamp) throws SQLException;
-    void reserveSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException;
-    void incrementSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException;
-    long getSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException;
-    void returnSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, SQLException[] exceptions) throws SQLException;
+    void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions, Sequence.Action action) throws SQLException;
+    void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException;
+    long currentSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException;
+    void returnSequences(List<SequenceKey> sequenceKeys, long timestamp, SQLException[] exceptions) throws SQLException;
+
     void addConnection(PhoenixConnection connection) throws SQLException;
     void removeConnection(PhoenixConnection connection) throws SQLException;
 

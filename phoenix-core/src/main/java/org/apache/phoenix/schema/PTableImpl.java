@@ -227,6 +227,7 @@ public class PTableImpl implements PTable {
         if (schemaName == null) {
             throw new NullPointerException();
         }
+        this.tenantId = tenantId;
         this.schemaName = schemaName;
         this.tableName = tableName;
         this.name = PNameFactory.newName(SchemaUtil.getTableName(schemaName.getString(), tableName.getString()));

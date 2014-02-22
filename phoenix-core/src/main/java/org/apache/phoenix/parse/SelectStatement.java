@@ -25,6 +25,7 @@ import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
+import org.apache.phoenix.schema.Sequence.Action;
 
 /**
  * 
@@ -179,5 +180,10 @@ public class SelectStatement implements FilterableStatement {
     @Override
     public Operation getOperation() {
         return Operation.QUERY;
+    }
+
+    @Override
+    public Action getSequenceAction() {
+        return Action.RESERVE;
     }
 }

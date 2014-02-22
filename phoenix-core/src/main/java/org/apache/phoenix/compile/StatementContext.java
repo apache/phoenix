@@ -64,6 +64,10 @@ public class StatementContext {
 
     private TableRef currentTable;
     
+    public StatementContext(PhoenixStatement statement) {
+        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, statement.getParameters(), new Scan());
+    }
+    
     public StatementContext(PhoenixStatement statement, ColumnResolver resolver, List<Object> binds, Scan scan) {
         this.statement = statement;
         this.resolver = resolver;

@@ -37,6 +37,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
@@ -552,6 +553,37 @@ public class SequenceTest extends BaseClientManagedTimeTest {
         conn2.close();
     }
 
+    @Test
+    public void testExplainPlanValidatesSequences() throws Exception {
+        nextConnection();
+        conn.createStatement().execute("CREATE SEQUENCE bar");
+        conn.createStatement().execute("CREATE TABLE foo (k BIGINT NOT NULL PRIMARY KEY)");
+        
+        nextConnection();
+        Connection conn2 = conn;
+        conn = null; // So that call to nextConnection doesn't close it
+        ResultSet rs = conn2.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR bar FROM foo");
+        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER FOO\n" + 
+        		"CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
+        
+        nextConnection();
+        rs = conn.createStatement().executeQuery("SELECT sequence_name, current_value FROM SYSTEM.\"SEQUENCE\" WHERE sequence_name='BAR'");
+        assertTrue(rs.next());
+        assertEquals("BAR", rs.getString(1));
+        assertEquals(1, rs.getLong(2));
+        conn.close();
+        conn2.close();
+
+        nextConnection();
+        try {
+            conn.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR zzz FROM foo");
+            fail();
+        } catch (SequenceNotFoundException e) {
+            // expected
+        }
+        conn.close();
+    }
+    
 	private void nextConnection() throws Exception {
 	    if (conn != null) conn.close();
 	    long ts = nextTimestamp();
