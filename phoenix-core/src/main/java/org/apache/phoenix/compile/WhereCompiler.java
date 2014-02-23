@@ -79,15 +79,7 @@ public class WhereCompiler {
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */
     public static Expression compile(StatementContext context, FilterableStatement statement) throws SQLException {
-        return compileWhereClause(context, statement, Sets.<Expression>newHashSet());
-    }
-
-    /**
-     * Used for testing to get access to the expressions that were used to form the start/stop key of the scan
-     * @param statement TODO
-     */
-    public static Expression compileWhereClause(StatementContext context, FilterableStatement statement,
-            Set<Expression> extractedNodes) throws SQLException {
+        Set<Expression> extractedNodes = Sets.<Expression>newHashSet();
         WhereExpressionCompiler whereCompiler = new WhereExpressionCompiler(context);
         ParseNode where = statement.getWhere();
         Expression expression = where == null ? LiteralExpression.newConstant(true,PDataType.BOOLEAN,true) : where.accept(whereCompiler);
