@@ -19,7 +19,6 @@ package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
 import java.text.Format;
-import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -65,14 +64,14 @@ public class StatementContext {
     private TableRef currentTable;
     
     public StatementContext(PhoenixStatement statement) {
-        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, statement.getParameters(), new Scan());
+        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan());
     }
     
-    public StatementContext(PhoenixStatement statement, ColumnResolver resolver, List<Object> binds, Scan scan) {
+    public StatementContext(PhoenixStatement statement, ColumnResolver resolver, Scan scan) {
         this.statement = statement;
         this.resolver = resolver;
         this.scan = scan;
-        this.binds = new BindManager(binds);
+        this.binds = new BindManager(statement.getParameters());
         this.aggregates = new AggregationManager();
         this.expressions = new ExpressionManager();
         PhoenixConnection connection = statement.getConnection();

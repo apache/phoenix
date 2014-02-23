@@ -679,7 +679,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertNotNull(filter);
         assertEquals(
                 rowKeyFilter(like(
-                    BaseConnectionlessQueryTest.ENTITY_ID,
+                    ENTITY_ID,
                     likeArg)),
                 filter);
 
@@ -703,7 +703,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertNotNull(filter);
         assertEquals(
                 rowKeyFilter(like(
-                    BaseConnectionlessQueryTest.ENTITY_ID,
+                    ENTITY_ID,
                     likeArg)),
                 filter);
 
@@ -727,7 +727,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertNotNull(filter);
         assertEquals(
                 rowKeyFilter(like(
-                    substr(BaseConnectionlessQueryTest.ENTITY_ID,1,10),
+                    substr(ENTITY_ID,1,10),
                     likeArg)),
                 filter);
 
@@ -751,7 +751,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertNotNull(filter);
         assertEquals(
                 rowKeyFilter(like(
-                    substr(BaseConnectionlessQueryTest.ENTITY_ID,4,10),
+                    substr(ENTITY_ID,4,10),
                     likeArg)),
                 filter);
 
@@ -774,7 +774,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertNotNull(filter);
         assertEquals(
                 rowKeyFilter(like(
-                    BaseConnectionlessQueryTest.ENTITY_ID,
+                    ENTITY_ID,
                     likeArg)),
                 filter);
 
@@ -797,7 +797,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertNotNull(filter);
         assertEquals(
                 rowKeyFilter(not(like(
-                    BaseConnectionlessQueryTest.ENTITY_ID,
+                    ENTITY_ID,
                     likeArg))),
                 filter);
 

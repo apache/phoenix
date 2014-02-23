@@ -115,12 +115,12 @@ public class QueryCompiler {
     public QueryPlan compile() throws SQLException{
         SelectStatement select = this.select;
         List<Object> binds = statement.getParameters();
-        StatementContext context = new StatementContext(statement, resolver, binds, scan);
+        StatementContext context = new StatementContext(statement, resolver, scan);
         if (select.getFrom().size() > 1) {
             select = JoinCompiler.optimize(context, select, statement);
             if (this.select != select) {
                 ColumnResolver resolver = FromCompiler.getResolver(select, statement.getConnection());
-                context = new StatementContext(statement, resolver, binds, scan);
+                context = new StatementContext(statement, resolver, scan);
             }
             JoinSpec join = JoinCompiler.getJoinSpec(context, select);
             return compileJoinQuery(context, select, binds, join, false);
@@ -165,7 +165,7 @@ public class QueryCompiler {
                 ColumnResolver resolver = join.getColumnResolver(subProjTable);
                 Scan subScan = ScanUtil.newScan(originalScan);
                 ScanProjector.serializeProjectorIntoScan(subScan, JoinCompiler.getScanProjector(subProjTable));
-                StatementContext subContext = new StatementContext(statement, resolver, binds, subScan);
+                StatementContext subContext = new StatementContext(statement, resolver, subScan);
                 subContext.setCurrentTable(joinTable.getTable());
                 join.projectColumns(subScan, joinTable.getTable());
                 joinPlans[i] = compileSingleQuery(subContext, subStatement, binds, null);
@@ -212,7 +212,7 @@ public class QueryCompiler {
             SelectStatement rhs = JoinCompiler.getSubqueryForLastJoinTable(select, join);
             JoinSpec lhsJoin = JoinCompiler.getSubJoinSpecWithoutPostFilters(join);
             Scan subScan = ScanUtil.newScan(originalScan);
-            StatementContext lhsCtx = new StatementContext(statement, context.getResolver(), binds, subScan);
+            StatementContext lhsCtx = new StatementContext(statement, context.getResolver(), subScan);
             QueryPlan lhsPlan = compileJoinQuery(lhsCtx, lhs, binds, lhsJoin, true);
             ColumnResolver lhsResolver = lhsCtx.getResolver();
             PTableWrapper lhsProjTable = ((JoinedTableColumnResolver) (lhsResolver)).getPTableWrapper();

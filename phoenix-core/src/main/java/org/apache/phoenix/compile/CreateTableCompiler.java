@@ -79,7 +79,7 @@ public class CreateTableCompiler {
         PTable parentToBe = null;
         ViewType viewTypeToBe = null;
         Scan scan = new Scan();
-        final StatementContext context = new StatementContext(statement, resolver, statement.getParameters(), scan);
+        final StatementContext context = new StatementContext(statement, resolver, scan);
         // TODO: support any statement for a VIEW instead of just a WHERE clause
         ParseNode whereNode = create.getWhereClause();
         String viewStatementToBe = null;

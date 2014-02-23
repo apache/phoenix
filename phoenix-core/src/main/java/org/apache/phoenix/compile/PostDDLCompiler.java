@@ -134,7 +134,7 @@ public class PostDDLCompiler {
                                 return new ColumnRef(tableRef, column.getPosition());
                             }
                         };
-                        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, Collections.<Object>emptyList(), scan);
+                        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, scan);
                         ScanUtil.setTimeRange(scan, timestamp);
                         if (emptyCF != null) {
                             scan.setAttribute(UngroupedAggregateRegionObserver.EMPTY_CF, emptyCF);

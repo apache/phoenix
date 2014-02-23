@@ -233,7 +233,7 @@ public class UpsertCompiler {
         int[] pkSlotIndexesToBe;
         List<PColumn> targetColumns;
         if (table.getViewType() == ViewType.UPDATABLE) {
-            StatementContext context = new StatementContext(statement, resolver, this.statement.getParameters(), new Scan());
+            StatementContext context = new StatementContext(statement, resolver, new Scan());
             ViewValuesMapBuilder builder = new ViewValuesMapBuilder(context);
             ParseNode viewNode = new SQLParser(table.getViewStatement()).parseQuery().getWhere();
             viewNode.accept(builder);
@@ -621,7 +621,7 @@ public class UpsertCompiler {
         int nodeIndex = 0;
         // Allocate array based on size of all columns in table,
         // since some values may not be set (if they're nullable).
-        final StatementContext context = new StatementContext(statement, resolver, statement.getParameters(), new Scan());
+        final StatementContext context = new StatementContext(statement, resolver, new Scan());
         UpsertValuesCompiler expressionBuilder = new UpsertValuesCompiler(context);
         final List<Expression> constantExpressions = Lists.newArrayListWithExpectedSize(valueNodes.size());
         // First build all the expressions, as with sequences we want to collect them all first
