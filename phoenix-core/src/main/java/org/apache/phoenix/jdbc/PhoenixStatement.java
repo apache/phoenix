@@ -868,18 +868,26 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     public QueryPlan compileQuery(String sql) throws SQLException {
         CompilableStatement stmt = parseStatement(sql);
+        return compileQuery(stmt, sql);
+    }
+
+    public QueryPlan compileQuery(CompilableStatement stmt, String query) throws SQLException {
         if (stmt.getOperation().isMutation()) {
-            throw new ExecuteQueryNotApplicableException(sql);
+            throw new ExecuteQueryNotApplicableException(query);
+        }
+        return stmt.compilePlan(this);
+    }
+
+    public MutationPlan compileMutation(CompilableStatement stmt, String query) throws SQLException {
+        if (!stmt.getOperation().isMutation()) {
+            throw new ExecuteUpdateNotApplicableException(query);
         }
         return stmt.compilePlan(this);
     }
 
     public MutationPlan compileMutation(String sql) throws SQLException {
         CompilableStatement stmt = parseStatement(sql);
-        if (!stmt.getOperation().isMutation()) {
-            throw new ExecuteUpdateNotApplicableException(sql);
-        }
-        return stmt.compilePlan(this);
+        return compileMutation(stmt, sql);
     }
 
     @Override

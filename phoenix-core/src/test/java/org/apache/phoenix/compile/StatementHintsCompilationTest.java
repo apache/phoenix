@@ -28,20 +28,16 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
-import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.parse.SQLParser;
-import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -50,11 +46,7 @@ import org.junit.Test;
  */
 public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
 
-    private static StatementContext compileStatement(String query, Scan scan, List<Object> binds) throws SQLException {
-        return compileStatement(query, scan, binds, null, null);
-    }
-    
-    private static boolean usingSkipScan(Scan scan) {
+   private static boolean usingSkipScan(Scan scan) {
         Filter filter = scan.getFilter();
         if (filter instanceof FilterList) {
             FilterList filterList = (FilterList) filter;
@@ -68,20 +60,17 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
         return filter instanceof SkipScanFilter;
     }
 
-    private static StatementContext compileStatement(String query, Scan scan, List<Object> binds, Integer limit, Set<Expression> extractedNodes) throws SQLException {
-        SQLParser parser = new SQLParser(query);
-        SelectStatement statement = parser.parseQuery();
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
-        ColumnResolver resolver = FromCompiler.getResolver(statement, pconn);
-        statement = StatementNormalizer.normalize(statement, resolver);
-        StatementContext context = new StatementContext(new PhoenixStatement(pconn), resolver, binds, scan);
+    private static StatementContext compileStatement(String query) throws SQLException {
+        return compileStatement(query, Collections.emptyList(), null);
+    }
 
-        Integer actualLimit = LimitCompiler.compile(context, statement);
-        assertEquals(limit, actualLimit);
-        GroupBy groupBy = GroupByCompiler.compile(context, statement);
-        statement = HavingCompiler.rewrite(context, statement, groupBy);
-        WhereCompiler.compileWhereClause(context, statement, extractedNodes);
-        return context;
+    private static StatementContext compileStatement(String query, List<Object> binds, Integer limit) throws SQLException {
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        TestUtil.bindParams(pstmt, binds);
+        QueryPlan plan = pstmt.compileQuery();
+        assertEquals(limit, plan.getLimit());
+        return plan.getContext();
     }
 
     @Test
@@ -89,10 +78,8 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
         String id = "000000000000001";
         // A where clause without the first column usually compiles into a range scan.
         String query = "SELECT /*+ SKIP_SCAN */ * FROM atable WHERE entity_id='" + id + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
         
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
         assertTrue("The first filter should be SkipScanFilter.", usingSkipScan(scan));
     }
 
@@ -100,10 +87,7 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
     public void testSelectForceRangeScan() throws Exception {
         String query = "SELECT /*+ RANGE_SCAN */ * FROM atable WHERE organization_id in (" +
                 "'000000000000001', '000000000000002', '000000000000003', '000000000000004')";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
         // Verify that it is not using SkipScanFilter.
         assertFalse("The first filter should not be SkipScanFilter.", usingSkipScan(scan));
     }

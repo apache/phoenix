@@ -21,6 +21,7 @@ import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.and;
 import static org.apache.phoenix.util.TestUtil.assertDegenerate;
+import static org.apache.phoenix.util.TestUtil.bindParams;
 import static org.apache.phoenix.util.TestUtil.columnComparison;
 import static org.apache.phoenix.util.TestUtil.constantComparison;
 import static org.apache.phoenix.util.TestUtil.in;
@@ -212,12 +213,6 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         assertArrayEquals(scan.getStopRow(),KeyRange.EMPTY_RANGE.getUpperRange());
     }
 
-    private static void bindParams(PhoenixPreparedStatement stmt, List<Object> binds) throws SQLException {
-        for (int i = 0; i < binds.size(); i++) {
-            stmt.setObject(i+1, binds.get(i));
-        }
-    }
-    
     @Test
     public void testAndFilter() throws SQLException {
         String tenantId = "000000000000001";

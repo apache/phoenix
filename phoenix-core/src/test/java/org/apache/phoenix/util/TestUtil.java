@@ -48,10 +48,12 @@ import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
+import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.expression.function.SubstrFunction;
 import org.apache.phoenix.filter.MultiCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.MultiKeyValueComparisonFilter;
 import org.apache.phoenix.filter.RowKeyComparisonFilter;
@@ -59,6 +61,7 @@ import org.apache.phoenix.filter.SingleCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SingleKeyValueComparisonFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
@@ -218,6 +221,14 @@ public class TestUtil {
         return  new ComparisonExpression(op, Arrays.asList(e, LiteralExpression.newConstant(o)));
     }
 
+    public static Expression like(Expression e, Object o) {
+        return  new LikeExpression(Arrays.asList(e, LiteralExpression.newConstant(o)));
+    }
+
+    public static Expression substr(Expression e, Object offset, Object length) {
+        return  new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset), LiteralExpression.newConstant(length)));
+    }
+
     public static Expression columnComparison(CompareOp op, Expression c1, Expression c2) {
         return  new ComparisonExpression(op, Arrays.<Expression>asList(c1, c2));
     }
@@ -334,5 +345,11 @@ public class TestUtil {
     public static void closeStmtAndConn(Statement stmt, Connection conn) {
         closeStatement(stmt);
         closeConnection(conn);
+    }
+
+    public static void bindParams(PhoenixPreparedStatement stmt, List<Object> binds) throws SQLException {
+        for (int i = 0; i < binds.size(); i++) {
+            stmt.setObject(i+1, binds.get(i));
+        }
     }
 }
