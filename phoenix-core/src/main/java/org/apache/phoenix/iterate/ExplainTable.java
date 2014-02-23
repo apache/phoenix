@@ -18,27 +18,17 @@
 package org.apache.phoenix.iterate;
 
 import java.text.Format;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;
+import java.util.*;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.filter.Filter;
-import org.apache.hadoop.hbase.filter.FilterList;
-import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
-import org.apache.hadoop.hbase.filter.PageFilter;
+import org.apache.hadoop.hbase.filter.*;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.compile.ScanRanges;
-import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.*;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.RowKeySchema;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.collect.Iterators;
@@ -116,9 +106,7 @@ public abstract class ExplainTable {
                     }
                     if (filterList.size() > offset+1) {
                         filterDesc = filterList.get(offset+1).toString();
-                        if (filterList.size() > offset+2) {
-                            pageFilter = (PageFilter) filterList.get(offset+2);
-                        }
+                        pageFilter = getPageFilter(filterList);
                     }
                 }
             } else if (filter instanceof FilterList) {
@@ -129,9 +117,7 @@ public abstract class ExplainTable {
                 }
                 if (filterList.size() > offset) {
                     filterDesc = filterList.get(offset).toString();
-                    if (filterList.size() > offset+1) {
-                        pageFilter = (PageFilter) filterList.get(offset+1);
-                    }
+                    pageFilter = getPageFilter(filterList);
                 }
             } else {
                 if (filter instanceof FirstKeyOnlyFilter) {
@@ -150,6 +136,13 @@ public abstract class ExplainTable {
             }
         }
         groupBy.explain(planSteps);
+    }
+
+    private PageFilter getPageFilter(List<Filter> filterList) {
+        for (Filter filter : filterList) {
+            if (filter instanceof PageFilter) return (PageFilter)filter;
+        }
+        return null;
     }
 
     private void appendPKColumnValue(StringBuilder buf, byte[] range, Boolean isNull, int slotIndex) {
