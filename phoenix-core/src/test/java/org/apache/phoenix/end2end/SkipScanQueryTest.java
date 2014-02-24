@@ -209,7 +209,7 @@ public class SkipScanQueryTest extends BaseHBaseManagedTimeTest {
     public void testPreSplitCompositeFixedKey() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         try {
-            conn.createStatement().execute("create table test(key_1 char(3) not null, key_2 char(4) not null, value varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2)) split on('000','100','200')");
+            conn.createStatement().execute("create table test(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2)) split on('000','100','200')");
             conn.setAutoCommit(true);
             conn.createStatement().execute("upsert into test values('000','aaaa','value_1')");
             conn.createStatement().execute("upsert into test values('000','aabb','value_2')");
