@@ -17,17 +17,9 @@
  */
 package org.apache.phoenix.compile;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.Set;
+import java.util.*;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -37,52 +29,22 @@ import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.expression.BaseTerminalExpression;
-import org.apache.phoenix.expression.CoerceExpression;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.KeyValueColumnExpression;
+import org.apache.phoenix.expression.*;
 import org.apache.phoenix.expression.aggregator.ClientAggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
 import org.apache.phoenix.expression.visitor.SingleAggregateFunctionVisitor;
-import org.apache.phoenix.parse.AliasedNode;
-import org.apache.phoenix.parse.BindParseNode;
-import org.apache.phoenix.parse.ColumnParseNode;
-import org.apache.phoenix.parse.FamilyWildcardParseNode;
-import org.apache.phoenix.parse.FunctionParseNode;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.SelectStatement;
-import org.apache.phoenix.parse.SequenceValueParseNode;
-import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.parse.TableWildcardParseNode;
-import org.apache.phoenix.parse.WildcardParseNode;
+import org.apache.phoenix.parse.*;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ArgumentTypeMismatchException;
-import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.RowKeySchema;
-import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.SizedUtil;
+import org.apache.phoenix.util.*;
 
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
+import com.google.common.collect.*;
 
 
 /**
@@ -99,14 +61,6 @@ public class ProjectionCompiler {
     private ProjectionCompiler() {
     }
     
-    private static void projectAllColumnFamilies(PTable table, Scan scan) {
-        // Will project all known/declared column families
-        scan.getFamilyMap().clear();
-        for (PColumnFamily family : table.getColumnFamilies()) {
-            scan.addFamily(family.getName().getBytes());
-        }
-    }
-
     private static void projectColumnFamily(PTable table, Scan scan, byte[] family) {
         // Will project all colmuns for given CF
         scan.addFamily(family);
@@ -342,21 +296,10 @@ public class ProjectionCompiler {
         }
         
         selectVisitor.compile();
-        // Since we don't have the empty key value in read-only tables,
-        // we must project everything.
-        boolean isProjectEmptyKeyValue = table.getType() != PTableType.VIEW && table.getViewType() != ViewType.MAPPED && !isWildcard;
-        if (isProjectEmptyKeyValue) {
-            for (byte[] family : projectedFamilies) {
-                projectColumnFamily(table, scan, family);       
-            }
-        } else {
-            /* 
-             * TODO: this could be optimized by detecting:
-             * - if a column is projected that's not in the where clause
-             * - if a column is grouped by that's not in the where clause
-             * - if we're not using IS NULL or CASE WHEN expressions
-             */
-             projectAllColumnFamilies(table,scan);
+        boolean isProjectEmptyKeyValue = table.getType() != PTableType.VIEW && table.getViewType() != ViewType.MAPPED
+                && !isWildcard;
+        for (byte[] family : projectedFamilies) {
+            projectColumnFamily(table, scan, family);
         }
         return new RowProjector(projectedColumns, estimatedByteSize, isProjectEmptyKeyValue);
     }
