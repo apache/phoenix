@@ -17,14 +17,14 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_DISPLAY_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_DISPLAY_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_DISPLAY_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_DISPLAY_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 
@@ -32,10 +32,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Collections;
-import java.util.List;
 
-import org.junit.Test;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.JoinCompiler.JoinSpec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -44,6 +41,7 @@ import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.QueryUtil;
+import org.junit.Test;
 
 /**
  * Test compilation of queries containing joins.
@@ -132,12 +130,11 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
     
     private static JoinSpec getJoinSpec(String query, PhoenixConnection connection) throws SQLException {
         Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
         SQLParser parser = new SQLParser(query);
         SelectStatement select = parser.parseQuery();
         ColumnResolver resolver = FromCompiler.getResolver(select, connection);
         select = StatementNormalizer.normalize(select, resolver);
-        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, binds, scan);
+        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, scan);
         return JoinCompiler.getJoinSpec(context, select);        
     }
 }

@@ -88,7 +88,7 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
             };
 
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
-        StatementContext context = new StatementContext(new PhoenixStatement(pconn), null, Collections.emptyList(), new Scan());
+        StatementContext context = new StatementContext(new PhoenixStatement(pconn), null, new Scan());
         AggregationManager aggregationManager = context.getAggregationManager();
         SumAggregateFunction func = new SumAggregateFunction(Arrays.<Expression>asList(new KeyValueColumnExpression(new PLongColumn() {
             @Override

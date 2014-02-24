@@ -32,6 +32,7 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.tuple.DelegateTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -100,11 +101,11 @@ public class SequenceManager {
             Long scn = statement.getConnection().getSCN();
             long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
             ConnectionQueryServices services = statement.getConnection().getQueryServices();
-            services.incrementSequenceValues(nextSequences, timestamp, srcSequenceValues, sqlExceptions);
+            services.incrementSequences(nextSequences, timestamp, srcSequenceValues, sqlExceptions);
             setSequenceValues(srcSequenceValues, dstSequenceValues, sqlExceptions);
             int offset = nextSequences.size();
             for (int i = 0; i < currentSequences.size(); i++) {
-                dstSequenceValues[sequencePosition[offset+i]] = services.getSequenceValue(currentSequences.get(i), timestamp);
+                dstSequenceValues[sequencePosition[offset+i]] = services.currentSequenceValue(currentSequences.get(i), timestamp);
             }
         }
 
@@ -137,8 +138,8 @@ public class SequenceManager {
         return expression;
     }
     
-    public void reserveSequences() throws SQLException {
-        if (sequenceMap == null) {
+    public void validateSequences(Sequence.Action action) throws SQLException {
+        if (sequenceMap == null || sequenceMap.isEmpty()) {
             return;
         }
         int maxSize = sequenceMap.size();
@@ -167,7 +168,7 @@ public class SequenceManager {
         ConnectionQueryServices services = this.statement.getConnection().getQueryServices();
         Long scn = statement.getConnection().getSCN();
         long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
-        services.reserveSequenceValues(nextSequences, timestamp, srcSequenceValues, sqlExceptions);
+        services.validateSequences(nextSequences, timestamp, srcSequenceValues, sqlExceptions, action);
         setSequenceValues(srcSequenceValues, dstSequenceValues, sqlExceptions);
     }
     

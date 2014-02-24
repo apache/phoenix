@@ -37,8 +37,6 @@ import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.Lists;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -49,10 +47,13 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
+import com.google.common.collect.Lists;
+
 public class Sequence {
     public static final int SUCCESS = 0;
     
-    private static final Long AMOUNT = Long.valueOf(0L);
+    public enum Action {VALIDATE, RESERVE};
+    
     // Pre-compute index of sequence key values to prevent binary search
     private static final KeyValue CURRENT_VALUE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SEQUENCE_FAMILY_BYTES, CURRENT_VALUE_BYTES);
     private static final KeyValue INCREMENT_BY_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SEQUENCE_FAMILY_BYTES, INCREMENT_BY_BYTES);
@@ -118,12 +119,15 @@ public class Sequence {
         return value.isDeleted() ? null : value;
     }
     
-    public long incrementValue(long timestamp, int factor) throws EmptySequenceCacheException {
+    public long incrementValue(long timestamp, int factor, Action action) throws EmptySequenceCacheException {
         SequenceValue value = findSequenceValue(timestamp);
         if (value == null) {
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }
         if (value.currentValue == value.nextValue) {
+            if (action == Action.VALIDATE) {
+                return value.currentValue;
+            }
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }
         long returnValue = value.currentValue;
@@ -212,7 +216,7 @@ public class Sequence {
         return currentValue;
     }
 
-    public Increment newIncrement(long timestamp) {
+    public Increment newIncrement(long timestamp, Sequence.Action action) {
         Increment inc = new Increment(SchemaUtil.getSequenceKey(key.getTenantId(), key.getSchemaName(), key.getSequenceName()));
         // It doesn't matter what we set the amount too - we always use the values we get
         // from the Get we do to prevent any race conditions. All columns that get added
@@ -224,7 +228,7 @@ public class Sequence {
         }
         for (KeyValue kv : SEQUENCE_KV_COLUMNS) {
             // We don't care about the amount, as we'll add what gets looked up on the server-side
-            inc.addColumn(kv.getFamily(), kv.getQualifier(), AMOUNT);
+            inc.addColumn(kv.getFamily(), kv.getQualifier(), action.ordinal());
         }
         return inc;
     }

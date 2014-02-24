@@ -19,21 +19,17 @@ package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
 import java.text.Format;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.util.DateUtil;
-import org.apache.phoenix.util.NumberUtil;
-import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.query.*;
+import org.apache.phoenix.schema.*;
+import org.apache.phoenix.util.*;
 
 
 /**
@@ -63,12 +59,17 @@ public class StatementContext {
     private final SequenceManager sequences; 
 
     private TableRef currentTable;
+    private List<Pair<byte[], byte[]>> whereConditionColumns;
     
-    public StatementContext(PhoenixStatement statement, ColumnResolver resolver, List<Object> binds, Scan scan) {
+    public StatementContext(PhoenixStatement statement) {
+        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan());
+    }
+    
+    public StatementContext(PhoenixStatement statement, ColumnResolver resolver, Scan scan) {
         this.statement = statement;
         this.resolver = resolver;
         this.scan = scan;
-        this.binds = new BindManager(binds);
+        this.binds = new BindManager(statement.getParameters());
         this.aggregates = new AggregationManager();
         this.expressions = new ExpressionManager();
         PhoenixConnection connection = statement.getConnection();
@@ -79,6 +80,7 @@ public class StatementContext {
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;
         this.sequences = new SequenceManager(statement);
+        this.whereConditionColumns = new ArrayList<Pair<byte[],byte[]>>();
     }
 
     public String getDateFormat() {
@@ -215,5 +217,13 @@ public class StatementContext {
     
     public SequenceManager getSequenceManager(){
         return sequences;
+    }
+
+    public void addWhereCoditionColumn(byte[] cf, byte[] q) {
+        whereConditionColumns.add(new Pair<byte[], byte[]>(cf, q));
+    }
+
+    public List<Pair<byte[], byte[]>> getWhereCoditionColumns() {
+        return whereConditionColumns;
     }
 }

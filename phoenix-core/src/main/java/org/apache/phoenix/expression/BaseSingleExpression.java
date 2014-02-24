@@ -23,9 +23,9 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 
 import com.google.common.collect.ImmutableList;
-import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 
 
 /**
@@ -72,6 +72,24 @@ public abstract class BaseSingleExpression extends BaseExpression {
     @Override
     public void reset() {
         children.get(0).reset();
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + children.get(0).hashCode();
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null) return false;
+        if (getClass() != obj.getClass()) return false;
+        BaseSingleExpression other = (BaseSingleExpression)obj;
+        if (!children.get(0).equals(other.children.get(0))) return false;
+        return true;
     }
 
     @Override

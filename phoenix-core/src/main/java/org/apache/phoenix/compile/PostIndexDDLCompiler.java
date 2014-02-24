@@ -17,14 +17,11 @@
  */
 package org.apache.phoenix.compile;
 
-import java.sql.ParameterMetaData;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.List;
 
-import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -46,81 +43,51 @@ public class PostIndexDDLCompiler {
     }
 
     public MutationPlan compile(final PTable indexTable) throws SQLException {
-        return new MutationPlan() {
-
-            @Override
-            public PhoenixConnection getConnection() {
-                return connection;
-            }
-
-            @Override
-            public ParameterMetaData getParameterMetaData() {
-                return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
-            }
-
-            @Override
-            public ExplainPlan getExplainPlan() throws SQLException {
-                return ExplainPlan.EMPTY_PLAN;
-            }
-
-            @Override
-            public MutationState execute() throws SQLException {
-                boolean wasAutoCommit = connection.getAutoCommit();
-                try {
-                    connection.setAutoCommit(true);
-                    /*
-                     * Handles:
-                     * 1) Populate a newly created table with contents.
-                     * 2) Activate the index by setting the INDEX_STATE to 
-                     */
-                    // NOTE: For first version, we would use a upsert/select to populate the new index table and
-                    //   returns synchronously. Creating an index on an existing table with large amount of data
-                    //   will as a result take a very very long time.
-                    //   In the long term, we should change this to an asynchronous process to populate the index
-                    //   that would allow the user to easily monitor the process of index creation.
-                    StringBuilder indexColumns = new StringBuilder();
-                    StringBuilder dataColumns = new StringBuilder();
-                    List<PColumn> dataTableColumns = dataTableRef.getTable().getColumns();
-                    PTable dataTable = dataTableRef.getTable();
-                    int nColumns = dataTable.getColumns().size();
-                    boolean isSalted = dataTable.getBucketNum() != null;
-                    boolean isMultiTenant = connection.getTenantId() != null && dataTable.isMultiTenant();
-                    boolean isSharedViewIndex = dataTable.getViewIndexId() != null;
-                    int posOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
-                    for (int i = posOffset; i < nColumns; i++) {
-                        PColumn col = dataTableColumns.get(i);
-                        String indexColName = IndexUtil.getIndexColumnName(col);
-                        try {
-                            indexTable.getColumn(indexColName);
-                            if (col.getFamilyName() != null) {
-                                dataColumns.append('"').append(col.getFamilyName()).append("\".");
-                            }
-                            dataColumns.append('"').append(col.getName()).append("\",");
-                            indexColumns.append('"').append(indexColName).append("\",");
-                        } catch (ColumnNotFoundException e) {
-                            // Catch and ignore - means that this data column is not in the index
-                        }
-                    }
-                    dataColumns.setLength(dataColumns.length()-1);
-                    indexColumns.setLength(indexColumns.length()-1);
-                    String schemaName = dataTableRef.getTable().getSchemaName().getString();
-                    String tableName = indexTable.getTableName().getString();
-                    
-                    StringBuilder updateStmtStr = new StringBuilder();
-                    updateStmtStr.append("UPSERT /*+ NO_INDEX */ INTO ").append(schemaName.length() == 0 ? "" : '"' + schemaName + "\".").append('"').append(tableName).append("\"(")
-                        .append(indexColumns).append(") SELECT ").append(dataColumns).append(" FROM ")
-                        .append(schemaName.length() == 0 ? "" : '"' + schemaName + "\".").append('"').append(dataTableRef.getTable().getTableName().getString()).append('"');
-                    PreparedStatement updateStmt = connection.prepareStatement(updateStmtStr.toString());
-                    int rowsUpdated = 0;
-                    updateStmt.execute();
-                    rowsUpdated = updateStmt.getUpdateCount();
-                    // Return number of rows built for index
-                    return new MutationState(rowsUpdated, connection);
-                } finally {
-                    if (!wasAutoCommit) connection.setAutoCommit(false);
+        /*
+         * Handles:
+         * 1) Populate a newly created table with contents.
+         * 2) Activate the index by setting the INDEX_STATE to 
+         */
+        // NOTE: For first version, we would use a upsert/select to populate the new index table and
+        //   returns synchronously. Creating an index on an existing table with large amount of data
+        //   will as a result take a very very long time.
+        //   In the long term, we should change this to an asynchronous process to populate the index
+        //   that would allow the user to easily monitor the process of index creation.
+        StringBuilder indexColumns = new StringBuilder();
+        StringBuilder dataColumns = new StringBuilder();
+        List<PColumn> dataTableColumns = dataTableRef.getTable().getColumns();
+        PTable dataTable = dataTableRef.getTable();
+        int nColumns = dataTable.getColumns().size();
+        boolean isSalted = dataTable.getBucketNum() != null;
+        boolean isMultiTenant = connection.getTenantId() != null && dataTable.isMultiTenant();
+        boolean isSharedViewIndex = dataTable.getViewIndexId() != null;
+        int posOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
+        for (int i = posOffset; i < nColumns; i++) {
+            PColumn col = dataTableColumns.get(i);
+            String indexColName = IndexUtil.getIndexColumnName(col);
+            try {
+                indexTable.getColumn(indexColName);
+                if (col.getFamilyName() != null) {
+                    dataColumns.append('"').append(col.getFamilyName()).append("\".");
                 }
+                dataColumns.append('"').append(col.getName()).append("\",");
+                indexColumns.append('"').append(indexColName).append("\",");
+            } catch (ColumnNotFoundException e) {
+                // Catch and ignore - means that this data column is not in the index
             }
-        };
+        }
+        dataColumns.setLength(dataColumns.length()-1);
+        indexColumns.setLength(indexColumns.length()-1);
+        String schemaName = dataTableRef.getTable().getSchemaName().getString();
+        String tableName = indexTable.getTableName().getString();
+        
+        StringBuilder updateStmtStr = new StringBuilder();
+        updateStmtStr.append("UPSERT /*+ NO_INDEX */ INTO ").append(schemaName.length() == 0 ? "" : '"' + schemaName + "\".").append('"').append(tableName).append("\"(")
+            .append(indexColumns).append(") SELECT ").append(dataColumns).append(" FROM ")
+            .append(schemaName.length() == 0 ? "" : '"' + schemaName + "\".").append('"').append(dataTableRef.getTable().getTableName().getString()).append('"');
+        
+        final PhoenixStatement statement = new PhoenixStatement(connection);
+        return statement.compileMutation(updateStmtStr.toString());
     }
 
 }

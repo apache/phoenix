@@ -468,14 +468,21 @@ public class MetaDataClient {
     }
     
     private MutationState buildIndex(PTable index, TableRef dataTableRef) throws SQLException {
-        PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(connection, dataTableRef);
-        MutationPlan plan = compiler.compile(index);
-        MutationState state = connection.getQueryServices().updateData(plan);
-        AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null, 
-                TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
-                dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
-        alterIndex(indexStatement);
-        return state;
+        boolean wasAutoCommit = connection.getAutoCommit();
+        connection.rollback();
+        try {
+            connection.setAutoCommit(true);
+            PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(connection, dataTableRef);
+            MutationPlan plan = compiler.compile(index);
+            MutationState state = connection.getQueryServices().updateData(plan);
+            AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null, 
+                    TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
+                    dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
+            alterIndex(indexStatement);
+            return state;
+        } finally {
+            connection.setAutoCommit(wasAutoCommit);
+        }
     }
 
     /**
@@ -623,6 +630,7 @@ public class MetaDataClient {
         if (table == null) {
             return new MutationState(0,connection);
         }
+        
         // If our connection is at a fixed point-in-time, we need to open a new
         // connection so that our new index table is visible.
         if (connection.getSCN() != null) {
@@ -715,7 +723,7 @@ public class MetaDataClient {
                     createSequence(key.getTenantId(), key.getSchemaName(), key.getSequenceName(), true, Short.MIN_VALUE, 1, 1, parent.getTimeStamp());
                     long[] seqValues = new long[1];
                     SQLException[] sqlExceptions = new SQLException[1];
-                    connection.getQueryServices().incrementSequenceValues(Collections.singletonList(key), timestamp, seqValues, sqlExceptions);
+                    connection.getQueryServices().incrementSequences(Collections.singletonList(key), timestamp, seqValues, sqlExceptions);
                     if (sqlExceptions[0] != null) {
                         throw sqlExceptions[0];
                     }
@@ -1902,6 +1910,7 @@ public class MetaDataClient {
                 connection.getQueryServices().updateData(plan);
                 NamedTableNode dataTableNode = NamedTableNode.create(null, TableName.create(schemaName, dataTableName), Collections.<ColumnDef>emptyList());
                 // Next rebuild the index
+                connection.setAutoCommit(true);
                 if (connection.getSCN() != null) {
                     return buildIndexAtTimeStamp(index, dataTableNode);
                 }

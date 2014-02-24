@@ -76,6 +76,10 @@ public class AggregatePlan extends BasicQueryPlan {
         this.aggregators = context.getAggregationManager().getAggregators();
     }
 
+    public Expression getHaving() {
+        return having;
+    }
+    
     @Override
     public List<KeyRange> getSplits() {
         return splits;

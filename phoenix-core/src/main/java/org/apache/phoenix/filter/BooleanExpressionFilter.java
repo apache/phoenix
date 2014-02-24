@@ -51,6 +51,10 @@ abstract public class BooleanExpressionFilter extends FilterBase {
         this.expression = expression;
     }
 
+    public Expression getExpression() {
+        return expression;
+    }
+    
     protected void setEvaluateOnCompletion(boolean evaluateOnCompletion) {
         this.evaluateOnCompletion = evaluateOnCompletion;
     }

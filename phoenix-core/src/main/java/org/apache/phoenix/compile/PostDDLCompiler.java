@@ -65,9 +65,11 @@ import com.google.common.collect.Lists;
  */
 public class PostDDLCompiler {
     private final PhoenixConnection connection;
+    private final StatementContext context; // bogus context
 
     public PostDDLCompiler(PhoenixConnection connection) {
         this.connection = connection;
+        this.context = new StatementContext(new PhoenixStatement(connection));
     }
 
     public MutationPlan compile(final List<TableRef> tableRefs, final byte[] emptyCF, final byte[] projectCF, final List<PColumn> deleteList,
@@ -132,7 +134,7 @@ public class PostDDLCompiler {
                                 return new ColumnRef(tableRef, column.getPosition());
                             }
                         };
-                        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, Collections.<Object>emptyList(), scan);
+                        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, scan);
                         ScanUtil.setTimeRange(scan, timestamp);
                         if (emptyCF != null) {
                             scan.setAttribute(UngroupedAggregateRegionObserver.EMPTY_CF, emptyCF);
@@ -242,6 +244,11 @@ public class PostDDLCompiler {
                 } finally {
                     if (!wasAutoCommit) connection.setAutoCommit(wasAutoCommit);
                 }
+            }
+
+            @Override
+            public StatementContext getContext() {
+                return context;
             }
         };
     }

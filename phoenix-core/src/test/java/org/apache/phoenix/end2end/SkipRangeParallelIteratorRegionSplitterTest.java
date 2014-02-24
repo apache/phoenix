@@ -359,7 +359,7 @@ public class SkipRangeParallelIteratorRegionSplitterTest extends BaseClientManag
             
         };
         PhoenixConnection connection = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
-        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, Collections.emptyList(), scan);
+        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, scan);
         context.setScanRanges(scanRanges);
         SkipRangeParallelIteratorRegionSplitter splitter = SkipRangeParallelIteratorRegionSplitter.getInstance(context, tableRef, HintNode.EMPTY_HINT_NODE);
         List<KeyRange> keyRanges = splitter.getSplits();
