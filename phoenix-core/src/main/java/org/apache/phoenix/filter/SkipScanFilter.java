@@ -137,7 +137,7 @@ public class SkipScanFilter extends FilterBase {
     
     private boolean areSlotsSingleKey(int startPosInclusive, int endPosExclusive) {
         for (int i = startPosInclusive; i < endPosExclusive; i++) {
-            if (!slots.get(0).get(position[i]).isSingleKey()) {
+            if (!slots.get(i).get(position[i]).isSingleKey()) {
                 return false;
             }
         }
