@@ -27,23 +27,13 @@ package org.apache.phoenix.expression;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
-import com.google.common.collect.Lists;
-import org.apache.phoenix.expression.function.CeilDecimalExpression;
-import org.apache.phoenix.expression.function.CeilTimestampExpression;
-import org.apache.phoenix.expression.function.FloorDateExpression;
-import org.apache.phoenix.expression.function.FloorDecimalExpression;
-import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
@@ -54,135 +44,6 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
     private ImmutableBytesWritable literalExprPtr;
     private int counter;
     private int estimatedByteSize;
-    
-    public static interface ExpressionComparabilityWrapper {
-        public Expression wrap(Expression lhs, Expression rhs) throws SQLException;
-    }
-    /*
-     * Used to coerce the RHS to the expected type based on the LHS. In some circumstances,
-     * we may need to round the value up or down. For example:
-     * WHERE (a,b) < (2.4, 'foo')
-     * We take the ceiling of 2.4 to make it 3 if a is an INTEGER to prevent needing to coerce
-     * every time during evaluation.
-     */
-    private static ExpressionComparabilityWrapper[] WRAPPERS = new ExpressionComparabilityWrapper[CompareOp.values().length];
-    static {
-        WRAPPERS[CompareOp.LESS.ordinal()] = new ExpressionComparabilityWrapper() {
-
-            @Override
-            public Expression wrap(Expression lhs, Expression rhs) throws SQLException {
-                Expression e = rhs;
-                PDataType rhsType = rhs.getDataType();
-                PDataType lhsType = lhs.getDataType();
-                if (rhsType == PDataType.DECIMAL && lhsType != PDataType.DECIMAL) {
-                    e = FloorDecimalExpression.create(rhs);
-                } else if ((rhsType == PDataType.TIMESTAMP || rhsType == PDataType.UNSIGNED_TIMESTAMP)  && (lhsType != PDataType.TIMESTAMP && lhsType != PDataType.UNSIGNED_TIMESTAMP)) {
-                    e = FloorDateExpression.create(rhs, TimeUnit.MILLISECOND);
-                }
-                e = new CoerceExpression(e, lhsType, lhs.getSortOrder(), lhs.getByteSize());
-                return e;
-            }
-            
-        };
-        WRAPPERS[CompareOp.LESS_OR_EQUAL.ordinal()] = WRAPPERS[CompareOp.LESS.ordinal()];
-        
-        WRAPPERS[CompareOp.GREATER.ordinal()] = new ExpressionComparabilityWrapper() {
-
-            @Override
-            public Expression wrap(Expression lhs, Expression rhs) throws SQLException {
-                Expression e = rhs;
-                PDataType rhsType = rhs.getDataType();
-                PDataType lhsType = lhs.getDataType();
-                if (rhsType == PDataType.DECIMAL && lhsType != PDataType.DECIMAL) {
-                    e = CeilDecimalExpression.create(rhs);
-                } else if ((rhsType == PDataType.TIMESTAMP || rhsType == PDataType.UNSIGNED_TIMESTAMP)  && (lhsType != PDataType.TIMESTAMP && lhsType != PDataType.UNSIGNED_TIMESTAMP)) {
-                    e = CeilTimestampExpression.create(rhs);
-                }
-                e = new CoerceExpression(e, lhsType, lhs.getSortOrder(), lhs.getByteSize());
-                return e;
-            }
-            
-        };
-        WRAPPERS[CompareOp.GREATER_OR_EQUAL.ordinal()] = WRAPPERS[CompareOp.GREATER.ordinal()];
-    }
-    
-    private static ExpressionComparabilityWrapper getWrapper(CompareOp op) {
-        ExpressionComparabilityWrapper wrapper = WRAPPERS[op.ordinal()];
-        if (wrapper == null) {
-            throw new IllegalStateException("Unexpected compare op of " + op + " for row value constructor");
-        }
-        return wrapper;
-    }
-    
-    /**
-     * Recursively coerce the RHS to match the LHS type, throwing if the types are incompatible. The
-     * recursion occurs when the RHS or LHS is a row value constructor.
-     * TODO: this no longer needs to be recursive, as we flatten out rvc when we normalize the statement.
-     * @param lhs left hand side expression
-     * @param rhs right hand side expression
-     * @param op operator being used to compare the expressions, which can affect rounding we may need to do.
-     * @return the newly coerced expression
-     * @throws SQLException
-     */
-    public static Expression coerce(Expression lhs, Expression rhs, CompareOp op) throws SQLException {
-        return coerce(lhs, rhs, getWrapper(op));
-    }
-        
-    public static Expression coerce(Expression lhs, Expression rhs, ExpressionComparabilityWrapper wrapper) throws SQLException {
-        
-        if (lhs instanceof RowValueConstructorExpression && rhs instanceof RowValueConstructorExpression) {
-            int i = 0;
-            List<Expression> coercedNodes = Lists.newArrayListWithExpectedSize(Math.max(lhs.getChildren().size(), rhs.getChildren().size()));
-            for (; i < Math.min(lhs.getChildren().size(),rhs.getChildren().size()); i++) {
-                coercedNodes.add(coerce(lhs.getChildren().get(i), rhs.getChildren().get(i), wrapper));
-            }
-            for (; i < lhs.getChildren().size(); i++) {
-                coercedNodes.add(coerce(lhs.getChildren().get(i), null, wrapper));
-            }
-            for (; i < rhs.getChildren().size(); i++) {
-                coercedNodes.add(coerce(null, rhs.getChildren().get(i), wrapper));
-            }
-            trimTrailingNulls(coercedNodes);
-            return coercedNodes.equals(rhs.getChildren()) ? rhs : new RowValueConstructorExpression(coercedNodes, rhs.isStateless());
-        } else if (lhs instanceof RowValueConstructorExpression) {
-            List<Expression> coercedNodes = Lists.newArrayListWithExpectedSize(Math.max(rhs.getChildren().size(), lhs.getChildren().size()));
-            coercedNodes.add(coerce(lhs.getChildren().get(0), rhs, wrapper));
-            for (int i = 1; i < lhs.getChildren().size(); i++) {
-                coercedNodes.add(coerce(lhs.getChildren().get(i), null, wrapper));
-            }
-            trimTrailingNulls(coercedNodes);
-            return coercedNodes.equals(rhs.getChildren()) ? rhs : new RowValueConstructorExpression(coercedNodes, rhs.isStateless());
-        } else if (rhs instanceof RowValueConstructorExpression) {
-            List<Expression> coercedNodes = Lists.newArrayListWithExpectedSize(Math.max(rhs.getChildren().size(), lhs.getChildren().size()));
-            coercedNodes.add(coerce(lhs, rhs.getChildren().get(0), wrapper));
-            for (int i = 1; i < rhs.getChildren().size(); i++) {
-                coercedNodes.add(coerce(null, rhs.getChildren().get(i), wrapper));
-            }
-            trimTrailingNulls(coercedNodes);
-            return coercedNodes.equals(rhs.getChildren()) ? rhs : new RowValueConstructorExpression(coercedNodes, rhs.isStateless());
-        } else if (lhs == null) { 
-            return rhs;
-        } else if (rhs == null) {
-            return LiteralExpression.newConstant(null, lhs.getDataType(), lhs.isDeterministic());
-        } else {
-            if (rhs.getDataType() != null && lhs.getDataType() != null && !rhs.getDataType().isCastableTo(lhs.getDataType())) {
-                throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType());
-            }
-            return wrapper.wrap(lhs, rhs);
-        }
-    }
-    
-    private static void trimTrailingNulls(List<Expression> expressions) {
-        for (int i = expressions.size() - 1; i >= 0; i--) {
-            Expression e = expressions.get(i);
-            if (e instanceof LiteralExpression && ((LiteralExpression)e).getValue() == null) {
-                expressions.remove(i);
-            } else {
-                break;
-            }
-        }
-    }
-
 
     public RowValueConstructorExpression() {
     }
