@@ -68,7 +68,7 @@ public class InListExpression extends BaseSingleExpression {
         }
         
         boolean addedNull = false;
-        SQLException sqlE = null;;
+        SQLException sqlE = null;
         List<Expression> coercedKeyExpressions = Lists.newArrayListWithExpectedSize(children.size());
         coercedKeyExpressions.add(firstChild);
         for (int i = 1; i < children.size(); i++) {
@@ -76,6 +76,10 @@ public class InListExpression extends BaseSingleExpression {
                 Expression rhs = BaseExpression.coerce(firstChild, children.get(i), CompareOp.EQUAL);
                 coercedKeyExpressions.add(rhs);
             } catch (SQLException e) {
+                // Type mismatch exception or invalid data exception.
+                // Ignore and filter the element from the list and it means it cannot possibly
+                // be in the list. If list is empty, we'll throw the last exception we ignored,
+                // as this is an error condition.
                 sqlE = e;
             }
         }
