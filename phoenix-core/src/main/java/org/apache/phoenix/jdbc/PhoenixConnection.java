@@ -50,13 +50,11 @@ import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
 
-import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
@@ -73,10 +71,15 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.JDBCUtil;
+import org.apache.phoenix.util.NumberUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
+
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 
 /**
@@ -153,10 +156,12 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this.tenantId = JDBCUtil.getTenantId(url, this.info);
         this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, services.getProps());
         datePattern = services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
+        String numberPattern = services.getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
         Format dateTimeFormat = DateUtil.getDateFormatter(datePattern);
         formatters[PDataType.DATE.ordinal()] = dateTimeFormat;
         formatters[PDataType.TIME.ordinal()] = dateTimeFormat;
+        formatters[PDataType.DECIMAL.ordinal()] = FunctionArgumentType.NUMERIC.getFormatter(numberPattern);
         this.metaData = PMetaDataImpl.pruneMultiTenant(metaData);
         this.mutationState = new MutationState(maxSize, this);
         services.addConnection(this);

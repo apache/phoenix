@@ -304,19 +304,22 @@ public class UpsertCompiler {
                 }
                 i++;
             }
+            int hiddenOffset = posOffset;
             // Add tenant column directly, as we don't want to resolve it as this will fail
             if (isTenantSpecific) {
-                PColumn tenantColumn = table.getPKColumns().get(posOffset);
+                PColumn tenantColumn = table.getPKColumns().get(hiddenOffset);
                 columnIndexesToBe[i] = tenantColumn.getPosition();
-                pkColumnsSet.set(pkSlotIndexesToBe[i] = posOffset);
+                pkColumnsSet.set(pkSlotIndexesToBe[i] = hiddenOffset);
                 targetColumns.set(i, tenantColumn);
+                hiddenOffset++;
                 i++;
             }
             if (isSharedViewIndex) {
-                PColumn indexIdColumn = table.getPKColumns().get(posOffset+1);
+                PColumn indexIdColumn = table.getPKColumns().get(hiddenOffset);
                 columnIndexesToBe[i] = indexIdColumn.getPosition();
-                pkColumnsSet.set(pkSlotIndexesToBe[i] = posOffset+1);
+                pkColumnsSet.set(pkSlotIndexesToBe[i] = hiddenOffset);
                 targetColumns.set(i, indexIdColumn);
+                hiddenOffset++;
                 i++;
             }
             i = posOffset;
@@ -808,7 +811,7 @@ public class UpsertCompiler {
     }
     
     private static SelectStatement addTenantAndViewConstants(PTable table, SelectStatement select, String tenantId, Map<ColumnRef, byte[]> addViewColumns) {
-        if (tenantId == null && addViewColumns.isEmpty()) {
+        if ((!table.isMultiTenant() || tenantId == null) && table.getViewIndexId() == null && addViewColumns.isEmpty()) {
             return select;
         }
         List<AliasedNode> selectNodes = newArrayListWithCapacity(select.getSelect().size() + 1 + addViewColumns.size());
