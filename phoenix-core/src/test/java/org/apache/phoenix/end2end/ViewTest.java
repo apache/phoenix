@@ -35,6 +35,7 @@ public class ViewTest extends BaseViewTest {
     
     @Test
     public void testReadOnlyView() throws Exception {
+        Connection earlierCon = DriverManager.getConnection(getUrl());
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)";
         conn.createStatement().execute(ddl);
@@ -53,6 +54,13 @@ public class ViewTest extends BaseViewTest {
         
         int count = 0;
         ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM v");
+        while (rs.next()) {
+            count++;
+            assertEquals(count + 5, rs.getInt(1));
+        }
+        assertEquals(4, count);
+        count = 0;
+        rs = earlierCon.createStatement().executeQuery("SELECT k FROM v");
         while (rs.next()) {
             count++;
             assertEquals(count + 5, rs.getInt(1));
