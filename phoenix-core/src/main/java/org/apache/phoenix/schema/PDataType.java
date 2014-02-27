@@ -1544,6 +1544,15 @@ public enum PDataType {
             // No association of runtime byte size from decimal precision.
             return null;
         }
+        
+        @Override
+        public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
+            if (formatter == null) {
+                BigDecimal o = (BigDecimal)toObject(b, offset, length);
+                return o.toPlainString();
+            }
+            return super.toStringLiteral(b,offset, length, formatter);
+        }
     },
     TIMESTAMP("TIMESTAMP", Types.TIMESTAMP, Timestamp.class, new DateCodec()) {
 
