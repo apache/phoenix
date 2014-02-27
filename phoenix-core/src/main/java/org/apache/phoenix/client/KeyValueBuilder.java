@@ -24,7 +24,6 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.util.MetaDataUtil;
 
 /**
@@ -62,7 +61,8 @@ public abstract class KeyValueBuilder {
         }
     }
 
-    private static final int CUSTOM_KEY_VALUE_MIN_VERSION = MetaDataUtil.encodeVersion("0.94.14");
+    // FIXME: Temporarily disabling usage of this pending more testing
+    private static final int CUSTOM_KEY_VALUE_MIN_VERSION = MetaDataUtil.encodeVersion("0.94.99");
 
     public static KeyValueBuilder get(String hbaseVersion) {
         int version = MetaDataUtil.encodeVersion(hbaseVersion);
