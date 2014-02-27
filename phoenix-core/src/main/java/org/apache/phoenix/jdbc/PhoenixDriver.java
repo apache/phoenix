@@ -61,17 +61,23 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
         super();
     }
 
-    private QueryServices services;
+    private volatile QueryServices services;
 
     @Override
-    public synchronized QueryServices getQueryServices() {
-        // Lazy initialize QueryServices so that we only attempt to create an HBase Configuration
-        // object upon the first attempt to connect to any cluster. Otherwise, an attempt will be
-        // made at driver initialization time which is too early for some systems.
-        if (services == null) {
-            services = new QueryServicesImpl();
-        }
-        return services;
+    public QueryServices getQueryServices() {
+    	// Lazy initialize QueryServices so that we only attempt to create an HBase Configuration
+    	// object upon the first attempt to connect to any cluster. Otherwise, an attempt will be
+    	// made at driver initialization time which is too early for some systems.
+    	QueryServices result = services;
+    	if (result == null) {
+    		synchronized(this) {
+    			result = services;
+    			if(result == null) {
+    				services = result = new QueryServicesImpl();
+    			}
+    		}
+    	}
+    	return result;
     }
 
     @Override
