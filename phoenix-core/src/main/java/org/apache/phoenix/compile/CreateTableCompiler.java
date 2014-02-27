@@ -109,9 +109,9 @@ public class CreateTableCompiler {
                     TableName baseTableName = create.getBaseTableName();
                     String schemaName = baseTableName.getSchemaName();
                     // Only form we currently support for VIEWs: SELECT * FROM t WHERE ...
-                    viewStatementToBe = SELECT + " " + WildcardParseNode.NAME + " " + FROM +
+                    viewStatementToBe = SELECT + " " + WildcardParseNode.NAME + " " + FROM + " " +
                             (schemaName == null ? "" : "\"" + schemaName + "\".") +
-                            (" \"" + baseTableName.getTableName() + "\" ") +
+                            ("\"" + baseTableName.getTableName() + "\" ") +
                             (WHERE + " " + where.toString());
                 }
                 if (viewTypeToBe != ViewType.MAPPED) {

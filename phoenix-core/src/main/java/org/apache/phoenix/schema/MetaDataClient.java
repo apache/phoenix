@@ -733,7 +733,7 @@ public class MetaDataClient {
             String defaultFamilyName = null;
             boolean isImmutableRows = false;
             List<PName> physicalNames = Collections.emptyList();
-            boolean isSalted = false;
+            boolean addSaltColumn = false;
             if (parent != null && tableType == PTableType.INDEX) {
                 // Index on view
                 // TODO: Can we support a multi-tenant index directly on a multi-tenant
@@ -742,7 +742,7 @@ public class MetaDataClient {
                 if (parent.getType() == PTableType.VIEW && parent.getViewType() != ViewType.MAPPED) {
                     PName physicalName = parent.getPhysicalName();
                     saltBucketNum = parent.getBucketNum();
-                    isSalted = (saltBucketNum != null);
+                    addSaltColumn = (saltBucketNum != null);
                     defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
                     // Set physical name of view index table
                     physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(physicalName.getBytes())));
@@ -825,7 +825,7 @@ public class MetaDataClient {
                 } else if (saltBucketNum.intValue() == 0) {
                     saltBucketNum = null; // Provides a way for an index to not be salted if its data table is salted
                 }
-                isSalted = (saltBucketNum != null);
+                addSaltColumn = (saltBucketNum != null);
                 
                 // Can't set MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an index
                 if (tableType != PTableType.INDEX) {
@@ -903,9 +903,11 @@ public class MetaDataClient {
             boolean isPK = false;
             
             int positionOffset = columns.size();
-            if (isSalted) {
+            if (saltBucketNum != null) {
                 positionOffset++;
-                pkColumns.add(SaltingUtil.SALTING_COLUMN);
+                if (addSaltColumn) {
+                    pkColumns.add(SaltingUtil.SALTING_COLUMN);
+                }
             }
             int position = positionOffset;
             
@@ -1009,7 +1011,7 @@ public class MetaDataClient {
                     }
                 }
             }
-            throwIfInsufficientColumns(schemaName, tableName, pkColumns, isSalted, multiTenant);
+            throwIfInsufficientColumns(schemaName, tableName, pkColumns, saltBucketNum!=null, multiTenant);
             
             for (PName familyName : familyNames.values()) {
                 Collection<Pair<String,Object>> props = statement.getProps().get(familyName.getString());
