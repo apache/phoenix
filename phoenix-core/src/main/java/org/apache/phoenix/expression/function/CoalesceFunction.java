@@ -21,7 +21,6 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
@@ -63,10 +62,14 @@ public class CoalesceFunction extends ScalarFunction {
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (children.get(0).evaluate(tuple, ptr)) {
+        boolean evaluated = children.get(0).evaluate(tuple, ptr);
+        if (evaluated) {
             return true;
         }
-        return children.get(1).evaluate(tuple, ptr);
+        if (tuple.isImmutable()) {
+            return children.get(1).evaluate(tuple, ptr);
+        }
+        return false;
     }
 
     @Override
