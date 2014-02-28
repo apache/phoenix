@@ -117,21 +117,28 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
             Map<ImmutableBytesPtr, NavigableSet<ImmutableBytesPtr>> columnsTracker = 
                     new TreeMap<ImmutableBytesPtr, NavigableSet<ImmutableBytesPtr>>();
             Set<byte[]> conditionOnlyCfs = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
-            boolean useOptimization = true;
-            for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
-                ImmutableBytesPtr cf = new ImmutableBytesPtr(entry.getKey());
-                NavigableSet<byte[]> qs = entry.getValue();
-                NavigableSet<ImmutableBytesPtr> cols = null;
-                if (qs != null) {
-                    cols = new TreeSet<ImmutableBytesPtr>();
-                    for (byte[] q : qs) {
-                        cols.add(new ImmutableBytesPtr(q));
-                    }
+            int referencedCfCount = familyMap.size();
+            for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
+                if (!(familyMap.containsKey(whereCol.getFirst()))) {
+                    referencedCfCount++;
                 }
-                columnsTracker.put(cf, cols);
             }
-            if (familyMap.size() > 1) {
-                useOptimization = false;
+            boolean useOptimization = referencedCfCount == 1;
+            // when referencedCfCount is >1 we are not using the optimization as of now
+            // TODO support adding a HINT in query so that in case of cf count>1 also, this optimization can be applied.
+            if (useOptimization) {
+                for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
+                    ImmutableBytesPtr cf = new ImmutableBytesPtr(entry.getKey());
+                    NavigableSet<byte[]> qs = entry.getValue();
+                    NavigableSet<ImmutableBytesPtr> cols = null;
+                    if (qs != null) {
+                        cols = new TreeSet<ImmutableBytesPtr>();
+                        for (byte[] q : qs) {
+                            cols.add(new ImmutableBytesPtr(q));
+                        }
+                    }
+                    columnsTracker.put(cf, cols);
+                }
             }
             // Making sure that where condition CFs are getting scanned at HRS.
             for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
@@ -143,9 +150,6 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                 } else {
                     scan.addColumn(whereCol.getFirst(), whereCol.getSecond());
                 }
-            }
-            if (familyMap.size() > 1) {
-                useOptimization = false;
             }
             if (useOptimization && !columnsTracker.isEmpty()) {
                 for (ImmutableBytesPtr f : columnsTracker.keySet()) {
