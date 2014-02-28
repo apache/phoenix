@@ -65,8 +65,22 @@
     <fileSet>
       <directory>${project.basedir}/../bin</directory>
       <outputDirectory>bin</outputDirectory>
+      <fileMode>0755</fileMode>
+      <directoryMode>0755</directoryMode>
+      <includes>
+        <include>*.py</include>
+        <include>*.sh</include>
+      </includes>
+    </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../bin</directory>
+      <outputDirectory>bin</outputDirectory>
       <fileMode>0644</fileMode>
       <directoryMode>0755</directoryMode>
+      <excludes>
+        <exclude>*.py/</exclude>
+        <exclude>*.sh/</exclude>
+      </excludes>
     </fileSet>
     <fileSet>
       <directory>${project.basedir}/../dev</directory>
