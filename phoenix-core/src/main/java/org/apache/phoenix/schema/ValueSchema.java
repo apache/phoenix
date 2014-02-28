@@ -26,6 +26,7 @@ import java.util.List;
 
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.util.SizedUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -53,6 +54,12 @@ public abstract class ValueSchema implements Writable {
     
     protected ValueSchema(int minNullable, List<Field> fields) {
         init(minNullable, fields);
+    }
+    
+    public int getEstimatedSize() { // Memory size of ValueSchema
+        int count = fieldIndexByPosition.length;
+        return SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE + SizedUtil.INT_SIZE * (4 + count) + 
+                SizedUtil.ARRAY_SIZE + count * Field.ESTIMATED_SIZE + SizedUtil.sizeOfArrayList(count);
     }
 
     private void init(int minNullable, List<Field> fields) {
@@ -155,6 +162,8 @@ public abstract class ValueSchema implements Writable {
             if (type != other.type) return false;
             return true;
         }
+        
+        public static final int ESTIMATED_SIZE = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 2 + SizedUtil.INT_SIZE * 3;
 
         private int count;
         private PDataType type;

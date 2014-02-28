@@ -34,7 +34,7 @@ import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_WAIT_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MUTATION_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_QUERY_CONCURRENCY_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS;
+import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SPOOL_TO_DISK_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_TENANT_MEMORY_PERC_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
@@ -73,7 +73,7 @@ public class QueryServicesOptions {
 	public static final int DEFAULT_QUEUE_SIZE = 500;
 	public static final int DEFAULT_THREAD_TIMEOUT_MS = 600000; // 10min
 	public static final int DEFAULT_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
-	public static final int DEFAULT_MAX_MEMORY_PERC = 20; // 20% of heap
+	public static final int DEFAULT_MAX_MEMORY_PERC = 15; // 15% of heap
 	public static final int DEFAULT_MAX_MEMORY_WAIT_MS = 10000;
 	public static final int DEFAULT_MAX_TENANT_MEMORY_PERC = 100;
 	public static final long DEFAULT_MAX_SERVER_CACHE_SIZE = 1024*1024*100;  // 100 Mb
@@ -111,7 +111,8 @@ public class QueryServicesOptions {
     
     public static final int DEFAULT_SEQUENCE_CACHE_SIZE = 100;  // reserve 100 sequences at a time
     public static final int DEFAULT_INDEX_MAX_FILESIZE_PERC = 50; // % of data table max file size for index table
-    
+    public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE =  1024L*1024L*20L; // 20 Mb
+    public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS =  60000 * 30; // 30 mins   
     
     private final Configuration config;
     
@@ -374,7 +375,7 @@ public class QueryServicesOptions {
     }
 
     public QueryServicesOptions setMaxServerCacheTTLMs(int ttl) {
-        return set(MAX_SERVER_CACHE_TIME_TO_LIVE_MS, ttl);
+        return set(MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, ttl);
     }
     
     public QueryServicesOptions setMasterInfoPort(int port) {

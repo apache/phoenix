@@ -50,6 +50,7 @@ import org.apache.phoenix.schema.stat.PTableStats;
 import org.apache.phoenix.schema.stat.PTableStatsImpl;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
@@ -110,6 +111,7 @@ public class PTableImpl implements PTable {
     private boolean multiTenant;
     private ViewType viewType;
     private Short viewIndexId;
+    private int estimatedSize;
     
     public PTableImpl() {
     }
@@ -221,12 +223,26 @@ public class PTableImpl implements PTable {
         return viewType;
     }
     
+
+    @Override
+    public int getEstimatedSize() {
+        return estimatedSize;
+    }
+    
     private void init(PName tenantId, PName schemaName, PName tableName, PTableType type, PIndexState state, long timeStamp, long sequenceNumber,
             PName pkName, Integer bucketNum, List<PColumn> columns, PTableStats stats, PName parentTableName, List<PTable> indexes,
-            boolean isImmutableRows, List<PName> physicalNames, PName defaultFamilyName, String viewExpression, boolean disableWAL, boolean multiTenant, ViewType viewType, Short viewIndexId) throws SQLException {
+            boolean isImmutableRows, List<PName> physicalNames, PName defaultFamilyName, String viewExpression, boolean disableWAL, boolean multiTenant,
+            ViewType viewType, Short viewIndexId) throws SQLException {
         if (schemaName == null) {
             throw new NullPointerException();
         }
+        int estimatedSize = SizedUtil.OBJECT_SIZE + 26 * SizedUtil.POINTER_SIZE + 4 * SizedUtil.INT_SIZE + 2 * SizedUtil.LONG_SIZE + 2 * SizedUtil.INT_OBJECT_SIZE +
+              PNameFactory.getEstimatedSize(tenantId) + 
+              PNameFactory.getEstimatedSize(schemaName) + 
+              PNameFactory.getEstimatedSize(tableName) + 
+              PNameFactory.getEstimatedSize(pkName) +
+              PNameFactory.getEstimatedSize(parentTableName) +
+              PNameFactory.getEstimatedSize(defaultFamilyName);
         this.tenantId = tenantId;
         this.schemaName = schemaName;
         this.tableName = tableName;
@@ -278,9 +294,12 @@ public class PTableImpl implements PTable {
                 }
             }
         }
+        estimatedSize += SizedUtil.sizeOfMap(allColumns.length, SizedUtil.POINTER_SIZE, SizedUtil.sizeOfArrayList(1)); // for multi-map
+        
         this.bucketNum = bucketNum;
         this.pkColumns = ImmutableList.copyOf(pkColumns);
         this.allColumns = ImmutableList.copyOf(allColumns);
+        estimatedSize += SizedUtil.sizeOfMap(pkColumns.size()) + SizedUtil.sizeOfMap(allColumns.length);
         
         RowKeySchemaBuilder builder = new RowKeySchemaBuilder(pkColumns.size());
         // Two pass so that column order in column families matches overall column order
@@ -291,6 +310,7 @@ public class PTableImpl implements PTable {
         for (PColumn column : allColumns) {
             PName familyName = column.getFamilyName();
             if (familyName == null) {            	
+                estimatedSize += column.getEstimatedSize(); // PK columns
                 builder.addField(column, column.isNullable(), column.getSortOrder());
             } else {
                 List<PColumn> columnsInFamily = familyMap.get(familyName);
@@ -303,6 +323,7 @@ public class PTableImpl implements PTable {
         }
         
         this.rowKeySchema = builder.build();
+        estimatedSize += rowKeySchema.getEstimatedSize();
         Iterator<Map.Entry<PName,List<PColumn>>> iterator = familyMap.entrySet().iterator();
         PColumnFamily[] families = new PColumnFamily[familyMap.size()];
         ImmutableMap.Builder<String, PColumnFamily> familyByString = ImmutableMap.builder();
@@ -313,15 +334,30 @@ public class PTableImpl implements PTable {
             families[i] = family;
             familyByString.put(family.getName().getString(), family);
             familyByBytes.put(family.getName().getBytes(), family);
+            estimatedSize += family.getEstimatedSize();
         }
         this.families = ImmutableList.copyOf(families);
         this.familyByBytes = familyByBytes.build();
         this.familyByString = familyByString.build();
+        estimatedSize += SizedUtil.sizeOfArrayList(families.length);
+        estimatedSize += SizedUtil.sizeOfMap(families.length) * 2;
+        
         this.stats = stats;
-        this.indexes = indexes;
+        this.indexes = indexes == null ? Collections.<PTable>emptyList() : indexes;
+        for (PTable index : this.indexes) {
+            estimatedSize += index.getEstimatedSize();
+        }
+        
         this.parentTableName = parentTableName;
         this.parentName = parentTableName == null ? null : PNameFactory.newName(SchemaUtil.getTableName(schemaName.getString(), parentTableName.getString()));
+        estimatedSize += PNameFactory.getEstimatedSize(this.parentName);
+        
         this.physicalNames = physicalNames == null ? ImmutableList.<PName>of() : ImmutableList.copyOf(physicalNames);
+        for (PName name : this.physicalNames) {
+            estimatedSize += name.getEstimatedSize();
+        }
+
+        this.estimatedSize = estimatedSize;
     }
 
     @Override

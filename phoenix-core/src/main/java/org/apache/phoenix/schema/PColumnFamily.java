@@ -49,4 +49,6 @@ public interface PColumnFamily {
      * @throws ColumnNotFoundException if the column cannot be found
      */
     PColumn getColumn(String name) throws ColumnNotFoundException;
+    
+    int getEstimatedSize();
 }

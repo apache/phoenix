@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema;
 
+import org.apache.phoenix.util.SizedUtil;
+
 
 /**
  * 
@@ -47,4 +49,9 @@ public abstract class PBaseColumn implements PColumn {
     public boolean isNullable() {
         return false;
     }
- }
+    
+    @Override
+    public int getEstimatedSize() {
+        return SizedUtil.OBJECT_SIZE; // Not really interested in sized of these
+    }
+}
