@@ -500,4 +500,20 @@ public class ClientKeyValue extends KeyValue {
     throw new UnsupportedOperationException(ClientKeyValue.class.getSimpleName()
         + " does not support a single backing buffer.");
   }
+
+  public ImmutableBytesWritable getRawRow() {
+    return this.row;
+  }
+
+  public ImmutableBytesWritable getRawFamily() {
+    return this.family;
+  }
+
+  public ImmutableBytesWritable getRawQualifier() {
+    return this.qualifier;
+  }
+
+  public ImmutableBytesWritable getRawValue() {
+    return this.value;
+  }
 }

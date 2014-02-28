@@ -81,6 +81,7 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.cache.GlobalCache;
+import org.apache.phoenix.client.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -836,7 +837,8 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                     // Disallow mutation of an index table
                     return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
                 } else {
-                    PTableType expectedType = MetaDataUtil.getTableType(tableMetadata);
+                    // server-side, except for indexing, we always expect the keyvalues to be standard KeyValues
+                    PTableType expectedType = MetaDataUtil.getTableType(tableMetadata, GenericKeyValueBuilder.INSTANCE, new ImmutableBytesPtr());
                     // We said to drop a table, but found a view or visa versa
                     if (type != expectedType) {
                         return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);

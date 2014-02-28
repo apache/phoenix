@@ -72,6 +72,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -882,15 +883,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // For views this will ensure that metadata already exists
             ensureTableCreated(tableName, tableType, tableProps, families, splits, true);
         }
-
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         if (tableType == PTableType.INDEX && physicalTableName != null) { // Index on view
             // Physical index table created up front for multi tenant
             // TODO: if viewIndexId is Short.MIN_VALUE, then we don't need to attempt to create it
-            if (!MetaDataUtil.isMultiTenant(m)) {
+            if (!MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) {
                 ensureViewIndexTableCreated(physicalTableName, MetaDataUtil.getClientTimeStamp(m));
             }
-        } else if (tableType == PTableType.TABLE && MetaDataUtil.isMultiTenant(m)) { // Create view index table up front for multi tenant tables
-            ensureViewIndexTableCreated(tableName, tableProps, families, MetaDataUtil.isSalted(m) ? splits : null, MetaDataUtil.getClientTimeStamp(m));
+        } else if (tableType == PTableType.TABLE && MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) { // Create view index table up front for multi tenant tables
+            ensureViewIndexTableCreated(tableName, tableProps, families, MetaDataUtil.isSalted(m, kvBuilder, ptr) ? splits : null, MetaDataUtil.getClientTimeStamp(m));
         }
         
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
@@ -1069,6 +1070,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (tableMetaData.size() == 1 && tableMetaData.get(0).isEmpty()) {
             return null;
         }
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         MetaDataMutationResult result =  metaDataCoprocessorExec(tableKey,
             new Batch.Call<MetaDataProtocol, MetaDataMutationResult>() {
                 @Override
@@ -1080,16 +1082,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (result.getMutationCode() == MutationCode.COLUMN_NOT_FOUND) { // Success
             // Flush the table if transitioning DISABLE_WAL from TRUE to FALSE
             if (Boolean.FALSE.equals(PDataType.BOOLEAN.toObject(
-                    MetaDataUtil.getMutationKVByteValue(m,PhoenixDatabaseMetaData.DISABLE_WAL_BYTES)))) {
+                    MetaDataUtil.getMutationKVByteValue(m,PhoenixDatabaseMetaData.DISABLE_WAL_BYTES, kvBuilder, ptr)))) {
                 flushTable(table.getPhysicalName().getBytes());
             }
             
             if (tableType == PTableType.TABLE) {
                 // If we're changing MULTI_TENANT to true or false, create or drop the view index table
-                KeyValue kv = MetaDataUtil.getMutationKeyValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES);
-                if (kv != null) {
+                if (MetaDataUtil.getMutationKeyValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, kvBuilder, ptr)){
                     long timestamp = MetaDataUtil.getClientTimeStamp(m);
-                    if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength()))) {
+                    if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()))) {
                         this.ensureViewIndexTableCreated(table, timestamp);
                     } else {
                         this.ensureViewIndexTableDropped(table.getPhysicalName().getBytes(), timestamp);
