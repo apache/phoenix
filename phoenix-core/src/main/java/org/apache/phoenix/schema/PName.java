@@ -51,6 +51,11 @@ public interface PName {
         public ImmutableBytesPtr getBytesPtr() {
             return ByteUtil.EMPTY_BYTE_ARRAY_PTR;
         }
+
+        @Override
+        public int getEstimatedSize() {
+            return 0;
+        }
     };
     public static PName EMPTY_COLUMN_NAME = new PName() {
         @Override
@@ -72,6 +77,11 @@ public interface PName {
         public ImmutableBytesPtr getBytesPtr() {
             return QueryConstants.EMPTY_COLUMN_BYTES_PTR;
         }
+
+        @Override
+        public int getEstimatedSize() {
+            return 0;
+        }
     };
     /**
      * Get the client-side, normalized name as referenced
@@ -91,4 +101,6 @@ public interface PName {
      * @return a pointer to the underlying bytes
      */
     ImmutableBytesPtr getBytesPtr();
+    
+    int getEstimatedSize();
 }

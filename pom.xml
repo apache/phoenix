@@ -63,7 +63,7 @@
     <hadoop-two.version>2.0.4-alpha</hadoop-two.version>
 
     <!-- Dependency versions -->
-    <hbase.version>0.94.12</hbase.version>
+    <hbase.version>0.94.16</hbase.version>
     <commons-cli.version>1.2</commons-cli.version>
     <hadoop.version>1.0.4</hadoop.version>
     <pig.version>0.12.0</pig.version>

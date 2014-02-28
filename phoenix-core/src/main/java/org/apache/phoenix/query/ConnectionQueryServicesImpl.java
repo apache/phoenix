@@ -72,6 +72,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -106,6 +107,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.io.Closeables;
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
@@ -179,21 +181,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public HTableInterface getTable(byte[] tableName) throws SQLException {
         try {
             return HBaseFactoryProvider.getHTableFactory().getTable(tableName, connection, getExecutor());
-        } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-            byte[][] schemaAndTableName = new byte[2][];
-            SchemaUtil.getVarChars(tableName, schemaAndTableName);
-            throw new TableNotFoundException(Bytes.toString(schemaAndTableName[0]), Bytes.toString(schemaAndTableName[1]));
         } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        	if(e instanceof org.apache.hadoop.hbase.TableNotFoundException || e.getCause() instanceof org.apache.hadoop.hbase.TableNotFoundException) {
+        		byte[][] schemaAndTableName = new byte[2][];
+        		SchemaUtil.getVarChars(tableName, schemaAndTableName);
+        		throw new TableNotFoundException(Bytes.toString(schemaAndTableName[0]), Bytes.toString(schemaAndTableName[1]));
+        	} 
+        	throw new SQLException(e);
+        } 
     }
     
     @Override
     public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
+        HTableInterface htable = getTable(tableName);
         try {
-            return getTable(tableName).getTableDescriptor();
+            return htable.getTableDescriptor();
         } catch (IOException e) {
             throw new RuntimeException(e);
+        } finally {
+            Closeables.closeQuietly(htable);
         }
     }
 
@@ -877,15 +883,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // For views this will ensure that metadata already exists
             ensureTableCreated(tableName, tableType, tableProps, families, splits, true);
         }
-
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         if (tableType == PTableType.INDEX && physicalTableName != null) { // Index on view
             // Physical index table created up front for multi tenant
             // TODO: if viewIndexId is Short.MIN_VALUE, then we don't need to attempt to create it
-            if (!MetaDataUtil.isMultiTenant(m)) {
+            if (!MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) {
                 ensureViewIndexTableCreated(physicalTableName, MetaDataUtil.getClientTimeStamp(m));
             }
-        } else if (tableType == PTableType.TABLE && MetaDataUtil.isMultiTenant(m)) { // Create view index table up front for multi tenant tables
-            ensureViewIndexTableCreated(tableName, tableProps, families, MetaDataUtil.isSalted(m) ? splits : null, MetaDataUtil.getClientTimeStamp(m));
+        } else if (tableType == PTableType.TABLE && MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) { // Create view index table up front for multi tenant tables
+            ensureViewIndexTableCreated(tableName, tableProps, families, MetaDataUtil.isSalted(m, kvBuilder, ptr) ? splits : null, MetaDataUtil.getClientTimeStamp(m));
         }
         
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
@@ -1064,6 +1070,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (tableMetaData.size() == 1 && tableMetaData.get(0).isEmpty()) {
             return null;
         }
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         MetaDataMutationResult result =  metaDataCoprocessorExec(tableKey,
             new Batch.Call<MetaDataProtocol, MetaDataMutationResult>() {
                 @Override
@@ -1071,15 +1078,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return instance.addColumn(tableMetaData);
                 }
             });
-        if (tableType == PTableType.TABLE && result.getMutationCode() == MutationCode.COLUMN_NOT_FOUND) { // Success
-            // If we're changing MULTI_TENANT to true or false, create or drop the view index table
-            KeyValue kv = MetaDataUtil.getMutationKeyValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES);
-            if (kv != null) {
-                long timestamp = MetaDataUtil.getClientTimeStamp(m);
-                if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength()))) {
-                    this.ensureViewIndexTableCreated(table, timestamp);
-                } else {
-                    this.ensureViewIndexTableDropped(table.getPhysicalName().getBytes(), timestamp);
+
+        if (result.getMutationCode() == MutationCode.COLUMN_NOT_FOUND) { // Success
+            // Flush the table if transitioning DISABLE_WAL from TRUE to FALSE
+            if (Boolean.FALSE.equals(PDataType.BOOLEAN.toObject(
+                    MetaDataUtil.getMutationKVByteValue(m,PhoenixDatabaseMetaData.DISABLE_WAL_BYTES, kvBuilder, ptr)))) {
+                flushTable(table.getPhysicalName().getBytes());
+            }
+            
+            if (tableType == PTableType.TABLE) {
+                // If we're changing MULTI_TENANT to true or false, create or drop the view index table
+                if (MetaDataUtil.getMutationKeyValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, kvBuilder, ptr)){
+                    long timestamp = MetaDataUtil.getClientTimeStamp(m);
+                    if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()))) {
+                        this.ensureViewIndexTableCreated(table, timestamp);
+                    } else {
+                        this.ensureViewIndexTableDropped(table.getPhysicalName().getBytes(), timestamp);
+                    }
                 }
             }
         }
@@ -1238,6 +1253,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    private void flushTable(byte[] tableName) throws SQLException {
+        HBaseAdmin admin = getAdmin();
+        try {
+            admin.flush(tableName);
+        } catch (IOException e) {
+            throw new PhoenixIOException(e);
+        } catch (InterruptedException e) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build()
+                    .buildException();
+        } finally {
+            Closeables.closeQuietly(admin);
+        }
+    }
+
     @Override
     public HBaseAdmin getAdmin() throws SQLException {
         try {
@@ -1314,11 +1343,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * Gets the current sequence value
      * @param tenantId
      * @param sequence
-     * @return
      * @throws SQLException if cached sequence cannot be found 
      */
     @Override
-    public long getSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException {
+    public long currentSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException {
         Sequence sequence = sequenceMap.get(sequenceKey);
         if (sequence == null) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CALL_CURRENT_BEFORE_NEXT_VALUE)
@@ -1338,15 +1366,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     /**
-     * Verifies that sequences exist and reserves values for them.
-     * @param tenantId
-     * @param sequences
-     * @param timestamp
-     * @throws SQLException if any sequence does not exist
+     * Verifies that sequences exist and reserves values for them if reserveValues is true
      */
     @Override
-    public void reserveSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException {
-        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 0);
+    public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions, Sequence.Action action) throws SQLException {
+        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 0, action);
     }
     
     /**
@@ -1357,18 +1381,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @param sequenceKeys sorted list of sequence kyes
      * @param batchSize
      * @param timestamp
-     * @return
      * @throws SQLException if any of the sequences cannot be found
      * 
-     * PSequences -> Sequence
-     * PSequenceKey -> SequenceKey
      */
     @Override
-    public void incrementSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException {
-        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 1);
+    public void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException {
+        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 1, Sequence.Action.RESERVE);
     }
 
-    private void incrementSequenceValues(List<SequenceKey> keys, long timestamp, long[] values, SQLException[] exceptions, int factor) throws SQLException {
+    private void incrementSequenceValues(List<SequenceKey> keys, long timestamp, long[] values, SQLException[] exceptions, int factor, Sequence.Action action) throws SQLException {
         List<Sequence> sequences = Lists.newArrayListWithExpectedSize(keys.size());
         for (SequenceKey key : keys) {
             Sequence newSequences = new Sequence(key);
@@ -1389,11 +1410,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             for (int i = 0; i < sequences.size(); i++) {
                 Sequence sequence = sequences.get(i);
                 try {
-                    values[i] = sequence.incrementValue(timestamp, factor);
+                    values[i] = sequence.incrementValue(timestamp, factor, action);
                 } catch (EmptySequenceCacheException e) {
                     indexes[toIncrementList.size()] = i;
                     toIncrementList.add(sequence);
-                    Increment inc = sequence.newIncrement(timestamp);
+                    Increment inc = sequence.newIncrement(timestamp, action);
                     incrementBatch.add(inc);
                 }
             }
@@ -1441,7 +1462,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public void returnSequenceValues(List<SequenceKey> keys, long timestamp, SQLException[] exceptions) throws SQLException {
+    public void returnSequences(List<SequenceKey> keys, long timestamp, SQLException[] exceptions) throws SQLException {
         List<Sequence> sequences = Lists.newArrayListWithExpectedSize(keys.size());
         for (SequenceKey key : keys) {
             Sequence newSequences = new Sequence(key);
@@ -1513,7 +1534,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     // Take no locks, as this only gets run when there are no open connections
     // so there's no danger of contention.
-    private void returnAllSequenceValues(ConcurrentMap<SequenceKey,Sequence> sequenceMap) throws SQLException {
+    private void returnAllSequences(ConcurrentMap<SequenceKey,Sequence> sequenceMap) throws SQLException {
         List<Append> mutations = Lists.newArrayListWithExpectedSize(sequenceMap.size());
         for (Sequence sequence : sequenceMap.values()) {
             mutations.addAll(sequence.newReturns());
@@ -1566,7 +1587,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // the lock.
         if (formerSequenceMap != null) {
             // When there are no more connections, attempt to return any sequences
-            returnAllSequenceValues(formerSequenceMap);
+            returnAllSequences(formerSequenceMap);
         }
     }
 

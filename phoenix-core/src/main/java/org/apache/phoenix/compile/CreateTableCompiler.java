@@ -79,7 +79,7 @@ public class CreateTableCompiler {
         PTable parentToBe = null;
         ViewType viewTypeToBe = null;
         Scan scan = new Scan();
-        final StatementContext context = new StatementContext(statement, resolver, statement.getParameters(), scan);
+        final StatementContext context = new StatementContext(statement, resolver, scan);
         // TODO: support any statement for a VIEW instead of just a WHERE clause
         ParseNode whereNode = create.getWhereClause();
         String viewStatementToBe = null;
@@ -109,9 +109,9 @@ public class CreateTableCompiler {
                     TableName baseTableName = create.getBaseTableName();
                     String schemaName = baseTableName.getSchemaName();
                     // Only form we currently support for VIEWs: SELECT * FROM t WHERE ...
-                    viewStatementToBe = SELECT + " " + WildcardParseNode.NAME + " " + FROM +
+                    viewStatementToBe = SELECT + " " + WildcardParseNode.NAME + " " + FROM + " " +
                             (schemaName == null ? "" : "\"" + schemaName + "\".") +
-                            (" \"" + baseTableName.getTableName() + "\" ") +
+                            ("\"" + baseTableName.getTableName() + "\" ") +
                             (WHERE + " " + where.toString());
                 }
                 if (viewTypeToBe != ViewType.MAPPED) {
@@ -189,6 +189,10 @@ public class CreateTableCompiler {
                 return connection;
             }
             
+            @Override
+            public StatementContext getContext() {
+                return context;
+            }
         };
     }
     

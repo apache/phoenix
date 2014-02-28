@@ -65,6 +65,15 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.ConstraintViolationException;
+import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SequenceNotFoundException;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -77,16 +86,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Floats;
-
-import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.ConstraintViolationException;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.SequenceNotFoundException;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.ReadOnlyProps;
 
 
 
@@ -2101,6 +2100,46 @@ public class QueryTest extends BaseClientManagedTimeTest {
             assertEquals(rs.getString(1), ROW5);
             assertTrue (rs.next());
             assertEquals(rs.getString(1), ROW6);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testCoalesceFunction() throws Exception {
+        String query = "SELECT entity_id FROM aTable WHERE a_integer > 0 and coalesce(X_DECIMAL,0.0) = 0.0";
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10)); // Execute at timestamp 2
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO aTable(organization_id,entity_id,x_decimal) values(?,?,?)");
+        stmt.setString(1, getOrganizationId());
+        stmt.setString(2, ROW1);
+        stmt.setBigDecimal(3, BigDecimal.valueOf(1.0));
+        stmt.execute();
+        stmt.setString(2, ROW3);
+        stmt.setBigDecimal(3, BigDecimal.valueOf(2.0));
+        stmt.execute();
+        stmt.setString(2, ROW4);
+        stmt.setBigDecimal(3, BigDecimal.valueOf(3.0));
+        stmt.execute();
+        stmt.setString(2, ROW5);
+        stmt.setBigDecimal(3, BigDecimal.valueOf(0.0));
+        stmt.execute();
+        stmt.setString(2, ROW6);
+        stmt.setBigDecimal(3, BigDecimal.valueOf(4.0));
+        stmt.execute();
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20)); // Execute at timestamp 2
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), ROW2);
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), ROW5);
             assertFalse(rs.next());
         } finally {
             conn.close();

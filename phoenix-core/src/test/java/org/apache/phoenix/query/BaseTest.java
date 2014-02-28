@@ -57,14 +57,14 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
-import org.junit.AfterClass;
-
-import com.google.common.collect.ImmutableMap;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.AfterClass;
+
+import com.google.common.collect.ImmutableMap;
 
 public abstract class BaseTest {
     private static final Map<String,String> tableDDLMap;
@@ -366,10 +366,10 @@ public abstract class BaseTest {
     protected static PhoenixTestDriver driver;
     private static int driverRefCount = 0;
 
-    protected static synchronized PhoenixTestDriver initDriver(QueryServices services) throws Exception {
+    protected static synchronized PhoenixTestDriver initDriver(ReadOnlyProps props) throws Exception {
         if (driver == null) {
             if (driverRefCount == 0) {
-                BaseTest.driver = new PhoenixTestDriver(services);
+                BaseTest.driver = new PhoenixTestDriver(props);
                 DriverManager.registerDriver(driver);
                 driverRefCount++;
             }
@@ -409,7 +409,7 @@ public abstract class BaseTest {
         // only load the test driver if we are testing locally - for integration tests, we want to
         // test on a wider scale
         if (PhoenixEmbeddedDriver.isTestUrl(url)) {
-            PhoenixTestDriver driver = initDriver(new QueryServicesTestImpl(props));
+            PhoenixTestDriver driver = initDriver(props);
             assertTrue(DriverManager.getDriver(url) == driver);
         }
     }

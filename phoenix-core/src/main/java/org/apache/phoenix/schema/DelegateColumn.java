@@ -21,6 +21,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import org.apache.phoenix.util.SizedUtil;
+
 public class DelegateColumn extends DelegateDatum implements PColumn {
     
     public DelegateColumn(PColumn delegate) {
@@ -70,5 +72,10 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
     @Override
     public byte[] getViewConstant() {
         return getDelegate().getViewConstant();
+    }
+
+    @Override
+    public int getEstimatedSize() {
+        return SizedUtil.OBJECT_SIZE + getDelegate().getEstimatedSize();
     }
 }

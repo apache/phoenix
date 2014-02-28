@@ -65,10 +65,13 @@ import java.sql.ResultSet;
 import java.sql.Types;
 import java.util.Properties;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
@@ -84,13 +87,6 @@ import org.junit.BeforeClass;
  * @since 0.1
  */
 public abstract class BaseConnectedQueryTest extends BaseTest {
-
-    private static String TEST_URL = TestUtil.PHOENIX_JDBC_URL;
-
-    public static void setUrl(String url) {
-        BaseConnectedQueryTest.TEST_URL = url;
-    }
-
     protected static byte[][] getDefaultSplits(String tenantId) {
         return new byte[][] { 
             Bytes.toBytes(tenantId + "00A"),
@@ -100,7 +96,25 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
     }
     
     protected static String getUrl() {
-        return TEST_URL;
+      Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+      boolean isDistributedCluster = false;
+      isDistributedCluster =
+          Boolean.parseBoolean(System.getProperty(IntegrationTestingUtility.IS_DISTRIBUTED_CLUSTER,
+            "false"));
+      if (!isDistributedCluster) {
+        isDistributedCluster =
+            conf.getBoolean(IntegrationTestingUtility.IS_DISTRIBUTED_CLUSTER, false);
+      }
+      // reconstruct url when running against a live cluster
+      if (isDistributedCluster) {
+        return "jdbc:phoenix:" + conf.get(HConstants.ZOOKEEPER_QUORUM, "localhost") + ":"
+            + conf.getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT)
+            + ":"
+            + conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT)
+            + ";test=true";
+      } else {
+        return TestUtil.PHOENIX_JDBC_URL;
+      }
     }
 
     @BeforeClass

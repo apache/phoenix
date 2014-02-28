@@ -22,6 +22,8 @@ import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 import static org.apache.phoenix.hbase.index.util.ImmutableBytesPtr.copyBytesIfNecessary;
 
@@ -65,5 +67,16 @@ public class GenericKeyValueBuilder extends KeyValueBuilder {
       ImmutableBytesWritable qualifier, long ts, KeyValue.Type type, ImmutableBytesWritable value) {
     return new KeyValue(copyBytesIfNecessary(row), copyBytesIfNecessary(family),
         copyBytesIfNecessary(qualifier), ts, type, value == null? null: copyBytesIfNecessary(value));
+  }
+
+  @Override
+  public int compareQualifier(KeyValue kv, byte[] key, int offset, int length) {
+    return Bytes.compareTo(kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength(), key,
+      offset, length);
+  }
+
+  @Override
+  public void getValueAsPtr(KeyValue kv, ImmutableBytesWritable writable) {
+    writable.set(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength());
   }
 }

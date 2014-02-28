@@ -26,30 +26,13 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.KeyValueColumnExpression;
-import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.*;
 import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
-import org.apache.phoenix.filter.MultiCFCQKeyValueComparisonFilter;
-import org.apache.phoenix.filter.MultiCQKeyValueComparisonFilter;
-import org.apache.phoenix.filter.RowKeyComparisonFilter;
-import org.apache.phoenix.filter.SingleCFCQKeyValueComparisonFilter;
-import org.apache.phoenix.filter.SingleCQKeyValueComparisonFilter;
-import org.apache.phoenix.parse.ColumnParseNode;
-import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.filter.*;
+import org.apache.phoenix.parse.*;
 import org.apache.phoenix.parse.HintNode.Hint;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.ParseNodeFactory;
-import org.apache.phoenix.schema.AmbiguousColumnException;
-import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.schema.*;
+import org.apache.phoenix.util.*;
 
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Sets;
@@ -79,15 +62,7 @@ public class WhereCompiler {
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */
     public static Expression compile(StatementContext context, FilterableStatement statement) throws SQLException {
-        return compileWhereClause(context, statement, Sets.<Expression>newHashSet());
-    }
-
-    /**
-     * Used for testing to get access to the expressions that were used to form the start/stop key of the scan
-     * @param statement TODO
-     */
-    public static Expression compileWhereClause(StatementContext context, FilterableStatement statement,
-            Set<Expression> extractedNodes) throws SQLException {
+        Set<Expression> extractedNodes = Sets.<Expression>newHashSet();
         WhereExpressionCompiler whereCompiler = new WhereExpressionCompiler(context);
         ParseNode where = statement.getWhere();
         Expression expression = where == null ? LiteralExpression.newConstant(true,PDataType.BOOLEAN,true) : where.accept(whereCompiler);
@@ -109,6 +84,18 @@ public class WhereCompiler {
 
         WhereExpressionCompiler(StatementContext context) {
             super(context);
+        }
+
+        @Override
+        public Expression visit(ColumnParseNode node) throws SQLException {
+            ColumnRef ref = resolveColumn(node);
+            TableRef tableRef = ref.getTableRef();
+            if (tableRef.equals(context.getCurrentTable()) && !SchemaUtil.isPKColumn(ref.getColumn())) {
+                // track the where condition columns. Later we need to ensure the Scan in HRS scans these column CFs
+                context.addWhereCoditionColumn(ref.getColumn().getFamilyName().getBytes(), ref.getColumn().getName()
+                        .getBytes());
+            }
+            return ref.newColumnExpression();
         }
 
         @Override

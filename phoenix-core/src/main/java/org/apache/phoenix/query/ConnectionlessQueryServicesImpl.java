@@ -55,6 +55,7 @@ import org.apache.phoenix.schema.PMetaDataImpl;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
@@ -286,8 +287,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public void reserveSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
-            SQLException[] exceptions) throws SQLException {
+    public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
+            SQLException[] exceptions, Sequence.Action action) throws SQLException {
         int i = 0;
         for (SequenceKey key : sequenceKeys) {
             Long value = sequenceMap.get(key);
@@ -301,7 +302,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public void incrementSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
+    public void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
             SQLException[] exceptions) throws SQLException {
         int i = 0;
         for (SequenceKey key : sequenceKeys) {
@@ -323,7 +324,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public long getSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException {
+    public long currentSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException {
         Long value = sequenceMap.get(sequenceKey);
         if (value == null) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CALL_CURRENT_BEFORE_NEXT_VALUE)
@@ -334,7 +335,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public void returnSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, SQLException[] exceptions)
+    public void returnSequences(List<SequenceKey> sequenceKeys, long timestamp, SQLException[] exceptions)
             throws SQLException {
     }
 

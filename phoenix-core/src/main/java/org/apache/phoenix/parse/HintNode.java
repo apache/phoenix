@@ -77,6 +77,10 @@ public class HintNode {
         * Avoid caching any HBase blocks loaded by this query.
         */
        NO_CACHE,
+       /**
+        * Avoid using star-join optimization.
+        */
+       NO_STAR_JOIN,
     };
 
     private final Map<Hint,String> hints;

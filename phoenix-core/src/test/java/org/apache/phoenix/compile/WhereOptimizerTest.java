@@ -20,6 +20,10 @@ package org.apache.phoenix.compile;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertDegenerate;
 import static org.apache.phoenix.util.TestUtil.assertEmptyScanKey;
+import static org.apache.phoenix.util.TestUtil.like;
+import static org.apache.phoenix.util.TestUtil.not;
+import static org.apache.phoenix.util.TestUtil.rowKeyFilter;
+import static org.apache.phoenix.util.TestUtil.substr;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -33,22 +37,17 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
-import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.OrExpression;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.phoenix.filter.RowKeyComparisonFilter;
+import org.apache.phoenix.filter.SingleKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.parse.SQLParser;
-import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -59,50 +58,38 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-import com.google.common.collect.Sets;
-
 
 
 public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     
-    private static StatementContext compileStatement(String query, Scan scan, List<Object> binds) throws SQLException {
-        return compileStatement(query, scan, binds, null, null);
+    private static StatementContext compileStatement(String query) throws SQLException {
+        return compileStatement(query, Collections.emptyList(), null);
     }
 
-    private static StatementContext compileStatement(String query, Scan scan, List<Object> binds, Integer limit) throws SQLException {
-        return compileStatement(query, scan, binds, limit, null);
+    private static StatementContext compileStatement(String query, Integer limit) throws SQLException {
+        return compileStatement(query, Collections.emptyList(), limit);
     }
 
-    private static StatementContext compileStatement(String query, Scan scan, List<Object> binds, Set<Expression> extractedNodes) throws SQLException {
-        return compileStatement(query, scan, binds, null, extractedNodes);
+    private static StatementContext compileStatement(String query, List<Object> binds) throws SQLException {
+        return compileStatement(query, binds, null);
     }
 
-    // TODO: remove this and replace checks on extractedNodes with tests for the scan filter
-    private static StatementContext compileStatement(String query, Scan scan, List<Object> binds, Integer limit, Set<Expression> extractedNodes) throws SQLException {
-        SQLParser parser = new SQLParser(query);
-        SelectStatement statement = parser.parseQuery();
+    private static StatementContext compileStatement(String query, List<Object> binds, Integer limit) throws SQLException {
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
-        ColumnResolver resolver = FromCompiler.getResolver(statement, pconn);
-        statement = StatementNormalizer.normalize(statement, resolver);
-        StatementContext context = new StatementContext(new PhoenixStatement(pconn), resolver, binds, scan);
-
-        Integer actualLimit = LimitCompiler.compile(context, statement);
-        assertEquals(limit, actualLimit);
-        GroupBy groupBy = GroupByCompiler.compile(context, statement);
-        statement = HavingCompiler.rewrite(context, statement, groupBy);
-        WhereCompiler.compileWhereClause(context, statement, extractedNodes);
-        return context;
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        TestUtil.bindParams(pstmt, binds);
+        QueryPlan plan = pstmt.compileQuery();
+        assertEquals(limit, plan.getLimit());
+        return plan.getContext();
     }
 
     @Test
     public void testSingleKeyExpression() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
 
-        compileStatement(query, scan, binds);
+        assertNull(scan.getFilter());
         assertArrayEquals(PDataType.VARCHAR.toBytes(tenantId), scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStopRow());
     }
@@ -111,11 +98,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testReverseSingleKeyExpression() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where '" + tenantId + "' = organization_id";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
+        assertNull(scan.getFilter());
 
-        compileStatement(query, scan, binds);
         assertArrayEquals(PDataType.VARCHAR.toBytes(tenantId), scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStopRow());
     }
@@ -127,9 +112,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         conn.close();
 
         String query = "select * from start_stop_test where pk >= 'EA' and pk < 'EZ'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
 
         assertNull(scan.getFilter());
         assertArrayEquals(PDataType.VARCHAR.toBytes("EA"), scan.getStartRow());
@@ -140,9 +123,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testConcatSingleKeyExpression() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id || 'foo' ='" + tenantId + "'||'foo'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
 
         // The || operator cannot currently be used to form the start/stop key
         assertNotNull(scan.getFilter());
@@ -155,7 +136,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String query = "select * from atable where null||'foo'||'bar' = 'foobar'";
         Scan scan = new Scan();
         List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        compileStatement(query, binds);
 
         assertNull(scan.getFilter());
         assertEquals(0, scan.getStartRow().length);
@@ -166,11 +147,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testSingleKeyNotExpression() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where not organization_id='" + tenantId + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
-        assertNotNull(scan.getFilter());
+        Scan scan = compileStatement(query).getScan();
 
+        assertNotNull(scan.getFilter());
         assertEquals(0, scan.getStartRow().length);
         assertEquals(0, scan.getStopRow().length);
     }
@@ -180,9 +159,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,1,3)='" + keyPrefix + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
 
         assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
@@ -196,10 +173,10 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
         String query = "select * from atable where organization_id=? and substr(entity_id,1,3)=?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId,keyPrefix);
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query, binds).getScan();
 
+        assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
@@ -213,9 +190,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-01 00:00:00");
         Date endDate = DateUtil.parseDate("2012-01-02 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')=?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query, binds).getScan();
+        assertNull(scan.getFilter());
 
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
                 PDataType.VARCHAR.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
@@ -233,9 +210,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String host = "b";
         Date startDate = DateUtil.parseDate("2012-01-01 01:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')=?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query, binds).getScan();
         assertDegenerate(scan);
     }
 
@@ -246,10 +222,10 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-01 00:00:00");
         Date endDate = DateUtil.parseDate("2012-01-02 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')>?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query, binds).getScan();
 
+        assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
                 PDataType.VARCHAR.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
                 PDataType.DATE.toBytes(endDate));
@@ -266,9 +242,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-01 00:00:00");
         Date endDate = DateUtil.parseDate("2012-01-01 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')>=?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query, binds).getScan();
+        assertNull(scan.getFilter());
 
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
                 PDataType.VARCHAR.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
@@ -286,9 +262,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-01 01:00:00");
         Date endDate = DateUtil.parseDate("2012-01-02 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')>?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query, binds).getScan();
+        assertNull(scan.getFilter());
 
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
                 PDataType.VARCHAR.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
@@ -306,10 +282,10 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-01 01:00:00");
         Date endDate = DateUtil.parseDate("2012-01-02 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')<?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query, binds).getScan();
 
+        assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
                 PDataType.VARCHAR.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY);
         assertArrayEquals(startRow, scan.getStartRow());
@@ -326,9 +302,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-01 00:00:00");
         Date endDate = DateUtil.parseDate("2012-01-01 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')<?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query, binds).getScan();
+        assertNull(scan.getFilter());
 
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
                 PDataType.VARCHAR.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY);
@@ -346,9 +322,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-01 01:00:00");
         Date endDate = DateUtil.parseDate("2012-01-02 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')<=?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query, binds).getScan();
+        assertNull(scan.getFilter());
 
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
                 PDataType.VARCHAR.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY);
@@ -366,10 +342,10 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-01 00:00:00");
         Date endDate = DateUtil.parseDate("2012-01-02 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')<=?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query, binds).getScan();
 
+        assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
                 PDataType.VARCHAR.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY);
         assertArrayEquals(startRow, scan.getStartRow());
@@ -385,9 +361,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String keyPrefix = "002";
         String entityId = "002333333333333";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,1,3)='" + keyPrefix + "' and entity_id='" + entityId + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
+
+        assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(entityId));
         assertArrayEquals(startRow, scan.getStartRow());
         assertArrayEquals(ByteUtil.concat(startRow, QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
@@ -398,9 +374,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String tenantId = "0xD000000000001";
         String entityId = "002333333333333";
         String query = "select * from atable where substr(organization_id,1,3)='" + tenantId.substring(0, 3) + "' and entity_id='" + entityId + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
         assertNotNull(scan.getFilter());
 
         byte[] startRow = ByteUtil.concat(ByteUtil.fillKey(PDataType.VARCHAR.toBytes(tenantId.substring(0,3)),15),PDataType.VARCHAR.toBytes(entityId));
@@ -418,9 +392,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testBasicRangeExpression() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id <= '" + tenantId + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
         assertNull(scan.getFilter());
 
         assertTrue(scan.getStartRow().length == 0);
@@ -434,9 +406,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String keyPrefix1 = "002";
         String keyPrefix2= "004";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,1,3) >= '" + keyPrefix1 + "' and substr(entity_id,1,3) < '" + keyPrefix2 + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
         assertNull(scan.getFilter());
 
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix1),15));
@@ -451,9 +421,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String keyPrefix1 = "002";
         String keyPrefix2= "004";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,1,3) >= '" + keyPrefix1 + "' and substr(entity_id,1,3) <= '" + keyPrefix2 + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
         assertNull(scan.getFilter());
 
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix1),15));
@@ -468,12 +436,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String keyPrefix1 = "002";
         String keyPrefix2= "004";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,1,3) > '" + keyPrefix1 + "' and substr(entity_id,1,3) <= '" + keyPrefix2 + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
-
+        Scan scan = compileStatement(query).getScan();
+        
         assertNull(scan.getFilter());
-
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix1)),15));
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix2)),15));
@@ -486,9 +451,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String keyPrefix1 = "002";
         String entityId= "002000000000002";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,1,3) > '" + keyPrefix1 + "' and substr(entity_id,1,3) = '" + entityId + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
         assertDegenerate(scan);
     }
 
@@ -498,9 +461,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String keyPrefix1 = "002";
         String entityId= "002000000000002";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,1,3) <= '" + keyPrefix1 + "' and entity_id = '" + entityId + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
 
         assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(entityId));
@@ -515,9 +476,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String keyPrefix1 = "002";
         String entityId= "002000000000002";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,1,3) < '" + keyPrefix1 + "' and entity_id = '" + entityId + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
         assertDegenerate(scan);
     }
 
@@ -527,9 +486,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String keyPrefix1 = "002";
         String entityId= "002000000000002";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,1,3) < '" + keyPrefix1 + "' and entity_id < '" + entityId + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
         assertNull(scan.getFilter());
 
         byte[] startRow = PDataType.VARCHAR.toBytes(tenantId);
@@ -544,9 +501,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String keyPrefix1 = "001";
         String entityId= "002000000000002";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,1,3) > '" + keyPrefix1 + "' and entity_id = '" + entityId + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
 
         assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(entityId));
@@ -561,9 +516,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String keyPrefix1 = "002";
         String keyPrefix2 = "0033";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,1,3) >= '" + keyPrefix1 + "' and substr(entity_id,1,4) <= '" + keyPrefix2 + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
 
         assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix1),15)); // extra byte is due to implicit internal padding
@@ -582,9 +535,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String keyPrefix = "002";
         String entityId = "001333333333333";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,1,3)='" + keyPrefix + "' and entity_id='" + entityId + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
         assertDegenerate(scan);
     }
 
@@ -592,9 +543,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testTopLevelOrKeyExpression() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' or a_integer=2";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
 
         assertNotNull(scan.getFilter());
         assertEquals(0, scan.getStartRow().length);
@@ -605,9 +554,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testSiblingOrKeyExpression() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and (a_integer = 2 or a_integer = 3)";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        Scan scan = compileStatement(query).getScan();
 
         assertNotNull(scan.getFilter());
         assertArrayEquals(PDataType.VARCHAR.toBytes(tenantId), scan.getStartRow());
@@ -618,10 +565,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testColumnNotFound() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where bar='" + tenantId + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
         try {
-            compileStatement(query, scan, binds);
+            compileStatement(query);
             fail();
         } catch (ColumnNotFoundException e) {
             // expected
@@ -632,9 +577,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testNotContiguousPkColumn() throws SQLException {
         String keyPrefix = "002";
         String query = "select * from atable where substr(entity_id,1,3)='" + keyPrefix + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        StatementContext context = compileStatement(query);
+        Scan scan = context.getScan();
 
         assertNotNull(scan.getFilter());
         assertEquals(0, scan.getStartRow().length);
@@ -646,9 +590,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
         String query = "select * from atable where organization_id >= '" + tenantId + "' AND substr(entity_id,1,3) > '" + keyPrefix + "'";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds);
+        StatementContext context = compileStatement(query);
+        Scan scan = context.getScan();
 
         assertNotNull(scan.getFilter());
         assertArrayEquals(PDataType.VARCHAR.toBytes(tenantId), scan.getStartRow());
@@ -659,9 +602,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testRHSLiteral() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and 0 >= a_integer limit 1000";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        compileStatement(query, scan, binds, 1000);
+        StatementContext context = compileStatement(query, 1000);
+        Scan scan = context.getScan();
 
         assertNotNull(scan.getFilter());
         assertArrayEquals(PDataType.VARCHAR.toBytes(tenantId), scan.getStartRow());
@@ -672,10 +614,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testKeyTypeMismatch() {
         String query = "select * from atable where organization_id=5";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
         try {
-            compileStatement(query, scan, binds);
+            compileStatement(query);
             fail();
         } catch (SQLException e) {
             assertTrue(e.getMessage().contains("Type mismatch"));
@@ -687,9 +627,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
         String query = "select * from atable where organization_id = ? and entity_id  LIKE '" + keyPrefix + "%'";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId);
-        compileStatement(query, scan, binds);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
 
         assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
@@ -703,9 +643,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
         String query = "select * from atable where organization_id LIKE ? and entity_id  LIKE '" + keyPrefix + "%'";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId);
-        compileStatement(query, scan, binds);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
 
         assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
@@ -719,9 +659,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
         String query = "select * from atable where organization_id LIKE ? and entity_id  LIKE '" + keyPrefix + "'";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId);
-        compileStatement(query, scan, binds);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
         assertDegenerate(scan);
     }
 
@@ -729,13 +669,19 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testLikeExtractKeyExpression2() throws SQLException {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
-        // TODO: verify that _ at end of like doesn't go to equals
-        String query = "select * from atable where organization_id = ? and entity_id  LIKE '" + keyPrefix + "_'";
-        Scan scan = new Scan();
+        String likeArg = keyPrefix + "_";
+        String query = "select * from atable where organization_id = ? and entity_id  LIKE '" + likeArg + "'";
         List<Object> binds = Arrays.<Object>asList(tenantId);
-        compileStatement(query, scan, binds);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
 
-        assertNotNull(scan.getFilter());
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertEquals(
+                rowKeyFilter(like(
+                    ENTITY_ID,
+                    likeArg)),
+                filter);
 
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
         assertArrayEquals(startRow, scan.getStartRow());
@@ -747,14 +693,19 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testLikeOptKeyExpression() throws SQLException {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
-        String query = "select * from atable where organization_id = ? and entity_id  LIKE '" + keyPrefix + "%003%'";
-        Scan scan = new Scan();
+        String likeArg = keyPrefix + "%003%";
+        String query = "select * from atable where organization_id = ? and entity_id  LIKE '" + likeArg + "'";
         List<Object> binds = Arrays.<Object>asList(tenantId);
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
 
-        assertNotNull(scan.getFilter());
-        assertEquals(1, extractedNodes.size());
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertEquals(
+                rowKeyFilter(like(
+                    ENTITY_ID,
+                    likeArg)),
+                filter);
 
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
         assertArrayEquals(startRow, scan.getStartRow());
@@ -766,15 +717,19 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testLikeOptKeyExpression2() throws SQLException {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
-        String query = "select * from atable where organization_id = ? and substr(entity_id,1,10)  LIKE '" + keyPrefix + "%003%'";
-        Scan scan = new Scan();
+        String likeArg = keyPrefix + "%003%";
+        String query = "select * from atable where organization_id = ? and substr(entity_id,1,10)  LIKE '" + likeArg + "'";
         List<Object> binds = Arrays.<Object>asList(tenantId);
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
 
-        assertNotNull(scan.getFilter());
-        assertEquals(1, extractedNodes.size());
-
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertEquals(
+                rowKeyFilter(like(
+                    substr(ENTITY_ID,1,10),
+                    likeArg)),
+                filter);
 
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
         byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
@@ -786,131 +741,43 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testLikeNoOptKeyExpression3() throws SQLException {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
-        String query = "select * from atable where organization_id = ? and substr(entity_id,4,10)  LIKE '" + keyPrefix + "%003%'";
-        Scan scan = new Scan();
+        String likeArg = keyPrefix + "%003%";
+        String query = "select * from atable where organization_id = ? and substr(entity_id,4,10)  LIKE '" + likeArg + "'";
         List<Object> binds = Arrays.<Object>asList(tenantId);
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
 
-        assertNotNull(scan.getFilter());
-        assertEquals(1, extractedNodes.size());
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertEquals(
+                rowKeyFilter(like(
+                    substr(ENTITY_ID,4,10),
+                    likeArg)),
+                filter);
+
         byte[] startRow = PDataType.VARCHAR.toBytes(tenantId);
         assertArrayEquals(startRow, scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(startRow), scan.getStopRow());
     }
 
     @Test
-    public void testLikeDegenerate() throws SQLException {
-        String tenantId = "000000000000001";
-        String query = "select * from atable where organization_id = ? and entity_id  LIKE '0000000000000012%003%'";
-        Scan scan = new Scan();
-        List<Object> binds = Arrays.<Object>asList(tenantId);
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
-
-        assertDegenerate(scan);
-    }
-
-    @Test
-    public void testDegenerateDivision1() throws SQLException {
-        String query = "select * from atable where a_integer = 3 / null";
-        Scan scan = new Scan();
-        List<Object> binds = Arrays.<Object>asList();
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
-
-        assertDegenerate(scan);
-    }
-
-    @Test
-    public void testDegenerateDivision2() throws SQLException {
-        String query = "select * from atable where a_integer / null = 3";
-        Scan scan = new Scan();
-        List<Object> binds = Arrays.<Object>asList();
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
-
-        assertDegenerate(scan);
-    }
-
-    @Test
-    public void testDegenerateMult1() throws SQLException {
-        String query = "select * from atable where a_integer = 3 * null";
-        Scan scan = new Scan();
-        List<Object> binds = Arrays.<Object>asList();
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
-
-        assertDegenerate(scan);
-    }
-
-    @Test
-    public void testDegenerateMult2() throws SQLException {
-        String query = "select * from atable where a_integer * null = 3";
-        Scan scan = new Scan();
-        List<Object> binds = Arrays.<Object>asList();
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
-
-        assertDegenerate(scan);
-    }
-
-    @Test
-    public void testDegenerateAdd1() throws SQLException {
-        String query = "select * from atable where a_integer = 3 + null";
-        Scan scan = new Scan();
-        List<Object> binds = Arrays.<Object>asList();
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
-
-        assertDegenerate(scan);
-    }
-
-    @Test
-    public void testDegenerateAdd2() throws SQLException {
-        String query = "select * from atable where a_integer + null = 3";
-        Scan scan = new Scan();
-        List<Object> binds = Arrays.<Object>asList();
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
-
-        assertDegenerate(scan);
-    }
-
-    @Test
-    public void testDegenerateSub1() throws SQLException {
-        String query = "select * from atable where a_integer = 3 - null";
-        Scan scan = new Scan();
-        List<Object> binds = Arrays.<Object>asList();
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
-
-        assertDegenerate(scan);
-    }
-
-    @Test
-    public void testDegenerateSub2() throws SQLException {
-        String query = "select * from atable where a_integer - null = 3";
-        Scan scan = new Scan();
-        List<Object> binds = Arrays.<Object>asList();
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
-
-        assertDegenerate(scan);
-    }
-
-    @Test
     public void testLikeNoOptKeyExpression() throws SQLException {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
-        String query = "select * from atable where organization_id = ? and entity_id  LIKE '%001%" + keyPrefix + "%'";
-        Scan scan = new Scan();
+        String likeArg = "%001%" + keyPrefix + "%";
+        String query = "select * from atable where organization_id = ? and entity_id  LIKE '" + likeArg + "'";
         List<Object> binds = Arrays.<Object>asList(tenantId);
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
 
-        assertNotNull(scan.getFilter());
-        assertEquals(1, extractedNodes.size());
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertEquals(
+                rowKeyFilter(like(
+                    ENTITY_ID,
+                    likeArg)),
+                filter);
+
         byte[] startRow = PDataType.VARCHAR.toBytes(tenantId);
         assertArrayEquals(startRow, scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(startRow), scan.getStopRow());
@@ -920,18 +787,108 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testLikeNoOptKeyExpression2() throws SQLException {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
-        String query = "select * from atable where organization_id = ? and entity_id  NOT LIKE '" + keyPrefix + "%'";
-        Scan scan = new Scan();
+        String likeArg = keyPrefix + "%";
+        String query = "select * from atable where organization_id = ? and entity_id  NOT LIKE '" + likeArg + "'";
         List<Object> binds = Arrays.<Object>asList(tenantId);
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
 
-        assertNotNull(scan.getFilter());
-        assertEquals(1, extractedNodes.size());
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertEquals(
+                rowKeyFilter(not(like(
+                    ENTITY_ID,
+                    likeArg))),
+                filter);
+
         byte[] startRow = PDataType.VARCHAR.toBytes(tenantId);
         assertArrayEquals(startRow, scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(startRow), scan.getStopRow());
     }
+
+    @Test
+    public void testLikeDegenerate() throws SQLException {
+        String tenantId = "000000000000001";
+        String query = "select * from atable where organization_id = ? and entity_id  LIKE '0000000000000012%003%'";
+        List<Object> binds = Arrays.<Object>asList(tenantId);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+
+        assertDegenerate(scan);
+    }
+
+    @Test
+    public void testDegenerateDivision1() throws SQLException {
+        String query = "select * from atable where a_integer = 3 / null";
+        StatementContext context = compileStatement(query);
+        Scan scan = context.getScan();
+
+        assertDegenerate(scan);
+    }
+
+    @Test
+    public void testDegenerateDivision2() throws SQLException {
+        String query = "select * from atable where a_integer / null = 3";
+        StatementContext context = compileStatement(query);
+        Scan scan = context.getScan();
+
+        assertDegenerate(scan);
+    }
+
+    @Test
+    public void testDegenerateMult1() throws SQLException {
+        String query = "select * from atable where a_integer = 3 * null";
+        StatementContext context = compileStatement(query);
+        Scan scan = context.getScan();
+
+        assertDegenerate(scan);
+    }
+
+    @Test
+    public void testDegenerateMult2() throws SQLException {
+        String query = "select * from atable where a_integer * null = 3";
+        StatementContext context = compileStatement(query);
+        Scan scan = context.getScan();
+
+        assertDegenerate(scan);
+    }
+
+    @Test
+    public void testDegenerateAdd1() throws SQLException {
+        String query = "select * from atable where a_integer = 3 + null";
+        StatementContext context = compileStatement(query);
+        Scan scan = context.getScan();
+
+        assertDegenerate(scan);
+    }
+
+    @Test
+    public void testDegenerateAdd2() throws SQLException {
+        String query = "select * from atable where a_integer + null = 3";
+        StatementContext context = compileStatement(query);
+        Scan scan = context.getScan();
+
+        assertDegenerate(scan);
+    }
+
+    @Test
+    public void testDegenerateSub1() throws SQLException {
+        String query = "select * from atable where a_integer = 3 - null";
+        StatementContext context = compileStatement(query);
+        Scan scan = context.getScan();
+
+        assertDegenerate(scan);
+    }
+
+    @Test
+    public void testDegenerateSub2() throws SQLException {
+        String query = "select * from atable where a_integer - null = 3";
+        StatementContext context = compileStatement(query);
+        Scan scan = context.getScan();
+
+        assertDegenerate(scan);
+    }
+
     /*
      * The following 5 tests are testing the comparison in where clauses under the case when the rhs
      * cannot be coerced into the lhs. We need to confirm the decision make by expression compilation
@@ -1015,18 +972,12 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     }
 
     private void assertQueryConditionAlwaysTrue(String query) throws SQLException {
-        Scan scan = new Scan();
-        List<Object> binds = Arrays.<Object>asList();
-        Set<Expression> extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
+        Scan scan = compileStatement(query).getScan();
         assertEmptyScanKey(scan);
     }
 
     private void assertQueryConditionAlwaysFalse(String query) throws SQLException {
-        Scan scan = new Scan();
-        List<Object> binds = Arrays.<Object>asList();
-        Set<Expression> extractedNodes = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedNodes);
+        Scan scan = compileStatement(query).getScan();
         assertDegenerate(scan);
     }
     
@@ -1035,12 +986,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String tenantId1 = "000000000000001";
         String tenantId2 = "000000000000003";
         String query = "select * from atable where organization_id = ? or organization_id  = ?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId1,tenantId2);
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        StatementContext context = compileStatement(query, scan, binds, extractedNodes);
-
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
         Filter filter = scan.getFilter();
+        
         assertNotNull(filter);
         assertTrue(filter instanceof SkipScanFilter);
         ScanRanges scanRanges = context.getScanRanges();
@@ -1051,8 +1001,6 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                 PDataType.CHAR.getKeyRange(PDataType.CHAR.toBytes(tenantId1), true, PDataType.CHAR.toBytes(tenantId1), true), 
                 PDataType.CHAR.getKeyRange(PDataType.CHAR.toBytes(tenantId2), true, PDataType.CHAR.toBytes(tenantId2), true)));
         assertEquals(expectedRanges, ranges);
-        assertEquals(1, extractedNodes.size());
-        assertTrue(extractedNodes.iterator().next() instanceof OrExpression);
         byte[] startRow = PDataType.VARCHAR.toBytes(tenantId1);
         assertArrayEquals(startRow, scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId2)), scan.getStopRow());
@@ -1065,14 +1013,14 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String entityId1 = "002333333333331";
         String entityId2 = "002333333333333";
         String query = "select * from atable where (organization_id = ? and entity_id  = ?) or (organization_id = ? and entity_id  = ?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId1,entityId1,tenantId2,entityId2);
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        StatementContext context = compileStatement(query, scan, binds, extractedNodes);
-
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
         Filter filter = scan.getFilter();
+
         assertNotNull(filter);
         assertTrue(filter instanceof RowKeyComparisonFilter);
+        
         ScanRanges scanRanges = context.getScanRanges();
         assertEquals(ScanRanges.EVERYTHING,scanRanges);
         assertArrayEquals(HConstants.EMPTY_START_ROW, scan.getStartRow());
@@ -1084,12 +1032,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String tenantId1 = "000000000000001";
         String entityId1 = "002333333333331";
         String query = "select * from atable where organization_id = ? or entity_id  = ?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId1,entityId1);
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        StatementContext context = compileStatement(query, scan, binds, extractedNodes);
-
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
         Filter filter = scan.getFilter();
+
         assertNotNull(filter);
         assertTrue(filter instanceof RowKeyComparisonFilter);
         ScanRanges scanRanges = context.getScanRanges();
@@ -1101,12 +1048,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testOrSameColRangeExpression() throws SQLException {
         String query = "select * from atable where substr(organization_id,1,3) = ? or organization_id LIKE 'foo%'";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList("00D");
-        Set<Expression>extractedNodes = new HashSet<Expression>();
-        StatementContext context = compileStatement(query, scan, binds, extractedNodes);
-
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
         Filter filter = scan.getFilter();
+
         assertNotNull(filter);
         assertTrue(filter instanceof SkipScanFilter);
         ScanRanges scanRanges = context.getScanRanges();
@@ -1121,8 +1067,6 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                         ByteUtil.fillKey(PDataType.CHAR.toBytes("foo"),15), true, 
                         ByteUtil.fillKey(ByteUtil.nextKey(PDataType.CHAR.toBytes("foo")),15), false)));
         assertEquals(expectedRanges, ranges);
-        assertEquals(1, extractedNodes.size());
-        assertTrue(extractedNodes.iterator().next() instanceof OrExpression);
     }
     
     @Test
@@ -1140,10 +1084,18 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                 "        constraint rowkey primary key (SENDER_ID,RECIPIENT_ID,M_TIMESTAMP DESC,ROW_ID))\n" + 
                 "SALT_BUCKETS=12\n");
         String query = "select /*+ SKIP_SCAN */ count(*) from user_messages where is_read='N' and recipient_id=5399179882";
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        Set<Expression> extractedNodes = Sets.newHashSet();
-        StatementContext context = compileStatement(query, scan, binds, null, extractedNodes);
+        StatementContext context = compileStatement(query);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        
+        assertNotNull(filter);
+        assertTrue(filter instanceof FilterList);
+        FilterList filterList = (FilterList)filter;
+        assertEquals(FilterList.Operator.MUST_PASS_ALL, filterList.getOperator());
+        assertEquals(2, filterList.getFilters().size());
+        assertTrue(filterList.getFilters().get(0) instanceof SkipScanFilter);
+        assertTrue(filterList.getFilters().get(1) instanceof SingleKeyValueComparisonFilter);
+        
         ScanRanges scanRanges = context.getScanRanges();
         assertNotNull(scanRanges);
         assertEquals(3,scanRanges.getRanges().size());
@@ -1152,8 +1104,6 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(1,scanRanges.getRanges().get(2).size());
         assertTrue(scanRanges.getRanges().get(2).get(0).isSingleKey());
         assertEquals(Long.valueOf(5399179882L), PDataType.UNSIGNED_LONG.toObject(scanRanges.getRanges().get(2).get(0).getLowerRange()));
-        assertEquals(1, extractedNodes.size());
-        assertNotNull(scan.getFilter());
     }
     
     @Test
@@ -1163,14 +1113,14 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String keyPrefix = "002";
         String query = "select /*+ RANGE_SCAN */ ORGANIZATION_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID from " + TestUtil.ENTITY_HISTORY_TABLE_NAME + 
                 " where ORGANIZATION_ID=? and SUBSTR(PARENT_ID, 1, 3) = ? and  CREATED_DATE >= ? and CREATED_DATE < ? order by ORGANIZATION_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID limit 6";
-        Scan scan = new Scan();
         Date startTime = new Date(System.currentTimeMillis());
         Date stopTime = new Date(startTime.getTime() + TestUtil.MILLIS_IN_DAY);
         List<Object> binds = Arrays.<Object>asList(tenantId, keyPrefix, startTime, stopTime);
-        Set<Expression> extractedNodes = Sets.newHashSet();
-        compileStatement(query, scan, binds, 6, extractedNodes);
-        assertEquals(2, extractedNodes.size());
-        assertNotNull(scan.getFilter());
+        StatementContext context = compileStatement(query, binds, 6);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertTrue(filter instanceof RowKeyComparisonFilter);
 
         byte[] expectedStartRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15), PDataType.DATE.toBytes(startTime));
         assertArrayEquals(expectedStartRow, scan.getStartRow());
@@ -1183,11 +1133,10 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String entityId = "002333333333331";
         String query = "select * from atable where (organization_id,entity_id) >= (?,?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId, entityId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        assertNull(scan.getFilter());
         byte[] expectedStartRow = ByteUtil.concat(PDataType.CHAR.toBytes(tenantId), PDataType.CHAR.toBytes(entityId));
         assertArrayEquals(expectedStartRow, scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
@@ -1201,11 +1150,12 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String entityId1 = "002333333333330";
         String entityId2 = "002333333333332";
         String query = "select * from atable where (organization_id,entity_id) >= (?,?) and organization_id = ? and  (entity_id = ? or entity_id = ?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId, entityId, tenantId, entityId1, entityId2);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 3);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertTrue(filter instanceof SkipScanFilter);
         byte[] expectedStartRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), PDataType.VARCHAR.toBytes(entityId));
         byte[] expectedStopRow = ByteUtil.concat(ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), PDataType.VARCHAR.toBytes(entityId2)), QueryConstants.SEPARATOR_BYTE_ARRAY);
         assertArrayEquals(expectedStartRow, scan.getStartRow());
@@ -1229,11 +1179,12 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String entityHistId = "000000000000003";
         
         String query = "select * from entity_history where (organization_id, parent_id, entity_history_id) >= (?,?,?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId, parentId, entityHistId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 0);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertTrue(filter instanceof RowKeyComparisonFilter);
         byte[] expectedStartRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), PDataType.VARCHAR.toBytes(parentId));
         assertArrayEquals(expectedStartRow, scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
@@ -1255,11 +1206,12 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String entityHistId = "000000000000003";
         
         String query = "select * from entity_history where (parent_id, entity_history_id) >= (?,?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(parentId, entityHistId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 0);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertTrue(filter instanceof RowKeyComparisonFilter);
         assertArrayEquals(HConstants.EMPTY_START_ROW, scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
@@ -1273,11 +1225,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String upperParentId = "000000000000009";
         
         String query = "select * from entity_history where (organization_id, parent_id, created_date) >= (?, ?, ?) AND (organization_id, parent_id) <= (?, ?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(lowerTenantId, lowerParentId, lowerCreatedDate, upperTenantId, upperParentId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 2);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         byte[] expectedStartRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(lowerTenantId), PDataType.VARCHAR.toBytes(lowerParentId), PDataType.DATE.toBytes(lowerCreatedDate));
         byte[] expectedStopRow = ByteUtil.nextKey(ByteUtil.concat(PDataType.VARCHAR.toBytes(upperTenantId), PDataType.VARCHAR.toBytes(upperParentId)));
         assertArrayEquals(expectedStartRow, scan.getStartRow());
@@ -1291,11 +1243,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date lowerCreatedDate = new Date(System.currentTimeMillis());
         
         String query = "select * from entity_history where (organization_id, parent_id, created_date) >= (?, ?, ?) AND (organization_id, parent_id) <= ('7', '7')";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(lowerTenantId, lowerParentId, lowerCreatedDate);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 2);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         byte[] expectedStartRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(lowerTenantId), PDataType.VARCHAR.toBytes(lowerParentId), PDataType.DATE.toBytes(lowerCreatedDate));
         byte[] expectedStopRow = ByteUtil.nextKey(ByteUtil.concat(ByteUtil.fillKey(PDataType.VARCHAR.toBytes("7"),15), ByteUtil.fillKey(PDataType.VARCHAR.toBytes("7"), 15)));
         assertArrayEquals(expectedStartRow, scan.getStartRow());
@@ -1310,12 +1262,13 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date createdDate = new Date(System.currentTimeMillis());
         
         String query = "select * from entity_history where (substr(organization_id, 1, 3), parent_id, created_date) >= (?,?,?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(subStringTenantId, parentId, createdDate);
-        Set<Expression> extractedFilters = new HashSet<Expression>(2);
-        compileStatement(query, scan, binds, extractedFilters);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertTrue(filter instanceof RowKeyComparisonFilter);
         byte[] expectedStartRow = PDataType.VARCHAR.toBytes(subStringTenantId);
-        assertTrue(extractedFilters.size() == 0);
         assertArrayEquals(expectedStartRow, scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
@@ -1328,11 +1281,12 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date createdDate = new Date(System.currentTimeMillis());
         
         String query = "select * from entity_history where (organization_id, substr(parent_id, 1, 3), created_date) >= (?,?,?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId, subStringParentId, createdDate);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 0);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertTrue(filter instanceof RowKeyComparisonFilter);
         byte[] expectedStartRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), PDataType.VARCHAR.toBytes(subStringParentId));
         assertArrayEquals(expectedStartRow, scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
@@ -1346,11 +1300,12 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date createdDate = new Date(System.currentTimeMillis());
         
         String query = "select * from entity_history where (organization_id, substr(parent_id, 1, 3), created_date) <= (?,?,?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId, subStringParentId, createdDate);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 0);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertTrue(filter instanceof RowKeyComparisonFilter);
         byte[] expectedStopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), ByteUtil.nextKey(PDataType.VARCHAR.toBytes(subStringParentId)));
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStartRow());
         assertArrayEquals(expectedStopRow, scan.getStopRow());
@@ -1363,11 +1318,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date createdDate = null;
         
         String query = "select * from entity_history where (organization_id, parent_id, created_date) >= (?,?,?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId, parentId, createdDate);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         byte[] expectedStartRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), PDataType.VARCHAR.toBytes(parentId));
         assertArrayEquals(expectedStartRow, scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
@@ -1380,11 +1335,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date createdDate = new Date(System.currentTimeMillis());
         
         String query = "select * from entity_history where (organization_id, parent_id, created_date) >= (?,?,?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId, parentId, createdDate);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         byte[] expectedStartRow = ByteUtil.concat(PDataType.CHAR.toBytes(tenantId), new byte[15], ByteUtil.previousKey(PDataType.DATE.toBytes(createdDate)));
         assertArrayEquals(expectedStartRow, scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
@@ -1397,11 +1352,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date createdDate = new Date(System.currentTimeMillis());
         
         String query = "select * from entity_history where (organization_id, parent_id, created_date) >= (?,?,?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId, parentId, createdDate);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         byte[] expectedStartRow = ByteUtil.concat(new byte[15], ByteUtil.previousKey(PDataType.CHAR.toBytes(parentId)), PDataType.DATE.toBytes(createdDate));
         assertArrayEquals(expectedStartRow, scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
@@ -1416,11 +1371,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date createdDate = new Date(System.currentTimeMillis());
         
         String query = "select * from entity_history where (organization_id, parent_id, created_date) >= (?,?,?) AND organization_id <= ?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(firstOrgId, parentId, createdDate, secondOrgId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 2);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         assertArrayEquals(ByteUtil.concat(PDataType.VARCHAR.toBytes(firstOrgId), PDataType.VARCHAR.toBytes(parentId), PDataType.DATE.toBytes(createdDate)), scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(secondOrgId)), scan.getStopRow());
     }
@@ -1431,11 +1386,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String parentId = "000000000000008";
         
         String query = "select * from entity_history where organization_id >= (?,?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId, parentId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
@@ -1446,11 +1401,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String parentId = "000000000000008";
         
         String query = "select * from entity_history where organization_id > (?,?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId, parentId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
@@ -1460,11 +1415,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         
         String query = "select * from entity_history where organization_id >?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
@@ -1475,11 +1430,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String parentId = "000000000000008";
         
         String query = "select * from entity_history where organization_id <= (?,?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId, parentId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         assertArrayEquals(HConstants.EMPTY_START_ROW, scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStopRow());
     }
@@ -1490,11 +1445,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String parentId = "000000000000008";
         
         String query = "select * from entity_history where organization_id < (?,?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(tenantId, parentId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         assertArrayEquals(HConstants.EMPTY_START_ROW, scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStopRow());
     }
@@ -1507,11 +1462,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String secondParentId = "000000000000015";
         
         String query = "select * from entity_history where (organization_id, parent_id) >= (?,?) OR (organization_id, parent_id) <= (?, ?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(firstTenantId, firstParentId, secondTenantId, secondParentId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1); // extracts the entire OR
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         assertArrayEquals(HConstants.EMPTY_START_ROW, scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
@@ -1524,11 +1479,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String secondParentId = "000000000000015";
         
         String query = "select * from entity_history where (organization_id, parent_id) >= (?,?) OR (organization_id, parent_id) >= (?, ?)";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(firstTenantId, firstParentId, secondTenantId, secondParentId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         assertArrayEquals(ByteUtil.concat(PDataType.VARCHAR.toBytes(firstTenantId), PDataType.VARCHAR.toBytes(firstParentId)), scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
@@ -1540,11 +1495,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String firstParentId = "000000000000011";
         
         String query = "select * from entity_history where (organization_id, parent_id) >= (?,?) OR organization_id  >= ?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(firstTenantId, firstParentId, secondTenantId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         assertArrayEquals(ByteUtil.concat(PDataType.VARCHAR.toBytes(firstTenantId), PDataType.VARCHAR.toBytes(firstParentId)), scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
@@ -1556,11 +1511,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String firstParentId = "000000000000011";
         
         String query = "select * from entity_history where (organization_id, parent_id) >= (?,?) OR organization_id  <= ?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(firstTenantId, firstParentId, secondTenantId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
         assertArrayEquals(HConstants.EMPTY_START_ROW, scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
@@ -1571,11 +1526,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String secondTenantId = "000000000000001";
         String firstParentId = "000000000000011";
         String query = "select * from entity_history where (organization_id, parent_id) >= (?,?) OR organization_id  <= ?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(firstTenantId, firstParentId, secondTenantId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 0);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertTrue(filter instanceof RowKeyComparisonFilter);
         assertArrayEquals(HConstants.EMPTY_START_ROW, scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
@@ -1587,11 +1542,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String firstParentId = "000000000000011";
         String secondParentId = "000000000000021";
         String query = "select * from entity_history where (organization_id, parent_id) IN ((?, ?), (?, ?))";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(firstOrgId, firstParentId, secondOrgId, secondParentId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 0);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertTrue(filter instanceof RowKeyComparisonFilter);
         assertArrayEquals(ByteUtil.concat(PDataType.VARCHAR.toBytes(firstOrgId), PDataType.VARCHAR.toBytes(firstParentId)), scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(PDataType.VARCHAR.toBytes(secondOrgId), PDataType.VARCHAR.toBytes(secondParentId))), scan.getStopRow());
     }
@@ -1603,11 +1558,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String firstParentId = "000000000000011";
         String secondParentId = "000000000000021";
         String query = "select * from atable where (organization_id, entity_id) IN ((?, ?), (?, ?))";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(firstOrgId, firstParentId, secondOrgId, secondParentId);
-        HashSet<Expression> extractedFilters = new HashSet<Expression>();
-        StatementContext context = compileStatement(query, scan, binds, extractedFilters);
-        assertTrue(extractedFilters.size() == 1);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertTrue(filter instanceof SkipScanFilter);
         List<List<KeyRange>> skipScanRanges = Collections.singletonList(Arrays.asList(
                 KeyRange.getKeyRange(ByteUtil.concat(PDataType.CHAR.toBytes(firstOrgId), PDataType.CHAR.toBytes(firstParentId))), 
                 KeyRange.getKeyRange(ByteUtil.concat(PDataType.CHAR.toBytes(secondOrgId), PDataType.CHAR.toBytes(secondParentId)))));

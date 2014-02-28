@@ -25,10 +25,9 @@ import java.util.Map;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
-import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.tuple.BaseTuple;
 
 
 /**
@@ -70,7 +69,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
     protected abstract Object setColumnKey(byte[] cf, int cfOffset, int cfLength, byte[] cq, int cqOffset, int cqLength);
     protected abstract Object newColumnKey(byte[] cf, int cfOffset, int cfLength, byte[] cq, int cqOffset, int cqLength);
     
-    private final class IncrementalResultTuple implements Tuple {
+    private final class IncrementalResultTuple extends BaseTuple {
         private int refCount;
         private final ImmutableBytesWritable keyPtr = new ImmutableBytesWritable(UNITIALIZED_KEY_BUFFER);
         private final Map<Object,KeyValueRef> foundColumns = new HashMap<Object,KeyValueRef>(5);

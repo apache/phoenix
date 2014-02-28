@@ -21,12 +21,12 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
-import com.google.common.collect.ImmutableList;
 import org.apache.phoenix.util.KeyValueUtil;
 
+import com.google.common.collect.ImmutableList;
 
-public class MultiKeyValueTuple implements Tuple {
+
+public class MultiKeyValueTuple extends BaseTuple {
     private List<KeyValue> values;
     
     public MultiKeyValueTuple(List<KeyValue> values) {

@@ -31,60 +31,48 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.junit.Test;
-
-import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.parse.SQLParser;
-import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.TestUtil;
+import org.junit.Test;
 
 
 public class LimitCompilerTest extends BaseConnectionlessQueryTest {
     
-    private static Integer compileStatement(String query, List<Object> binds, Scan scan) throws SQLException {
-        SQLParser parser = new SQLParser(query);
-        SelectStatement statement = parser.parseQuery();
+    private static QueryPlan compileStatement(String query, List<Object> binds) throws SQLException {
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
-        ColumnResolver resolver = FromCompiler.getResolver(statement, pconn);
-        statement = StatementNormalizer.normalize(statement, resolver);
-        StatementContext context = new StatementContext(new PhoenixStatement(pconn), resolver, binds, scan);
-
-        Integer limit = LimitCompiler.compile(context, statement);
-        GroupBy groupBy = GroupByCompiler.compile(context, statement);
-        statement = HavingCompiler.rewrite(context, statement, groupBy);
-        HavingCompiler.compile(context, statement, groupBy);
-        Expression where = WhereCompiler.compile(context, statement);
-        assertNull(where);
-        return limit;
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        TestUtil.bindParams(pstmt, binds);
+        return pstmt.compileQuery();
     }
     
     @Test
     public void testLimit() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' limit 5";
-        Scan scan = new Scan();
         List<Object> binds = Collections.emptyList();
-        Integer limit = compileStatement(query, binds, scan);
-
+        QueryPlan plan = compileStatement(query, binds);
+        Scan scan = plan.getContext().getScan();
+        
+        assertNull(scan.getFilter());
         assertArrayEquals(PDataType.VARCHAR.toBytes(tenantId), scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStopRow());
-        assertEquals(limit,Integer.valueOf(5));
+        assertEquals(plan.getLimit(),Integer.valueOf(5));
     }
 
     @Test
     public void testNoLimit() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "'";
-        Scan scan = new Scan();
         List<Object> binds = Collections.emptyList();
-        Integer limit = compileStatement(query, binds, scan);
+        QueryPlan plan = compileStatement(query, binds);
+        Scan scan = plan.getContext().getScan();
 
-        assertNull(limit);
+        assertNull(scan.getFilter());
+        assertNull(plan.getLimit());
         assertArrayEquals(PDataType.VARCHAR.toBytes(tenantId), scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStopRow());
     }
@@ -93,27 +81,22 @@ public class LimitCompilerTest extends BaseConnectionlessQueryTest {
     public void testBoundLimit() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' limit ?";
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(5);
-        Integer limit = compileStatement(query, binds, scan);
+        QueryPlan plan = compileStatement(query, binds);
+        Scan scan = plan.getContext().getScan();
 
+        assertNull(scan.getFilter());
         assertArrayEquals(PDataType.VARCHAR.toBytes(tenantId), scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStopRow());
-        assertEquals(limit,Integer.valueOf(5));
+        assertEquals(plan.getLimit(),Integer.valueOf(5));
     }
 
     @Test
     public void testTypeMismatchBoundLimit() throws SQLException {
         String query = "select * from atable limit ?";
-        SQLParser parser = new SQLParser(query);
-        SelectStatement statement = parser.parseQuery();
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList("foo");
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
-        ColumnResolver resolver = FromCompiler.getResolver(statement, pconn);
-        StatementContext context = new StatementContext(new PhoenixStatement(pconn), resolver, binds, scan);
         try {
-            LimitCompiler.compile(context, statement);
+            compileStatement(query, binds);
             fail();
         } catch (SQLException e) {
             assertTrue(e.getMessage().contains("Type mismatch"));
@@ -123,14 +106,9 @@ public class LimitCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testNegativeBoundLimit() throws SQLException {
         String query = "select * from atable limit ?";
-        SQLParser parser = new SQLParser(query);
-        SelectStatement statement = parser.parseQuery();
-        Scan scan = new Scan();
         List<Object> binds = Arrays.<Object>asList(-1);
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
-        ColumnResolver resolver = FromCompiler.getResolver(statement, pconn);
-        StatementContext context = new StatementContext(new PhoenixStatement(pconn), resolver, binds, scan);
-        assertNull(LimitCompiler.compile(context, statement));
+        QueryPlan plan = compileStatement(query, binds);
+        assertNull(plan.getLimit());
     }
 
     @Test
@@ -139,14 +117,8 @@ public class LimitCompilerTest extends BaseConnectionlessQueryTest {
         String keyPrefix = "002";
         List<Object> binds = Arrays.<Object>asList(tenantId,keyPrefix);
         String query = "select * from atable where organization_id=? and substr(entity_id,1,3)=?";
-        SQLParser parser = new SQLParser(query);
-        SelectStatement statement = parser.parseQuery();
-        Scan scan = new Scan();
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
-        ColumnResolver resolver = FromCompiler.getResolver(statement, pconn);
-        StatementContext context = new StatementContext(new PhoenixStatement(pconn), resolver, binds, scan);
         try {
-            WhereCompiler.compile(context, statement);
+            compileStatement(query, binds);
             fail();
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 203 (22005): Type mismatch."));

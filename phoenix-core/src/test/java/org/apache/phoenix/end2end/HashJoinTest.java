@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_DISPLAY_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_DISPLAY_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
@@ -248,6 +249,37 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME,
+                /*
+                 * testStarJoin
+                 * SELECT order_id, c.name, i.name iname, quantity, o.date 
+                 * FROM joinOrderTable o 
+                 * JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
+                 * JOIN joinItemTable i ON o.item_id = i.item_id 
+                 * ORDER BY order_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + "\n" +
+                "    BUILD HASH TABLE 1\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME,
+                /*
+                 * testStarJoin
+                 * SELECT (*NO_STAR_JOIN*) order_id, c.name, i.name iname, quantity, o.date 
+                 * FROM joinOrderTable o 
+                 * JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
+                 * JOIN joinItemTable i ON o.item_id = i.item_id 
+                 * ORDER BY order_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER SORTED BY [O.order_id]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "            BUILD HASH TABLE 0\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME,
                 }});
         testCases.add(new String[][] {
                 {
@@ -396,6 +428,39 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item",
+                /*
+                 * testStarJoin
+                 * SELECT order_id, c.name, i.name iname, quantity, o.date 
+                 * FROM joinOrderTable o 
+                 * JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
+                 * JOIN joinItemTable i ON o.item_id = i.item_id 
+                 * ORDER BY order_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_customer\n" +
+                "    BUILD HASH TABLE 1\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
+                /*
+                 * testStarJoin
+                 * SELECT (*NO_STAR_JOIN*) order_id, c.name, i.name iname, quantity, o.date 
+                 * FROM joinOrderTable o 
+                 * JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
+                 * JOIN joinItemTable i ON o.item_id = i.item_id 
+                 * ORDER BY order_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER SORTED BY [O.order_id]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "            BUILD HASH TABLE 0\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_customer",
                 }});
         return testCases;
     }
@@ -1030,50 +1095,59 @@ public class HashJoinTest extends BaseHBaseManagedTimeTest {
     
     @Test
     public void testStarJoin() throws Exception {
-        String query = "SELECT \"order_id\", c.name, i.name iname, quantity, o.date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " 
-            + JOIN_CUSTOMER_TABLE_FULL_NAME + " c ON o.\"customer_id\" = c.\"customer_id\" LEFT JOIN " 
-            + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\"";
+        String[] query = new String[2];
+        query[0] = "SELECT \"order_id\", c.name, i.name iname, quantity, o.date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o JOIN " 
+            + JOIN_CUSTOMER_TABLE_FULL_NAME + " c ON o.\"customer_id\" = c.\"customer_id\" JOIN " 
+            + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\"";
+        query[1] = "SELECT /*+ NO_STAR_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o JOIN " 
+                + JOIN_CUSTOMER_TABLE_FULL_NAME + " c ON o.\"customer_id\" = c.\"customer_id\" JOIN " 
+                + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), "000000000000001");
-            assertEquals(rs.getString("\"order_id\""), "000000000000001");
-            assertEquals(rs.getString(2), "C4");
-            assertEquals(rs.getString("C.name"), "C4");
-            assertEquals(rs.getString(3), "T1");
-            assertEquals(rs.getString("iName"), "T1");
-            assertEquals(rs.getInt(4), 1000);
-            assertEquals(rs.getInt("Quantity"), 1000);
-            assertNotNull(rs.getDate(5));
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), "000000000000002");
-            assertEquals(rs.getString(2), "C3");
-            assertEquals(rs.getString(3), "T6");
-            assertEquals(rs.getInt(4), 2000);
-            assertNotNull(rs.getDate(5));
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), "000000000000003");
-            assertEquals(rs.getString(2), "C2");
-            assertEquals(rs.getString(3), "T2");
-            assertEquals(rs.getInt(4), 3000);
-            assertNotNull(rs.getDate(5));
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), "000000000000004");
-            assertEquals(rs.getString(2), "C4");
-            assertEquals(rs.getString(3), "T6");
-            assertEquals(rs.getInt(4), 4000);
-            assertNotNull(rs.getDate(5));
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), "000000000000005");
-            assertEquals(rs.getString(2), "C5");
-            assertEquals(rs.getString(3), "T3");
-            assertEquals(rs.getInt(4), 5000);
-            assertNotNull(rs.getDate(5));
+            for (int i = 0; i < query.length; i++) {
+                PreparedStatement statement = conn.prepareStatement(query[i]);
+                ResultSet rs = statement.executeQuery();
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000001");
+                assertEquals(rs.getString("\"order_id\""), "000000000000001");
+                assertEquals(rs.getString(2), "C4");
+                assertEquals(rs.getString("C.name"), "C4");
+                assertEquals(rs.getString(3), "T1");
+                assertEquals(rs.getString("iName"), "T1");
+                assertEquals(rs.getInt(4), 1000);
+                assertEquals(rs.getInt("Quantity"), 1000);
+                assertNotNull(rs.getDate(5));
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000002");
+                assertEquals(rs.getString(2), "C3");
+                assertEquals(rs.getString(3), "T6");
+                assertEquals(rs.getInt(4), 2000);
+                assertNotNull(rs.getDate(5));
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000003");
+                assertEquals(rs.getString(2), "C2");
+                assertEquals(rs.getString(3), "T2");
+                assertEquals(rs.getInt(4), 3000);
+                assertNotNull(rs.getDate(5));
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000004");
+                assertEquals(rs.getString(2), "C4");
+                assertEquals(rs.getString(3), "T6");
+                assertEquals(rs.getInt(4), 4000);
+                assertNotNull(rs.getDate(5));
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000005");
+                assertEquals(rs.getString(2), "C5");
+                assertEquals(rs.getString(3), "T3");
+                assertEquals(rs.getInt(4), 5000);
+                assertNotNull(rs.getDate(5));
 
-            assertFalse(rs.next());
+                assertFalse(rs.next());
+                
+                rs = conn.createStatement().executeQuery("EXPLAIN " + query[i]);
+                assertEquals(plans[11 + i], QueryUtil.getExplainPlan(rs));
+            }
         } finally {
             conn.close();
         }

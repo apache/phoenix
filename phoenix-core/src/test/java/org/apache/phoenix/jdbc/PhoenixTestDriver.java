@@ -25,6 +25,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
+import org.apache.phoenix.util.ReadOnlyProps;
 
 
 
@@ -38,13 +39,24 @@ import org.apache.phoenix.query.QueryServicesTestImpl;
  */
 public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     private ConnectionQueryServices queryServices;
-    
+    private final ReadOnlyProps overrideProps;
+    private QueryServices services;
+
     public PhoenixTestDriver() {
-        this(new QueryServicesTestImpl());
+        this.overrideProps = ReadOnlyProps.EMPTY_PROPS;
     }
 
-    public PhoenixTestDriver(QueryServices services) {
-        super(services);
+    // For tests to override the default configuration
+    public PhoenixTestDriver(ReadOnlyProps overrideProps) {
+        this.overrideProps = overrideProps;
+    }
+
+    @Override
+    public synchronized QueryServices getQueryServices() {
+        if (services == null) {
+            services = new QueryServicesTestImpl(overrideProps);
+        }
+        return services;
     }
 
     @Override

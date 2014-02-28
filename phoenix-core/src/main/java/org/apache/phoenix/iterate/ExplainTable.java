@@ -116,9 +116,7 @@ public abstract class ExplainTable {
                     }
                     if (filterList.size() > offset+1) {
                         filterDesc = filterList.get(offset+1).toString();
-                        if (filterList.size() > offset+2) {
-                            pageFilter = (PageFilter) filterList.get(offset+2);
-                        }
+                        pageFilter = getPageFilter(filterList);
                     }
                 }
             } else if (filter instanceof FilterList) {
@@ -129,9 +127,7 @@ public abstract class ExplainTable {
                 }
                 if (filterList.size() > offset) {
                     filterDesc = filterList.get(offset).toString();
-                    if (filterList.size() > offset+1) {
-                        pageFilter = (PageFilter) filterList.get(offset+1);
-                    }
+                    pageFilter = getPageFilter(filterList);
                 }
             } else {
                 if (filter instanceof FirstKeyOnlyFilter) {
@@ -150,6 +146,13 @@ public abstract class ExplainTable {
             }
         }
         groupBy.explain(planSteps);
+    }
+
+    private PageFilter getPageFilter(List<Filter> filterList) {
+        for (Filter filter : filterList) {
+            if (filter instanceof PageFilter) return (PageFilter)filter;
+        }
+        return null;
     }
 
     private void appendPKColumnValue(StringBuilder buf, byte[] range, Boolean isNull, int slotIndex) {

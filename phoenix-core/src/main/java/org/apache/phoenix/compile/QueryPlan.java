@@ -61,8 +61,6 @@ public interface QueryPlan extends StatementPlan {
 
     List<KeyRange> getSplits();
 
-    StatementContext getContext();
-    
     FilterableStatement getStatement();
 
     public boolean isDegenerate();

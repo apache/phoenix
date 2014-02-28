@@ -18,100 +18,98 @@
 package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.and;
+import static org.apache.phoenix.util.TestUtil.constantComparison;
+import static org.apache.phoenix.util.TestUtil.multiKVFilter;
+import static org.apache.phoenix.util.TestUtil.singleKVFilter;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Collections;
-import java.util.List;
 
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
-import org.junit.Test;
-
-import org.apache.phoenix.expression.AndExpression;
-import org.apache.phoenix.expression.ComparisonExpression;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.KeyValueColumnExpression;
-import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.parse.SQLParser;
-import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.junit.Test;
 
 
 
 public class SelectStatementRewriterTest extends BaseConnectionlessQueryTest {
-    private static Expression compileStatement(String query) throws SQLException {
-        Scan scan = new Scan();
-        List<Object> binds = Collections.emptyList();
-        SQLParser parser = new SQLParser(query);
-        SelectStatement statement = parser.parseQuery();
+    private static Filter compileStatement(String query) throws SQLException {
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
-        ColumnResolver resolver = FromCompiler.getResolver(statement, pconn);
-        statement = StatementNormalizer.normalize(statement, resolver);
-        StatementContext context = new StatementContext(new PhoenixStatement(pconn), resolver, binds, scan);
-        Expression whereClause = WhereCompiler.compile(context, statement);
-        return WhereOptimizer.pushKeyExpressionsToScan(context, statement, whereClause);
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        QueryPlan plan = pstmt.compileQuery();
+        return plan.getContext().getScan().getFilter();
     }
+
     
     @Test
     public void testCollapseAnd() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and a_integer=0";
-        Expression where = compileStatement(query);
-        assertTrue(where instanceof ComparisonExpression);
-        ComparisonExpression child = (ComparisonExpression)where;
-        assertEquals(CompareOp.EQUAL, child.getFilterOp());
-        assertTrue(child.getChildren().get(0) instanceof KeyValueColumnExpression);
-        assertTrue(child.getChildren().get(1) instanceof LiteralExpression);
+        Filter filter = compileStatement(query);
+        assertEquals(
+                singleKVFilter(constantComparison(
+                    CompareOp.EQUAL,
+                    A_INTEGER,
+                    0)),
+                filter);
     }
     
     @Test
     public void testLHSLiteralCollapseAnd() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where '" + tenantId + "'=organization_id and 0=a_integer";
-        Expression where = compileStatement(query);
-        assertTrue(where instanceof ComparisonExpression);
-        ComparisonExpression child = (ComparisonExpression)where;
-        assertEquals(CompareOp.EQUAL, child.getFilterOp());
-        assertTrue(child.getChildren().get(0) instanceof KeyValueColumnExpression);
-        assertTrue(child.getChildren().get(1) instanceof LiteralExpression);
+        Filter filter = compileStatement(query);
+        assertEquals(
+                singleKVFilter(constantComparison(
+                    CompareOp.EQUAL,
+                    A_INTEGER,
+                    0)),
+                filter);
     }
     
     @Test
     public void testRewriteAnd() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and a_integer=0 and a_string='foo'";
-        Expression where = compileStatement(query);
-        
-        assertTrue(where instanceof AndExpression);
-        assertTrue(where.getChildren().size() == 2);
-        assertTrue(where.getChildren().get(0) instanceof ComparisonExpression);
-        assertEquals(CompareOp.EQUAL, ((ComparisonExpression)where.getChildren().get(0)).getFilterOp());
-        assertTrue(where.getChildren().get(1) instanceof ComparisonExpression);
-        assertEquals(CompareOp.EQUAL, ((ComparisonExpression)where.getChildren().get(1)).getFilterOp());
+        Filter filter = compileStatement(query);
+        assertEquals(
+                multiKVFilter(and(
+                        constantComparison(
+                            CompareOp.EQUAL,
+                            A_INTEGER, 0),
+                        constantComparison(
+                            CompareOp.EQUAL,
+                            A_STRING, "foo")
+                    )),
+                filter);
     }
 
     @Test
     public void testCollapseWhere() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(organization_id,1,3)='foo' LIMIT 2";
-        Expression where = compileStatement(query);
-        assertNull(where);
+        Filter filter = compileStatement(query);
+        assertNull(filter);
     }
 
     @Test
     public void testNoCollapse() throws SQLException {
         String query = "select * from atable where a_integer=0 and a_string='foo'";
-        Expression where = compileStatement(query);
-        assertEquals(2, where.getChildren().size());
-        assertTrue(where.getChildren().get(0) instanceof ComparisonExpression);
-        assertEquals(CompareOp.EQUAL, ((ComparisonExpression)where.getChildren().get(0)).getFilterOp());
-        assertTrue(where.getChildren().get(1) instanceof ComparisonExpression);
-        assertEquals(CompareOp.EQUAL, ((ComparisonExpression)where.getChildren().get(1)).getFilterOp());
+        Filter filter = compileStatement(query);
+        assertEquals(
+                multiKVFilter(and(
+                        constantComparison(
+                            CompareOp.EQUAL,
+                            A_INTEGER, 0),
+                        constantComparison(
+                            CompareOp.EQUAL,
+                            A_STRING, "foo")
+                    )),
+                filter);
     }
 }

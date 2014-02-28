@@ -38,6 +38,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 
 
@@ -181,26 +182,26 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public void reserveSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
+    public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
+            SQLException[] exceptions, Sequence.Action action) throws SQLException {
+        getDelegate().validateSequences(sequenceKeys, timestamp, values, exceptions, action);
+    }
+
+    @Override
+    public void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
             SQLException[] exceptions) throws SQLException {
-        getDelegate().reserveSequenceValues(sequenceKeys, timestamp, values, exceptions);
+        getDelegate().incrementSequences(sequenceKeys, timestamp, values, exceptions);
     }
 
     @Override
-    public void incrementSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
-            SQLException[] exceptions) throws SQLException {
-        getDelegate().incrementSequenceValues(sequenceKeys, timestamp, values, exceptions);
+    public long currentSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException {
+        return getDelegate().currentSequenceValue(sequenceKey, timestamp);
     }
 
     @Override
-    public long getSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException {
-        return getDelegate().getSequenceValue(sequenceKey, timestamp);
-    }
-
-    @Override
-    public void returnSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, SQLException[] exceptions)
+    public void returnSequences(List<SequenceKey> sequenceKeys, long timestamp, SQLException[] exceptions)
             throws SQLException {
-        getDelegate().returnSequenceValues(sequenceKeys, timestamp, exceptions);
+        getDelegate().returnSequences(sequenceKeys, timestamp, exceptions);
     }
 
     @Override

@@ -147,7 +147,7 @@ public class DeleteCompiler {
         }
         
         @Override
-        protected MutationState mutate(PhoenixConnection connection, ResultIterator iterator) throws SQLException {
+        protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException {
             PhoenixStatement statement = new PhoenixStatement(connection);
             return deleteRows(statement, tableRef, iterator, projector);
         }
@@ -259,6 +259,11 @@ public class DeleteCompiler {
                 public PhoenixConnection getConnection() {
                     return connection;
                 }
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
             };
         } else if (runOnServer) {
             // TODO: better abstraction
@@ -281,6 +286,11 @@ public class DeleteCompiler {
                 @Override
                 public ParameterMetaData getParameterMetaData() {
                     return context.getBindManager().getParameterMetaData();
+                }
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
                 }
 
                 @Override
@@ -339,6 +349,11 @@ public class DeleteCompiler {
                 @Override
                 public ParameterMetaData getParameterMetaData() {
                     return context.getBindManager().getParameterMetaData();
+                }
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
                 }
 
                 @Override

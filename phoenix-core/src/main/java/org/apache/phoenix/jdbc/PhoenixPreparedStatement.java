@@ -47,6 +47,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.phoenix.compile.BindManager;
+import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -128,6 +129,14 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     }
     
     
+    public QueryPlan compileQuery() throws SQLException {
+        return compileQuery(statement, query);
+    }
+
+    public MutationPlan compileMutation() throws SQLException {
+        return compileMutation(statement, query);
+    }
+
     boolean execute(boolean batched) throws SQLException {
         throwIfUnboundParameters();
         if (!batched && statement.getOperation().isMutation() && !batch.isEmpty()) {

@@ -39,7 +39,13 @@
     <dependencySet>
       <outputDirectory>/</outputDirectory>
       <unpack>true</unpack>
-      <scope>system</scope>
+      <includes>
+        <include>org.apache:phoenix-*</include>
+      </includes>
+      <excludes>
+        <exclude>org.apache:phoenix-flume</exclude>
+        <exclude>org.apache:phoenix-pig</exclude>
+      </excludes>
     </dependencySet>
   </dependencySets>
 

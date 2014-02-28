@@ -20,7 +20,6 @@ package org.apache.phoenix.coprocessor;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-
 import org.apache.phoenix.cache.GlobalCache;
 
 
@@ -33,6 +32,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
     @Override
     public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
             boolean abortRequested) {
-        GlobalCache.getInstance(c.getEnvironment()).getMetaDataCache().clear();
+        GlobalCache.getInstance(c.getEnvironment()).getMetaDataCache().invalidateAll();
     }
 }

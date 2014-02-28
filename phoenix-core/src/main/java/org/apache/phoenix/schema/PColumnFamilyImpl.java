@@ -21,26 +21,41 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.util.SizedUtil;
 
-import com.google.common.collect.*;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedMap;
 
 public class PColumnFamilyImpl implements PColumnFamily {
     private final PName name;
     private final List<PColumn> columns;
     private final Map<String, PColumn> columnByString;
     private final Map<byte[], PColumn> columnByBytes;
+    private final int estimatedSize;
+
+    @Override
+    public int getEstimatedSize() {
+        return estimatedSize;
+    }
     
     public PColumnFamilyImpl(PName name, List<PColumn> columns) {
+        Preconditions.checkNotNull(name);
+        int estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 4 + SizedUtil.INT_SIZE + name.getEstimatedSize() +
+                SizedUtil.sizeOfMap(columns.size()) * 2 + SizedUtil.sizeOfArrayList(columns.size());
         this.name = name;
         this.columns = ImmutableList.copyOf(columns);
         ImmutableMap.Builder<String, PColumn> columnByStringBuilder = ImmutableMap.builder();
         ImmutableSortedMap.Builder<byte[], PColumn> columnByBytesBuilder = ImmutableSortedMap.orderedBy(Bytes.BYTES_COMPARATOR);
         for (PColumn column : columns) {
+            estimatedSize += column.getEstimatedSize();
             columnByBytesBuilder.put(column.getName().getBytes(), column);
             columnByStringBuilder.put(column.getName().getString(), column);
         }
         this.columnByBytes = columnByBytesBuilder.build();
         this.columnByString = columnByStringBuilder.build();
+        this.estimatedSize = estimatedSize;
     }
     
     @Override

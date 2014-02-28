@@ -35,7 +35,6 @@ public class SequenceResultIterator extends DelegateResultIterator {
     
     public SequenceResultIterator(ResultIterator delegate, SequenceManager sequenceManager) throws SQLException {
         super(delegate);
-        sequenceManager.initSequences();
         this.sequenceManager = sequenceManager;
     }
     
@@ -45,13 +44,14 @@ public class SequenceResultIterator extends DelegateResultIterator {
         if (next == null) {
             return null;
         }
-        sequenceManager.incrementSequenceValues();
+        next = sequenceManager.newSequenceTuple(next);
         return next;
     }
 
     @Override
     public void explain(List<String> planSteps) {
         super.explain(planSteps);
-        planSteps.add("CLIENT RESERVE " + sequenceManager.getSequenceCount() + " SEQUENCES");
+        int nSequences = sequenceManager.getSequenceCount();
+        planSteps.add("CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S"));
     }
 }

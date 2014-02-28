@@ -31,9 +31,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.junit.Test;
-
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.Test;
 
 public class SkipScanQueryTest extends BaseHBaseManagedTimeTest {
     
@@ -201,6 +200,73 @@ public class SkipScanQueryTest extends BaseHBaseManagedTimeTest {
             assertEquals("da", rs.getString(1));
             assertEquals("mc", rs.getString(2));
             assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testPreSplitCompositeFixedKey() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("create table test(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2)) split on('000','100','200')");
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("upsert into test values('000','aaaa','value_1')");
+            conn.createStatement().execute("upsert into test values('000','aabb','value_2')");
+            conn.createStatement().execute("upsert into test values('100','aacc','value_3')");
+            conn.createStatement().execute("upsert into test values('100','aadd','value_4')");
+            conn.createStatement().execute("upsert into test values('200','aaee','value_5')");
+            conn.createStatement().execute("upsert into test values('201','aaff','value_6')");
+            ResultSet rs = conn.createStatement().executeQuery("select * from test where key_1>='000' and key_1<'200' and key_2>='aabb' and key_2<'aadd'");
+            assertTrue(rs.next());
+            assertEquals("000", rs.getString(1));
+            assertEquals("aabb", rs.getString(2));
+            assertEquals("value_2", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("100", rs.getString(1));
+            assertEquals("aacc", rs.getString(2));
+            assertEquals("value_3", rs.getString(3));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    
+    @Test
+    public void testInWithDescKey() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("create table test(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2 desc))");
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("upsert into test values('000','aaaa','value_1')");
+            conn.createStatement().execute("upsert into test values('000','aabb','value_2')");
+            conn.createStatement().execute("upsert into test values('100','aacc','value_3')");
+            conn.createStatement().execute("upsert into test values('100','aadd','value_4')");
+            conn.createStatement().execute("upsert into test values('200','aaee','value_5')");
+            conn.createStatement().execute("upsert into test values('201','aaff','value_6')");
+            ResultSet rs = conn.createStatement().executeQuery("select * from test where key_1>='000' and key_1<'200' and key_2>='aabb' and key_2<'aadd'");
+            assertTrue(rs.next());
+            assertEquals("000", rs.getString(1));
+            assertEquals("aabb", rs.getString(2));
+            assertEquals("value_2", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("100", rs.getString(1));
+            assertEquals("aacc", rs.getString(2));
+            assertEquals("value_3", rs.getString(3));
+            assertFalse(rs.next());
+
+            rs = conn.createStatement().executeQuery("select * from test where (key_1,key_2) in (('100','aacc'),('100','aadd'))");
+            assertTrue(rs.next());
+            assertEquals("100", rs.getString(1));
+            assertEquals("aadd", rs.getString(2));
+            assertEquals("value_4", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("100", rs.getString(1));
+            assertEquals("aacc", rs.getString(2));
+            assertEquals("value_3", rs.getString(3));
+            assertFalse(rs.next());
+            
         } finally {
             conn.close();
         }
