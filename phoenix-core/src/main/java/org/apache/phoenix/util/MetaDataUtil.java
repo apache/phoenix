@@ -27,8 +27,12 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.client.ClientKeyValue;
+import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
@@ -176,9 +180,13 @@ public class MetaDataUtil {
         return getSequenceNumber(getTableHeaderRow(tableMetaData));
     }
     
-    public static PTableType getTableType(List<Mutation> tableMetaData) {
-        KeyValue kv = getMutationKeyValue(getPutOnlyTableHeaderRow(tableMetaData), PhoenixDatabaseMetaData.TABLE_TYPE_BYTES);
-        return kv == null ? null : PTableType.fromSerializedValue(kv.getBuffer()[kv.getValueOffset()]);
+    public static PTableType getTableType(List<Mutation> tableMetaData, KeyValueBuilder builder,
+      ImmutableBytesPtr value) {
+        if (getMutationKeyValue(getPutOnlyTableHeaderRow(tableMetaData),
+            PhoenixDatabaseMetaData.TABLE_TYPE_BYTES, builder, value)) {
+            return PTableType.fromSerializedValue(value.get()[value.getOffset()]);
+        }
+        return null;
     }
     
     public static long getParentSequenceNumber(List<Mutation> tableMetaData) {
@@ -189,21 +197,38 @@ public class MetaDataUtil {
         return tableMetaData.get(0);
     }
 
-    public static byte[] getMutationKVByteValue(Mutation headerRow, byte[] key) {
-        KeyValue kv = getMutationKeyValue(headerRow, key);
-        // FIXME: byte copy
-        return kv == null ? ByteUtil.EMPTY_BYTE_ARRAY : kv.getValue();
+    public static byte[] getMutationKVByteValue(Mutation headerRow, byte[] key,
+        KeyValueBuilder builder, ImmutableBytesWritable ptr) {
+        if (getMutationKeyValue(headerRow, key, builder, ptr)) {
+            return ByteUtil.copyKeyBytesIfNecessary(ptr);
+        }
+        return ByteUtil.EMPTY_BYTE_ARRAY;
     }
 
-    public static KeyValue getMutationKeyValue(Mutation headerRow, byte[] key) {
+  /**
+   * Get the mutation who's qualifier matches the passed key
+   * <p>
+   * We need to pass in an {@link ImmutableBytesPtr} to pass the result back to make life easier
+   * when dealing with a regular {@link KeyValue} vs. a {@link ClientKeyValue} as the latter doesn't
+   * support things like {@link KeyValue#getBuffer()}
+   * @param headerRow mutation to check
+   * @param key to check
+   * @param builder that created the {@link KeyValue KeyValues} in the {@link Mutation}
+   * @param ptr to update with the value of the mutation
+   * @return the value of the matching {@link KeyValue}
+   */
+  public static boolean getMutationKeyValue(Mutation headerRow, byte[] key,
+      KeyValueBuilder builder, ImmutableBytesWritable ptr) {
         List<KeyValue> kvs = headerRow.getFamilyMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
         if (kvs != null) {
             for (KeyValue kv : kvs) {
-                if (Bytes.compareTo(kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength(), key, 0,
-                        key.length) == 0) { return kv; }
+                if (builder.compareQualifier(kv, key, 0, key.length) ==0) {
+                    builder.getValueAsPtr(kv, ptr);
+                    return true;
+                }
             }
         }
-        return null;
+        return false;
     }
 
     /**
@@ -241,12 +266,15 @@ public class MetaDataUtil {
         return ByteUtil.concat(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId, QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : schemaName, QueryConstants.SEPARATOR_BYTE_ARRAY, tableName, QueryConstants.SEPARATOR_BYTE_ARRAY, QueryConstants.SEPARATOR_BYTE_ARRAY, indexName);
     }
     
-    public static boolean isMultiTenant(Mutation m) {
-        return Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(MetaDataUtil.getMutationKVByteValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES)));
+    public static boolean isMultiTenant(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
+        if (getMutationKeyValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, builder, ptr)) {
+            return Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(ptr));
+        }
+        return false;
     }
     
-    public static boolean isSalted(Mutation m) {
-        return MetaDataUtil.getMutationKeyValue(m, PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES) != null;
+    public static boolean isSalted(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
+        return MetaDataUtil.getMutationKeyValue(m, PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES, builder, ptr);
     }
     
     public static byte[] getViewIndexPhysicalName(byte[] physicalTableName) {

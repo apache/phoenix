@@ -20,7 +20,7 @@ package org.apache.phoenix.client;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 
 /**
@@ -61,5 +61,18 @@ public class ClientKeyValueBuilder extends KeyValueBuilder {
   public KeyValue buildDeleteColumn(ImmutableBytesWritable row, ImmutableBytesWritable family,
             ImmutableBytesWritable qualifier, long ts) {
         return new ClientKeyValue(row, family, qualifier, ts, Type.Delete, null);
+  }
+
+  @Override
+  public int compareQualifier(KeyValue kv, byte[] key, int offset, int length) {
+        byte[] qual = kv.getQualifier();
+        return Bytes.compareTo(qual, 0, qual.length, key, offset, length);
+  }
+
+  @Override
+  public void getValueAsPtr(KeyValue kv, ImmutableBytesWritable ptr) {
+        ClientKeyValue ckv = (ClientKeyValue) kv;
+        ImmutableBytesWritable value = ckv.getRawValue();
+        ptr.set(value.get(), value.getOffset(), value.getLength());
   }
 }
