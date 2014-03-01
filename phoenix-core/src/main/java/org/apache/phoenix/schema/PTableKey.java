@@ -17,23 +17,32 @@
  */
 package org.apache.phoenix.schema;
 
-import org.apache.http.annotation.Immutable;
+import com.google.common.base.Preconditions;
 
-import org.apache.phoenix.util.SchemaUtil;
-
-
-@Immutable
-public class PNormalizedName extends PNameImpl {
+public class PTableKey {
+    private final PName tenantId;
+    private final String name;
     
-    public PNormalizedName(String nonNormalizedName) {
-        super(SchemaUtil.normalizeIdentifier(nonNormalizedName));
+    public PTableKey(PName tenantId, String name) {
+        Preconditions.checkNotNull(name);
+        this.tenantId = tenantId;
+        this.name = name;
     }
 
+    public PName getTenantId() {
+        return tenantId;
+    }
+
+    public String getName() {
+        return name;
+    }
+    
     @Override
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + getString().hashCode();
+        result = prime * result + ((tenantId == null) ? 0 : tenantId.hashCode());
+        result = prime * result + name.hashCode();
         return result;
     }
 
@@ -42,10 +51,12 @@ public class PNormalizedName extends PNameImpl {
         if (this == obj) return true;
         if (obj == null) return false;
         if (getClass() != obj.getClass()) return false;
-        PNormalizedName other = (PNormalizedName)obj;
-        // Compare normalized stringName for equality, since bytesName
-        // may differ since it remains case sensitive.
-        if (!getString().equals(other.getString())) return false;
+        PTableKey other = (PTableKey)obj;
+        if (!name.equals(other.name)) return false;
+        if (tenantId == null) {
+            if (other.tenantId != null) return false;
+        } else if (!tenantId.equals(other.tenantId)) return false;
         return true;
     }
+
 }

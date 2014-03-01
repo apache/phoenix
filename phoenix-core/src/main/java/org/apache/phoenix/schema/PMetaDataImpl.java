@@ -28,35 +28,35 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 public class PMetaDataImpl implements PMetaData {
-    public static final PMetaData EMPTY_META_DATA = new PMetaDataImpl(Collections.<String,PTable>emptyMap());
-    private final Map<String,PTable> metaData;
+    public static final PMetaData EMPTY_META_DATA = new PMetaDataImpl(Collections.<PTableKey, PTable>emptyMap());
+    private final Map<PTableKey,PTable> metaData;
     
-    public PMetaDataImpl(Map<String,PTable> tables) {
+    public PMetaDataImpl(Map<PTableKey, PTable> tables) {
         this.metaData = ImmutableMap.copyOf(tables);
     }
     
     @Override
-    public PTable getTable(String name) throws TableNotFoundException {
-        PTable table = metaData.get(name);
+    public PTable getTable(PTableKey key) throws TableNotFoundException {
+        PTable table = metaData.get(key);
         if (table == null) {
-            throw new TableNotFoundException(name);
+            throw new TableNotFoundException(key.getName());
         }
         return table;
     }
 
     @Override
-    public Map<String,PTable> getTables() {
+    public Map<PTableKey, PTable> getTables() {
         return metaData;
     }
 
 
     @Override
     public PMetaData addTable(PTable table) throws SQLException {
-        Map<String,PTable> tables = Maps.newHashMap(metaData);
-        PTable oldTable = tables.put(table.getName().getString(), table);
+        Map<PTableKey,PTable> tables = Maps.newHashMap(metaData);
+        PTable oldTable = tables.put(table.getKey(), table);
         if (table.getParentName() != null) { // Upsert new index table into parent data table list
             String parentName = table.getParentName().getString();
-            PTable parentTable = tables.get(parentName);
+            PTable parentTable = tables.get(new PTableKey(table.getTenantId(), parentName));
             // If parentTable isn't cached, that's ok we can skip this
             if (parentTable != null) {
                 List<PTable> oldIndexes = parentTable.getIndexes();
@@ -66,19 +66,20 @@ public class PMetaDataImpl implements PMetaData {
                     newIndexes.remove(oldTable);
                 }
                 newIndexes.add(table);
-                tables.put(parentName, PTableImpl.makePTable(parentTable, table.getTimeStamp(), newIndexes));
+                parentTable = PTableImpl.makePTable(parentTable, table.getTimeStamp(), newIndexes);
+                tables.put(parentTable.getKey(), parentTable);
             }
         }
         for (PTable index : table.getIndexes()) {
-            tables.put(index.getName().getString(), index);
+            tables.put(index.getKey(), index);
         }
         return new PMetaDataImpl(tables);
     }
 
     @Override
-    public PMetaData addColumn(String tableName, List<PColumn> columnsToAdd, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows) throws SQLException {
-        PTable table = getTable(tableName);
-        Map<String,PTable> tables = Maps.newHashMap(metaData);
+    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columnsToAdd, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows) throws SQLException {
+        PTable table = getTable(new PTableKey(tenantId, tableName));
+        Map<PTableKey,PTable> tables = Maps.newHashMap(metaData);
         List<PColumn> oldColumns = PTableImpl.getColumnsToClone(table);
         List<PColumn> newColumns;
         if (columnsToAdd.isEmpty()) {
@@ -89,19 +90,19 @@ public class PMetaDataImpl implements PMetaData {
             newColumns.addAll(columnsToAdd);
         }
         PTable newTable = PTableImpl.makePTable(table, tableTimeStamp, tableSeqNum, newColumns, isImmutableRows);
-        tables.put(tableName, newTable);
+        tables.put(newTable.getKey(), newTable);
         return new PMetaDataImpl(tables);
     }
 
     @Override
-    public PMetaData removeTable(String tableName) throws SQLException {
+    public PMetaData removeTable(PName tenantId, String tableName) throws SQLException {
         PTable table;
-        Map<String,PTable> tables = Maps.newHashMap(metaData);
-        if ((table=tables.remove(tableName)) == null) {
+        Map<PTableKey,PTable> tables = Maps.newHashMap(metaData);
+        if ((table=tables.remove(new PTableKey(tenantId, tableName))) == null) {
             throw new TableNotFoundException(tableName);
         } else {
             for (PTable index : table.getIndexes()) {
-                if (tables.remove(index.getName().getString()) == null) {
+                if (tables.remove(index.getKey()) == null) {
                     throw new TableNotFoundException(index.getName().getString());
                 }
             }
@@ -110,9 +111,9 @@ public class PMetaDataImpl implements PMetaData {
     }
     
     @Override
-    public PMetaData removeColumn(String tableName, String familyName, String columnName, long tableTimeStamp, long tableSeqNum) throws SQLException {
-        PTable table = getTable(tableName);
-        Map<String,PTable> tables = Maps.newHashMap(metaData);
+    public PMetaData removeColumn(PName tenantId, String tableName, String familyName, String columnName, long tableTimeStamp, long tableSeqNum) throws SQLException {
+        PTable table = getTable(new PTableKey(tenantId, tableName));
+        Map<PTableKey,PTable> tables = Maps.newHashMap(metaData);
         PColumn column;
         if (familyName == null) {
             column = table.getPKColumn(columnName);
@@ -137,7 +138,7 @@ public class PMetaDataImpl implements PMetaData {
         }
         
         PTable newTable = PTableImpl.makePTable(table, tableTimeStamp, tableSeqNum, columns);
-        tables.put(tableName, newTable);
+        tables.put(newTable.getKey(), newTable);
         return new PMetaDataImpl(tables);
     }
 
@@ -145,8 +146,8 @@ public class PMetaDataImpl implements PMetaData {
         if (!hasNewerMetaData(scn, metaData)) {
             return metaData;
         }
-        Map<String,PTable> newTables = Maps.newHashMap(metaData.getTables());
-        Iterator<Map.Entry<String, PTable>> tableIterator = newTables.entrySet().iterator();
+        Map<PTableKey,PTable> newTables = Maps.newHashMap(metaData.getTables());
+        Iterator<Map.Entry<PTableKey, PTable>> tableIterator = newTables.entrySet().iterator();
         boolean wasModified = false;
         while (tableIterator.hasNext()) {
             PTable table = tableIterator.next().getValue();
@@ -184,8 +185,8 @@ public class PMetaDataImpl implements PMetaData {
         if (!hasMultiTenantMetaData(metaData)) {
             return metaData;
         }
-        Map<String,PTable> newTables = Maps.newHashMap(metaData.getTables());
-        Iterator<Map.Entry<String, PTable>> tableIterator = newTables.entrySet().iterator();
+        Map<PTableKey,PTable> newTables = Maps.newHashMap(metaData.getTables());
+        Iterator<Map.Entry<PTableKey, PTable>> tableIterator = newTables.entrySet().iterator();
         while (tableIterator.hasNext()) {
             PTable table = tableIterator.next().getValue();
             if (table.isMultiTenant()) {

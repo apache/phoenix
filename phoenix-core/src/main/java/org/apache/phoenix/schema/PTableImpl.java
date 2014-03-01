@@ -76,6 +76,7 @@ import com.google.common.collect.Maps;
 public class PTableImpl implements PTable {
     private static final Integer NO_SALTING = -1;
     
+    private PTableKey key;
     private PName name;
     private PName schemaName;
     private PName tableName;
@@ -119,6 +120,7 @@ public class PTableImpl implements PTable {
     public PTableImpl(PName tenantId, String schemaName, String tableName, long timestamp, List<PColumnFamily> families) { // For base table of mapped VIEW
         this.tenantId = tenantId;
         this.name = PNameFactory.newName(SchemaUtil.getTableName(schemaName, tableName));
+        this.key = new PTableKey(tenantId, name.getString());
         this.schemaName = PNameFactory.newName(schemaName);
         this.tableName = PNameFactory.newName(tableName);
         this.type = PTableType.VIEW;
@@ -236,7 +238,7 @@ public class PTableImpl implements PTable {
         if (schemaName == null) {
             throw new NullPointerException();
         }
-        int estimatedSize = SizedUtil.OBJECT_SIZE + 26 * SizedUtil.POINTER_SIZE + 4 * SizedUtil.INT_SIZE + 2 * SizedUtil.LONG_SIZE + 2 * SizedUtil.INT_OBJECT_SIZE +
+        int estimatedSize = SizedUtil.OBJECT_SIZE * 2 + 23 * SizedUtil.POINTER_SIZE + 4 * SizedUtil.INT_SIZE + 2 * SizedUtil.LONG_SIZE + 2 * SizedUtil.INT_OBJECT_SIZE +
               PNameFactory.getEstimatedSize(tenantId) + 
               PNameFactory.getEstimatedSize(schemaName) + 
               PNameFactory.getEstimatedSize(tableName) + 
@@ -247,6 +249,7 @@ public class PTableImpl implements PTable {
         this.schemaName = schemaName;
         this.tableName = tableName;
         this.name = PNameFactory.newName(SchemaUtil.getTableName(schemaName.getString(), tableName.getString()));
+        this.key = new PTableKey(tenantId, name.getString());
         this.type = type;
         this.state = state;
         this.timeStamp = timeStamp;
@@ -923,5 +926,10 @@ public class PTableImpl implements PTable {
     @Override
     public PName getTenantId() {
         return tenantId;
+    }
+
+    @Override
+    public PTableKey getKey() {
+        return key;
     }
 }

@@ -55,6 +55,7 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
@@ -203,14 +204,19 @@ public class FromCompiler {
             boolean didRetry = false;
             MetaDataMutationResult result = null;
             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+            PName tenantId = connection.getTenantId();
             while (true) {
                 try {
+                    PTable theTable = null;
                     if (!updateCacheOnlyIfAutoCommit || connection.getAutoCommit()) {
                         retry = false; // No reason to retry after this
                         result = client.updateCache(schemaName, tableName);
                         timeStamp = result.getMutationTime();
+                        theTable = result.getTable();
+                    } 
+                    if (theTable == null) {
+                        theTable = connection.getPMetaData().getTable(new PTableKey(tenantId, fullTableName));
                     }
-                    PTable theTable = connection.getPMetaData().getTable(fullTableName);
                     // If dynamic columns have been specified add them to the table declaration
                     if (!table.getDynamicColumns().isEmpty()) {
                         theTable = this.addDynamicColumns(table.getDynamicColumns(), theTable);
@@ -221,6 +227,10 @@ public class FromCompiler {
                     }
                     break;
                 } catch (TableNotFoundException e) {
+                    if (tenantId != null) { // Check with null tenantId next
+                        tenantId = null;
+                        continue;
+                    }
                     sqlE = new TableNotFoundException(e,timeStamp);
                 }
                 // If we haven't already tried, update our cache and retry
@@ -358,7 +368,8 @@ public class FromCompiler {
                 List<ColumnDef> dynamicColumnDefs) throws SQLException {
             MetaDataMutationResult result = client.updateCache(schemaName, tableName);
             long timeStamp = result.getMutationTime();
-            PTable theTable = connection.getPMetaData().getTable(SchemaUtil.getTableName(schemaName, tableName));
+            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+            PTable theTable = connection.getPMetaData().getTable(new PTableKey(connection.getTenantId(), fullTableName));
 
             // If dynamic columns have been specified add them to the table declaration
             if (!dynamicColumnDefs.isEmpty()) {

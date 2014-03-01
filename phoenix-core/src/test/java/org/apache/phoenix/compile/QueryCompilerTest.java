@@ -52,6 +52,7 @@ import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
@@ -145,7 +146,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             String query = "CREATE TABLE t1 (k integer not null primary key, a.k decimal, b.k decimal)";
             conn.createStatement().execute(query);
-            PColumn c = conn.unwrap(PhoenixConnection.class).getPMetaData().getTable("T1").getColumn("K");
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            PColumn c = pconn.getPMetaData().getTable(new PTableKey(pconn.getTenantId(), "T1")).getColumn("K");
             assertTrue(SchemaUtil.isPKColumn(c));
         } finally {
             conn.close();
@@ -1104,6 +1106,11 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
     
+    private void assertImmutableRows(Connection conn, String fullTableName, boolean expectedValue) throws SQLException {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        assertEquals(expectedValue, pconn.getPMetaData().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isImmutableRows());
+    }
+    
     @Test
     public void testDeleteFromImmutableWithKV() throws Exception {
         String ddl = "CREATE TABLE t (k1 VARCHAR, v1 VARCHAR, v2 VARCHAR CONSTRAINT pk PRIMARY KEY(k1)) immutable_rows=true";
@@ -1111,7 +1118,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         try {
             conn.createStatement().execute(ddl);
+            assertImmutableRows(conn, "T", true);
             conn.createStatement().execute(indexDDL);
+            assertImmutableRows(conn, "T", true);
             conn.createStatement().execute("DELETE FROM t");
             fail();
         } catch (SQLException e) {

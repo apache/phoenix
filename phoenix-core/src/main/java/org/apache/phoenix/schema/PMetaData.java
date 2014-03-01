@@ -23,6 +23,6 @@ import org.apache.phoenix.query.MetaDataMutated;
 
 
 public interface PMetaData extends MetaDataMutated {
-    public PTable getTable(String name) throws TableNotFoundException;
-    public Map<String, PTable> getTables();
+    public PTable getTable(PTableKey key) throws TableNotFoundException;
+    public Map<PTableKey, PTable> getTables();
 }

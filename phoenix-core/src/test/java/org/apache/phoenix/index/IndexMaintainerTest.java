@@ -38,9 +38,6 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
-import org.junit.Test;
-
-import com.google.common.collect.Maps;
 import org.apache.phoenix.client.ClientKeyValueBuilder;
 import org.apache.phoenix.client.GenericKeyValueBuilder;
 import org.apache.phoenix.client.KeyValueBuilder;
@@ -51,8 +48,12 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Test;
+
+import com.google.common.collect.Maps;
 
 public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
     private static final String DEFAULT_SCHEMA_NAME = "";
@@ -98,12 +99,14 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
             String pk, String indexColumns, Object[] values, String includeColumns,
             String dataProps, String indexProps, KeyValueBuilder builder) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String fullTableName = SchemaUtil.getTableName(schemaName, tableName) ;
+        String fullTableName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(schemaName),SchemaUtil.normalizeIdentifier(tableName));
+        String fullIndexName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(schemaName),SchemaUtil.normalizeIdentifier("idx"));
         conn.createStatement().execute("CREATE TABLE " + fullTableName + "(" + dataColumns + " CONSTRAINT pk PRIMARY KEY (" + pk + "))  " + (dataProps.isEmpty() ? "" : dataProps) );
         try {
             conn.createStatement().execute("CREATE INDEX idx ON " + fullTableName + "(" + indexColumns + ") " + (includeColumns.isEmpty() ? "" : "INCLUDE (" + includeColumns + ") ") + (indexProps.isEmpty() ? "" : indexProps));
-            PTable table = conn.unwrap(PhoenixConnection.class).getPMetaData().getTable(SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(schemaName),SchemaUtil.normalizeIdentifier(tableName)));
-            PTable index = conn.unwrap(PhoenixConnection.class).getPMetaData().getTable(SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(schemaName),SchemaUtil.normalizeIdentifier("idx")));
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            PTable table = pconn.getPMetaData().getTable(new PTableKey(pconn.getTenantId(), fullTableName));
+            PTable index = pconn.getPMetaData().getTable(new PTableKey(pconn.getTenantId(),fullIndexName));
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             table.getIndexMaintainers(ptr);
             List<IndexMaintainer> c1 = IndexMaintainer.deserialize(ptr, builder);

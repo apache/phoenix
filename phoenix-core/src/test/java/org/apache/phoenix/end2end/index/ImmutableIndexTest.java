@@ -37,6 +37,7 @@ import org.apache.phoenix.end2end.BaseHBaseManagedTimeTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
@@ -153,11 +154,17 @@ public class ImmutableIndexTest extends BaseHBaseManagedTimeTest{
         
     }
     
+    private void assertImmutableRows(Connection conn, String fullTableName, boolean expectedValue) throws SQLException {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        assertEquals(expectedValue, pconn.getPMetaData().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isImmutableRows());
+    }
+    
     @Test
     public void testAlterTableWithImmutability() throws Exception {
 
         String query;
         ResultSet rs;
+        String fullTableName = "T";
 
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -170,21 +177,13 @@ public class ImmutableIndexTest extends BaseHBaseManagedTimeTest{
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
 
-        assertFalse(conn.unwrap(PhoenixConnection.class).getPMetaData().getTable("T")
-                .isImmutableRows());
-
+        assertImmutableRows(conn,fullTableName, false);
         conn.createStatement().execute("ALTER TABLE t SET IMMUTABLE_ROWS=true");
-
-        assertTrue(conn.unwrap(PhoenixConnection.class).getPMetaData().getTable("T")
-                .isImmutableRows());
+        assertImmutableRows(conn,fullTableName, true);
         
         
         conn.createStatement().execute("ALTER TABLE t SET immutable_rows=false");
-
-        assertFalse(conn.unwrap(PhoenixConnection.class).getPMetaData().getTable("T")
-                .isImmutableRows());
-        
-       
+        assertImmutableRows(conn,fullTableName, false);
     }
     
     @Test

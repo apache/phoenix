@@ -81,7 +81,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNormalizedName;
+import org.apache.phoenix.schema.PNameFactory;
 
 
 /**
@@ -103,8 +103,8 @@ public interface QueryConstants {
     public final static String PHOENIX_SCHEMA = "system";
     public final static String PHOENIX_METADATA = "table";
 
-    public final static PName SINGLE_COLUMN_NAME = new PNormalizedName("s");
-    public final static PName SINGLE_COLUMN_FAMILY_NAME = new PNormalizedName("s");
+    public final static PName SINGLE_COLUMN_NAME = PNameFactory.newNormalizedName("s");
+    public final static PName SINGLE_COLUMN_FAMILY_NAME = PNameFactory.newNormalizedName("s");
     public final static byte[] SINGLE_COLUMN = SINGLE_COLUMN_NAME.getBytes();
     public final static byte[] SINGLE_COLUMN_FAMILY = SINGLE_COLUMN_FAMILY_NAME.getBytes();
 

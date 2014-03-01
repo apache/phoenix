@@ -93,11 +93,12 @@ public class PNameImpl implements PName {
     public boolean equals(Object obj) {
         if (this == obj) return true;
         if (obj == null) return false;
-        if (getClass() != obj.getClass()) return false;
-        PNameImpl other = (PNameImpl) obj;
+        if (! (obj instanceof PName) ) return false;
+        PName other = (PName)obj;
+        if (hashCode() != other.hashCode()) return false;
         // Compare normalized stringName for equality, since bytesName
         // may differ since it remains case sensitive.
-        if (!data.stringName.equals(other.data.stringName)) return false;
+        if (!getString().equals(other.getString())) return false;
         return true;
     }
 

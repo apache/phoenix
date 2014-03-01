@@ -22,6 +22,7 @@ import java.util.List;
 
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PMetaData;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 
 
@@ -34,7 +35,7 @@ import org.apache.phoenix.schema.PTable;
  */
 public interface MetaDataMutated {
     PMetaData addTable(PTable table) throws SQLException;
-    PMetaData removeTable(String tableName) throws SQLException;
-    PMetaData addColumn(String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows) throws SQLException;
-    PMetaData removeColumn(String tableName, String familyName, String columnName, long tableTimeStamp, long tableSeqNum) throws SQLException;
+    PMetaData removeTable(PName tenantId, String tableName) throws SQLException;
+    PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows) throws SQLException;
+    PMetaData removeColumn(PName tenantId, String tableName, String familyName, String columnName, long tableTimeStamp, long tableSeqNum) throws SQLException;
 }

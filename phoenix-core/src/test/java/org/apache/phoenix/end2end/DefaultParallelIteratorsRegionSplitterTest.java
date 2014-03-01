@@ -19,7 +19,6 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
-import static org.apache.phoenix.util.TestUtil.STABLE_SCHEMA_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -40,10 +39,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
-import com.google.common.collect.Maps;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.iterate.DefaultParallelIteratorRegionSplitter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -56,10 +51,14 @@ import org.apache.phoenix.query.StatsManager;
 import org.apache.phoenix.query.StatsManagerImpl;
 import org.apache.phoenix.query.StatsManagerImpl.TimeKeeper;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import com.google.common.collect.Maps;
 
 
 /**
@@ -115,7 +114,7 @@ public class DefaultParallelIteratorsRegionSplitterTest extends BaseClientManage
 
     private static TableRef getTableRef(Connection conn, long ts) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        TableRef table = new TableRef(null,pconn.getPMetaData().getTable(SchemaUtil.getTableName(STABLE_SCHEMA_NAME, STABLE_NAME)),ts, false);
+        TableRef table = new TableRef(null,pconn.getPMetaData().getTable(new PTableKey(pconn.getTenantId(), STABLE_NAME)),ts, false);
         return table;
     }
     

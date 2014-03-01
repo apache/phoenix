@@ -260,6 +260,7 @@ public class MetaDataClient {
     
     private MetaDataMutationResult updateCache(String schemaName, String tableName, boolean alwaysHitServer) throws SQLException { // TODO: pass byte[] here
         Long scn = connection.getSCN();
+        PName tenantId = connection.getTenantId();
         long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
         if (TYPE_SCHEMA.equals(schemaName) && !alwaysHitServer) {
             return SYSTEM_TABLE_RESULT;
@@ -267,9 +268,8 @@ public class MetaDataClient {
         PTable table = null;
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         long tableTimestamp = HConstants.LATEST_TIMESTAMP;
-        PName tenantIdName = connection.getTenantId();
         try {
-            table = connection.getPMetaData().getTable(fullTableName);
+            table = connection.getPMetaData().getTable(new PTableKey(tenantId, fullTableName));
             tableTimestamp = table.getTimeStamp();
         } catch (TableNotFoundException e) {
             // TODO: Try again on services cache, as we may be looking for
@@ -280,12 +280,7 @@ public class MetaDataClient {
             return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,QueryConstants.UNSET_TIMESTAMP,table);
         }
         
-        byte[] tenantId = null;
-        int maxTryCount = 1;
-        if (tenantIdName != null) {
-            tenantId = tenantIdName.getBytes();
-            maxTryCount = 2;
-        }
+        int maxTryCount = tenantId == null ? 1 : 2;
         int tryCount = 0;
         MetaDataMutationResult result;
         
@@ -323,11 +318,11 @@ public class MetaDataClient {
                         return result;
                     }
                     if (code == MutationCode.TABLE_NOT_FOUND && tryCount + 1 == maxTryCount) {
-                        connection.removeTable(fullTableName);
+                        connection.removeTable(tenantId, fullTableName);
                     }
                 }
             }
-            tenantId = null;
+            tenantId = null; // Try again with global tenantId
         } while (++tryCount < maxTryCount);
         
         return result;
@@ -1228,8 +1223,9 @@ public class MetaDataClient {
         connection.rollback();
         boolean wasAutoCommit = connection.getAutoCommit();
         try {
-            String tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getString();
-            byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+            PName tenantId = connection.getTenantId();
+            String tenantIdStr = tenantId == null ? null : tenantId.getString();
+            byte[] key = SchemaUtil.getTableKey(tenantIdStr, schemaName, tableName);
             Long scn = connection.getSCN();
             long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
             List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize(2);
@@ -1237,7 +1233,7 @@ public class MetaDataClient {
             Delete tableDelete = new Delete(key, clientTimeStamp, null);
             tableMetaData.add(tableDelete);
             if (parentTableName != null) {
-                byte[] linkKey = MetaDataUtil.getParentLinkKey(tenantId, schemaName, parentTableName, tableName);
+                byte[] linkKey = MetaDataUtil.getParentLinkKey(tenantIdStr, schemaName, parentTableName, tableName);
                 @SuppressWarnings("deprecation") // FIXME: Remove when unintentionally deprecated method is fixed (HBASE-7870).
                 Delete linkDelete = new Delete(linkKey, clientTimeStamp, null);
                 tableMetaData.add(linkDelete);
@@ -1259,7 +1255,7 @@ public class MetaDataClient {
                 default:
                     try {
                         // TODO: should we update the parent table by removing the index?
-                        connection.removeTable(tableName);
+                        connection.removeTable(tenantId, tableName);
                     } catch (TableNotFoundException ignore) { } // Ignore - just means wasn't cached
                     
                     // TODO: we need to drop the index data when a view is dropped
@@ -1271,7 +1267,8 @@ public class MetaDataClient {
                         // Create empty table and schema - they're only used to get the name from
                         // PName name, PTableType type, long timeStamp, long sequenceNumber, List<PColumn> columns
                         List<TableRef> tableRefs = Lists.newArrayListWithExpectedSize(2 + table.getIndexes().size());
-                        if (tableType == PTableType.TABLE && MetaDataUtil.hasViewIndexTable(connection, table.getPhysicalName())) {
+                        // All multi-tenant tables have a view index table, so no need to check in that case
+                        if (tableType == PTableType.TABLE && (table.isMultiTenant() || MetaDataUtil.hasViewIndexTable(connection, table.getPhysicalName()))) {
                             MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName());
                             // TODO: consider removing this, as the DROP INDEX done for each DROP VIEW command
                             // would have deleted all the rows already
@@ -1303,9 +1300,10 @@ public class MetaDataClient {
 
     private MutationCode processMutationResult(String schemaName, String tableName, MetaDataMutationResult result) throws SQLException {
         final MutationCode mutationCode = result.getMutationCode();
+        PName tenantId = connection.getTenantId();
         switch (mutationCode) {
         case TABLE_NOT_FOUND:
-            connection.removeTable(tableName);
+            connection.removeTable(tenantId, tableName);
             throw new TableNotFoundException(schemaName, tableName);
         case UNALLOWED_TABLE_MUTATION:
             String columnName = null;
@@ -1400,6 +1398,7 @@ public class MetaDataClient {
         boolean wasAutoCommit = connection.getAutoCommit();
         try {
             connection.setAutoCommit(false);
+            PName tenantId = connection.getTenantId();
             TableName tableNameNode = statement.getTable().getName();
             String schemaName = tableNameNode.getSchemaName();
             String tableName = tableNameNode.getTableName();
@@ -1581,7 +1580,7 @@ public class MetaDataClient {
                     // Only update client side cache if we aren't adding a PK column to a table with indexes.
                     // We could update the cache manually then too, it'd just be a pain.
                     if (!isAddingPKColumn || table.getIndexes().isEmpty()) {
-                        connection.addColumn(SchemaUtil.getTableName(schemaName, tableName), columns, result.getMutationTime(), seqNum, isImmutableRows == null ? table.isImmutableRows() : isImmutableRows);
+                        connection.addColumn(tenantId, SchemaUtil.getTableName(schemaName, tableName), columns, result.getMutationTime(), seqNum, isImmutableRows == null ? table.isImmutableRows() : isImmutableRows);
                     }
                     // Delete rows in view index if we haven't dropped it already
                     // We only need to do this if the multiTenant transitioned to false
@@ -1703,6 +1702,7 @@ public class MetaDataClient {
         boolean wasAutoCommit = connection.getAutoCommit();
         try {
             connection.setAutoCommit(false);
+            PName tenantId = connection.getTenantId();
             TableName tableNameNode = statement.getTable().getName();
             String schemaName = tableNameNode.getSchemaName();
             String tableName = tableNameNode.getTableName();
@@ -1818,7 +1818,7 @@ public class MetaDataClient {
                     // the server when needed.
                     if (columnsToDrop.size() > 0 && indexesToDrop.isEmpty()) {
                         for(PColumn columnToDrop : tableColumnsToDrop) {
-                            connection.removeColumn(SchemaUtil.getTableName(schemaName, tableName), columnToDrop.getFamilyName().getString() , columnToDrop.getName().getString(), result.getMutationTime(), seqNum);
+                            connection.removeColumn(tenantId, SchemaUtil.getTableName(schemaName, tableName) , columnToDrop.getFamilyName().getString(), columnToDrop.getName().getString(), result.getMutationTime(), seqNum);
                         }
                     }
                     // If we have a VIEW, then only delete the metadata, and leave the table data alone
@@ -1861,7 +1861,7 @@ public class MetaDataClient {
                     if (retried) {
                         throw e;
                     }
-                    table = connection.getPMetaData().getTable(fullTableName);
+                    table = connection.getPMetaData().getTable(new PTableKey(tenantId, fullTableName));
                     retried = true;
                 }
             }

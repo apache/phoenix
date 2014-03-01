@@ -43,6 +43,7 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableNotFoundException;
 
@@ -318,7 +319,7 @@ public class PhoenixRuntime {
         PTable table = null;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         try {
-            table = pconn.getPMetaData().getTable(name);
+            table = pconn.getPMetaData().getTable(new PTableKey(pconn.getTenantId(), name));
         } catch (TableNotFoundException e) {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
             String tableName = SchemaUtil.getTableNameFromFullName(name);

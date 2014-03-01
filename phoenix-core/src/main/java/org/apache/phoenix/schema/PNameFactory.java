@@ -20,6 +20,7 @@ package org.apache.phoenix.schema;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.SchemaUtil;
 
 public class PNameFactory {
     public static int getEstimatedSize(PName name) {
@@ -29,6 +30,10 @@ public class PNameFactory {
     private PNameFactory() {
     }
 
+    public static PName newNormalizedName(String name) {
+        return newName(SchemaUtil.normalizeIdentifier(name));
+    }
+    
     public static PName newName(String name) {
         return name == null || name.isEmpty() ? PName.EMPTY_NAME : 
             name.equals(QueryConstants.EMPTY_COLUMN_NAME ) ?  PName.EMPTY_COLUMN_NAME : 

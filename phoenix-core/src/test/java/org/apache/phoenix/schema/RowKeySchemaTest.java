@@ -31,13 +31,13 @@ import java.util.List;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
-import org.junit.Test;
-
-import com.google.common.collect.Lists;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Test;
+
+import com.google.common.collect.Lists;
 
 public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
 
@@ -52,9 +52,10 @@ public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
         String schemaName = "";
         String tableName = "T";
         Connection conn = DriverManager.getConnection(getUrl());
-        String fullTableName = SchemaUtil.getTableName(schemaName, tableName) ;
+        String fullTableName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(schemaName),SchemaUtil.normalizeIdentifier(tableName));
         conn.createStatement().execute("CREATE TABLE " + fullTableName + "(" + dataColumns + " CONSTRAINT pk PRIMARY KEY (" + pk + "))  " + (dataProps.isEmpty() ? "" : dataProps) );
-        PTable table = conn.unwrap(PhoenixConnection.class).getPMetaData().getTable(SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(schemaName),SchemaUtil.normalizeIdentifier(tableName)));
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getPMetaData().getTable(new PTableKey(pconn.getTenantId(), fullTableName));
         conn.close();
         StringBuilder buf = new StringBuilder("UPSERT INTO " + fullTableName  + " VALUES(");
         for (int i = 0; i < values.length; i++) {

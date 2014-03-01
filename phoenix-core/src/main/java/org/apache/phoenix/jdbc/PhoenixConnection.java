@@ -639,28 +639,28 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
 
     @Override
-    public PMetaData addColumn(String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows)
+    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows)
             throws SQLException {
-        metaData = metaData.addColumn(tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
+        metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
         //Cascade through to connectionQueryServices too
-        getQueryServices().addColumn(tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
+        getQueryServices().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
         return metaData;
     }
 
     @Override
-    public PMetaData removeTable(String tableName) throws SQLException {
-        metaData = metaData.removeTable(tableName);
+    public PMetaData removeTable(PName tenantId, String tableName) throws SQLException {
+        metaData = metaData.removeTable(tenantId, tableName);
         //Cascade through to connectionQueryServices too
-        getQueryServices().removeTable(tableName);
+        getQueryServices().removeTable(tenantId, tableName);
         return metaData;
     }
 
     @Override
-    public PMetaData removeColumn(String tableName, String familyName, String columnName, long tableTimeStamp,
-            long tableSeqNum) throws SQLException {
-        metaData = metaData.removeColumn(tableName, familyName, columnName, tableTimeStamp, tableSeqNum);
+    public PMetaData removeColumn(PName tenantId, String tableName, String familyName, String columnName,
+            long tableTimeStamp, long tableSeqNum) throws SQLException {
+        metaData = metaData.removeColumn(tenantId, tableName, familyName, columnName, tableTimeStamp, tableSeqNum);
         //Cascade through to connectionQueryServices too
-        getQueryServices().removeColumn(tableName, familyName, columnName, tableTimeStamp, tableSeqNum);
+        getQueryServices().removeColumn(tenantId, tableName, familyName, columnName, tableTimeStamp, tableSeqNum);
         return metaData;
     }
 

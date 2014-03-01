@@ -36,6 +36,7 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PMetaData;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
@@ -79,21 +80,21 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public PMetaData addColumn(String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum,
-            boolean isImmutableRows) throws SQLException {
-        return getDelegate().addColumn(tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
+    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
+            long tableSeqNum, boolean isImmutableRows) throws SQLException {
+        return getDelegate().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
     }
 
     @Override
-    public PMetaData removeTable(String tableName)
+    public PMetaData removeTable(PName tenantId, String tableName)
             throws SQLException {
-        return getDelegate().removeTable(tableName);
+        return getDelegate().removeTable(tenantId, tableName);
     }
 
     @Override
-    public PMetaData removeColumn(String tableName, String familyName, String columnName, long tableTimeStamp,
-            long tableSeqNum) throws SQLException {
-        return getDelegate().removeColumn(tableName, familyName, columnName, tableTimeStamp, tableSeqNum);
+    public PMetaData removeColumn(PName tenantId, String tableName, String familyName, String columnName,
+            long tableTimeStamp, long tableSeqNum) throws SQLException {
+        return getDelegate().removeColumn(tenantId, tableName, familyName, columnName, tableTimeStamp, tableSeqNum);
     }
 
     @Override
@@ -102,7 +103,7 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public MetaDataMutationResult getTable(byte[] tenantId, byte[] schemaBytes, byte[] tableBytes, long tableTimestamp, long clientTimestamp) throws SQLException {
+    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaBytes, byte[] tableBytes, long tableTimestamp, long clientTimestamp) throws SQLException {
         return getDelegate().getTable(tenantId, schemaBytes, tableBytes, tableTimestamp, clientTimestamp);
     }
 
