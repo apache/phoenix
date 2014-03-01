@@ -174,6 +174,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         try {
             while (true) {
                 PhoenixPreparedStatement stmt = new PhoenixPreparedStatement(this, parser);
+                this.statements.add(stmt);
                 ParameterMetaData paramMetaData = stmt.getParameterMetaData();
                 for (int i = 0; i < paramMetaData.getParameterCount(); i++) {
                     stmt.setObject(i+1, binds.get(bindsOffset+i));
