@@ -21,9 +21,11 @@ import java.io.*;
 import java.util.*;
 import java.util.Map.Entry;
 
-import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.filter.FilterBase;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryConstants;
@@ -37,15 +39,17 @@ public class ColumnProjectionFilter extends FilterBase {
 
     private byte[] emptyCFName;
     private Map<ImmutableBytesPtr, NavigableSet<ImmutableBytesPtr>> columnsTracker;
+    private Set<byte[]> conditionOnlyCfs;
 
     public ColumnProjectionFilter() {
 
     }
 
     public ColumnProjectionFilter(byte[] emptyCFName,
-            Map<ImmutableBytesPtr, NavigableSet<ImmutableBytesPtr>> columnsTracker) {
+            Map<ImmutableBytesPtr, NavigableSet<ImmutableBytesPtr>> columnsTracker, Set<byte[]> conditionOnlyCfs) {
         this.emptyCFName = emptyCFName;
         this.columnsTracker = columnsTracker;
+        this.conditionOnlyCfs = conditionOnlyCfs;
     }
 
     @Override
@@ -68,6 +72,12 @@ public class ColumnProjectionFilter extends FilterBase {
             columnsTracker.put(new ImmutableBytesPtr(cf), qualifiers);
             familyMapSize--;
         }
+        int conditionOnlyCfsSize = WritableUtils.readVInt(input);
+        this.conditionOnlyCfs = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
+        while (conditionOnlyCfsSize > 0) {
+            this.conditionOnlyCfs.add(WritableUtils.readCompressedByteArray(input));
+            conditionOnlyCfsSize--;
+        }
     }
 
     @Override
@@ -85,6 +95,11 @@ public class ColumnProjectionFilter extends FilterBase {
                     WritableUtils.writeCompressedByteArray(output, cq.copyBytes());
                 }
             }
+        }
+        // Write conditionOnlyCfs
+        WritableUtils.writeVInt(output, this.conditionOnlyCfs.size());
+        for (byte[] f : this.conditionOnlyCfs) {
+            WritableUtils.writeCompressedByteArray(output, f);
         }
     }
 
@@ -117,6 +132,11 @@ public class ColumnProjectionFilter extends FilterBase {
     @Override
     public boolean hasFilterRow() {
         return true;
+    }
+
+    @Override
+    public boolean isFamilyEssential(byte[] name) {
+        return conditionOnlyCfs.isEmpty() || this.conditionOnlyCfs.contains(name);
     }
 
     @Override

@@ -105,37 +105,72 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
             ScanUtil.andFilterAtEnd(scan, new PageFilter(limit));
         }
 
+        if (!(statement.isAggregate())) {
+            doColumnProjectionOptimization(context, scan, table);
+        } else {
+            // TODO avoid code duplication.
+            for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
+                scan.addColumn(whereCol.getFirst(), whereCol.getSecond());
+            }
+            if (table.getViewType() == ViewType.MAPPED) {
+                // Since we don't have the empty key value in MAPPED tables, we must select all CFs in HRS. But only the
+                // selected column values are returned back to client
+                for (PColumnFamily family : table.getColumnFamilies()) {
+                    scan.addFamily(family.getName().getBytes());
+                }
+            }
+        }
+    }
+
+    private void doColumnProjectionOptimization(StatementContext context, Scan scan, PTable table) {
         Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
         if (familyMap != null && !familyMap.isEmpty()) {
             // columnsTracker contain cf -> qualifiers which should get returned.
             Map<ImmutableBytesPtr, NavigableSet<ImmutableBytesPtr>> columnsTracker = 
                     new TreeMap<ImmutableBytesPtr, NavigableSet<ImmutableBytesPtr>>();
-            for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
-                ImmutableBytesPtr cf = new ImmutableBytesPtr(entry.getKey());
-                NavigableSet<byte[]> qs = entry.getValue();
-                NavigableSet<ImmutableBytesPtr> cols = null;
-                if (qs != null) {
-                    cols = new TreeSet<ImmutableBytesPtr>();
-                    for (byte[] q : qs) {
-                        cols.add(new ImmutableBytesPtr(q));
-                    }
+            Set<byte[]> conditionOnlyCfs = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
+            int referencedCfCount = familyMap.size();
+            for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
+                if (!(familyMap.containsKey(whereCol.getFirst()))) {
+                    referencedCfCount++;
                 }
-                columnsTracker.put(cf, cols);
+            }
+            boolean useOptimization = referencedCfCount == 1;
+            // when referencedCfCount is >1 we are not using the optimization as of now
+            // TODO support adding a HINT in query so that in case of cf count>1 also, this optimization can be applied.
+            if (useOptimization) {
+                for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
+                    ImmutableBytesPtr cf = new ImmutableBytesPtr(entry.getKey());
+                    NavigableSet<byte[]> qs = entry.getValue();
+                    NavigableSet<ImmutableBytesPtr> cols = null;
+                    if (qs != null) {
+                        cols = new TreeSet<ImmutableBytesPtr>();
+                        for (byte[] q : qs) {
+                            cols.add(new ImmutableBytesPtr(q));
+                        }
+                    }
+                    columnsTracker.put(cf, cols);
+                }
             }
             // Making sure that where condition CFs are getting scanned at HRS.
             for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
-                if (!(familyMap.containsKey(whereCol.getFirst()))) {
-                    scan.addFamily(whereCol.getFirst());
+                if (useOptimization) {
+                    if (!(familyMap.containsKey(whereCol.getFirst()))) {
+                        scan.addFamily(whereCol.getFirst());
+                        conditionOnlyCfs.add(whereCol.getFirst());
+                    }
+                } else {
+                    scan.addColumn(whereCol.getFirst(), whereCol.getSecond());
                 }
             }
-            if (!columnsTracker.isEmpty()) {
+            if (useOptimization && !columnsTracker.isEmpty()) {
                 for (ImmutableBytesPtr f : columnsTracker.keySet()) {
                     // This addFamily will remove explicit cols in scan familyMap and make it as entire row.
                     // We don't want the ExplicitColumnTracker to be used. Instead we have the ColumnProjectionFilter
                     scan.addFamily(f.get());
                 }
                 ScanUtil.andFilterAtEnd(scan, new ColumnProjectionFilter(SchemaUtil.getEmptyColumnFamily(table),
-                        columnsTracker));
+                        columnsTracker, conditionOnlyCfs));
             }
             if (table.getViewType() == ViewType.MAPPED) {
                 // Since we don't have the empty key value in MAPPED tables, we must select all CFs in HRS. But only the
