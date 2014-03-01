@@ -30,6 +30,8 @@ import java.util.Set;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.AndExpression;
+import org.apache.phoenix.expression.BaseExpression;
+import org.apache.phoenix.expression.BaseExpression.ExpressionComparabilityWrapper;
 import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -41,7 +43,6 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
-import org.apache.phoenix.expression.RowValueConstructorExpression.ExpressionComparabilityWrapper;
 import org.apache.phoenix.expression.function.FunctionExpression.OrderPreserving;
 import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.visitor.TraverseNoExpressionVisitor;
@@ -757,7 +758,6 @@ public class WhereOptimizer {
             List<KeyRange> ranges = Lists.newArrayListWithExpectedSize(keyExpressions.size());
             KeySlot childSlot = childParts.get(0).iterator().next();
             KeyPart childPart = childSlot.getKeyPart();
-            SortOrder sortOrder = node.getChildren().get(0).getSortOrder();
             // We can only optimize a row value constructor that is fully qualified
             if (childSlot.getPKSpan() > 1 && !isFullyQualified(childSlot.getPKSpan())) {
                 // Just return a key part that has the min/max of the IN list, but doesn't
@@ -771,9 +771,6 @@ public class WhereOptimizer {
             for (Expression key : keyExpressions) {
                 KeyRange range = childPart.getKeyRange(CompareOp.EQUAL, key);
                 if (range != KeyRange.EMPTY_RANGE) { // null means it can't possibly be in range
-                    if (sortOrder == SortOrder.DESC) {
-                        range = range.invert();
-                    }
                     ranges.add(range);
                 }
             }
@@ -1043,7 +1040,7 @@ public class WhereOptimizer {
                     // applying the appropriate transformations to the RHS (through the KeyPart#getKeyRange method).
                     // For example, with WHERE (invert(a),b) < ('abc',5), the 'abc' would be inverted by going through the
                     // childPart.getKeyRange defined for the invert function.
-                    rhs = RowValueConstructorExpression.coerce(rvc, rhs, new ExpressionComparabilityWrapper() {
+                    rhs = BaseExpression.coerce(rvc, rhs, new ExpressionComparabilityWrapper() {
 
                         @Override
                         public Expression wrap(final Expression lhs, final Expression rhs) throws SQLException {

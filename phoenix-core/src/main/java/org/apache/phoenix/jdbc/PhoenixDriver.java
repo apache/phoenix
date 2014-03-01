@@ -23,7 +23,11 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import org.apache.phoenix.query.*;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
+import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesImpl;
 import org.apache.phoenix.util.SQLCloseables;
 
 
@@ -54,7 +58,26 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
 
     public PhoenixDriver() { // for Squirrel
         // Use production services implementation
-        super(new QueryServicesImpl());
+        super();
+    }
+
+    private volatile QueryServices services;
+
+    @Override
+    public QueryServices getQueryServices() {
+    	// Lazy initialize QueryServices so that we only attempt to create an HBase Configuration
+    	// object upon the first attempt to connect to any cluster. Otherwise, an attempt will be
+    	// made at driver initialization time which is too early for some systems.
+    	QueryServices result = services;
+    	if (result == null) {
+    		synchronized(this) {
+    			result = services;
+    			if(result == null) {
+    				services = result = new QueryServicesImpl();
+    			}
+    		}
+    	}
+    	return result;
     }
 
     @Override

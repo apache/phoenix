@@ -15,39 +15,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.io.Writable;
+import org.junit.Test;
 
-/**
- * Definition of a Phoenix column
- *
- * 
- * @since 0.1
- */
-public interface PColumn extends PDatum, Writable {
-
-    /**
-     * @return the name of the column qualifier
-     */
-    PName getName();
-
-    /**
-     * @return the name of the column family
-     */
-    PName getFamilyName();
-
-    /**
-     * @return the zero-based ordinal position of the column
-     */
-    int getPosition();
+public class SaltedViewTest extends BaseViewTest {
     
     /**
-     * @return the declared array size or zero if this is not an array
+     * Salted tests must be in their own test file to ensure that the underlying
+     * table is dropped. Otherwise, the splits may not be performed.
+     * TODO: we should throw in that case
+     * 
+     * @throws Exception
      */
-    Integer getArraySize();
-    
-    byte[] getViewConstant();
-    
-    int getEstimatedSize();
+    @Test
+    public void testSaltedUpdatableViewWithIndex() throws Exception {
+        testUpdatableViewWithIndex(3);
+    }
 }

@@ -32,6 +32,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 	PDataType baseType;
 	Object array;
 	int numElements;
+	Integer maxLength;
 	public PhoenixArray() {
 		// empty constructor
 	}
@@ -136,11 +137,26 @@ public class PhoenixArray implements Array,SQLCloseable {
 	}
 	
 	public int estimateByteSize(int pos) {
+	    if(((Object[])array)[pos] == null) {
+	        return 0;
+	    }
 		return this.baseType.estimateByteSize(((Object[])array)[pos]);
+	}
+	
+	public Integer getMaxLength(int pos) {
+	    return this.baseType.getMaxLength(((Object[])array)[pos]);
 	}
 	
 	public byte[] toBytes(int pos) {
 		return this.baseType.toBytes(((Object[])array)[pos]);
+	}
+	
+	public boolean isNull(int pos) {
+	    if(this.baseType.toBytes(((Object[])array)[pos]).length == 0) {
+	        return true;
+	    } else {
+	        return false;
+	    }
 	}
 	
 	@Override

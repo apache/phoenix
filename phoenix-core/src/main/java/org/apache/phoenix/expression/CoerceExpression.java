@@ -48,6 +48,13 @@ public class CoerceExpression extends BaseSingleExpression {
         return new CoerceExpression(expression, toType);
     }
     
+    public static Expression create(Expression expression, PDataType toType, SortOrder toSortOrder, Integer byteSize) throws SQLException {
+        if (toType == expression.getDataType() && toSortOrder == expression.getSortOrder()) {
+            return expression;
+        }
+        return new CoerceExpression(expression, toType, toSortOrder, byteSize);
+    }
+    
     //Package protected for tests
     CoerceExpression(Expression expression, PDataType toType) {
         this(expression, toType, SortOrder.getDefault(), null);

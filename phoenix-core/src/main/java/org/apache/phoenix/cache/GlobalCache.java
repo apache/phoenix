@@ -23,17 +23,22 @@ import static org.apache.phoenix.query.QueryServices.MAX_TENANT_MEMORY_PERC_ATTR
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.memory.ChildMemoryManager;
 import org.apache.phoenix.memory.GlobalMemoryManager;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.SizedUtil;
+
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.Weigher;
 
 
 /**
@@ -51,19 +56,48 @@ public class GlobalCache extends TenantCacheImpl {
     // TODO: Use Guava cache with auto removal after lack of access 
     private final ConcurrentMap<ImmutableBytesWritable,TenantCache> perTenantCacheMap = new ConcurrentHashMap<ImmutableBytesWritable,TenantCache>();
     // Cache for lastest PTable for a given Phoenix table
-    private final ConcurrentHashMap<ImmutableBytesPtr,PTable> metaDataCacheMap = new ConcurrentHashMap<ImmutableBytesPtr,PTable>();
+    private Cache<ImmutableBytesPtr,PTable> metaDataCache;
     
-    public static synchronized GlobalCache getInstance(RegionCoprocessorEnvironment env) {
-        // See http://www.cs.umd.edu/~pugh/java/memoryModel/DoubleCheckedLocking.html
-        // for explanation of why double locking doesn't work. 
-        if (INSTANCE == null) {
-            INSTANCE = new GlobalCache(env.getConfiguration());
+    public Cache<ImmutableBytesPtr,PTable> getMetaDataCache() {
+        // Lazy initialize QueryServices so that we only attempt to create an HBase Configuration
+        // object upon the first attempt to connect to any cluster. Otherwise, an attempt will be
+        // made at driver initialization time which is too early for some systems.
+        Cache<ImmutableBytesPtr,PTable> result = metaDataCache;
+        if (result == null) {
+            synchronized(this) {
+                result = metaDataCache;
+                if(result == null) {
+                    long maxSize = config.getLong(QueryServices.MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB,
+                            QueryServicesOptions.DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE);
+                    long maxTTL = config.getLong(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB,
+                            QueryServicesOptions.DEFAULT_MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS);
+                    metaDataCache = result = CacheBuilder.newBuilder()
+                            .maximumWeight(maxSize)
+                            .expireAfterAccess(maxTTL, TimeUnit.MILLISECONDS)
+                            .weigher(new Weigher<ImmutableBytesPtr, PTable>() {
+                                @Override
+                                public int weigh(ImmutableBytesPtr key, PTable table) {
+                                    return SizedUtil.IMMUTABLE_BYTES_PTR_SIZE + key.getLength() + table.getEstimatedSize();
+                                }
+                            })
+                            .build();
+                }
+            }
         }
-        return INSTANCE;
+        return result;
     }
-    
-    public ConcurrentHashMap<ImmutableBytesPtr,PTable> getMetaDataCache() {
-        return metaDataCacheMap;
+
+    public static GlobalCache getInstance(RegionCoprocessorEnvironment env) {
+        GlobalCache result = INSTANCE;
+        if (result == null) {
+            synchronized(GlobalCache.class) {
+                result = INSTANCE;
+                if(result == null) {
+                    INSTANCE = result = new GlobalCache(env.getConfiguration());
+                }
+            }
+        }
+        return result;
     }
     
     /**
@@ -83,7 +117,7 @@ public class GlobalCache extends TenantCacheImpl {
         super(new GlobalMemoryManager(Runtime.getRuntime().totalMemory() * 
                                           config.getInt(MAX_MEMORY_PERC_ATTRIB, QueryServicesOptions.DEFAULT_MAX_MEMORY_PERC) / 100,
                                       config.getInt(MAX_MEMORY_WAIT_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_MEMORY_WAIT_MS)),
-              config.getInt(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS));
+              config.getInt(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS));
         this.config = config;
     }
     
@@ -100,7 +134,7 @@ public class GlobalCache extends TenantCacheImpl {
         TenantCache tenantCache = perTenantCacheMap.get(tenantId);
         if (tenantCache == null) {
             int maxTenantMemoryPerc = config.getInt(MAX_TENANT_MEMORY_PERC_ATTRIB, QueryServicesOptions.DEFAULT_MAX_TENANT_MEMORY_PERC);
-            int maxServerCacheTimeToLive = config.getInt(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
+            int maxServerCacheTimeToLive = config.getInt(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
             TenantCacheImpl newTenantCache = new TenantCacheImpl(new ChildMemoryManager(getMemoryManager(), maxTenantMemoryPerc), maxServerCacheTimeToLive);
             tenantCache = perTenantCacheMap.putIfAbsent(tenantId, newTenantCache);
             if (tenantCache == null) {

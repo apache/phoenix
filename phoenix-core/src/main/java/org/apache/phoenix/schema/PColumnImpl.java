@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.SizedUtil;
 
 import com.google.common.base.Preconditions;
 
@@ -93,6 +94,13 @@ public class PColumnImpl implements PColumn {
         this.sortOrder = sortOrder;
         this.arraySize = arrSize;
         this.viewConstant = viewConstant;
+    }
+
+    @Override
+    public int getEstimatedSize() {
+        return SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 8 + SizedUtil.INT_OBJECT_SIZE * 3 + SizedUtil.INT_SIZE + 
+                name.getEstimatedSize() + (familyName == null ? 0 : familyName.getEstimatedSize()) +
+                (viewConstant == null ? 0 : (SizedUtil.ARRAY_SIZE + viewConstant.length));
     }
 
     @Override

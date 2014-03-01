@@ -19,8 +19,8 @@ package org.apache.phoenix.schema;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.http.annotation.Immutable;
-
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.util.SizedUtil;
 
 @Immutable
 public class PNameImpl implements PName {
@@ -41,6 +41,13 @@ public class PNameImpl implements PName {
         }
     }
     private PNameImplData data = new PNameImplData();
+
+
+    @Override
+    public int getEstimatedSize() {
+        return SizedUtil.OBJECT_SIZE * 3 + SizedUtil.ARRAY_SIZE + SizedUtil.IMMUTABLE_BYTES_PTR_SIZE +
+                data.stringName.length() * SizedUtil.CHAR_SIZE + data.bytesName.length;
+    }
 
     PNameImpl(String name) {
         this.data.stringName = name;

@@ -19,10 +19,12 @@
 package org.apache.phoenix.schema;
 
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.query.QueryConstants;
 
 public class PNameFactory {
+    public static int getEstimatedSize(PName name) {
+        return name == null ? 0 : name.getEstimatedSize();
+    }
 
     private PNameFactory() {
     }

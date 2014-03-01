@@ -32,7 +32,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -48,6 +47,7 @@ import com.google.common.collect.Sets;
  *
  */
 public class InListExpression extends BaseSingleExpression {
+    public final LinkedHashSet<ImmutableBytesPtr> EMPTY_SET = new LinkedHashSet<ImmutableBytesPtr>();
     private LinkedHashSet<ImmutableBytesPtr> values;
     private ImmutableBytesPtr minValue;
     private ImmutableBytesPtr maxValue;
@@ -59,7 +59,6 @@ public class InListExpression extends BaseSingleExpression {
 
     public static Expression create (List<Expression> children, boolean isNegate, ImmutableBytesWritable ptr) throws SQLException {
         Expression firstChild = children.get(0);
-        PDataType firstChildType = firstChild.getDataType();
         
         if (firstChild.isStateless() && (!firstChild.evaluate(null, ptr) || ptr.getLength() == 0)) {
             return LiteralExpression.newConstant(null, PDataType.BOOLEAN, firstChild.isDeterministic());
@@ -69,45 +68,28 @@ public class InListExpression extends BaseSingleExpression {
         }
         
         boolean addedNull = false;
-        List<Expression> keys = Lists.newArrayListWithExpectedSize(children.size());
+        SQLException sqlE = null;
         List<Expression> coercedKeyExpressions = Lists.newArrayListWithExpectedSize(children.size());
-        keys.add(firstChild);
         coercedKeyExpressions.add(firstChild);
         for (int i = 1; i < children.size(); i++) {
-            Expression rhs = children.get(i);
-            if (rhs.evaluate(null, ptr)) {
-                if (ptr.getLength() == 0) {
-                    if (!addedNull) {
-                        addedNull = true;
-                        keys.add(LiteralExpression.newConstant(null, PDataType.VARBINARY, true));
-                        coercedKeyExpressions.add(LiteralExpression.newConstant(null, firstChildType, true));
-                    }
-                } else {
-                    // Don't specify the firstChild SortOrder here, as we specify it in the LiteralExpression creation below
-                    try {
-                        firstChildType.coerceBytes(ptr, rhs.getDataType(), rhs.getSortOrder(), SortOrder.getDefault());
-                        keys.add(LiteralExpression.newConstant(ByteUtil.copyKeyBytesIfNecessary(ptr), PDataType.VARBINARY, firstChild.getSortOrder(), true));
-                        if(rhs.getDataType() == firstChildType) {
-                            coercedKeyExpressions.add(rhs);
-                        } else {
-                            coercedKeyExpressions.add(CoerceExpression.create(rhs, firstChildType));    
-                        }
-                    } catch (ConstraintViolationException e) { // Ignore and continue
-                    }
-                }
+            try {
+                Expression rhs = BaseExpression.coerce(firstChild, children.get(i), CompareOp.EQUAL);
+                coercedKeyExpressions.add(rhs);
+            } catch (SQLException e) {
+                // Type mismatch exception or invalid data exception.
+                // Ignore and filter the element from the list and it means it cannot possibly
+                // be in the list. If list is empty, we'll throw the last exception we ignored,
+                // as this is an error condition.
+                sqlE = e;
             }
-            
         }
-        if (keys.size() == 1) {
-            return LiteralExpression.newConstant(false, PDataType.BOOLEAN, true);
+        if (coercedKeyExpressions.size() == 1) {
+            throw sqlE;
         }
-        if (keys.size() == 2 && addedNull) {
+        if (coercedKeyExpressions.size() == 2 && addedNull) {
             return LiteralExpression.newConstant(null, PDataType.BOOLEAN, true);
         }
-        // TODO: if inChildren.isEmpty() then Oracle throws a type mismatch exception. This means
-        // that none of the list elements match in type and there's no null element. We'd return
-        // false in this case. Should we throw?
-        Expression expression = new InListExpression(keys, coercedKeyExpressions);
+        Expression expression = new InListExpression(coercedKeyExpressions);
         if (isNegate) { 
             expression = NotExpression.create(expression, ptr);
         }
@@ -124,16 +106,15 @@ public class InListExpression extends BaseSingleExpression {
     public InListExpression() {
     }
 
-    private InListExpression(List<Expression> keys, List<Expression> keyExpressions) throws SQLException {
+    private InListExpression(List<Expression> keyExpressions) throws SQLException {
         super(keyExpressions.get(0));
         this.keyExpressions = keyExpressions.subList(1, keyExpressions.size());
-        Set<ImmutableBytesPtr> values = Sets.newHashSetWithExpectedSize(keys.size()-1);
+        Set<ImmutableBytesPtr> values = Sets.newHashSetWithExpectedSize(keyExpressions.size()-1);
         int fixedWidth = -1;
         boolean isFixedLength = true;
-        for (int i = 1; i < keys.size(); i++) {
+        for (int i = 1; i < keyExpressions.size(); i++) {
             ImmutableBytesPtr ptr = new ImmutableBytesPtr();
-            Expression child = keys.get(i);
-            assert(child.getDataType() == PDataType.VARBINARY);
+            Expression child = keyExpressions.get(i);
             child.evaluate(null, ptr);
             if (ptr.getLength() == 0) {
                 containsNull = true;
@@ -154,9 +135,15 @@ public class InListExpression extends BaseSingleExpression {
         // Sort values by byte value so we can get min/max easily
         ImmutableBytesPtr[] valuesArray = values.toArray(new ImmutableBytesPtr[values.size()]);
         Arrays.sort(valuesArray, ByteUtil.BYTES_PTR_COMPARATOR);
-        this.minValue = valuesArray[0];
-        this.maxValue = valuesArray[valuesArray.length-1];
-        this.values = new LinkedHashSet<ImmutableBytesPtr>(Arrays.asList(valuesArray));
+        if (values.isEmpty()) {
+            this.minValue = ByteUtil.EMPTY_BYTE_ARRAY_PTR;
+            this.maxValue = ByteUtil.EMPTY_BYTE_ARRAY_PTR;
+            this.values = EMPTY_SET;
+        } else {
+            this.minValue = valuesArray[0];
+            this.maxValue = valuesArray[valuesArray.length-1];
+            this.values = new LinkedHashSet<ImmutableBytesPtr>(Arrays.asList(valuesArray));
+        }
     }
 
     @Override

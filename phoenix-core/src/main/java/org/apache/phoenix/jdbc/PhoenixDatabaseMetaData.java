@@ -204,6 +204,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] INCREMENT_BY_BYTES = Bytes.toBytes(INCREMENT_BY);
     public static final String CACHE_SIZE = "CACHE_SIZE";
     public static final byte[] CACHE_SIZE_BYTES = Bytes.toBytes(CACHE_SIZE);
+    public static final String KEY_SEQ = "KEY_SEQ";
+    public static final byte[] KEY_SEQ_BYTES = Bytes.toBytes(KEY_SEQ);
+    		
     
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;
@@ -610,11 +613,12 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 TABLE_SCHEM_NAME + "," +
                 TABLE_NAME_NAME + " ," +
                 COLUMN_NAME + "," +
-                "null as KEY_SEQ," +
+                "null as " + KEY_SEQ + "," +
                 "PK_NAME" + "," +
                 "CASE WHEN " + SORT_ORDER + " = " + (SortOrder.DESC.getSystemValue()) + " THEN 'D' ELSE 'A' END ASC_OR_DESC," +
                 DATA_TYPE + "," + // include type info, though not in spec
-                SqlTypeNameFunction.NAME + "(" + DATA_TYPE + ") AS " + TYPE_NAME +
+                SqlTypeNameFunction.NAME + "(" + DATA_TYPE + ") AS " + TYPE_NAME + "," +
+                COLUMN_SIZE + 
                 " from " + TYPE_SCHEMA_AND_TABLE + " " + TYPE_SCHEMA_AND_TABLE_ALIAS +
                 " where ");
         buf.append(getTenantIdWhereClause());

@@ -217,6 +217,7 @@ public class ServerCacheClient {
                 }
             }
         }
+        if (LOG.isDebugEnabled()) {LOG.debug("Cache " + cacheId + " successfully added to servers.");}
         return hashCacheSpec;
     }
     
@@ -241,6 +242,7 @@ public class ServerCacheClient {
          * this, we iterate through the current metadata boundaries and remove the cache once for each
          * server that we originally sent to.
          */
+        if (LOG.isDebugEnabled()) {LOG.debug("Removing Cache " + cacheId + " from servers.");}
         for (HRegionLocation entry : locations) {
             if (remainingOnServers.contains(entry)) {  // Call once per server
                 try {

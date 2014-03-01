@@ -277,4 +277,6 @@ public interface PTable extends Writable {
     ViewType getViewType();
     String getViewStatement();
     Short getViewIndexId();
+    
+    int getEstimatedSize();
 }

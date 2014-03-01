@@ -52,8 +52,16 @@ public class SizedUtil {
     private SizedUtil() {
     }
     
+    public static int sizeOfArrayList(int capacity) {
+        return SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE + SizedUtil.INT_SIZE + SizedUtil.ARRAY_SIZE + SizedUtil.POINTER_SIZE * capacity;
+    }
+    
+    public static int sizeOfMap(int nRows) {
+        return sizeOfMap(nRows, SizedUtil.POINTER_SIZE, SizedUtil.POINTER_SIZE);
+    }
+    
     public static int sizeOfMap(int nRows, int keySize, int valueSize) {
-        return nRows * (
+        return SizedUtil.OBJECT_SIZE + nRows * (
                 SizedUtil.MAP_ENTRY_SIZE + // entry
                 keySize + // key size
                 valueSize); // value size
