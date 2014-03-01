@@ -107,6 +107,18 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
 
         if (!(statement.isAggregate())) {
             doColumnProjectionOptimization(context, scan, table);
+        } else {
+            // TODO avoid code duplication.
+            for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
+                scan.addColumn(whereCol.getFirst(), whereCol.getSecond());
+            }
+            if (table.getViewType() == ViewType.MAPPED) {
+                // Since we don't have the empty key value in MAPPED tables, we must select all CFs in HRS. But only the
+                // selected column values are returned back to client
+                for (PColumnFamily family : table.getColumnFamilies()) {
+                    scan.addFamily(family.getName().getBytes());
+                }
+            }
         }
     }
 
