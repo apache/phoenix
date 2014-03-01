@@ -86,10 +86,16 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     
     public ConnectionlessQueryServicesImpl(QueryServices queryServices) {
         super(queryServices);
-        metaData = PMetaDataImpl.EMPTY_META_DATA;
+        metaData = newEmptyMetaData();
         // find the HBase version and use that to determine the KeyValueBuilder that should be used
         String hbaseVersion = VersionInfo.getVersion();
         this.kvBuilder = KeyValueBuilder.get(hbaseVersion);
+    }
+
+    private PMetaData newEmptyMetaData() {
+        long maxSizeBytes = getProps().getLong(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB,
+                QueryServicesOptions.DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE);
+        return new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, maxSizeBytes);
     }
 
     @Override
@@ -194,7 +200,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public void init(String url, Properties props) throws SQLException {
         props = new Properties(props);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
-        PhoenixConnection metaConnection = new PhoenixConnection(this, url, props, PMetaDataImpl.EMPTY_META_DATA);
+        PhoenixConnection metaConnection = new PhoenixConnection(this, url, props, newEmptyMetaData());
         SQLException sqlE = null;
         try {
             try {

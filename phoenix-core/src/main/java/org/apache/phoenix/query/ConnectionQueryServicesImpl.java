@@ -96,7 +96,6 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -114,6 +113,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
     private static final int INITIAL_CHILD_SERVICES_CAPACITY = 100;
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
+    
     protected final Configuration config;
     // Copy of config.getProps(), but read-only to prevent synchronization that we
     // don't need.
@@ -122,7 +122,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final StatsManager statsManager;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
     // Cache the latest meta data here for future connections
-    private volatile PMetaData latestMetaData = PMetaDataImpl.EMPTY_META_DATA;
+    private volatile PMetaData latestMetaData;
     private final Object latestMetaDataLock = new Object();
     // Lowest HBase version on the cluster.
     private int lowestClusterHBaseVersion = Integer.MAX_VALUE;
@@ -132,6 +132,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private ConcurrentMap<SequenceKey,Sequence> sequenceMap = Maps.newConcurrentMap();
     private KeyValueBuilder kvBuilder;
 
+    private PMetaData newEmptyMetaData() {
+        long maxSizeBytes = props.getLong(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB,
+                QueryServicesOptions.DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE);
+        return new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, maxSizeBytes);
+    }
     /**
      * Construct a ConnectionQueryServicesImpl that represents a connection to an HBase
      * cluster.
@@ -161,6 +166,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (this.connection.isClosed()) { // TODO: why the heck doesn't this throw above?
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION).build().buildException();
         }
+        this.latestMetaData = newEmptyMetaData();
         // TODO: should we track connection wide memory usage or just org-wide usage?
         // If connection-wide, create a MemoryManager here, otherwise just use the one from the delegate
         this.childServices = new ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices>(INITIAL_CHILD_SERVICES_CAPACITY);
@@ -182,12 +188,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public HTableInterface getTable(byte[] tableName) throws SQLException {
         try {
             return HBaseFactoryProvider.getHTableFactory().getTable(tableName, connection, getExecutor());
+        } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
+            byte[][] schemaAndTableName = new byte[2][];
+            SchemaUtil.getVarChars(tableName, schemaAndTableName);
+            throw new TableNotFoundException(Bytes.toString(schemaAndTableName[0]), Bytes.toString(schemaAndTableName[1]));
         } catch (IOException e) {
-        	if(e instanceof org.apache.hadoop.hbase.TableNotFoundException || e.getCause() instanceof org.apache.hadoop.hbase.TableNotFoundException) {
-        		byte[][] schemaAndTableName = new byte[2][];
-        		SchemaUtil.getVarChars(tableName, schemaAndTableName);
-        		throw new TableNotFoundException(Bytes.toString(schemaAndTableName[0]), Bytes.toString(schemaAndTableName[1]));
-        	} 
         	throw new SQLException(e);
         } 
     }
@@ -413,9 +418,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public PhoenixConnection connect(String url, Properties info) throws SQLException {
-        Long scn = JDBCUtil.getCurrentSCN(url, info);
-        PMetaData metaData = scn == null ? latestMetaData : PMetaDataImpl.pruneNewerTables(scn, latestMetaData);
-        return new PhoenixConnection(this, url, info, metaData);
+        return new PhoenixConnection(this, url, info, latestMetaData);
     }
 
 
@@ -1139,7 +1142,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         Properties props = new Properties(oldMetaConnection.getClientInfo());
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
         // Cannot go through DriverManager or you end up in an infinite loop because it'll call init again
-        PhoenixConnection metaConnection = new PhoenixConnection(this, oldMetaConnection.getURL(), props, oldMetaConnection.getPMetaData());
+        PhoenixConnection metaConnection = new PhoenixConnection(this, oldMetaConnection.getURL(), props, oldMetaConnection.getMetaDataCache());
         SQLException sqlE = null;
         try {
             metaConnection.createStatement().executeUpdate("ALTER TABLE " + PhoenixDatabaseMetaData.TYPE_SCHEMA_AND_TABLE + " ADD IF NOT EXISTS " + columns );
@@ -1166,7 +1169,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public void init(String url, Properties props) throws SQLException {
         props = new Properties(props);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
-        PhoenixConnection metaConnection = new PhoenixConnection(this, url, props, PMetaDataImpl.EMPTY_META_DATA);
+        PhoenixConnection metaConnection = new PhoenixConnection(this, url, props, newEmptyMetaData());
         SQLException sqlE = null;
         try {
             try {

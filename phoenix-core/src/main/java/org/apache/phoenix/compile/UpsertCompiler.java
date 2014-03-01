@@ -209,7 +209,7 @@ public class UpsertCompiler {
         final PhoenixConnection connection = statement.getConnection();
         ConnectionQueryServices services = connection.getQueryServices();
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        final ColumnResolver resolver = FromCompiler.getResolver(upsert, connection);
+        final ColumnResolver resolver = FromCompiler.getResolverForMutation(upsert, connection);
         final TableRef tableRef = resolver.getTables().get(0);
         final PTable table = tableRef.getTable();
         if (table.getType() == PTableType.VIEW) {
@@ -344,7 +344,7 @@ public class UpsertCompiler {
         if (valueNodes == null) {
             SelectStatement select = upsert.getSelect();
             assert(select != null);
-            ColumnResolver selectResolver = FromCompiler.getResolver(select, connection);
+            ColumnResolver selectResolver = FromCompiler.getResolverForQuery(select, connection);
             select = StatementNormalizer.normalize(select, selectResolver);
             select = addTenantAndViewConstants(table, select, tenantId, addViewColumnsToBe);
             sameTable = select.getFrom().size() == 1

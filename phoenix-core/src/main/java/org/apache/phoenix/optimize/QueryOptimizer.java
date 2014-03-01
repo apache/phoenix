@@ -67,7 +67,7 @@ public class QueryOptimizer {
     }
 
     public QueryPlan optimize(PhoenixStatement statement, SelectStatement select) throws SQLException {
-        return optimize(statement, select, FromCompiler.getResolver(select, statement.getConnection()), Collections.<PColumn>emptyList(), null);
+        return optimize(statement, select, FromCompiler.getResolverForQuery(select, statement.getConnection()), Collections.<PColumn>emptyList(), null);
     }
 
     public QueryPlan optimize(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
@@ -190,7 +190,7 @@ public class QueryOptimizer {
         List<? extends TableNode> tables = Collections.singletonList(FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName)));
         try {
             SelectStatement indexSelect = FACTORY.select(select, tables);
-            ColumnResolver resolver = FromCompiler.getResolver(indexSelect, statement.getConnection());
+            ColumnResolver resolver = FromCompiler.getResolverForQuery(indexSelect, statement.getConnection());
             // Check index state of now potentially updated index table to make sure it's active
             if (PIndexState.ACTIVE.equals(resolver.getTables().get(0).getTable().getIndexState())) {
                 QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory);

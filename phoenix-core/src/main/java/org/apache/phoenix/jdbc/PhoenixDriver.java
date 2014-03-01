@@ -54,6 +54,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             throw new IllegalStateException("Untable to register " + PhoenixDriver.class.getName() + ": "+ e.getMessage());
         }
     }
+    // One entry per cluster here
     private final ConcurrentMap<ConnectionInfo,ConnectionQueryServices> connectionQueryServicesMap = new ConcurrentHashMap<ConnectionInfo,ConnectionQueryServices>(3);
 
     public PhoenixDriver() { // for Squirrel

@@ -38,6 +38,11 @@ public class PTableKey {
     }
     
     @Override
+    public String toString() {
+        return name + (tenantId == null ? "" : " for " + tenantId.getString());
+    }
+    
+    @Override
     public int hashCode() {
         final int prime = 31;
         int result = 1;

@@ -452,7 +452,7 @@ public class SchemaUtil {
     protected static PhoenixConnection addMetaDataColumn(PhoenixConnection conn, long scn, String columnDef) throws SQLException {
         String url = conn.getURL();
         Properties props = conn.getClientInfo();
-        PMetaData metaData = conn.getPMetaData();
+        PMetaData metaData = conn.getMetaDataCache();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
         PhoenixConnection metaConnection = null;
 

@@ -94,7 +94,7 @@ public class ScanPlan extends BasicQueryPlan {
             scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions());
         } else {
             if (isSalted && 
-                    (getConnectionQueryServices(context.getConnection().getQueryServices()).getProps().getBoolean(
+                    (context.getConnection().getQueryServices().getProps().getBoolean(
                             QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, 
                             QueryServicesOptions.DEFAULT_ROW_KEY_ORDER_SALTED_TABLE) ||
                      orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY ||

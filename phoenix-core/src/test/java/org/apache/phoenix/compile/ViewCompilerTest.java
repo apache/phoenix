@@ -24,8 +24,6 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.junit.Test;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -34,6 +32,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Test;
 
 public class ViewCompilerTest extends BaseConnectionlessQueryTest {
     @Test
@@ -63,7 +62,7 @@ public class ViewCompilerTest extends BaseConnectionlessQueryTest {
         }
         
         int count = 0;
-        for (PTable table : conn.getPMetaData().getTables().values()) {
+        for (PTable table : conn.getMetaDataCache().getTables()) {
             if (table.getType() == PTableType.VIEW) {
                 assertEquals(viewType, table.getViewType());
                 conn.createStatement().execute("DROP VIEW " + table.getName().getString());

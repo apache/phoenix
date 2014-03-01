@@ -65,7 +65,7 @@ public class SaltedIndexTest extends BaseIndexTest{
             conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " SET IMMUTABLE_ROWS=true");
             conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + DATA_TABLE_FULL_NAME).next();
             PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-            assertTrue(pconn.getPMetaData().getTable(new PTableKey(pconn.getTenantId(), DATA_TABLE_FULL_NAME)).isImmutableRows());
+            assertTrue(pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), DATA_TABLE_FULL_NAME)).isImmutableRows());
         } finally {
             conn.close();
         }

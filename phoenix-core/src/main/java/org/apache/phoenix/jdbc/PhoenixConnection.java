@@ -50,6 +50,7 @@ import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -66,9 +67,10 @@ import org.apache.phoenix.schema.PArrayDataType;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PMetaData;
-import org.apache.phoenix.schema.PMetaDataImpl;
+import org.apache.phoenix.schema.PMetaData.Pruner;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.NumberUtil;
@@ -77,6 +79,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -118,7 +121,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
     
     public PhoenixConnection(PhoenixConnection connection) throws SQLException {
-        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getPMetaData());
+        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache());
         this.isAutoCommit = connection.isAutoCommit;
     }
     
@@ -127,7 +130,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
     
     public PhoenixConnection(ConnectionQueryServices services, PhoenixConnection connection, long scn) throws SQLException {
-        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), PMetaDataImpl.pruneNewerTables(scn, connection.getPMetaData()));
+        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.getMetaDataCache());
         this.isAutoCommit = connection.isAutoCommit;
     }
     
@@ -136,9 +139,17 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this.url = url;
         // Copy so client cannot change
         this.info = info == null ? new Properties() : new Properties(info);
-        if (this.info.isEmpty()) {
+        final PName tenantId = JDBCUtil.getTenantId(url, info);
+        if (this.info.isEmpty() && tenantId == null) {
             this.services = services;
         } else {
+            // Create child services keyed by tenantId to track resource usage for
+            // a tenantId for all connections on this JVM.
+            if (tenantId != null) {
+                services = services.getChildQueryServices(tenantId.getBytesPtr());
+            }
+            // TODO: we could avoid creating another wrapper if the only property
+            // specified was for the tenant ID
             Map<String, String> existingProps = services.getProps().asMap();
             Map<String, String> tmpAugmentedProps = Maps.newHashMapWithExpectedSize(existingProps.size() + info.size());
             tmpAugmentedProps.putAll(existingProps);
@@ -153,18 +164,30 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             };
         }
         this.scn = JDBCUtil.getCurrentSCN(url, this.info);
-        this.tenantId = JDBCUtil.getTenantId(url, this.info);
-        this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, services.getProps());
-        datePattern = services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
-        String numberPattern = services.getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
-        int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
+        this.tenantId = tenantId;
+        this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
+        datePattern = this.services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
+        String numberPattern = this.services.getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
+        int maxSize = this.services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
         Format dateTimeFormat = DateUtil.getDateFormatter(datePattern);
         formatters[PDataType.DATE.ordinal()] = dateTimeFormat;
         formatters[PDataType.TIME.ordinal()] = dateTimeFormat;
         formatters[PDataType.DECIMAL.ordinal()] = FunctionArgumentType.NUMERIC.getFormatter(numberPattern);
-        this.metaData = PMetaDataImpl.pruneMultiTenant(metaData);
+        // We do not limit the metaData on a connection less than the global one,
+        // as there's not much that will be cached here.
+        this.metaData = metaData.pruneTables(new Pruner() {
+
+            @Override
+            public boolean prune(PTable table) {
+                long maxTimestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
+                return (table.getType() != PTableType.SYSTEM && 
+                        (  table.getTimeStamp() >= maxTimestamp || 
+                         ! Objects.equal(tenantId, table.getTenantId())) );
+            }
+            
+        });
         this.mutationState = new MutationState(maxSize, this);
-        services.addConnection(this);
+        this.services.addConnection(this);
     }
 
     public int executeStatements(Reader reader, List<Object> binds, PrintStream out) throws IOException, SQLException {
@@ -256,7 +279,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return mutateBatchSize;
     }
     
-    public PMetaData getPMetaData() {
+    public PMetaData getMetaDataCache() {
         return metaData;
     }
 

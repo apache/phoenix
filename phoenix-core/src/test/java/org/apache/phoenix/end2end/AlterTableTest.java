@@ -604,7 +604,7 @@ public class AlterTableTest extends BaseHBaseManagedTimeTest {
 
     private void asssertIsWALDisabled(Connection conn, String fullTableName, boolean expectedValue) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        assertEquals(expectedValue, pconn.getPMetaData().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isWALDisabled());
+        assertEquals(expectedValue, pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isWALDisabled());
     }
     
     @Test

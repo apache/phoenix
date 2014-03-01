@@ -25,7 +25,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import com.google.common.collect.ListMultimap;
 
 
-public class CreateIndexStatement extends SingleTableSQLStatement {
+public class CreateIndexStatement extends SingleTableStatement {
     private final TableName indexTableName;
     private final PrimaryKeyConstraint indexConstraint;
     private final List<ColumnName> includeColumns;

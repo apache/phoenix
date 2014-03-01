@@ -19,7 +19,7 @@ package org.apache.phoenix.parse;
 
 import org.apache.phoenix.schema.PIndexState;
 
-public class AlterIndexStatement extends SingleTableSQLStatement {
+public class AlterIndexStatement extends SingleTableStatement {
     private final String dataTableName;
     private final boolean ifExists;
     private final PIndexState indexState;

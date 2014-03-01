@@ -119,7 +119,7 @@ public class QueryCompiler {
         if (select.getFrom().size() > 1) {
             select = JoinCompiler.optimize(context, select, statement);
             if (this.select != select) {
-                ColumnResolver resolver = FromCompiler.getResolver(select, statement.getConnection());
+                ColumnResolver resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
                 context = new StatementContext(statement, resolver, scan);
             }
             JoinSpec join = JoinCompiler.getJoinSpec(context, select);
@@ -257,7 +257,7 @@ public class QueryCompiler {
         Expression having = HavingCompiler.compile(context, select, groupBy);
         // Don't pass groupBy when building where clause expression, because we do not want to wrap these
         // expressions as group by key expressions since they're pre, not post filtered.
-        context.setResolver(FromCompiler.getResolver(select, connection));
+        context.setResolver(FromCompiler.getResolverForQuery(select, connection));
         WhereCompiler.compile(context, select);
         context.setResolver(resolver); // recover resolver
         OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit); 

@@ -19,7 +19,7 @@ package org.apache.phoenix.parse;
 
 import org.apache.phoenix.schema.PTableType;
 
-public abstract class AlterTableStatement extends SingleTableSQLStatement {
+public abstract class AlterTableStatement extends SingleTableStatement {
     private final PTableType tableType;
 
     AlterTableStatement(NamedTableNode table, PTableType tableType) {

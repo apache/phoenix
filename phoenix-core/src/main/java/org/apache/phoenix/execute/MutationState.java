@@ -293,7 +293,7 @@ public class MutationState implements SQLCloseable {
                                 }
                             }
                         }
-                        table = connection.getPMetaData().getTable(new PTableKey(tenantId, table.getName().getString()));
+                        table = connection.getMetaDataCache().getTable(new PTableKey(tenantId, table.getName().getString()));
                         for (PColumn column : columns) {
                             if (column != null) {
                                 table.getColumnFamily(column.getFamilyName().getString()).getColumn(column.getName().getString());

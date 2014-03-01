@@ -28,6 +28,7 @@ import static org.apache.phoenix.query.QueryServices.IMMUTABLE_ROWS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.KEEP_ALIVE_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MASTER_INFO_PORT_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_INTRA_REGION_PARALLELIZATION_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_PERC_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_WAIT_MS_ATTRIB;
@@ -35,6 +36,7 @@ import static org.apache.phoenix.query.QueryServices.MAX_MUTATION_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_QUERY_CONCURRENCY_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SPOOL_TO_DISK_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_TENANT_MEMORY_PERC_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
@@ -111,8 +113,9 @@ public class QueryServicesOptions {
     
     public static final int DEFAULT_SEQUENCE_CACHE_SIZE = 100;  // reserve 100 sequences at a time
     public static final int DEFAULT_INDEX_MAX_FILESIZE_PERC = 50; // % of data table max file size for index table
-    public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE =  1024L*1024L*20L; // 20 Mb
     public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS =  60000 * 30; // 30 mins   
+    public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE =  1024L*1024L*20L; // 20 Mb
+    public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE =  1024L*1024L*10L; // 10 Mb
     
     private final Configuration config;
     
@@ -241,6 +244,14 @@ public class QueryServicesOptions {
         return set(MAX_SERVER_CACHE_SIZE_ATTRIB, maxServerCacheSize);
     }
 
+    public QueryServicesOptions setMaxServerMetaDataCacheSize(long maxMetaDataCacheSize) {
+        return set(MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB, maxMetaDataCacheSize);
+    }
+
+    public QueryServicesOptions setMaxClientMetaDataCacheSize(long maxMetaDataCacheSize) {
+        return set(MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, maxMetaDataCacheSize);
+    }
+
     public QueryServicesOptions setScanFetchSize(int scanFetchSize) {
         return set(SCAN_CACHE_SIZE_ATTRIB, scanFetchSize);
     }
@@ -285,15 +296,15 @@ public class QueryServicesOptions {
         return set(DROP_METADATA_ATTRIB, dropMetadata);
     }
     
-    public QueryServicesOptions setSPGBYEnabled(boolean enabled) {
+    public QueryServicesOptions setGroupBySpill(boolean enabled) {
         return set(GROUPBY_SPILLABLE_ATTRIB, enabled);
     }
 
-    public QueryServicesOptions setSPGBYMaxCacheSize(long size) {
+    public QueryServicesOptions setGroupBySpillMaxCacheSize(long size) {
         return set(GROUPBY_MAX_CACHE_SIZE_ATTRIB, size);
     }
     
-    public QueryServicesOptions setSPGBYNumSpillFiles(long num) {
+    public QueryServicesOptions setGroupBySpillNumSpillFiles(long num) {
         return set(GROUPBY_SPILL_FILES_ATTRIB, num);
     }
 

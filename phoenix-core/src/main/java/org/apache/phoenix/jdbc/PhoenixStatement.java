@@ -259,7 +259,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         @SuppressWarnings("unchecked")
         @Override
         public QueryPlan compilePlan(PhoenixStatement stmt) throws SQLException {
-            ColumnResolver resolver = FromCompiler.getResolver(this, stmt.getConnection());
+            ColumnResolver resolver = FromCompiler.getResolverForQuery(this, stmt.getConnection());
             SelectStatement select = StatementNormalizer.normalize(this, resolver);
             return new QueryCompiler(stmt, select, resolver).compile();
         }

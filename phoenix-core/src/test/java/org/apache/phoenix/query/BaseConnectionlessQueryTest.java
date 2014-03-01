@@ -33,7 +33,7 @@ import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import java.sql.DriverManager;
 import java.util.Properties;
 
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.ColumnRef;
@@ -81,10 +81,11 @@ public class BaseConnectionlessQueryTest extends BaseTest {
         ensureTableCreated(getUrl(), JOIN_SUPPLIER_TABLE_FULL_NAME);
         ensureTableCreated(getUrl(), TABLE_WITH_ARRAY);
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_TABLE_TIMESTAMP));
+        //props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_TABLE_TIMESTAMP));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(HConstants.LATEST_TIMESTAMP));
         PhoenixConnection conn = DriverManager.getConnection(PHOENIX_CONNECTIONLESS_JDBC_URL, props).unwrap(PhoenixConnection.class);
         try {
-            PTable table = conn.getPMetaData().getTable(new PTableKey(null, ATABLE_NAME));
+            PTable table = conn.getMetaDataCache().getTable(new PTableKey(null, ATABLE_NAME));
             ATABLE = table;
             ORGANIZATION_ID = new ColumnRef(new TableRef(table), table.getColumn("ORGANIZATION_ID").getPosition()).newColumnExpression();
             ENTITY_ID = new ColumnRef(new TableRef(table), table.getColumn("ENTITY_ID").getPosition()).newColumnExpression();

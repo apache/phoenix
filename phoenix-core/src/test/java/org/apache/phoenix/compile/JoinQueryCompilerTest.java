@@ -132,7 +132,7 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
         Scan scan = new Scan();
         SQLParser parser = new SQLParser(query);
         SelectStatement select = parser.parseQuery();
-        ColumnResolver resolver = FromCompiler.getResolver(select, connection);
+        ColumnResolver resolver = FromCompiler.getResolverForQuery(select, connection);
         select = StatementNormalizer.normalize(select, resolver);
         StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, scan);
         return JoinCompiler.getJoinSpec(context, select);        

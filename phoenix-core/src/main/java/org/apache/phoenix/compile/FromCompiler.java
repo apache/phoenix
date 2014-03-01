@@ -35,7 +35,7 @@ import org.apache.phoenix.parse.DerivedTableNode;
 import org.apache.phoenix.parse.JoinTableNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.SelectStatement;
-import org.apache.phoenix.parse.SingleTableSQLStatement;
+import org.apache.phoenix.parse.SingleTableStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
@@ -97,7 +97,7 @@ public class FromCompiler {
         }
     };
 
-    public static ColumnResolver getResolver(final CreateTableStatement statement, final PhoenixConnection connection)
+    public static ColumnResolver getResolverForCreation(final CreateTableStatement statement, final PhoenixConnection connection)
             throws SQLException {
         TableName baseTable = statement.getBaseTableName();
         if (baseTable == null) {
@@ -106,7 +106,7 @@ public class FromCompiler {
         NamedTableNode tableNode = NamedTableNode.create(null, baseTable, Collections.<ColumnDef>emptyList());
         // Always use non-tenant-specific connection here
         try {
-            SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, false);
+            SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true);
             return visitor;
         } catch (TableNotFoundException e) {
             // Used for mapped VIEW, since we won't be able to resolve that.
@@ -143,11 +143,11 @@ public class FromCompiler {
      * @throws TableNotFoundException
      *             if table name not found in schema
      */
-    public static ColumnResolver getResolver(SelectStatement statement, PhoenixConnection connection)
+    public static ColumnResolver getResolverForQuery(SelectStatement statement, PhoenixConnection connection)
     		throws SQLException {
     	List<TableNode> fromNodes = statement.getFrom();
         if (fromNodes.size() == 1)
-            return new SingleTableColumnResolver(connection, (NamedTableNode)fromNodes.get(0), false);
+            return new SingleTableColumnResolver(connection, (NamedTableNode)fromNodes.get(0), true);
 
         MultiTableColumnResolver visitor = new MultiTableColumnResolver(connection);
         for (TableNode node : fromNodes) {
@@ -157,20 +157,16 @@ public class FromCompiler {
     }
 
     public static ColumnResolver getResolver(NamedTableNode tableNode, PhoenixConnection connection) throws SQLException {
-        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, false);
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true);
         return visitor;
     }
     
-    public static ColumnResolver getResolver(SingleTableSQLStatement statement, PhoenixConnection connection,
-            List<ColumnDef> dyn_columns) throws SQLException {
-        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), true);
+    public static ColumnResolver getResolverForMutation(SingleTableStatement statement, PhoenixConnection connection)
+            throws SQLException {
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), false);
         return visitor;
     }
-
-    public static ColumnResolver getResolver(SingleTableSQLStatement statement, PhoenixConnection connection)
-            throws SQLException {
-        return getResolver(statement, connection, Collections.<ColumnDef>emptyList());
-    }
+    
 
     private static class SingleTableColumnResolver extends BaseColumnResolver {
         	private final List<TableRef> tableRefs;
@@ -191,58 +187,10 @@ public class FromCompiler {
            tableRefs = ImmutableList.of(new TableRef(alias, theTable, timeStamp, !table.getDynamicColumns().isEmpty()));
        }
        
-        public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode table, boolean updateCacheOnlyIfAutoCommit) throws SQLException {
+        public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode, boolean updateCacheImmediately) throws SQLException {
             super(connection);
-            alias = table.getAlias();
-            TableName tableNameNode = table.getName();
-            String schemaName = tableNameNode.getSchemaName();
-            String tableName = tableNameNode.getTableName();
-            SQLException sqlE = null;
-            long timeStamp = QueryConstants.UNSET_TIMESTAMP;
-            TableRef tableRef = null;
-            boolean retry = true;
-            boolean didRetry = false;
-            MetaDataMutationResult result = null;
-            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-            PName tenantId = connection.getTenantId();
-            while (true) {
-                try {
-                    PTable theTable = null;
-                    if (!updateCacheOnlyIfAutoCommit || connection.getAutoCommit()) {
-                        retry = false; // No reason to retry after this
-                        result = client.updateCache(schemaName, tableName);
-                        timeStamp = result.getMutationTime();
-                        theTable = result.getTable();
-                    } 
-                    if (theTable == null) {
-                        theTable = connection.getPMetaData().getTable(new PTableKey(tenantId, fullTableName));
-                    }
-                    // If dynamic columns have been specified add them to the table declaration
-                    if (!table.getDynamicColumns().isEmpty()) {
-                        theTable = this.addDynamicColumns(table.getDynamicColumns(), theTable);
-                    }
-                    tableRef = new TableRef(alias, theTable, timeStamp, !table.getDynamicColumns().isEmpty());
-                    if (didRetry && logger.isDebugEnabled()) {
-                        logger.debug("Re-resolved stale table " + fullTableName + " with seqNum " + tableRef.getTable().getSequenceNumber() + " at timestamp " + tableRef.getTable().getTimeStamp() + " with " + tableRef.getTable().getColumns().size() + " columns: " + tableRef.getTable().getColumns());
-                    }
-                    break;
-                } catch (TableNotFoundException e) {
-                    if (tenantId != null) { // Check with null tenantId next
-                        tenantId = null;
-                        continue;
-                    }
-                    sqlE = new TableNotFoundException(e,timeStamp);
-                }
-                // If we haven't already tried, update our cache and retry
-                // Only loop back if the cache was updated
-                if (retry && (result = client.updateCache(schemaName, tableName)).wasUpdated()) {
-                    timeStamp = result.getMutationTime();
-                    retry = false;
-                    didRetry = true;
-                    continue;
-                }
-                throw sqlE;
-            }
+            alias = tableNode.getAlias();
+            TableRef tableRef = createTableRef(tableNode, updateCacheImmediately);
             tableRefs = ImmutableList.of(tableRef);
         }
 
@@ -313,6 +261,61 @@ public class FromCompiler {
             this.client = new MetaDataClient(connection);
         }
 
+        protected TableRef createTableRef(NamedTableNode tableNode, boolean updateCacheImmediately) throws SQLException {
+            String alias = tableNode.getAlias();
+            String tableName = tableNode.getName().getTableName();
+            String schemaName = tableNode.getName().getSchemaName();
+            List<ColumnDef> dynamicColumns = tableNode.getDynamicColumns();
+            SQLException sqlE = null;
+            long timeStamp = QueryConstants.UNSET_TIMESTAMP;
+            TableRef tableRef = null;
+            boolean retry = true;
+            boolean didRetry = false;
+            MetaDataMutationResult result = null;
+            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+            PName tenantId = connection.getTenantId();
+            while (true) {
+                try {
+                    PTable theTable = null;
+                    if (updateCacheImmediately || connection.getAutoCommit()) {
+                        retry = false; // No reason to retry after this
+                        result = client.updateCache(schemaName, tableName);
+                        timeStamp = result.getMutationTime();
+                        theTable = result.getTable();
+                    } 
+                    if (theTable == null) {
+                        theTable = connection.getMetaDataCache().getTable(new PTableKey(tenantId, fullTableName));
+                    }
+                    // If dynamic columns have been specified add them to the table declaration
+                    if (!dynamicColumns.isEmpty()) {
+                        theTable = this.addDynamicColumns(dynamicColumns, theTable);
+                    }
+                    tableRef = new TableRef(alias, theTable, timeStamp, !dynamicColumns.isEmpty());
+                    if (didRetry && logger.isDebugEnabled()) {
+                        logger.debug("Re-resolved stale table " + fullTableName + " with seqNum " + tableRef.getTable().getSequenceNumber() + " at timestamp " + tableRef.getTable().getTimeStamp() + " with " + tableRef.getTable().getColumns().size() + " columns: " + tableRef.getTable().getColumns());
+                    }
+                    break;
+                } catch (TableNotFoundException e) {
+                    if (tenantId != null) { // Check with null tenantId next
+                        tenantId = null;
+                        continue;
+                    }
+                    sqlE = new TableNotFoundException(e,timeStamp);
+                }
+                // If we haven't already tried, update our cache and retry.
+                // We always attempt to update the cache in the event of a retry (i.e. TableNotFoundException)
+                // Only loop back if the cache was updated
+                if (retry && (result = client.updateCache(schemaName, tableName)).wasUpdated()) {
+                    timeStamp = result.getMutationTime();
+                    retry = false;
+                    didRetry = true;
+                    continue;
+                }
+                throw sqlE;
+            }
+            return tableRef;
+        }
+        
         protected PTable addDynamicColumns(List<ColumnDef> dynColumns, PTable theTable)
                 throws SQLException {
             if (!dynColumns.isEmpty()) {
@@ -364,31 +367,10 @@ public class FromCompiler {
             joinNode.getTable().accept(this);
         }
 
-        private TableRef createTableRef(String alias, String schemaName, String tableName,
-                List<ColumnDef> dynamicColumnDefs) throws SQLException {
-            MetaDataMutationResult result = client.updateCache(schemaName, tableName);
-            long timeStamp = result.getMutationTime();
-            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-            PTable theTable = connection.getPMetaData().getTable(new PTableKey(connection.getTenantId(), fullTableName));
-
-            // If dynamic columns have been specified add them to the table declaration
-            if (!dynamicColumnDefs.isEmpty()) {
-                theTable = this.addDynamicColumns(dynamicColumnDefs, theTable);
-            }
-            TableRef tableRef = new TableRef(alias, theTable, timeStamp, !dynamicColumnDefs.isEmpty());
-            return tableRef;
-        }
-
-
         @Override
-        public void visit(NamedTableNode namedTableNode) throws SQLException {
-            String tableName = namedTableNode.getName().getTableName();
-            String schemaName = namedTableNode.getName().getSchemaName();
-
-            String alias = namedTableNode.getAlias();
-            List<ColumnDef> dynamicColumnDefs = namedTableNode.getDynamicColumns();
-
-            TableRef tableRef = createTableRef(alias, schemaName, tableName, dynamicColumnDefs);
+        public void visit(NamedTableNode tableNode) throws SQLException {
+            String alias = tableNode.getAlias();
+            TableRef tableRef = createTableRef(tableNode, true);
             PTable theTable = tableRef.getTable();
 
             if (alias != null) {

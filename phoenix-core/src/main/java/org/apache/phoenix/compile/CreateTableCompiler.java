@@ -73,7 +73,7 @@ public class CreateTableCompiler {
 
     public MutationPlan compile(final CreateTableStatement create) throws SQLException {
         final PhoenixConnection connection = statement.getConnection();
-        ColumnResolver resolver = FromCompiler.getResolver(create, connection);
+        ColumnResolver resolver = FromCompiler.getResolverForCreation(create, connection);
         PTableType type = create.getTableType();
         PhoenixConnection connectionToBe = connection;
         PTable parentToBe = null;

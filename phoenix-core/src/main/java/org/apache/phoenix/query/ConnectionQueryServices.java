@@ -42,6 +42,8 @@ import org.apache.phoenix.schema.SequenceKey;
 
 
 public interface ConnectionQueryServices extends QueryServices, MetaDataMutated {
+    public static final int INITIAL_META_DATA_TABLE_CAPACITY = 100;
+
     /**
      * Get (and create if necessary) a child QueryService for a given tenantId.
      * The QueryService will be cached for the lifetime of the parent QueryService

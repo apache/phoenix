@@ -180,7 +180,7 @@ public class DeleteCompiler {
         final PhoenixConnection connection = statement.getConnection();
         final boolean isAutoCommit = connection.getAutoCommit();
         final ConnectionQueryServices services = connection.getQueryServices();
-        final ColumnResolver resolver = FromCompiler.getResolver(delete, connection);
+        final ColumnResolver resolver = FromCompiler.getResolverForMutation(delete, connection);
         final TableRef tableRef = resolver.getTables().get(0);
         final PTable table = tableRef.getTable();
         if (table.getType() == PTableType.VIEW && table.getViewType().isReadOnly()) {

@@ -98,7 +98,7 @@ public class IndexMetadataTest extends BaseHBaseManagedTimeTest{
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         conn.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName).next(); // client side cache will update
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        pconn.getPMetaData().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr);
+        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr);
         assertTrue(ptr.getLength() > 0);
     }
     
@@ -107,7 +107,7 @@ public class IndexMetadataTest extends BaseHBaseManagedTimeTest{
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         conn.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName).next(); // client side cache will update
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        pconn.getPMetaData().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr);
+        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr);
         assertTrue(ptr.getLength() == 0);
     }
     

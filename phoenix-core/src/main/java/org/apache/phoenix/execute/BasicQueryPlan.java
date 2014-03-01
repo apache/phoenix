@@ -23,7 +23,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -36,7 +35,6 @@ import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.FilterableStatement;
-import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
@@ -111,14 +109,6 @@ public abstract class BasicQueryPlan implements QueryPlan {
     @Override
     public RowProjector getProjector() {
         return projection;
-    }
-
-    protected ConnectionQueryServices getConnectionQueryServices(ConnectionQueryServices services) {
-        // Get child services associated with tenantId of query.
-        ConnectionQueryServices childServices = context.getConnection().getTenantId() == null ? 
-                services : 
-                services.getChildQueryServices(new ImmutableBytesWritable(context.getConnection().getTenantId().getBytes()));
-        return childServices;
     }
 
 //    /**

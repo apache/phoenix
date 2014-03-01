@@ -17,11 +17,11 @@
  */
 package org.apache.phoenix.parse;
 
-public abstract class SingleTableSQLStatement extends MutableStatement {
+public abstract class SingleTableStatement extends MutableStatement {
     private final NamedTableNode table;
     private final int bindCount;
 
-    public SingleTableSQLStatement(NamedTableNode table, int bindCount) {
+    public SingleTableStatement(NamedTableNode table, int bindCount) {
         this.table = table;
         this.bindCount = bindCount;
     }
