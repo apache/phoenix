@@ -24,7 +24,10 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -43,12 +46,16 @@ import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.SQLCloseable;
+import org.apache.phoenix.util.SQLCloseables;
 
 import com.google.common.collect.Lists;
 
 public class HashJoinPlan implements QueryPlan {
+    private static final Log LOG = LogFactory.getLog(HashJoinPlan.class);
     
     private BasicQueryPlan plan;
     private HashJoinInfo joinInfo;
@@ -92,6 +99,9 @@ public class HashJoinPlan implements QueryPlan {
         ExecutorService executor = services.getExecutor();
         List<Future<ServerCache>> futures = new ArrayList<Future<ServerCache>>(count);
         List<SQLCloseable> dependencies = new ArrayList<SQLCloseable>(count);
+        final int maxServerCacheTimeToLive = services.getProps().getInt(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
+        final AtomicLong firstJobEndTime = new AtomicLong(0);
+        SQLException firstException = null;
         for (int i = 0; i < count; i++) {
             final int index = i;
             futures.add(executor.submit(new JobCallable<ServerCache>() {
@@ -99,8 +109,14 @@ public class HashJoinPlan implements QueryPlan {
                 @Override
                 public ServerCache call() throws Exception {
                     QueryPlan hashPlan = hashPlans[index];
-                    return hashClient.addHashCache(ranges, hashPlan.iterator(), 
+                    ServerCache cache = hashClient.addHashCache(ranges, hashPlan.iterator(), 
                             hashPlan.getEstimatedSize(), hashExpressions[index], plan.getTableRef());
+                    long endTime = System.currentTimeMillis();
+                    boolean isSet = firstJobEndTime.compareAndSet(0, endTime);
+                    if (!isSet && (endTime - firstJobEndTime.get()) > maxServerCacheTimeToLive) {
+                        LOG.warn("Hash plan [" + index + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.");
+                    }
+                    return cache;
                 }
 
                 @Override
@@ -115,12 +131,21 @@ public class HashJoinPlan implements QueryPlan {
                 joinIds[i].set(cache.getId());
                 dependencies.add(cache);
             } catch (InterruptedException e) {
-                throw new SQLException("Hash join execution interrupted.", e);
+                if (firstException == null) {
+                    firstException = new SQLException("Hash plan [" + i + "] execution interrupted.", e);
+                }
             } catch (ExecutionException e) {
-                throw new SQLException("Encountered exception in hash plan execution.", 
+                if (firstException == null) {
+                    firstException = new SQLException("Encountered exception in hash plan [" + i + "] execution.", 
                         e.getCause());
+                }
             }
         }
+        if (firstException != null) {
+            SQLCloseables.closeAllQuietly(dependencies);
+            throw firstException;
+        }
+        
         HashJoinInfo.serializeHashJoinIntoScan(scan, joinInfo);
         
         return plan.iterator(dependencies);
