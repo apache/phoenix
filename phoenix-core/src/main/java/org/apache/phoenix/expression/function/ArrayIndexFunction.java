@@ -21,7 +21,6 @@ import java.sql.Types;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
@@ -67,7 +66,7 @@ public class ArrayIndexFunction extends ScalarFunction {
 
 		// Given a ptr to the entire array, set ptr to point to a particular element within that array
 		// given the type of an array element (see comments in PDataTypeForArray)
-		PArrayDataType.positionAtArrayElement(ptr, index, getDataType());
+		PArrayDataType.positionAtArrayElement(ptr, index-1, getDataType(), getByteSize());
 		return true;
 		
 	}
@@ -77,8 +76,17 @@ public class ArrayIndexFunction extends ScalarFunction {
 		return PDataType.fromTypeId(children.get(0).getDataType().getSqlType()
 				- Types.ARRAY);
 	}
-
+	
 	@Override
+	public Integer getByteSize() {
+	    return this.children.get(0).getMaxLength();
+	}
+	
+	@Override
+	public Integer getMaxLength() {
+	    return this.children.get(0).getMaxLength();
+	}
+		@Override
 	public String getName() {
 		return NAME;
 	}

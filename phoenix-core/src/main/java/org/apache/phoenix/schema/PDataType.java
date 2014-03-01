@@ -3432,6 +3432,13 @@ public enum PDataType {
         }
 
         @Override
+        public Integer getMaxLength(Object o) {
+            if (o == null) { return null; }
+            byte[] value = (byte[])o;
+            return value.length;
+        }
+
+        @Override
         public Object toObject(String value) {
             if (value == null || value.length() == 0) {
                 return null;
@@ -3653,12 +3660,19 @@ public enum PDataType {
            return true;
         }
 		
-		@Override
-		public boolean isSizeCompatible(PDataType srcType, Object value,
-				byte[] b, Integer maxLength, Integer desiredMaxLength,
-				Integer scale, Integer desiredScale) {
-			return pDataTypeForArray.isSizeCompatible(srcType, value, b,
-					maxLength, desiredMaxLength, scale, desiredScale);		}
+        @Override
+        public boolean isSizeCompatible(PDataType srcType, Object value, byte[] b, Integer maxLength,
+                Integer desiredMaxLength, Integer scale, Integer desiredScale) {
+            return pDataTypeForArray.isSizeCompatible(srcType, value, b, maxLength, desiredMaxLength, scale,
+                    desiredScale);
+        }
+
+        @Override
+        public byte[] coerceBytes(byte[] b, Object object, PDataType actualType, Integer maxLength, Integer scale,
+                Integer desiredMaxLength, Integer desiredScale) {
+            return pDataTypeForArray.coerceBytes(b, object, actualType, maxLength, scale, desiredMaxLength,
+                    desiredScale);
+        }
 		
 	},
 	VARBINARY_ARRAY("VARBINARY_ARRAY", Types.ARRAY + PDataType.VARBINARY.getSqlType(), PhoenixArray.class, null) {
@@ -3735,7 +3749,13 @@ public enum PDataType {
 			return pDataTypeForArray.isSizeCompatible(srcType, value, b,
 					maxLength, desiredMaxLength, scale, desiredScale);
 		}
-		
+
+        @Override
+        public byte[] coerceBytes(byte[] b, Object object, PDataType actualType, Integer maxLength, Integer scale,
+                Integer desiredMaxLength, Integer desiredScale) {
+            return pDataTypeForArray.coerceBytes(b, object, actualType, maxLength, scale, desiredMaxLength,
+                    desiredScale);
+        }
 	},
 	BINARY_ARRAY("BINARY_ARRAY", Types.ARRAY + PDataType.BINARY.getSqlType(), PhoenixArray.class, null) {
 		@Override
@@ -3811,6 +3831,13 @@ public enum PDataType {
 			return pDataTypeForArray.isSizeCompatible(srcType, value, b,
 					maxLength, desiredMaxLength, scale, desiredScale);
 		}
+	
+        @Override
+        public byte[] coerceBytes(byte[] b, Object object, PDataType actualType, Integer maxLength, Integer scale,
+                Integer desiredMaxLength, Integer desiredScale) {
+            return pDataTypeForArray.coerceBytes(b, object, actualType, maxLength, scale, desiredMaxLength,
+                    desiredScale);
+        }
 
 	},
 	CHAR_ARRAY("CHAR_ARRAY", Types.ARRAY + PDataType.CHAR.getSqlType(), PhoenixArray.class, null) {
@@ -3887,6 +3914,12 @@ public enum PDataType {
 				Integer scale, Integer desiredScale) {
 			return pDataTypeForArray.isSizeCompatible(srcType, value, b,
 					maxLength, desiredMaxLength, scale, desiredScale);
+		}
+		
+		@Override
+		public byte[] coerceBytes(byte[] b, Object object, PDataType actualType, Integer maxLength, Integer scale,
+		        Integer desiredMaxLength, Integer desiredScale) {
+		    return pDataTypeForArray.coerceBytes(b, object, actualType, maxLength, scale, desiredMaxLength, desiredScale);
 		}
 		
 	},
@@ -5170,18 +5203,11 @@ public enum PDataType {
         if(isArrayType()) {
             PhoenixArray array = (PhoenixArray)o;
             int noOfElements = array.numElements;
-            //int vIntSize = WritableUtils.getVIntSize(noOfElements);
-            int vIntSize = Bytes.SIZEOF_INT;
-
             int totalVarSize = 0;
             for (int i = 0; i < noOfElements; i++) {
                 totalVarSize += array.estimateByteSize(i);
             }
-            /**
-             * Calculate the totalVarSize including the vInt and byte needed for the 
-             * number of elements and version respectively
-             */
-            return vIntSize + (totalVarSize) + Bytes.SIZEOF_BYTE;
+            return totalVarSize;
         }
         // Non fixed width types must override this
         throw new UnsupportedOperationException();
