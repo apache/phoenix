@@ -22,7 +22,6 @@ import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
-import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
@@ -69,6 +68,8 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Types;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
@@ -79,6 +80,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
@@ -138,18 +140,6 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
             props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
         }
         Connection conn = null;
-        if (tenantId != null) {
-            props.setProperty(TENANT_ID_ATTRIB, tenantId);
-            try {
-                conn = DriverManager.getConnection(getUrl(), props);
-                deletePriorTables(ts, conn);
-                deletePriorSequences(ts, conn);
-            }
-            finally {
-                conn.close();
-            }
-            props.remove(TENANT_ID_ATTRIB);
-        }
         conn = DriverManager.getConnection(getUrl(), props);
         try {
             deletePriorTables(ts, conn);
@@ -160,28 +150,41 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
         }
     }
     
-    private static void deletePriorTables(long ts, Connection conn) throws Exception {
-        DatabaseMetaData dbmd = conn.getMetaData();
-        // Drop VIEWs first, as we don't allow a TABLE with views to be dropped.
-        ResultSet rs = dbmd.getTables(null, null, null, new String[] {PTableType.VIEW.toString()});
-        while (rs.next()) {
-            String fullTableName = SchemaUtil.getEscapedTableName(
-                    rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM_NAME),
-                    rs.getString(PhoenixDatabaseMetaData.TABLE_NAME_NAME));
-            String ddl = "DROP " + rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE_NAME) + " " + fullTableName;
-            conn.createStatement().executeUpdate(ddl);
-        }
-        rs = dbmd.getTables(null, null, null, new String[] {PTableType.TABLE.toString()});
-        while (rs.next()) {
-            String fullTableName = SchemaUtil.getEscapedTableName(
-                    rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM_NAME),
-                    rs.getString(PhoenixDatabaseMetaData.TABLE_NAME_NAME));
-            String ddl = "DROP " + rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE_NAME) + " " + fullTableName;
-            conn.createStatement().executeUpdate(ddl);
+    private static void deletePriorTables(long ts, Connection globalConn) throws Exception {
+        DatabaseMetaData dbmd = globalConn.getMetaData();
+        // Drop VIEWs first, as we don't allow a TABLE with views to be dropped
+        // Tables are sorted by TENANT_ID
+        List<String[]> tableTypesList = Arrays.asList(new String[] {PTableType.VIEW.toString()}, new String[] {PTableType.TABLE.toString()});
+        for (String[] tableTypes: tableTypesList) {
+            ResultSet rs = dbmd.getTables(null, null, null, tableTypes);
+            String lastTenantId = null;
+            Connection conn = globalConn;
+            while (rs.next()) {
+                String fullTableName = SchemaUtil.getEscapedTableName(
+                        rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
+                        rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+                String ddl = "DROP " + rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE) + " " + fullTableName;
+                String tenantId = rs.getString(1);
+                if (tenantId != null && !tenantId.equals(lastTenantId))  {
+                    if (lastTenantId != null) {
+                        conn.close();
+                    }
+                    // Open tenant-specific connection when we find a new one
+                    Properties props = new Properties(globalConn.getClientInfo());
+                    props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                    conn = DriverManager.getConnection(getUrl(), props);
+                    lastTenantId = tenantId;
+                }
+                conn.createStatement().executeUpdate(ddl);
+            }
+            if (lastTenantId != null) {
+                conn.close();
+            }
         }
     }
     
     private static void deletePriorSequences(long ts, Connection conn) throws Exception {
+        // TODO: drop tenant-specific sequences too
         ResultSet rs = conn.createStatement().executeQuery("SELECT " 
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + "," 
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME 

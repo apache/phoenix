@@ -39,6 +39,7 @@ import java.util.Properties;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Assert;
 import org.junit.Test;
@@ -937,17 +938,17 @@ public class ArrayTest extends BaseClientManagedTimeTest {
                 Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
-            ResultSet rs = conn.getMetaData().getColumns(null, null, StringUtil.escapeLike(TABLE_WITH_ARRAY), StringUtil.escapeLike("x_long_array"));
+            ResultSet rs = conn.getMetaData().getColumns(null, null, StringUtil.escapeLike(TABLE_WITH_ARRAY), StringUtil.escapeLike(SchemaUtil.normalizeIdentifier("x_long_array")));
             assertTrue(rs.next());          
             assertEquals(5, rs.getInt("ARRAY_SIZE"));
             assertFalse(rs.next());
 
-            rs = conn.getMetaData().getColumns(null, null, StringUtil.escapeLike(TABLE_WITH_ARRAY), StringUtil.escapeLike("a_string_array"));
+            rs = conn.getMetaData().getColumns(null, null, StringUtil.escapeLike(TABLE_WITH_ARRAY), StringUtil.escapeLike(SchemaUtil.normalizeIdentifier("a_string_array")));
             assertTrue(rs.next());          
             assertEquals(3, rs.getInt("ARRAY_SIZE"));
             assertFalse(rs.next());
 
-            rs = conn.getMetaData().getColumns(null, null, StringUtil.escapeLike(TABLE_WITH_ARRAY), StringUtil.escapeLike("a_double_array"));
+            rs = conn.getMetaData().getColumns(null, null, StringUtil.escapeLike(TABLE_WITH_ARRAY), StringUtil.escapeLike(SchemaUtil.normalizeIdentifier("a_double_array")));
             assertTrue(rs.next());          
             assertEquals(0, rs.getInt("ARRAY_SIZE"));
             assertTrue(rs.wasNull());

@@ -39,14 +39,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SCHEMA;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
@@ -132,11 +132,11 @@ public class MetaDataClient {
 
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
     private static final String CREATE_TABLE =
-            "UPSERT INTO " + TYPE_SCHEMA + ".\"" + TYPE_TABLE + "\"( " +
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
             TENANT_ID + "," +
-            TABLE_SCHEM_NAME + "," +
-            TABLE_NAME_NAME + "," +
-            TABLE_TYPE_NAME + "," +
+            TABLE_SCHEM + "," +
+            TABLE_NAME + "," +
+            TABLE_TYPE + "," +
             TABLE_SEQ_NUM + "," +
             COLUMN_COUNT + "," +
             SALT_BUCKETS + "," +
@@ -152,64 +152,64 @@ public class MetaDataClient {
             VIEW_INDEX_ID +
             ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String CREATE_LINK =
-            "UPSERT INTO " + TYPE_SCHEMA + ".\"" + TYPE_TABLE + "\"( " +
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
             TENANT_ID + "," +
-            TABLE_SCHEM_NAME + "," +
-            TABLE_NAME_NAME + "," +
-            TABLE_CAT_NAME + "," +
+            TABLE_SCHEM + "," +
+            TABLE_NAME + "," +
+            COLUMN_FAMILY + "," +
             LINK_TYPE +
             ") VALUES (?, ?, ?, ?, ?)";
     private static final String INCREMENT_SEQ_NUM =
-            "UPSERT INTO " + TYPE_SCHEMA + ".\"" + TYPE_TABLE + "\"( " + 
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + 
             TENANT_ID + "," +
-            TABLE_SCHEM_NAME + "," +
-            TABLE_NAME_NAME + "," +
+            TABLE_SCHEM + "," +
+            TABLE_NAME + "," +
             TABLE_SEQ_NUM  +
             ") VALUES (?, ?, ?, ?)";
     private static final String MUTATE_TABLE =
-        "UPSERT INTO " + TYPE_SCHEMA + ".\"" + TYPE_TABLE + "\"( " + 
+        "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + 
         TENANT_ID + "," +
-        TABLE_SCHEM_NAME + "," +
-        TABLE_NAME_NAME + "," +
-        TABLE_TYPE_NAME + "," +
+        TABLE_SCHEM + "," +
+        TABLE_NAME + "," +
+        TABLE_TYPE + "," +
         TABLE_SEQ_NUM + "," +
         COLUMN_COUNT +
         ") VALUES (?, ?, ?, ?, ?, ?)";
     private static final String MUTATE_MULTI_TENANT =
-            "UPSERT INTO " + TYPE_SCHEMA + ".\"" + TYPE_TABLE + "\"( " + 
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + 
             TENANT_ID + "," +
-            TABLE_SCHEM_NAME + "," +
-            TABLE_NAME_NAME + "," +
+            TABLE_SCHEM + "," +
+            TABLE_NAME + "," +
             MULTI_TENANT + 
             ") VALUES (?, ?, ?, ?)";
     private static final String MUTATE_DISABLE_WAL =
-            "UPSERT INTO " + TYPE_SCHEMA + ".\"" + TYPE_TABLE + "\"( " + 
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + 
             TENANT_ID + "," +
-            TABLE_SCHEM_NAME + "," +
-            TABLE_NAME_NAME + "," +
+            TABLE_SCHEM + "," +
+            TABLE_NAME + "," +
             DISABLE_WAL + 
             ") VALUES (?, ?, ?, ?)";
     private static final String MUTATE_IMMUTABLE_ROWS =
-            "UPSERT INTO " + TYPE_SCHEMA + ".\"" + TYPE_TABLE + "\"( " + 
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + 
             TENANT_ID + "," +
-            TABLE_SCHEM_NAME + "," +
-            TABLE_NAME_NAME + "," +
+            TABLE_SCHEM + "," +
+            TABLE_NAME + "," +
             IMMUTABLE_ROWS + 
             ") VALUES (?, ?, ?, ?)";
     private static final String UPDATE_INDEX_STATE =
-            "UPSERT INTO " + TYPE_SCHEMA + ".\"" + TYPE_TABLE + "\"( " + 
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + 
             TENANT_ID + "," +
-            TABLE_SCHEM_NAME + "," +
-            TABLE_NAME_NAME + "," +
+            TABLE_SCHEM + "," +
+            TABLE_NAME + "," +
             INDEX_STATE +
             ") VALUES (?, ?, ?, ?)";
     private static final String INSERT_COLUMN =
-        "UPSERT INTO " + TYPE_SCHEMA + ".\"" + TYPE_TABLE + "\"( " + 
+        "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + 
         TENANT_ID + "," +
-        TABLE_SCHEM_NAME + "," +
-        TABLE_NAME_NAME + "," +
+        TABLE_SCHEM + "," +
+        TABLE_NAME + "," +
         COLUMN_NAME + "," +
-        TABLE_CAT_NAME + "," +
+        COLUMN_FAMILY + "," +
         DATA_TYPE + "," +
         NULLABLE + "," +
         COLUMN_SIZE + "," +
@@ -221,12 +221,12 @@ public class MetaDataClient {
         VIEW_CONSTANT +
         ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String UPDATE_COLUMN_POSITION =
-        "UPSERT INTO " + TYPE_SCHEMA + ".\"" + TYPE_TABLE + "\" ( " + 
+        "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\" ( " + 
         TENANT_ID + "," +
-        TABLE_SCHEM_NAME + "," +
-        TABLE_NAME_NAME + "," +
+        TABLE_SCHEM + "," +
+        TABLE_NAME + "," +
         COLUMN_NAME + "," +
-        TABLE_CAT_NAME + "," +
+        COLUMN_FAMILY + "," +
         ORDINAL_POSITION +
         ") VALUES (?, ?, ?, ?, ?, ?)";
     
@@ -258,7 +258,7 @@ public class MetaDataClient {
     
     private MetaDataMutationResult updateCache(String schemaName, String tableName, boolean alwaysHitServer) throws SQLException { // TODO: pass byte[] here
         Long scn = connection.getSCN();
-        boolean systemTable = TYPE_SCHEMA.equals(schemaName);
+        boolean systemTable = SYSTEM_CATALOG_SCHEMA.equals(schemaName);
         // System tables must always have a null tenantId
         PName tenantId = systemTable ? null : connection.getTenantId();
         long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
@@ -286,7 +286,7 @@ public class MetaDataClient {
             final byte[] tableBytes = PDataType.VARCHAR.toBytes(tableName);
             result = connection.getQueryServices().getTable(tenantId, schemaBytes, tableBytes, tableTimestamp, clientTimeStamp);
             
-            if (TYPE_SCHEMA.equals(schemaName)) {
+            if (SYSTEM_CATALOG_SCHEMA.equals(schemaName)) {
                 return result;
             }
             MutationCode code = result.getMutationCode();
@@ -1638,10 +1638,10 @@ public class MetaDataClient {
          * handle currently. If/when the optimizer handles (A and ((B AND C) OR (D AND E))) we
          * can factor out the tenant ID, schema name, and table name columns
          */
-        StringBuilder buf = new StringBuilder("DELETE FROM " + TYPE_SCHEMA + ".\"" + TYPE_TABLE + "\" WHERE ");
+        StringBuilder buf = new StringBuilder("DELETE FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\" WHERE ");
         buf.append("(" + 
-                TENANT_ID + "," + TABLE_SCHEM_NAME + "," + TABLE_NAME_NAME + "," + 
-                COLUMN_NAME + ", " + TABLE_CAT_NAME + ") IN (");
+                TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + "," + 
+                COLUMN_NAME + ", " + COLUMN_FAMILY + ") IN (");
         for(PColumn columnToDrop : columnsToDrop) {
             buf.append("('" + tenantId + "'");
             buf.append(",'" + schemaName + "'");

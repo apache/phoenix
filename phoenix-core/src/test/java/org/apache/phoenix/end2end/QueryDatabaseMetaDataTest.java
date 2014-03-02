@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.ATABLE_SCHEMA_NAME;
 import static org.apache.phoenix.util.TestUtil.BTABLE_NAME;
@@ -103,11 +103,11 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         
         rs = dbmd.getTables(null, null, null, null);
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),TYPE_SCHEMA);
-        assertEquals(rs.getString("TABLE_NAME"),TYPE_TABLE);
+        assertEquals(rs.getString("TABLE_SCHEM"),SYSTEM_CATALOG_SCHEMA);
+        assertEquals(rs.getString("TABLE_NAME"),SYSTEM_CATALOG_TABLE);
         assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),TYPE_SCHEMA);
+        assertEquals(rs.getString("TABLE_SCHEM"),SYSTEM_CATALOG_SCHEMA);
         assertEquals(rs.getString("TABLE_NAME"),TYPE_SEQUENCE);
         assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
         assertTrue(rs.next());
@@ -174,7 +174,7 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertEquals(rs.getString("TABLE_SCHEM"),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
         assertEquals(rs.getString("TABLE_CATALOG"),null);
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),PhoenixDatabaseMetaData.TYPE_SCHEMA);
+        assertEquals(rs.getString("TABLE_SCHEM"),PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
         assertEquals(rs.getString("TABLE_CATALOG"),null);
         assertFalse(rs.next());
     }
@@ -204,7 +204,7 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PDataType.INTEGER.getSqlType(), rs.getInt("DATA_TYPE"));
@@ -215,7 +215,7 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PDataType.LONG.getSqlType(), rs.getInt("DATA_TYPE"));
@@ -226,7 +226,7 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col3"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PDataType.DECIMAL.getSqlType(), rs.getInt("DATA_TYPE"));
@@ -237,7 +237,7 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col4"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PDataType.DECIMAL.getSqlType(), rs.getInt("DATA_TYPE"));
@@ -248,7 +248,7 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col5"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PDataType.DECIMAL.getSqlType(), rs.getInt("DATA_TYPE"));
@@ -259,11 +259,11 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertFalse(rs.next());
 
         // Look up only columns in a column family
-        rs = dbmd.getColumns(SchemaUtil.normalizeIdentifier("a"), "", MDTEST_NAME, null);
+        rs = dbmd.getColumns(null, "", MDTEST_NAME, "A.");
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PDataType.INTEGER.getSqlType(), rs.getInt("DATA_TYPE"));
@@ -274,11 +274,11 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertFalse(rs.next());
 
         // Look up KV columns in a column family
-        rs = dbmd.getColumns("%", "", MDTEST_NAME, null);
+        rs = dbmd.getColumns("", "", MDTEST_NAME, "%.COL%");
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PDataType.INTEGER.getSqlType(), rs.getInt("DATA_TYPE"));
@@ -289,7 +289,7 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PDataType.LONG.getSqlType(), rs.getInt("DATA_TYPE"));
@@ -300,7 +300,7 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col3"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PDataType.DECIMAL.getSqlType(), rs.getInt("DATA_TYPE"));
@@ -311,7 +311,7 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col4"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PDataType.DECIMAL.getSqlType(), rs.getInt("DATA_TYPE"));
@@ -322,7 +322,7 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col5"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PDataType.DECIMAL.getSqlType(), rs.getInt("DATA_TYPE"));
@@ -330,6 +330,15 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertEquals(6, rs.getInt("COLUMN_SIZE"));
         assertEquals(3, rs.getInt("DECIMAL_DIGITS"));
 
+        assertFalse(rs.next());
+        
+        // Look up KV columns in a column family
+        rs = dbmd.getColumns("", "", MDTEST_NAME, "B.COL2");
+        assertTrue(rs.next());
+        assertEquals(rs.getString("TABLE_SCHEM"),null);
+        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
+        assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
         assertFalse(rs.next());
     }
 
@@ -404,14 +413,14 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         // The above returns all columns, starting with the PK columns
         assertTrue(rs.next());
         
-        rs = dbmd.getColumns("", CUSTOM_ENTITY_DATA_SCHEMA_NAME.toLowerCase(), CUSTOM_ENTITY_DATA_NAME.toLowerCase(), "key_prefix");
+        rs = dbmd.getColumns("", CUSTOM_ENTITY_DATA_SCHEMA_NAME, CUSTOM_ENTITY_DATA_NAME, "KEY_PREFIX");
         assertTrue(rs.next());
         assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
         assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
         assertEquals(null, rs.getString("TABLE_CAT"));
         assertEquals(SchemaUtil.normalizeIdentifier("key_prefix"), rs.getString("COLUMN_NAME"));
         
-        rs = dbmd.getColumns("", CUSTOM_ENTITY_DATA_SCHEMA_NAME.toLowerCase(), CUSTOM_ENTITY_DATA_NAME.toLowerCase(), "key_prefix".toUpperCase());
+        rs = dbmd.getColumns("", CUSTOM_ENTITY_DATA_SCHEMA_NAME, CUSTOM_ENTITY_DATA_NAME, "KEY_PREFIX");
         assertTrue(rs.next());
         assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
         assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
@@ -437,47 +446,47 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(rs.getString("TABLE_NAME"),GROUPBYTEST_NAME);
-        assertEquals(null, rs.getString("TABLE_CAT"));
+        assertEquals(null, rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("id"), rs.getString("COLUMN_NAME"));
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(rs.getString("TABLE_NAME"),GROUPBYTEST_NAME);
-        assertEquals(PhoenixDatabaseMetaData.TABLE_FAMILY, rs.getString("TABLE_CAT"));
+        assertEquals(PhoenixDatabaseMetaData.TABLE_FAMILY, rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("uri"), rs.getString("COLUMN_NAME"));
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(rs.getString("TABLE_NAME"),GROUPBYTEST_NAME);
-        assertEquals(PhoenixDatabaseMetaData.TABLE_FAMILY, rs.getString("TABLE_CAT"));
+        assertEquals(PhoenixDatabaseMetaData.TABLE_FAMILY, rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("appcpu"), rs.getString("COLUMN_NAME"));
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(rs.getString("TABLE_NAME"),MDTEST_NAME);
-        assertEquals(null, rs.getString("TABLE_CAT"));
+        assertEquals(null, rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("id"), rs.getString("COLUMN_NAME"));
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(rs.getString("TABLE_NAME"),MDTEST_NAME);
-        assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(rs.getString("TABLE_NAME"),MDTEST_NAME);
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(rs.getString("TABLE_NAME"),MDTEST_NAME);
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col3"), rs.getString("COLUMN_NAME"));
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(rs.getString("TABLE_NAME"),MDTEST_NAME);
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col4"), rs.getString("COLUMN_NAME"));
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(rs.getString("TABLE_NAME"),MDTEST_NAME);
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("TABLE_CAT"));
+        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col5"), rs.getString("COLUMN_NAME"));
         assertFalse(rs.next());
     }

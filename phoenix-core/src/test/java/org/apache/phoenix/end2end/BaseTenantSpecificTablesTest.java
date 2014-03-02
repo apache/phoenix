@@ -21,7 +21,6 @@ import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 
 import java.sql.SQLException;
 
-import org.junit.After;
 import org.junit.Before;
 
 /**
@@ -66,10 +65,5 @@ public abstract class BaseTenantSpecificTablesTest extends BaseClientManagedTime
         createTestTable(getUrl(), PARENT_TABLE_DDL_NO_TENANT_TYPE_ID, null, nextTimestamp());
         createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, TENANT_TABLE_DDL, null, nextTimestamp());
         createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, TENANT_TABLE_DDL_NO_TENANT_TYPE_ID, null, nextTimestamp());
-    }
-    
-    @After
-    public void dropTables() throws Exception {
-        deletePriorTables(nextTimestamp()-1, TENANT_ID);
     }
 }
