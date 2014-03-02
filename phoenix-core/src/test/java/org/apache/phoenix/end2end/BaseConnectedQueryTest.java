@@ -17,6 +17,11 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
@@ -34,6 +39,7 @@ import static org.apache.phoenix.util.TestUtil.ENTITYHISTID9;
 import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_SALTED_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
+import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.apache.phoenix.util.TestUtil.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.PARENTID1;
 import static org.apache.phoenix.util.TestUtil.PARENTID2;
@@ -73,7 +79,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
@@ -107,11 +112,12 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
       }
       // reconstruct url when running against a live cluster
       if (isDistributedCluster) {
-        return "jdbc:phoenix:" + conf.get(HConstants.ZOOKEEPER_QUORUM, "localhost") + ":"
+        return JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + conf.get(HConstants.ZOOKEEPER_QUORUM, LOCALHOST) 
+            + JDBC_PROTOCOL_SEPARATOR
             + conf.getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT)
-            + ":"
+            + JDBC_PROTOCOL_SEPARATOR
             + conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT)
-            + ";test=true";
+            + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
       } else {
         return TestUtil.PHOENIX_JDBC_URL;
       }
@@ -129,7 +135,7 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
     protected static void deletePriorTables(long ts, String tenantId) throws Exception {
         Properties props = new Properties();
         if (ts != HConstants.LATEST_TIMESTAMP) {
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+            props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
         }
         Connection conn = null;
         if (tenantId != null) {
@@ -252,7 +258,7 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
     protected static void initTablesWithArrays(String tenantId, Date date, Long ts, boolean useNull) throws Exception {
     	 Properties props = new Properties();
          if (ts != null) {
-             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, ts.toString());
+             props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
          }
          Connection conn = DriverManager.getConnection(getUrl(), props);
          try {
@@ -336,7 +342,7 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
         
         Properties props = new Properties();
         if (ts != null) {
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts-3));
+            props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts-3));
         }
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -549,7 +555,7 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
         
         Properties props = new Properties();
         if (ts != null) {
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, ts.toString());
+            props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
         }
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -653,7 +659,7 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
         
         Properties props = new Properties();
         if (ts != null) {
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, ts.toString());
+            props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
         }
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {

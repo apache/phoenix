@@ -58,6 +58,10 @@ public class GlobalCache extends TenantCacheImpl {
     // Cache for lastest PTable for a given Phoenix table
     private Cache<ImmutableBytesPtr,PTable> metaDataCache;
     
+    public void clearTenantCache() {
+        perTenantCacheMap.clear();
+    }
+    
     public Cache<ImmutableBytesPtr,PTable> getMetaDataCache() {
         // Lazy initialize QueryServices so that we only attempt to create an HBase Configuration
         // object upon the first attempt to connect to any cluster. Otherwise, an attempt will be

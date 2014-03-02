@@ -1087,8 +1087,10 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
 
     @Override
     public void clearCache() {
-        Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.getEnvironment()).getMetaDataCache();
+        GlobalCache cache = GlobalCache.getInstance(this.getEnvironment());
+        Cache<ImmutableBytesPtr,PTable> metaDataCache = cache.getMetaDataCache();
         metaDataCache.invalidateAll();
+        cache.clearTenantCache();
     }
 
     @Override

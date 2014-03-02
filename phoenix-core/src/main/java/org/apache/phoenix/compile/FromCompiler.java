@@ -262,56 +262,48 @@ public class FromCompiler {
         }
 
         protected TableRef createTableRef(NamedTableNode tableNode, boolean updateCacheImmediately) throws SQLException {
-            String alias = tableNode.getAlias();
             String tableName = tableNode.getName().getTableName();
             String schemaName = tableNode.getName().getSchemaName();
-            List<ColumnDef> dynamicColumns = tableNode.getDynamicColumns();
-            SQLException sqlE = null;
             long timeStamp = QueryConstants.UNSET_TIMESTAMP;
-            TableRef tableRef = null;
-            boolean retry = true;
-            boolean didRetry = false;
-            MetaDataMutationResult result = null;
             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
             PName tenantId = connection.getTenantId();
-            while (true) {
+            PTable theTable = null;
+            if (updateCacheImmediately || connection.getAutoCommit()) {
+                MetaDataMutationResult result = client.updateCache(schemaName, tableName);
+                timeStamp = result.getMutationTime();
+                theTable = result.getTable();
+                if (theTable == null) {
+                    throw new TableNotFoundException(schemaName, tableName, timeStamp);
+                }
+            } else {
                 try {
-                    PTable theTable = null;
-                    if (updateCacheImmediately || connection.getAutoCommit()) {
-                        retry = false; // No reason to retry after this
-                        result = client.updateCache(schemaName, tableName);
+                    theTable = connection.getMetaDataCache().getTable(new PTableKey(tenantId, fullTableName));
+                } catch (TableNotFoundException e1) {
+                    if (tenantId != null) { // Check with null tenantId next
+                        try {
+                            theTable = connection.getMetaDataCache().getTable(new PTableKey(null, fullTableName));
+                        } catch (TableNotFoundException e2) {
+                        }
+                    }
+                }
+                // We always attempt to update the cache in the event of a TableNotFoundException
+                if (theTable == null) {
+                    MetaDataMutationResult result = client.updateCache(schemaName, tableName);
+                    if (result.wasUpdated()) {
                         timeStamp = result.getMutationTime();
                         theTable = result.getTable();
-                    } 
-                    if (theTable == null) {
-                        theTable = connection.getMetaDataCache().getTable(new PTableKey(tenantId, fullTableName));
                     }
-                    // If dynamic columns have been specified add them to the table declaration
-                    if (!dynamicColumns.isEmpty()) {
-                        theTable = this.addDynamicColumns(dynamicColumns, theTable);
-                    }
-                    tableRef = new TableRef(alias, theTable, timeStamp, !dynamicColumns.isEmpty());
-                    if (didRetry && logger.isDebugEnabled()) {
-                        logger.debug("Re-resolved stale table " + fullTableName + " with seqNum " + tableRef.getTable().getSequenceNumber() + " at timestamp " + tableRef.getTable().getTimeStamp() + " with " + tableRef.getTable().getColumns().size() + " columns: " + tableRef.getTable().getColumns());
-                    }
-                    break;
-                } catch (TableNotFoundException e) {
-                    if (tenantId != null) { // Check with null tenantId next
-                        tenantId = null;
-                        continue;
-                    }
-                    sqlE = new TableNotFoundException(e,timeStamp);
                 }
-                // If we haven't already tried, update our cache and retry.
-                // We always attempt to update the cache in the event of a retry (i.e. TableNotFoundException)
-                // Only loop back if the cache was updated
-                if (retry && (result = client.updateCache(schemaName, tableName)).wasUpdated()) {
-                    timeStamp = result.getMutationTime();
-                    retry = false;
-                    didRetry = true;
-                    continue;
+                if (theTable == null) {
+                    throw new TableNotFoundException(schemaName, tableName, timeStamp);
                 }
-                throw sqlE;
+            }
+            // Add any dynamic columns to the table declaration
+            List<ColumnDef> dynamicColumns = tableNode.getDynamicColumns();
+            theTable = addDynamicColumns(dynamicColumns, theTable);
+            TableRef tableRef = new TableRef(tableNode.getAlias(), theTable, timeStamp, !dynamicColumns.isEmpty());
+            if (logger.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
+                logger.debug("Re-resolved stale table " + fullTableName + " with seqNum " + tableRef.getTable().getSequenceNumber() + " at timestamp " + tableRef.getTable().getTimeStamp() + " with " + tableRef.getTable().getColumns().size() + " columns: " + tableRef.getTable().getColumns());
             }
             return tableRef;
         }

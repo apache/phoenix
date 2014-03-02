@@ -227,6 +227,8 @@ public class PhoenixRuntime {
         }
     }
 
+    public static final String PHOENIX_TEST_DRIVER_URL_PARAM = "test=true";
+
     private PhoenixRuntime() {
     }
     

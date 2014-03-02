@@ -256,15 +256,12 @@ public class MetaDataClient {
         return updateCache(schemaName, tableName, false);
     }
     
-    private static final MetaDataMutationResult SYSTEM_TABLE_RESULT = new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,QueryConstants.UNSET_TIMESTAMP,null);
-    
     private MetaDataMutationResult updateCache(String schemaName, String tableName, boolean alwaysHitServer) throws SQLException { // TODO: pass byte[] here
         Long scn = connection.getSCN();
-        PName tenantId = connection.getTenantId();
+        boolean systemTable = TYPE_SCHEMA.equals(schemaName);
+        // System tables must always have a null tenantId
+        PName tenantId = systemTable ? null : connection.getTenantId();
         long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
-        if (TYPE_SCHEMA.equals(schemaName) && !alwaysHitServer) {
-            return SYSTEM_TABLE_RESULT;
-        }
         PTable table = null;
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         long tableTimestamp = HConstants.LATEST_TIMESTAMP;
@@ -276,7 +273,7 @@ public class MetaDataClient {
             // a global multi-tenant table
         }
         // Don't bother with server call: we can't possibly find a newer table
-        if (table != null && tableTimestamp == clientTimeStamp - 1 && !alwaysHitServer) {
+        if (table != null && !alwaysHitServer && (systemTable || tableTimestamp == clientTimeStamp - 1)) {
             return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,QueryConstants.UNSET_TIMESTAMP,table);
         }
         

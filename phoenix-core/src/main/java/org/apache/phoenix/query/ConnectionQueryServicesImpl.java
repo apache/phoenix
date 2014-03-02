@@ -225,8 +225,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public void close() throws SQLException {
         SQLException sqlE = null;
         try {
-            // Clear Phoenix metadata cache before closing HConnection
-            clearCache();
+            try {
+                // Clear Phoenix metadata cache before closing HConnection
+                clearCache();
+            } finally {
+                // Should not be necessary, but at test time in particular
+                // there seems to be a memory leak and this can't hurt.
+                childServices.clear();
+                latestMetaData = null;
+            }
         } catch (SQLException e) {
             sqlE = e;
         } finally {

@@ -99,7 +99,12 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     public void close() throws SQLException {
         SQLException sqlE = null;
         try {
-            super.close();
+            try {
+                // Attempt to fix apparent memory leak...
+                clearCache();
+            } finally {
+                super.close();
+            }
         } catch (SQLException e)  {
             sqlE = e;
         } finally {
