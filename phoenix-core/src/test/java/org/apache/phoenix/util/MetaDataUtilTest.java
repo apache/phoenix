@@ -44,12 +44,14 @@ public class MetaDataUtilTest {
     
     @Test
     public void testCompatibility() {
-        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(1,2,1), 1, 2));
-        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(1,2,10), 1, 2));
-        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(1,2,0), 1, 2));
-        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(1,2,255), 1, 2));
-        assertFalse(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(2,2,0), 2, 1));
-        assertFalse(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(3,1,10), 4, 2));
+        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(1,2,1), 1));
+        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(1,2,10), 1));
+        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(1,2,0), 1));
+        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(1,2,255), 1));
+        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(2,2,0), 2));
+        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(2,10,36), 2));
+        assertFalse(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(3,1,10), 4));
+        assertFalse(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(3,1,10), 2));
     }
 
   /**

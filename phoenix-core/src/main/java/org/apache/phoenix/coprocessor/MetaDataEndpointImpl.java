@@ -208,7 +208,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
     private static final int DECIMAL_DIGITS_INDEX = COLUMN_KV_COLUMNS.indexOf(DECIMAL_DIGITS_KV);
     private static final int COLUMN_SIZE_INDEX = COLUMN_KV_COLUMNS.indexOf(COLUMN_SIZE_KV);
     private static final int NULLABLE_INDEX = COLUMN_KV_COLUMNS.indexOf(NULLABLE_KV);
-    private static final int SQL_DATA_TYPE_INDEX = COLUMN_KV_COLUMNS.indexOf(DATA_TYPE_KV);
+    private static final int DATA_TYPE_INDEX = COLUMN_KV_COLUMNS.indexOf(DATA_TYPE_KV);
     private static final int ORDINAL_POSITION_INDEX = COLUMN_KV_COLUMNS.indexOf(ORDINAL_POSITION_KV);
     private static final int SORT_ORDER_INDEX = COLUMN_KV_COLUMNS.indexOf(SORT_ORDER_KV);
     private static final int ARRAY_SIZE_INDEX = COLUMN_KV_COLUMNS.indexOf(ARRAY_SIZE_KV);
@@ -221,10 +221,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             return null;
         }
         int length = getVarCharLength(keyBuffer, keyOffset, keyLength);
-        // TODO: PNameImpl that doesn't need to copy the bytes
-        byte[] pnameBuf = new byte[length];
-        System.arraycopy(keyBuffer, keyOffset, pnameBuf, 0, length);
-        return PNameFactory.newName(pnameBuf);
+        return PNameFactory.newName(keyBuffer, keyOffset, length);
     }
     
     private static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp) throws IOException {
@@ -294,7 +291,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             }
         }
         // COLUMN_SIZE and DECIMAL_DIGIT are optional. NULLABLE, DATA_TYPE and ORDINAL_POSITION_KV are required.
-        if (colKeyValues[SQL_DATA_TYPE_INDEX] == null || colKeyValues[NULLABLE_INDEX] == null
+        if (colKeyValues[DATA_TYPE_INDEX] == null || colKeyValues[NULLABLE_INDEX] == null
                 || colKeyValues[ORDINAL_POSITION_INDEX] == null) {
             throw new IllegalStateException("Didn't find all required key values in '" + colName.getString() + "' column metadata row");
         }
@@ -306,9 +303,8 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         int position = PDataType.INTEGER.getCodec().decodeInt(ordinalPositionKv.getBuffer(), ordinalPositionKv.getValueOffset(), SortOrder.getDefault());
         KeyValue nullableKv = colKeyValues[NULLABLE_INDEX];
         boolean isNullable = PDataType.INTEGER.getCodec().decodeInt(nullableKv.getBuffer(), nullableKv.getValueOffset(), SortOrder.getDefault()) != ResultSetMetaData.columnNoNulls;
-        KeyValue sqlDataTypeKv = colKeyValues[SQL_DATA_TYPE_INDEX];
-        PDataType dataType = PDataType.fromTypeId(PDataType.INTEGER.getCodec().decodeInt(sqlDataTypeKv.getBuffer(), sqlDataTypeKv.getValueOffset(), SortOrder.getDefault()));
-        if (maxLength == null && dataType == PDataType.BINARY) dataType = PDataType.VARBINARY; // For backward compatibility.
+        KeyValue dataTypeKv = colKeyValues[DATA_TYPE_INDEX];
+        PDataType dataType = PDataType.fromTypeId(PDataType.INTEGER.getCodec().decodeInt(dataTypeKv.getBuffer(), dataTypeKv.getValueOffset(), SortOrder.getDefault()));
         KeyValue sortOrderKv = colKeyValues[SORT_ORDER_INDEX];
         SortOrder sortOrder = sortOrderKv == null ? SortOrder.getDefault() : SortOrder.fromSystemValue(PDataType.INTEGER.getCodec().decodeInt(sortOrderKv.getBuffer(), sortOrderKv.getValueOffset(), SortOrder.getDefault()));
         KeyValue arraySizeKv = colKeyValues[ARRAY_SIZE_INDEX];
@@ -335,6 +331,9 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         int keyOffset = keyValue.getRowOffset();
         PName tenantId = newPName(keyBuffer, keyOffset, keyLength);
         int tenantIdLength = tenantId.getBytes().length;
+        if (tenantIdLength == 0) {
+            tenantId = null;
+        }
         PName schemaName = newPName(keyBuffer, keyOffset+tenantIdLength+1, keyLength);
         int schemaNameLength = schemaName.getBytes().length;
         int tableNameLength = keyLength-schemaNameLength-1-tenantIdLength-1;

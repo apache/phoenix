@@ -52,18 +52,20 @@ public class MetaDataUtil {
     public static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
     
     public static boolean areClientAndServerCompatible(long version) {
-        // A server and client with the same major and minor version number must be compatible.
-        // So it's important that we roll the PHOENIX_MAJOR_VERSION or PHOENIX_MINOR_VERSION
-        // when we make an incompatible change.
-        return areClientAndServerCompatible(MetaDataUtil.decodePhoenixVersion(version), MetaDataProtocol.PHOENIX_MAJOR_VERSION, MetaDataProtocol.PHOENIX_MINOR_VERSION);
+        // As of 3.0, we allow a client and server to differ for the minor version.
+        // Care has to be taken to upgrade the server before the client, as otherwise
+        // the client may call expressions that don't yet exist on the server.
+        // Differing by the patch version has always been allowed.
+        // Only differing by the major version is not allowed.
+        return areClientAndServerCompatible(MetaDataUtil.decodePhoenixVersion(version), MetaDataProtocol.PHOENIX_MAJOR_VERSION);
     }
 
-    // For testing
-    static boolean areClientAndServerCompatible(int version, int pMajor, int pMinor) {
+    // Default scope for testing
+    static boolean areClientAndServerCompatible(int version, int pMajor) {
         // A server and client with the same major and minor version number must be compatible.
         // So it's important that we roll the PHOENIX_MAJOR_VERSION or PHOENIX_MINOR_VERSION
         // when we make an incompatible change.
-        return MetaDataUtil.encodeMaxPatchVersion(pMajor, pMinor) >= version && MetaDataUtil.encodeMinPatchVersion(pMajor, pMinor) <= version;
+        return MetaDataUtil.encodeMaxMinorVersion(pMajor) >= version && MetaDataUtil.encodeMinMinorVersion(pMajor) <= version;
     }
 
     // Given the encoded integer representing the phoenix version in the encoded version value.
@@ -141,6 +143,19 @@ public class MetaDataUtil {
         int version = 0;
         version |= (major << Byte.SIZE * 2);
         version |= (minor << Byte.SIZE);
+        return version;
+    }
+
+    public static int encodeMaxMinorVersion(int major) {
+        int version = 0;
+        version |= (major << Byte.SIZE * 2);
+        version |= 0xFFFF;
+        return version;
+    }
+
+    public static int encodeMinMinorVersion(int major) {
+        int version = 0;
+        version |= (major << Byte.SIZE * 2);
         return version;
     }
 

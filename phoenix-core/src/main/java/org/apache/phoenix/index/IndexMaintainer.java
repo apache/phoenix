@@ -48,7 +48,6 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
@@ -240,8 +239,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int nIndexPKColumns = index.getPKColumns().size() - indexPosOffset;
 
         int nDataPKColumns = dataRowKeySchema.getFieldCount() - (isDataTableSalted ? 1 : 0);
-        PName tenantId = dataTable.getTenantId();
-        this.isMultiTenant = tenantId != null;
+        this.isMultiTenant = dataTable.isMultiTenant();
         this.viewIndexId = dataTable.getViewIndexId() == null ? null : MetaDataUtil.getViewIndexIdDataType().toBytes(dataTable.getViewIndexId());
         this.indexTableName = indexTableName;
         this.indexedColumns = Sets.newLinkedHashSetWithExpectedSize(nIndexPKColumns-nDataPKColumns);
