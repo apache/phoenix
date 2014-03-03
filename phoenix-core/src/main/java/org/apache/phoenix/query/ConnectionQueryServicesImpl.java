@@ -100,6 +100,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
+import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.PhoenixIOException;
@@ -173,6 +174,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private int lowestClusterHBaseVersion = Integer.MAX_VALUE;
     private boolean hasInvalidIndexConfiguration = false;
     private int connectionCount = 0;
+    private boolean updateTo3_0 = false;
     
     private ConcurrentMap<SequenceKey,Sequence> sequenceMap = Maps.newConcurrentMap();
     private KeyValueBuilder kvBuilder;
@@ -580,6 +582,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     descriptor.removeCoprocessor(MetaDataRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
                     descriptor.addCoprocessor(MetaDataRegionObserver.class.getName(), null, 2, null);
                 }
+            } else if (SchemaUtil.isSequenceTable(tableName)) {
+                if (!descriptor.hasCoprocessor(SequenceRegionObserver.class.getName())) {
+                    descriptor.addCoprocessor(SequenceRegionObserver.class.getName(), null, 1, null);
+                }
             }
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
@@ -726,7 +732,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
 
                 boolean updateTo2_2 = false;
-                boolean updateTo3_0 = false;
                 if (isMetaTable) {
                     updateTo2_2 = existingDesc.getValue(ConnectionQueryServicesImpl.UPGRADE_TO_2_2) == null;
                     updateTo3_0 = existingDesc.getValue(ConnectionQueryServicesImpl.UPGRADE_TO_3_0) == null;
@@ -734,7 +739,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         checkClientServerCompatibility();
                     } else {
                         // Will add back once upgrade is successful
-                        existingDesc.remove(ConnectionQueryServicesImpl.UPGRADE_TO_3_0);
+                        newDesc.remove(ConnectionQueryServicesImpl.UPGRADE_TO_3_0);
                     }
                 }
                                 
@@ -1246,11 +1251,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
         PhoenixConnection metaConnection = new PhoenixConnection(this, url, props, newEmptyMetaData());
         SQLException sqlE = null;
-        boolean upgradeTo3_0 = false;
         try {
             try {
                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
-                upgradeTo3_0 = getTableDescriptor(SYSTEM_CATALOG_NAME_BYTES).getValue(ConnectionQueryServicesImpl.UPGRADE_TO_3_0) == null;
             } catch (NewerTableAlreadyExistsException ignore) {
                 // Ignore, as this will happen if the SYSTEM.TABLE already exists at this fixed timestamp.
                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
@@ -1277,8 +1280,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 throw sqlE;
             }
         }
-        if (upgradeTo3_0) {
+        if (updateTo3_0) {
             upgradeTo3_0(url, props);
+            updateTo3_0 = false;
         }
     }
 
