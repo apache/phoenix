@@ -20,16 +20,12 @@
 package org.apache.phoenix.end2end;
 
 import java.sql.SQLException;
-import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
@@ -84,6 +80,8 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     @Override
     public void init(String url, Properties props) throws SQLException {
         try {
+            // during test, we don't do hbase.table.sanity.checks
+            config.setBoolean("hbase.table.sanity.checks", false);
             setupServer(config);
             super.init(url, props);
             /**

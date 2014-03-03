@@ -642,7 +642,10 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
             fail();
         } catch (TableNotFoundException e) {
             // expected to fail b/c table doesn't exist
+        } catch (ReadOnlyTableException e) {
+          // expected to fail b/c table doesn't exist
         }
+        
         createStmt = "create view " + MDTEST_NAME + 
                 "   (id char(1) not null primary key,\n" + 
                 "    a.col1 integer,\n" +
