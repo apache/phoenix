@@ -42,6 +42,7 @@ import org.apache.phoenix.flume.SchemaHandler;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -151,7 +152,7 @@ public abstract class BaseEventSerializer implements EventSerializer {
             String  cq = null;
             String  cf = null;
             Integer dt = null;
-            rs = connection.getMetaData().getColumns(null, schemaName, tableName, null);
+            rs = connection.getMetaData().getColumns("", StringUtil.escapeLike(SchemaUtil.normalizeIdentifier(schemaName)), StringUtil.escapeLike(SchemaUtil.normalizeIdentifier(tableName)), null);
             while (rs.next()) {
                 cf = rs.getString(QueryUtil.COLUMN_FAMILY_POSITION);
                 cq = rs.getString(QueryUtil.COLUMN_NAME_POSITION);
