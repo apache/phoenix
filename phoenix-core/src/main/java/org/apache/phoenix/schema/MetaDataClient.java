@@ -23,6 +23,7 @@ import static com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
@@ -32,6 +33,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
@@ -39,14 +41,13 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
@@ -218,8 +219,10 @@ public class MetaDataClient {
         SORT_ORDER + "," +
         DATA_TABLE_NAME + "," + // write this both in the column and table rows for access by metadata APIs
         ARRAY_SIZE + "," +
-        VIEW_CONSTANT +
-        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        VIEW_CONSTANT + "," + 
+        PK_NAME + "," +  // write this both in the column and table rows for access by metadata APIs
+        KEY_SEQ +
+        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String UPDATE_COLUMN_POSITION =
         "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\" ( " + 
         TENANT_ID + "," +
@@ -326,7 +329,7 @@ public class MetaDataClient {
     }
 
 
-    private void addColumnMutation(String schemaName, String tableName, PColumn column, PreparedStatement colUpsert, String parentTableName) throws SQLException {
+    private void addColumnMutation(String schemaName, String tableName, PColumn column, PreparedStatement colUpsert, String parentTableName, String pkName, Short keySeq) throws SQLException {
         colUpsert.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
         colUpsert.setString(2, schemaName);
         colUpsert.setString(3, tableName);
@@ -353,6 +356,12 @@ public class MetaDataClient {
             colUpsert.setInt(13, column.getArraySize());
         }
         colUpsert.setBytes(14, column.getViewConstant());
+        colUpsert.setString(15, pkName);
+        if (keySeq == null) {
+            colUpsert.setNull(16, Types.SMALLINT);
+        } else {
+            colUpsert.setShort(16, keySeq);
+        }
         colUpsert.execute();
     }
 
@@ -1052,6 +1061,7 @@ public class MetaDataClient {
                 }
             }
             
+            short nextKeySeq = 0;
             for (int i = 0; i < columns.size(); i++) {
                 PColumn column = columns.get(i);
                 int columnPosition = column.getPosition();
@@ -1065,7 +1075,8 @@ public class MetaDataClient {
                         }
                     });
                 }
-                addColumnMutation(schemaName, tableName, column, colUpsert, parentTableName);
+                Short keySeq = SchemaUtil.isPKColumn(column) ? ++nextKeySeq : null;
+                addColumnMutation(schemaName, tableName, column, colUpsert, parentTableName, pkName, keySeq);
             }
             
             tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
@@ -1476,6 +1487,7 @@ public class MetaDataClient {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.SET_UNSUPPORTED_PROP_ON_ALTER_TABLE)
                         .setTableName(table.getName().getString()).build().buildException();
                     }
+                    short nextKeySeq = SchemaUtil.getMaxKeySeq(table);
                     for( ColumnDef colDef : columnDefs) {
                         if (colDef != null && !colDef.isNull()) {
                             if(colDef.isPK()) {
@@ -1489,26 +1501,38 @@ public class MetaDataClient {
                         throwIfAlteringViewPK(colDef, table);
                         PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString());
                         columns.add(column);
-                        addColumnMutation(schemaName, tableName, column, colUpsert, null);
+                        String pkName = null;
+                        Short keySeq = null;
 
                         // TODO: support setting properties on other families?
-                        if (column.getFamilyName() != null) {
-                            families.add(new Pair<byte[],Map<String,Object>>(column.getFamilyName().getBytes(),statement.getProps()));
-                        } else { // If adding to primary key, then add the same column to all indexes on the table
+                        if (column.getFamilyName() == null) {
                             isAddingPKColumn = true;
-                            for (PTable index : table.getIndexes()) {
-                                int indexColPosition = index.getColumns().size();
-                                PDataType indexColDataType = IndexUtil.getIndexColumnDataType(column);
-                                ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(column));
-                                ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), column.isNullable(), column.getMaxLength(), column.getScale(), true, column.getSortOrder());
-                                PColumn indexColumn = newColumn(indexColPosition, indexColDef, PrimaryKeyConstraint.EMPTY, index.getDefaultFamilyName() == null ? null : index.getDefaultFamilyName().getString());
-                                addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString());
+                            pkName = table.getPKName() == null ? null : table.getPKName().getString();
+                            keySeq = ++nextKeySeq;
+                        } else {
+                            families.add(new Pair<byte[],Map<String,Object>>(column.getFamilyName().getBytes(),statement.getProps()));
+                        }
+                        addColumnMutation(schemaName, tableName, column, colUpsert, null, pkName, keySeq);
+                    }
+                    // Add any new PK columns to end of index PK
+                    if (isAddingPKColumn) {
+                        for (PTable index : table.getIndexes()) {
+                            short nextIndexKeySeq = SchemaUtil.getMaxKeySeq(index);
+                            int indexPosition = index.getColumns().size();
+                            for (ColumnDef colDef : columnDefs) {
+                                if (colDef.isPK()) {
+                                    PDataType indexColDataType = IndexUtil.getIndexColumnDataType(colDef.isNull(), colDef.getDataType());
+                                    ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, colDef.getColumnDefName().getColumnName()));
+                                    ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder());
+                                    PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null);
+                                    addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString(), index.getPKName() == null ? null : index.getPKName().getString(), ++nextIndexKeySeq);
+                                }
                             }
                         }
-
-                        tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
-                        connection.rollback();
                     }
+
+                    tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
+                    connection.rollback();
                 } else {
                     // Only support setting IMMUTABLE_ROWS=true and DISABLE_WAL=true on ALTER TABLE SET command
                     // TODO: support setting HBase table properties too

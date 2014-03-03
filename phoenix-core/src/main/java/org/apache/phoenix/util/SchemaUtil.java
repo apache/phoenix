@@ -38,7 +38,6 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -50,6 +49,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SaltingUtil;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 
 
@@ -539,5 +539,19 @@ public class SchemaUtil {
             maxKeyLength += maxSlotLength;
         }
         return maxKeyLength;
+    }
+
+    public static short getMaxKeySeq(PTable table) {
+        int offset = 0;
+        if (table.getBucketNum() != null) {
+            offset++;
+        }
+        if (table.isMultiTenant()) {
+            offset++;
+        }
+        if (table.getViewIndexId() != null) {
+            offset++;
+        }
+        return (short)(table.getPKColumns().size() - offset);
     }
 }

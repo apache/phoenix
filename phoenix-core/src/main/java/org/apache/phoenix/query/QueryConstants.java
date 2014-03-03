@@ -38,6 +38,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_AUTOINCREMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NULLABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
@@ -200,6 +201,7 @@ public interface QueryConstants {
             SORT_ORDER + " INTEGER," +
             ARRAY_SIZE + " INTEGER,\n" +
             VIEW_CONSTANT + " VARBINARY,\n" +
+            KEY_SEQ + " SMALLINT,\n" +
             // Link metadata (only set on rows linking table to index or view)
             LINK_TYPE + " UNSIGNED_TINYINT,\n" +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ","

@@ -44,6 +44,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
@@ -345,8 +346,26 @@ public class AlterTableTest extends BaseHBaseManagedTimeTest {
         conn.commit();
         
         assertIndexExists(conn,true);
-        conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " ADD k2 DECIMAL PRIMARY KEY");
-        // TODO: verify metadata of index
+        conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " ADD v3 VARCHAR, k2 DECIMAL PRIMARY KEY");
+        rs = conn.getMetaData().getPrimaryKeys("", SCHEMA_NAME, DATA_TABLE_NAME);
+        assertTrue(rs.next());
+        assertEquals("K",rs.getString("COLUMN_NAME"));
+        assertEquals(1, rs.getShort("KEY_SEQ"));
+        assertTrue(rs.next());
+        assertEquals("K2",rs.getString("COLUMN_NAME"));
+        assertEquals(2, rs.getShort("KEY_SEQ"));
+
+        rs = conn.getMetaData().getPrimaryKeys("", SCHEMA_NAME, INDEX_TABLE_NAME);
+        assertTrue(rs.next());
+        assertEquals(QueryConstants.DEFAULT_COLUMN_FAMILY + IndexUtil.INDEX_COLUMN_NAME_SEP + "V1",rs.getString("COLUMN_NAME"));
+        assertEquals(1, rs.getShort("KEY_SEQ"));
+        assertTrue(rs.next());
+        assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K",rs.getString("COLUMN_NAME"));
+        assertEquals(2, rs.getShort("KEY_SEQ"));
+        assertTrue(rs.next());
+        assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K2",rs.getString("COLUMN_NAME"));
+        assertEquals(3, rs.getShort("KEY_SEQ"));
+        
         assertIndexExists(conn,true);
         
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;

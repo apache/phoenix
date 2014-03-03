@@ -23,8 +23,8 @@ import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MODIFY_VIEW_P
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_UNDEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.schema.PTableType.SYSTEM;
 import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -373,7 +373,7 @@ public class TenantSpecificTablesDDLTest extends BaseTenantSpecificTablesTest {
             // null means across all tenant_ids
             rs = meta.getSuperTables(null, null, StringUtil.escapeLike(TENANT_TABLE_NAME));
             assertTrue(rs.next());
-            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.COLUMN_FAMILY));
+            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
             assertEquals(TENANT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
             assertEquals(PARENT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
             assertFalse(rs.next());
@@ -383,18 +383,18 @@ public class TenantSpecificTablesDDLTest extends BaseTenantSpecificTablesTest {
             conn = DriverManager.getConnection(getUrl());
             rs = conn.getMetaData().getSuperTables(TENANT_ID, null, null);
             assertTrue(rs.next());
-            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.COLUMN_FAMILY));
+            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
             assertEquals(TENANT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
             assertEquals(PARENT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
             assertTrue(rs.next());
-            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.COLUMN_FAMILY));
+            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
             assertEquals(TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
             assertEquals(PARENT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
             assertFalse(rs.next());
             
             rs = conn.getMetaData().getCatalogs();
             assertTrue(rs.next());
-            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.COLUMN_FAMILY));
+            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
             assertFalse(rs.next());
         }
         finally {

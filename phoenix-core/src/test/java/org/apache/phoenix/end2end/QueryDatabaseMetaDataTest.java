@@ -18,8 +18,8 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.ATABLE_SCHEMA_NAME;
 import static org.apache.phoenix.util.TestUtil.BTABLE_NAME;
@@ -367,10 +367,10 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
         assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
         assertEquals(null, rs.getString("TABLE_CAT"));
-        assertEquals(SchemaUtil.normalizeIdentifier("organization_id"), rs.getString("COLUMN_NAME"));
-        assertEquals(1, rs.getInt("KEY_SEQ"));
-        assertEquals(SchemaUtil.normalizeIdentifier("pk"), rs.getString("PK_NAME")); // TODO: this is on the table row
-        
+        assertEquals(SchemaUtil.normalizeIdentifier("custom_entity_data_id"), rs.getString("COLUMN_NAME"));
+        assertEquals(3, rs.getInt("KEY_SEQ"));
+        assertEquals(SchemaUtil.normalizeIdentifier("pk"), rs.getString("PK_NAME"));
+
         assertTrue(rs.next());
         assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
         assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
@@ -383,10 +383,10 @@ public class QueryDatabaseMetaDataTest extends BaseClientManagedTimeTest {
         assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
         assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
         assertEquals(null, rs.getString("TABLE_CAT"));
-        assertEquals(SchemaUtil.normalizeIdentifier("custom_entity_data_id"), rs.getString("COLUMN_NAME"));
-        assertEquals(3, rs.getInt("KEY_SEQ"));
-        assertEquals(SchemaUtil.normalizeIdentifier("pk"), rs.getString("PK_NAME"));
-
+        assertEquals(SchemaUtil.normalizeIdentifier("organization_id"), rs.getString("COLUMN_NAME"));
+        assertEquals(1, rs.getInt("KEY_SEQ"));
+        assertEquals(SchemaUtil.normalizeIdentifier("pk"), rs.getString("PK_NAME")); // TODO: this is on the table row
+        
         assertFalse(rs.next());
 
         rs = dbmd.getColumns("", CUSTOM_ENTITY_DATA_SCHEMA_NAME, CUSTOM_ENTITY_DATA_NAME, null);

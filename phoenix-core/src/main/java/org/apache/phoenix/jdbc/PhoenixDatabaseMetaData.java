@@ -23,14 +23,11 @@ import java.sql.ResultSet;
 import java.sql.RowIdLifetime;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 
 import org.apache.commons.lang.StringEscapeUtils;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExpressionProjector;
@@ -38,13 +35,11 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
-import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.HintNode.Hint;
@@ -653,99 +648,27 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         if (table == null || table.length() == 0) {
             return emptyResultSet;
         }
-        final int keySeqPosition = 4;
-        final int pkNamePosition = 5;
         StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n" +
                 TENANT_ID + " " + TABLE_CAT + "," + // use catalog for tenant_id
                 TABLE_SCHEM + "," +
                 TABLE_NAME + " ," +
                 COLUMN_NAME + "," +
-                "null as " + KEY_SEQ + "," +
-                "PK_NAME" + "," +
+                KEY_SEQ + "," +
+                PK_NAME + "," +
                 "CASE WHEN " + SORT_ORDER + " = " + (SortOrder.DESC.getSystemValue()) + " THEN 'D' ELSE 'A' END ASC_OR_DESC," +
                 DATA_TYPE + "," + // include type info, though not in spec
                 SqlTypeNameFunction.NAME + "(" + DATA_TYPE + ") AS " + TYPE_NAME + "," +
-                COLUMN_SIZE + 
+                COLUMN_SIZE + "," +
+                VIEW_CONSTANT + 
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                 " where ");
         buf.append(TABLE_SCHEM + (schema == null || schema.length() == 0 ? " is null" : " = '" + escapePattern(schema) + "'" ));
         buf.append(" and " + TABLE_NAME + " = '" + escapePattern(table) + "'" );
+        buf.append(" and " + COLUMN_NAME + " is not null");
         buf.append(" and " + COLUMN_FAMILY + " is null");
         addTenantIdFilter(buf, catalog);
-        buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + " ," + ORDINAL_POSITION);
-        // Dynamically replaces the KEY_SEQ with an expression that gets incremented after each next call.
-        Statement stmt = connection.createStatement(new PhoenixStatementFactory() {
-
-            @Override
-            public PhoenixStatement newStatement(PhoenixConnection connection) {
-                final byte[] unsetValue = new byte[0];
-                final ImmutableBytesWritable pkNamePtr = new ImmutableBytesWritable(unsetValue);
-                final byte[] rowNumberHolder = new byte[PDataType.INTEGER.getByteSize()];
-                return new PhoenixStatement(connection) {
-                    @Override
-                    protected PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector) throws SQLException {
-                        List<ColumnProjector> columns = new ArrayList<ColumnProjector>(projector.getColumnProjectors());
-                        ColumnProjector column = columns.get(keySeqPosition);
-                        
-                        columns.set(keySeqPosition, new ExpressionProjector(column.getName(), column.getTableName(), 
-                                new BaseTerminalExpression() {
-                                    @Override
-                                    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-                                        ptr.set(rowNumberHolder);
-                                        return true;
-                                    }
-
-                                    @Override
-                                    public PDataType getDataType() {
-                                        return PDataType.INTEGER;
-                                    }
-                                },
-                                column.isCaseSensitive())
-                        );
-                        column = columns.get(pkNamePosition);
-                        columns.set(pkNamePosition, new ExpressionProjector(column.getName(), column.getTableName(), 
-                                new BaseTerminalExpression() {
-                                    @Override
-                                    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-                                        if (pkNamePtr.get() == unsetValue) {
-                                            boolean b = tuple.getValue(TABLE_FAMILY_BYTES, PK_NAME_BYTES, pkNamePtr);
-                                            if (!b) {
-                                                pkNamePtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-                                            }
-                                        }
-                                        ptr.set(pkNamePtr.get(),pkNamePtr.getOffset(),pkNamePtr.getLength());
-                                        return true;
-                                    }
-
-                                    @Override
-                                    public PDataType getDataType() {
-                                        return PDataType.VARCHAR;
-                                    }
-                                },
-                                column.isCaseSensitive())
-                        );
-                        final RowProjector newProjector = new RowProjector(columns, projector.getEstimatedRowByteSize(), projector.isProjectEmptyKeyValue());
-                        ResultIterator delegate = new DelegateResultIterator(iterator) {
-                            private int rowCount = 0;
-
-                            @Override
-                            public Tuple next() throws SQLException {
-                                // Ignore first row, since it's the table row
-                                PDataType.INTEGER.toBytes(rowCount++, rowNumberHolder, 0);
-                                return super.next();
-                            }
-                        };
-                        return new PhoenixResultSet(delegate, newProjector, this);
-                    }
-                    
-                };
-            }
-            
-        });
-        ResultSet rs = stmt.executeQuery(buf.toString());
-        if (rs.next()) { // Skip table row - we just use that to get the PK_NAME
-            rs.getString(pkNamePosition+1); // Hack to cause the statement to cache this value
-        }
+        buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + " ," + COLUMN_NAME);
+        ResultSet rs = connection.createStatement().executeQuery(buf.toString());
         return rs;
     }
 
