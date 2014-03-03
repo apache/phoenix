@@ -196,72 +196,78 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         PhoenixStatementParser parser = new PhoenixStatementParser(reader);
         try {
             while (true) {
-                PhoenixPreparedStatement stmt = new PhoenixPreparedStatement(this, parser);
-                this.statements.add(stmt);
-                ParameterMetaData paramMetaData = stmt.getParameterMetaData();
-                for (int i = 0; i < paramMetaData.getParameterCount(); i++) {
-                    stmt.setObject(i+1, binds.get(bindsOffset+i));
-                }
-                long start = System.currentTimeMillis();
-                boolean isQuery = stmt.execute();
-                if (isQuery) {
-                    ResultSet rs = stmt.getResultSet();
-                    if (!rs.next()) {
-                        if (out != null) {
-                            out.println("no rows selected");
-                        }
-                    } else {
-                        int columnCount = 0;
-                        if (out != null) {
-                            ResultSetMetaData md = rs.getMetaData();
-                            columnCount = md.getColumnCount();
-                            for (int i = 1; i <= columnCount; i++) {
-                                int displayWidth = md.getColumnDisplaySize(i);
-                                String label = md.getColumnLabel(i);
-                                if (md.isSigned(i)) {
-                                    out.print(displayWidth < label.length() ? label.substring(0,displayWidth) : Strings.padStart(label, displayWidth, ' '));
-                                    out.print(' ');
-                                } else {
-                                    out.print(displayWidth < label.length() ? label.substring(0,displayWidth) : Strings.padEnd(md.getColumnLabel(i), displayWidth, ' '));
-                                    out.print(' ');
-                                }
+                PhoenixPreparedStatement stmt = null;
+                try {
+                    stmt = new PhoenixPreparedStatement(this, parser);
+                    ParameterMetaData paramMetaData = stmt.getParameterMetaData();
+                    for (int i = 0; i < paramMetaData.getParameterCount(); i++) {
+                        stmt.setObject(i+1, binds.get(bindsOffset+i));
+                    }
+                    long start = System.currentTimeMillis();
+                    boolean isQuery = stmt.execute();
+                    if (isQuery) {
+                        ResultSet rs = stmt.getResultSet();
+                        if (!rs.next()) {
+                            if (out != null) {
+                                out.println("no rows selected");
                             }
-                            out.println();
-                            for (int i = 1; i <= columnCount; i++) {
-                                int displayWidth = md.getColumnDisplaySize(i);
-                                out.print(Strings.padStart("", displayWidth,'-'));
-                                out.print(' ');
-                            }
-                            out.println();
-                        }
-                        do {
+                        } else {
+                            int columnCount = 0;
                             if (out != null) {
                                 ResultSetMetaData md = rs.getMetaData();
+                                columnCount = md.getColumnCount();
                                 for (int i = 1; i <= columnCount; i++) {
                                     int displayWidth = md.getColumnDisplaySize(i);
-                                    String value = rs.getString(i);
-                                    String valueString = value == null ? QueryConstants.NULL_DISPLAY_TEXT : value;
+                                    String label = md.getColumnLabel(i);
                                     if (md.isSigned(i)) {
-                                        out.print(Strings.padStart(valueString, displayWidth, ' '));
+                                        out.print(displayWidth < label.length() ? label.substring(0,displayWidth) : Strings.padStart(label, displayWidth, ' '));
+                                        out.print(' ');
                                     } else {
-                                        out.print(Strings.padEnd(valueString, displayWidth, ' '));
+                                        out.print(displayWidth < label.length() ? label.substring(0,displayWidth) : Strings.padEnd(md.getColumnLabel(i), displayWidth, ' '));
+                                        out.print(' ');
                                     }
+                                }
+                                out.println();
+                                for (int i = 1; i <= columnCount; i++) {
+                                    int displayWidth = md.getColumnDisplaySize(i);
+                                    out.print(Strings.padStart("", displayWidth,'-'));
                                     out.print(' ');
                                 }
                                 out.println();
                             }
-                        } while (rs.next());
+                            do {
+                                if (out != null) {
+                                    ResultSetMetaData md = rs.getMetaData();
+                                    for (int i = 1; i <= columnCount; i++) {
+                                        int displayWidth = md.getColumnDisplaySize(i);
+                                        String value = rs.getString(i);
+                                        String valueString = value == null ? QueryConstants.NULL_DISPLAY_TEXT : value;
+                                        if (md.isSigned(i)) {
+                                            out.print(Strings.padStart(valueString, displayWidth, ' '));
+                                        } else {
+                                            out.print(Strings.padEnd(valueString, displayWidth, ' '));
+                                        }
+                                        out.print(' ');
+                                    }
+                                    out.println();
+                                }
+                            } while (rs.next());
+                        }
+                    } else if (out != null){
+                        int updateCount = stmt.getUpdateCount();
+                        if (updateCount >= 0) {
+                            out.println((updateCount == 0 ? "no" : updateCount) + (updateCount == 1 ? " row " : " rows ") + stmt.getUpdateOperation().toString());
+                        }
                     }
-                } else if (out != null){
-                    int updateCount = stmt.getUpdateCount();
-                    if (updateCount >= 0) {
-                        out.println((updateCount == 0 ? "no" : updateCount) + (updateCount == 1 ? " row " : " rows ") + stmt.getUpdateOperation().toString());
+                    bindsOffset += paramMetaData.getParameterCount();
+                    double elapsedDuration = ((System.currentTimeMillis() - start) / 1000.0);
+                    out.println("Time: " + elapsedDuration + " sec(s)\n");
+                    nStatements++;
+                } finally {
+                    if (stmt != null) {
+                        stmt.close();
                     }
                 }
-                bindsOffset += paramMetaData.getParameterCount();
-                double elapsedDuration = ((System.currentTimeMillis() - start) / 1000.0);
-                out.println("Time: " + elapsedDuration + " sec(s)\n");
-                nStatements++;
             }
         } catch (EOFException e) {
         }
