@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -345,7 +345,7 @@ public class SchemaUtil {
     }
 
     public static boolean isMetaTable(byte[] tableName) {
-        return Bytes.compareTo(tableName, SYSTEM_CATALOG_BYTES) == 0;
+        return Bytes.compareTo(tableName, SYSTEM_CATALOG_NAME_BYTES) == 0;
     }
     
     public static boolean isSequenceTable(byte[] tableName) {
@@ -439,9 +439,6 @@ public class SchemaUtil {
         return length;
     }
     
-    public static final String UPGRADE_TO_2_0 = "UpgradeTo20";
-    public static final String UPGRADE_TO_2_1 = "UpgradeTo21";
-
     public static String getEscapedTableName(String schemaName, String tableName) {
         if (schemaName == null || schemaName.length() == 0) {
             return "\"" + tableName + "\"";

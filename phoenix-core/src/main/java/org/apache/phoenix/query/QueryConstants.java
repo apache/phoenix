@@ -152,24 +152,18 @@ public interface QueryConstants {
     public static final String SPECIFIC_ARRAY_INDEX = "SpecificArrayIndex";
 
     public static final String CREATE_TABLE_METADATA =
-            // Do not use IF NOT EXISTS as we sometimes catch the TableAlreadyExists exception
-            // and add columns to the SYSTEM.TABLE dynamically.
+            // Do not use IF NOT EXISTS as we sometimes catch the TableAlreadyExists
+            // exception and add columns to the SYSTEM.TABLE dynamically.
             "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"(\n" +
             // PK columns
             TENANT_ID + " VARCHAR NULL," +
             TABLE_SCHEM + " VARCHAR NULL," +
             TABLE_NAME + " VARCHAR NOT NULL," +
-            COLUMN_NAME + " VARCHAR NULL," + // null only for table row
-            COLUMN_FAMILY + " VARCHAR NULL," + // using for CF - ensures uniqueness for columns
+            COLUMN_NAME + " VARCHAR NULL," + // null for table row
+            COLUMN_FAMILY + " VARCHAR NULL," + // using for CF to uniqueness for columns
             // Table metadata (will be null for column rows)
             TABLE_TYPE + " CHAR(1)," +
-            REMARKS + " VARCHAR," +
-            DATA_TYPE + " INTEGER," +
             PK_NAME + " VARCHAR," +
-            TYPE_NAME + " VARCHAR," +
-            SELF_REFERENCING_COL_NAME + " VARCHAR," +
-            REF_GENERATION + " VARCHAR," +
-            TABLE_SEQ_NUM + " BIGINT," +
             COLUMN_COUNT + " INTEGER," +
             SALT_BUCKETS + " INTEGER," +
             DATA_TABLE_NAME + " VARCHAR," +
@@ -182,28 +176,35 @@ public interface QueryConstants {
             VIEW_TYPE + " UNSIGNED_TINYINT,\n" +
             VIEW_INDEX_ID + " SMALLINT,\n" +
             // Column metadata (will be null for table row)
+            DATA_TYPE + " INTEGER," +
             COLUMN_SIZE + " INTEGER," +
-            BUFFER_LENGTH + " INTEGER," +
             DECIMAL_DIGITS + " INTEGER," +
-            NUM_PREC_RADIX + " INTEGER," +
             NULLABLE + " INTEGER," +
-            COLUMN_DEF + " VARCHAR," +
-            SQL_DATA_TYPE + " INTEGER," +
-            SQL_DATETIME_SUB + " INTEGER," +
-            CHAR_OCTET_LENGTH + " INTEGER," +
             ORDINAL_POSITION + " INTEGER," +
-            IS_NULLABLE + " VARCHAR," +
-            SCOPE_CATALOG + " VARCHAR," +
-            SCOPE_SCHEMA + " VARCHAR," +
-            SCOPE_TABLE + " VARCHAR," +
-            SOURCE_DATA_TYPE + " SMALLINT," +
-            IS_AUTOINCREMENT + " VARCHAR," +
             SORT_ORDER + " INTEGER," +
             ARRAY_SIZE + " INTEGER,\n" +
             VIEW_CONSTANT + " VARBINARY,\n" +
             KEY_SEQ + " SMALLINT,\n" +
             // Link metadata (only set on rows linking table to index or view)
             LINK_TYPE + " UNSIGNED_TINYINT,\n" +
+            // Unused
+            TYPE_NAME + " VARCHAR," +
+            REMARKS + " VARCHAR," +
+            SELF_REFERENCING_COL_NAME + " VARCHAR," + 
+            REF_GENERATION + " VARCHAR," +
+            TABLE_SEQ_NUM + " BIGINT," +
+            BUFFER_LENGTH + " INTEGER," +
+            NUM_PREC_RADIX + " INTEGER," +
+            COLUMN_DEF + " VARCHAR," +
+            SQL_DATA_TYPE + " INTEGER," +
+            SQL_DATETIME_SUB + " INTEGER," +
+            CHAR_OCTET_LENGTH + " INTEGER," +
+            IS_NULLABLE + " VARCHAR," +
+            SCOPE_CATALOG + " VARCHAR," +
+            SCOPE_SCHEMA + " VARCHAR," +
+            SCOPE_TABLE + " VARCHAR," +
+            SOURCE_DATA_TYPE + " SMALLINT," +
+            IS_AUTOINCREMENT + " VARCHAR," +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ","
             + TABLE_SCHEM + "," + TABLE_NAME + "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" +
             HConstants.VERSIONS + "=" + MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS + ",\n" +
