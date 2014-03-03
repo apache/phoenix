@@ -45,4 +45,13 @@ public class PNameFactory {
             Bytes.compareTo(bytes, QueryConstants.EMPTY_COLUMN_BYTES) == 0 ? PName.EMPTY_COLUMN_NAME :
                 new PNameImpl(bytes);
     }
+
+    public static PName newName(byte[] bytes, int offset, int length) {
+        if (bytes == null || length == 0) {
+            return PName.EMPTY_NAME;
+        }
+        byte[] buf = new byte[length];
+        System.arraycopy(bytes, offset, buf, 0, length);
+        return new PNameImpl(buf);
+    }
 }

@@ -221,10 +221,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             return null;
         }
         int length = getVarCharLength(keyBuffer, keyOffset, keyLength);
-        // TODO: PNameImpl that doesn't need to copy the bytes
-        byte[] pnameBuf = new byte[length];
-        System.arraycopy(keyBuffer, keyOffset, pnameBuf, 0, length);
-        return PNameFactory.newName(pnameBuf);
+        return PNameFactory.newName(keyBuffer, keyOffset, length);
     }
     
     private static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp) throws IOException {
@@ -334,6 +331,9 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         int keyOffset = keyValue.getRowOffset();
         PName tenantId = newPName(keyBuffer, keyOffset, keyLength);
         int tenantIdLength = tenantId.getBytes().length;
+        if (tenantIdLength == 0) {
+            tenantId = null;
+        }
         PName schemaName = newPName(keyBuffer, keyOffset+tenantIdLength+1, keyLength);
         int schemaNameLength = schemaName.getBytes().length;
         int tableNameLength = keyLength-schemaNameLength-1-tenantIdLength-1;
