@@ -23,9 +23,6 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.TrackOrderPreservingExpressionCompiler.Ordering;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -36,6 +33,10 @@ import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.query.ConnectionQueryServices.Feature;
 import org.apache.phoenix.schema.SortOrder;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 /**
  * Validates ORDER BY clause and builds up a list of referenced columns.
@@ -99,10 +100,6 @@ public class OrderByCompiler {
                         }
                         ExpressionCompiler.throwNonAggExpressionInAggException(expression.toString());
                     }
-                }
-                if (expression.getDataType().isArrayType()) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.ORDER_BY_ARRAY_NOT_SUPPORTED)
-                    .setMessage(expression.toString()).build().buildException();
                 }
                 if (expression.getSortOrder() == SortOrder.DESC) {
                     isAscending = !isAscending;

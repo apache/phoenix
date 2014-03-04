@@ -283,6 +283,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // Should not be necessary, but at test time in particular
                 // there seems to be a memory leak and this can't hurt.
                 childServices.clear();
+                statsManager.clearStats();
                 latestMetaData = null;
             }
         } catch (SQLException e) {

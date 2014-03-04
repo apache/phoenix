@@ -125,6 +125,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
             @Override
             public void updateStats(TableRef table) throws SQLException {
             }
+
+            @Override
+            public void clearStats() throws SQLException {
+            }
         };
     }
 

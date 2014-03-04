@@ -54,4 +54,6 @@ public interface StatsManager {
      * @throws SQLException
      */
     void updateStats(TableRef table) throws SQLException;
+    
+    void clearStats() throws SQLException;
 }

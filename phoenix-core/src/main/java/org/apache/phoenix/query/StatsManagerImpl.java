@@ -30,7 +30,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.KeyOnlyFilter;
-
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -215,5 +214,10 @@ public class StatsManagerImpl implements StatsManager {
         private long getInitiatedTime() {
             return initiatedTime;
         }
+    }
+    
+    @Override
+    public void clearStats() throws SQLException {
+        tableStatsMap.clear();
     }
 }
