@@ -204,7 +204,6 @@ public class CSVCommonsLoaderTest extends BaseHBaseManagedTimeTest {
 			ResultSet phoenixResultSet = statement.executeQuery();
 			parser = new CSVParser(new StringReader(
 					STOCK_CSV_VALUES_WITH_DELIMITER), csvUtil.getFormat());
-			String[] csvData;
 			for (CSVRecord record : parser) {
 				assertTrue(phoenixResultSet.next());
 				int i = 0;

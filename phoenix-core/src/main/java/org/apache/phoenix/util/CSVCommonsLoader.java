@@ -36,8 +36,6 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PDataType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Maps;
 
@@ -48,9 +46,6 @@ import com.google.common.collect.Maps;
  * 
  */
 public class CSVCommonsLoader {
-
-	private static final Logger logger = LoggerFactory
-			.getLogger(CSVCommonsLoader.class);
 
 	private final PhoenixConnection conn;
 	private final String tableName;
