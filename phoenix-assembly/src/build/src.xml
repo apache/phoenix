@@ -1,0 +1,102 @@
+<assembly xmlns="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0 http://maven.apache.org/xsd/assembly-1.1.0.xsd">
+  <!--This 'all' id is not appended to the produced bundle because we do this: http://maven.apache.org/plugins/maven-assembly-plugin/faq.html#required-classifiers -->
+  <id>src</id>
+  <formats>
+    <format>tar.gz</format>
+  </formats>
+  <includeBaseDirectory>true</includeBaseDirectory>
+  
+  <moduleSets>
+    <moduleSet>
+      <!-- Enable access to all projects in the current multimodule build. Eclipse 
+        says this is an error, but builds from the command line just fine. -->
+      <useAllReactorProjects>true</useAllReactorProjects>
+       <!-- Include all the sources in the top directory -->
+      <sources>
+         <fileSets>
+          <fileSet>
+            <!-- Make sure this excludes is same as the phoenix-hadoop2-compat
+                 excludes below -->
+            <excludes>
+              <exclude>target/</exclude>
+              <exclude>test/</exclude>
+              <exclude>.classpath</exclude>
+              <exclude>.project</exclude>
+              <exclude>.settings/</exclude>
+            </excludes>
+          </fileSet>
+        </fileSets>
+      </sources>
+    </moduleSet>
+  </moduleSets>
+
+  <fileSets>
+    <!--This one is weird.  When we assemble src, it'll be default profile which
+         at the moment is hadoop1.  But we should include the hadoop2 compat module
+         too so can build hadoop2 from src -->
+    <fileSet>
+      <directory>${project.basedir}/..</directory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+      <includes>
+        <include>phoenix-*</include>
+        </includes>
+            <excludes>
+              <exclude>target/</exclude>
+              <exclude>test/</exclude>
+              <exclude>.classpath</exclude>
+              <exclude>.project</exclude>
+              <exclude>.settings/</exclude>
+            </excludes>
+    </fileSet>
+    <fileSet>
+      <!--Get misc project files -->
+      <directory>${project.basedir}/..</directory>
+      <outputDirectory>/</outputDirectory>
+      <includes>
+        <include>*.txt</include>
+        <include>*.md</include>
+        <include>pom.xml</include>
+      </includes>
+    </fileSet>
+    <!-- Top level directories -->
+    <fileSet>
+      <directory>${project.basedir}/../bin</directory>
+      <outputDirectory>bin</outputDirectory>
+      <fileMode>0755</fileMode>
+      <directoryMode>0755</directoryMode>
+      <includes>
+        <include>*.py</include>
+        <include>*.sh</include>
+      </includes>
+    </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../bin</directory>
+      <outputDirectory>bin</outputDirectory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+      <excludes>
+        <exclude>*.py/</exclude>
+        <exclude>*.sh/</exclude>
+      </excludes>
+    </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../dev</directory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+    </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../docs</directory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+    </fileSet>
+      <fileSet>
+      <directory>${project.basedir}/../examples</directory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+    </fileSet>
+  </fileSets>
+
+</assembly>

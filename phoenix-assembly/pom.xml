@@ -56,6 +56,22 @@
             </configuration>
           </execution>
           <execution>
+            <id>package-to-source-tar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <configuration>
+            <finalName>phoenix-${project.version}-source</finalName>
+              <attach>false</attach>
+              <tarLongFileMode>gnu</tarLongFileMode>
+              <appendAssemblyId>false</appendAssemblyId>
+              <descriptors>
+                <descriptor>src/build/src.xml</descriptor>
+              </descriptors>
+            </configuration>
+          </execution>          
+          <execution>
             <id>client-minimal</id>
             <phase>package</phase>
             <goals>
