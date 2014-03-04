@@ -827,16 +827,18 @@ public class MetaDataClient {
                     saltBucketNum = null; // Provides a way for an index to not be salted if its data table is salted
                 }
                 addSaltColumn = (saltBucketNum != null);
-                
-                // Can't set MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an index
-                if (tableType != PTableType.INDEX) {
-                    Boolean multiTenantProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.MULTI_TENANT);
-                    multiTenant = Boolean.TRUE.equals(multiTenantProp);
-                    // Don't remove this prop, as we need it when we create the HBase metadata
-                    defaultFamilyName = (String)tableProps.get(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);                
-                }
             }
             
+            boolean removedProp = false;
+            // Can't set MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an index
+            if (tableType != PTableType.INDEX && (tableType != PTableType.VIEW || viewType == ViewType.MAPPED)) {
+                Boolean multiTenantProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.MULTI_TENANT);
+                multiTenant = Boolean.TRUE.equals(multiTenantProp);
+                // Remove, but add back after our check below
+                defaultFamilyName = (String)tableProps.remove(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);  
+                removedProp = (defaultFamilyName != null);
+            }
+
             boolean disableWAL = false;
             Boolean disableWALProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.DISABLE_WAL);
             if (disableWALProp == null) {
@@ -847,6 +849,9 @@ public class MetaDataClient {
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
             if ((statement.getTableType() == PTableType.VIEW || viewIndexId != null) && !tableProps.isEmpty()) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WITH_PROPERTIES).build().buildException();
+            }
+            if (removedProp) {
+                tableProps.put(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME, defaultFamilyName);  
             }
             
             List<ColumnDef> colDefs = statement.getColumnDefs();
@@ -886,16 +891,20 @@ public class MetaDataClient {
 
             // Don't add link for mapped view, as it just points back to itself and causes the drop to
             // fail because it looks like there's always a view associated with it.
-            if (viewType != ViewType.MAPPED && !physicalNames.isEmpty()) {
-                // Add row linking from data table row to physical table row
-                PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
-                for (PName physicalName : physicalNames) {
-                    linkStatement.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
-                    linkStatement.setString(2, schemaName);
-                    linkStatement.setString(3, tableName);
-                    linkStatement.setString(4, physicalName.getString());
-                    linkStatement.setByte(5, LinkType.PHYSICAL_TABLE.getSerializedValue());
-                    linkStatement.execute();
+            if (!physicalNames.isEmpty()) {
+                // Upsert physical name for mapped view if the parent name is different than the name
+                if (viewType != ViewType.MAPPED
+                        || !physicalNames.get(0).getString().equals(PNameFactory.newName(SchemaUtil.getTableName(schemaName, parentTableName)))) {
+                    // Add row linking from data table row to physical table row
+                    PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
+                    for (PName physicalName : physicalNames) {
+                        linkStatement.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
+                        linkStatement.setString(2, schemaName);
+                        linkStatement.setString(3, tableName);
+                        linkStatement.setString(4, physicalName.getString());
+                        linkStatement.setByte(5, LinkType.PHYSICAL_TABLE.getSerializedValue());
+                        linkStatement.execute();
+                    }
                 }
             }
             

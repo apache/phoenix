@@ -172,6 +172,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         Format dateTimeFormat = DateUtil.getDateFormatter(datePattern);
         formatters[PDataType.DATE.ordinal()] = dateTimeFormat;
         formatters[PDataType.TIME.ordinal()] = dateTimeFormat;
+        formatters[PDataType.TIMESTAMP.ordinal()] = dateTimeFormat;
+        formatters[PDataType.UNSIGNED_DATE.ordinal()] = dateTimeFormat;
+        formatters[PDataType.UNSIGNED_TIME.ordinal()] = dateTimeFormat;
+        formatters[PDataType.UNSIGNED_TIMESTAMP.ordinal()] = dateTimeFormat;
         formatters[PDataType.DECIMAL.ordinal()] = FunctionArgumentType.NUMERIC.getFormatter(numberPattern);
         // We do not limit the metaData on a connection less than the global one,
         // as there's not much that will be cached here.
