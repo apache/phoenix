@@ -29,11 +29,9 @@ import java.util.List;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
@@ -112,13 +110,6 @@ public class ComparisonExpression extends BaseCompoundExpression {
         Expression rhsExpr = children.get(1);
         PDataType lhsExprDataType = lhsExpr.getDataType();
         PDataType rhsExprDataType = rhsExpr.getDataType();
-        // We don't yet support comparison between entire arrays
-        if ( ( (lhsExprDataType != null && lhsExprDataType.isArrayType()) || 
-               (rhsExprDataType != null && rhsExprDataType.isArrayType()) ) &&
-             ( op != CompareOp.EQUAL && op != CompareOp.NOT_EQUAL ) ) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_ARRAY_COMPARISON)
-            .setMessage(ComparisonExpression.toString(op, children)).build().buildException();
-        }
         
         if (lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) {
             if (op == CompareOp.EQUAL || op == CompareOp.NOT_EQUAL) {

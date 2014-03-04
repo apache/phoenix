@@ -26,6 +26,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Array;
 import java.sql.Connection;
@@ -957,7 +958,181 @@ public class ArrayTest extends BaseClientManagedTimeTest {
             conn.close();
         }
     }
+    
+    @Test
+    public void testVarLengthArrComparisonInWhereClauseWithSameArrays() throws Exception {
+        Connection conn;
+        PreparedStatement stmt;
+        ResultSet rs;
+        
+        long ts = nextTimestamp();
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement()
+                .execute(
+                        "CREATE TABLE t_same_size ( k VARCHAR PRIMARY KEY, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4])");
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t_same_size VALUES(?,?,?)");
+        stmt.setString(1, "a");
+        String[] s = new String[] {"abc","def", "ghi","jkl"};
+        Array array = conn.createArrayOf("VARCHAR", s);
+        stmt.setArray(2, array);
+        s = new String[] {"abc","def", "ghi","jkl"};
+        array = conn.createArrayOf("VARCHAR", s);
+        stmt.setArray(3, array);
+        stmt.execute();
+        conn.commit();
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("SELECT k, a_string_array[2] FROM t_same_size where a_string_array=b_string_array");
+        assertTrue(rs.next());
+        assertEquals("a",rs.getString(1));
+        assertEquals("def",rs.getString(2));
+        conn.close();
+    }
+    
+    @Test
+    public void testVarLengthArrComparisonInWhereClauseWithDiffSizeArrays() throws Exception {
+        Connection conn;
+        PreparedStatement stmt;
+        ResultSet rs;
 
+        long ts = nextTimestamp();
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement()
+                .execute(
+                        "CREATE TABLE t ( k VARCHAR PRIMARY KEY, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4])");
+        conn.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?,?)");
+        stmt.setString(1, "a");
+        String[] s = new String[] { "abc", "def", "ghi", "jkll" };
+        Array array = conn.createArrayOf("VARCHAR", s);
+        stmt.setArray(2, array);
+        s = new String[] { "abc", "def", "ghi", "jklm" };
+        array = conn.createArrayOf("VARCHAR", s);
+        stmt.setArray(3, array);
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery(
+                "SELECT k, a_string_array[2] FROM t where a_string_array<b_string_array");
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertEquals("def", rs.getString(2));
+        conn.close();
+    }
+    
+    @Test
+    public void testVarLengthArrComparisonWithNulls() throws Exception {
+        Connection conn;
+        PreparedStatement stmt;
+        ResultSet rs;
+
+        long ts = nextTimestamp();
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement()
+                .execute(
+                        "CREATE TABLE t ( k VARCHAR PRIMARY KEY, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4])");
+        conn.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?,?)");
+        stmt.setString(1, "a");
+        String[] s = new String[] { "abc", "def", "ghi", "jkll", null, null, "xxx" };
+        Array array = conn.createArrayOf("VARCHAR", s);
+        stmt.setArray(2, array);
+        s = new String[] { "abc", "def", "ghi", "jkll", null, null, null, "xxx" };
+        array = conn.createArrayOf("VARCHAR", s);
+        stmt.setArray(3, array);
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery(
+                "SELECT k, a_string_array[2] FROM t where a_string_array>b_string_array");
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertEquals("def", rs.getString(2));
+        conn.close();
+    }
+
+    @Test
+    public void testPKWithArray() throws Exception {
+        Connection conn;
+        PreparedStatement stmt;
+        ResultSet rs;
+        long ts = nextTimestamp();
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement()
+                .execute(
+                        "CREATE TABLE t ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
+                        + " CONSTRAINT pk PRIMARY KEY (k, b_string_array)) \n");
+        conn.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?,?)");
+        stmt.setString(1, "a");
+        String[] s = new String[] { "abc", "def", "ghi", "jkll", null, null, "xxx" };
+        Array array = conn.createArrayOf("VARCHAR", s);
+        stmt.setArray(2, array);
+        s = new String[] { "abc", "def", "ghi", "jkll", null, null, null, "xxx" };
+        array = conn.createArrayOf("VARCHAR", s);
+        stmt.setArray(3, array);
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery(
+                "SELECT k, a_string_array[2] FROM t where b_string_array[8]='xxx'");
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertEquals("def", rs.getString(2));
+        conn.close();
+    }
+
+    @Test
+    public void testPKWithArrayNotInEnd() throws Exception {
+        Connection conn;
+        long ts = nextTimestamp();
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute(
+                    "CREATE TABLE t ( a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4], k VARCHAR  \n"
+                            + " CONSTRAINT pk PRIMARY KEY (b_string_array, k))");
+            conn.close();
+            fail();
+        } catch (SQLException e) {
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+
+    }
+    
     static void createTableWithArray(String url, byte[][] bs, Object object,
 			long ts) throws SQLException {
 		String ddlStmt = "create table "

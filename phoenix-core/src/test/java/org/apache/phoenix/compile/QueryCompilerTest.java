@@ -1210,33 +1210,6 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
-    public void testInvalidArrayTypeAsPK () throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        try {
-            String query = "CREATE TABLE foo (col1 INTEGER[10] NOT NULL PRIMARY KEY)";
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.execute();
-            fail();
-        } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.ARRAY_NOT_ALLOWED_IN_PRIMARY_KEY.getErrorCode(), e.getErrorCode());
-        } finally {
-                conn.close();
-        }
-
-        conn = DriverManager.getConnection(getUrl());
-        try {
-            String query = "CREATE TABLE foo (col1 VARCHAR, col2 INTEGER ARRAY[10] CONSTRAINT pk PRIMARY KEY (col1, col2))";
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.execute();
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ARRAY_NOT_ALLOWED_IN_PRIMARY_KEY.getErrorCode(), e.getErrorCode());
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
     public void testInvalidArraySize() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         try {

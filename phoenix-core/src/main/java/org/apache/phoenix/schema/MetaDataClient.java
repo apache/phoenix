@@ -946,14 +946,6 @@ public class MetaDataClient {
                             .setColumnName(colDef.getColumnDefName().getColumnName())
                             .build().buildException();
                     }
-                    // disallow array type usage in primary key constraint
-                    if (colDef.isArray()) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.ARRAY_NOT_ALLOWED_IN_PRIMARY_KEY)
-                        .setSchemaName(schemaName)
-                        .setTableName(tableName)
-                        .setColumnName(colDef.getColumnDefName().getColumnName())
-                        .build().buildException();
-                    }
                     if (!pkColumns.add(column)) {
                         throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
                     }
@@ -963,10 +955,9 @@ public class MetaDataClient {
                     throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
                 }
                 columns.add(column);
-                if (colDef.getDataType() == PDataType.VARBINARY 
+                if ((colDef.getDataType() == PDataType.VARBINARY || colDef.getDataType().isArrayType())  
                         && SchemaUtil.isPKColumn(column)
-                        && pkColumnsNames.size() > 1 
-                        && column.getPosition() < pkColumnsNames.size() - 1) {
+                        && pkColumnsIterator.hasNext()) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_IN_ROW_KEY)
                         .setSchemaName(schemaName)
                         .setTableName(tableName)
