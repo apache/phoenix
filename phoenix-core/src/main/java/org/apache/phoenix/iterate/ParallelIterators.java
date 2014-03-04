@@ -133,24 +133,10 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
             ScanUtil.andFilterAtEnd(scan, new PageFilter(limit));
         }
 
-        if (!(statement.isAggregate())) {
-            doColumnProjectionOptimization(context, scan, table);
-        } else {
-            // TODO avoid code duplication.
-            for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
-                scan.addColumn(whereCol.getFirst(), whereCol.getSecond());
-            }
-            if (table.getViewType() == ViewType.MAPPED) {
-                // Since we don't have the empty key value in MAPPED tables, we must select all CFs in HRS. But only the
-                // selected column values are returned back to client
-                for (PColumnFamily family : table.getColumnFamilies()) {
-                    scan.addFamily(family.getName().getBytes());
-                }
-            }
-        }
+        doColumnProjectionOptimization(context, scan, table, statement);
     }
 
-    private void doColumnProjectionOptimization(StatementContext context, Scan scan, PTable table) {
+    private void doColumnProjectionOptimization(StatementContext context, Scan scan, PTable table, FilterableStatement statement) {
         Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
         if (familyMap != null && !familyMap.isEmpty()) {
             // columnsTracker contain cf -> qualifiers which should get returned.
@@ -197,8 +183,13 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                     // We don't want the ExplicitColumnTracker to be used. Instead we have the ColumnProjectionFilter
                     scan.addFamily(f.get());
                 }
-                ScanUtil.andFilterAtEnd(scan, new ColumnProjectionFilter(SchemaUtil.getEmptyColumnFamily(table),
-                        columnsTracker, conditionOnlyCfs));
+                // We don't need this filter for aggregates, as we're not returning back what's
+                // in the scan in this case. We still want the other optimization that causes
+                // the ExplicitColumnTracker not to be used, though.
+                if (!(statement.isAggregate())) {
+                    ScanUtil.andFilterAtEnd(scan, new ColumnProjectionFilter(SchemaUtil.getEmptyColumnFamily(table),
+                            columnsTracker, conditionOnlyCfs));
+                }
             }
             if (table.getViewType() == ViewType.MAPPED) {
                 // Since we don't have the empty key value in MAPPED tables, we must select all CFs in HRS. But only the
