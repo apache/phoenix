@@ -528,13 +528,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             
             // Always try to remove, as this coprocessor doesn't exist anymore
             descriptor.removeCoprocessor("com.salesforce.phoenix.join.HashJoiningRegionObserver");
-            // Always try to remove indexing coprocessor, as we may have added this by mistake in 2.x versions
-            descriptor.removeCoprocessor(Indexer.class.getName());
-            descriptor.removeCoprocessor(Indexer.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+            // Remove indexing coprocessor if on VIEW or INDEX, as we may have added this by mistake in 2.x versions
+            if (tableType == PTableType.INDEX || tableType == PTableType.VIEW) {
+                descriptor.removeCoprocessor(Indexer.class.getName());
+                descriptor.removeCoprocessor(Indexer.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+            }
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes. Also,
             // don't install on the metadata table until we fix the TODO there.
             if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW) && !SchemaUtil.isMetaTable(tableName) && !descriptor.hasCoprocessor(Indexer.class.getName())) {
+                descriptor.removeCoprocessor(Indexer.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                 opts.put(CoveredColumnsIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                 Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts);
