@@ -892,9 +892,10 @@ public class MetaDataClient {
             // Don't add link for mapped view, as it just points back to itself and causes the drop to
             // fail because it looks like there's always a view associated with it.
             if (!physicalNames.isEmpty()) {
-                // Upsert physical name for mapped view if the parent name is different than the name
+                // Upsert physical name for mapped view only if the full physical table name is different than the full table name
+                // Otherwise, we end up with a self-referencing link and then cannot ever drop the view.
                 if (viewType != ViewType.MAPPED
-                        || !physicalNames.get(0).getString().equals(PNameFactory.newName(SchemaUtil.getTableName(schemaName, parentTableName)))) {
+                        || !physicalNames.get(0).getString().equals(SchemaUtil.getTableName(schemaName, tableName))) {
                     // Add row linking from data table row to physical table row
                     PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
                     for (PName physicalName : physicalNames) {
