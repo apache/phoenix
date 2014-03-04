@@ -312,8 +312,11 @@ public class FromCompiler {
                 throws SQLException {
             if (!dynColumns.isEmpty()) {
                 List<PColumn> allcolumns = new ArrayList<PColumn>();
-                allcolumns.addAll(theTable.getColumns());
-                int position = allcolumns.size();
+                List<PColumn> existingColumns = theTable.getColumns();
+                // Need to skip the salting column, as it's added in the makePTable call below
+                allcolumns.addAll(theTable.getBucketNum() == null ? existingColumns : existingColumns.subList(1, existingColumns.size()));
+                // Position still based on with the salting columns
+                int position = existingColumns.size();
                 PName defaultFamilyName = PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(theTable));
                 for (ColumnDef dynColumn : dynColumns) {
                     PName familyName = defaultFamilyName;
