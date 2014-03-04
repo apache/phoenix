@@ -68,6 +68,7 @@ public final class CSVPrinter implements Flushable, Closeable {
     // printing implementation
     // ======================================================
 
+    @Override
     public void close() throws IOException {
         if (out instanceof Closeable) {
             ((Closeable) out).close();
@@ -80,6 +81,7 @@ public final class CSVPrinter implements Flushable, Closeable {
      * @throws IOException
      *             If an I/O error occurs
      */
+    @Override
     public void flush() throws IOException {
         if (out instanceof Flushable) {
             ((Flushable) out).flush();

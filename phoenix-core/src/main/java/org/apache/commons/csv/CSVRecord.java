@@ -166,6 +166,7 @@ public final class CSVRecord implements Serializable, Iterable<String> {
      *
      * @return an iterator over the values of this record.
      */
+    @Override
     public Iterator<String> iterator() {
         return toList().iterator();
     }
