@@ -32,8 +32,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import au.com.bytecode.opencsv.CSVReader;
-
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -41,7 +42,6 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
-
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -131,21 +131,21 @@ public class MapReduceJob {
 		@Override
 		public void map(LongWritable key, Text line, Context context) throws IOException, InterruptedException{
 			
-			CSVReader reader = new CSVReader(new InputStreamReader(new ByteArrayInputStream(line.toString().getBytes())), ',');			
+			CSVParser parser = new CSVParser(new InputStreamReader(new ByteArrayInputStream(line.toString().getBytes())),CSVFormat.EXCEL);
 			try {
-				String[] tokens = reader.readNext();
+				CSVRecord record = parser.iterator().next(); 
 				
 				PreparedStatement upsertStatement;
-				if(tokens.length >= stmtCache.length){
+				if(record.size() >= stmtCache.length){
 					//If CVS values are more than the number of cols in the table, apply the col count cap
 					upsertStatement = stmtCache[stmtCache.length - 1];
 				}else{
 					//Else, take the corresponding upsertStmt from cached array 
-					upsertStatement = stmtCache[tokens.length - 1];
+					upsertStatement = stmtCache[record.size() - 1];
 				}
 
-				for(int i = 0 ; i < tokens.length && i < colDetails.size() ;i++){
-					upsertStatement.setObject(i+1, convertTypeSpecificValue(tokens[i], colDetails.get(new Integer(i+1))));
+				for(int i = 0 ; i < record.size() && i < colDetails.size() ;i++){
+					upsertStatement.setObject(i+1, convertTypeSpecificValue(record.get(i), colDetails.get(new Integer(i+1))));
 				}
 				
 				upsertStatement.execute();
@@ -157,7 +157,7 @@ public class MapReduceJob {
 			} catch (Exception e) {
 				System.err.println("Failed to upsert data in the Phoenix :: " + e.getMessage());
 			}finally {
-				reader.close();
+				parser.close();
        			} 
 			
 			Iterator<Pair<byte[],List<KeyValue>>> dataIterator = null;

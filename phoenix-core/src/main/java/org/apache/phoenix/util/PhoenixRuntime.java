@@ -145,7 +145,7 @@ public class PhoenixRuntime {
             String tableName = null;
             List<String> columns = null;
             boolean isStrict = false;
-            List<String> delimiter = new ArrayList<String>();
+            List<String> customMetaCharacters = new ArrayList<String>();
 
             int i = 0;
             for (; i < args.length; i++) {
@@ -173,7 +173,7 @@ public class PhoenixRuntime {
                 } else if (CSV_OPTION.equals(args[i])) {
                     for(int j=0; j < 3; j++) {
                         if(args[++i].length()==1){
-                            delimiter.add(args[i]);
+                            customMetaCharacters.add(args[i]);
                         } else {
                             usageError();
                         }
@@ -198,7 +198,8 @@ public class PhoenixRuntime {
                     if (tableName == null) {
                         tableName = fileName.substring(fileName.lastIndexOf(File.separatorChar) + 1, fileName.length()-CSV_FILE_EXT.length());
                     }
-                    CSVLoader csvLoader = new CSVLoader(conn, tableName, columns, isStrict, delimiter);
+                    CSVCommonsLoader csvLoader = 
+                    		new CSVCommonsLoader(conn, tableName, columns, isStrict, customMetaCharacters);
                     csvLoader.upsert(fileName);
                 } else {
                     usageError();
