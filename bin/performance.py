@@ -61,7 +61,7 @@ if len(sys.argv) < 3:
 # command line arguments
 zookeeper = sys.argv[1]
 rowcount = sys.argv[2]
-table = "performance_" + sys.argv[2]
+table = "PERFORMANCE_" + sys.argv[2]
 
 # helper variable and functions
 ddl = "ddl.sql"

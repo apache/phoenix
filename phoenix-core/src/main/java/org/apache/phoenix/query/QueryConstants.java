@@ -162,6 +162,7 @@ public interface QueryConstants {
             COLUMN_NAME + " VARCHAR NULL," + // null for table row
             COLUMN_FAMILY + " VARCHAR NULL," + // using for CF to uniqueness for columns
             // Table metadata (will be null for column rows)
+            TABLE_SEQ_NUM + " BIGINT," +
             TABLE_TYPE + " CHAR(1)," +
             PK_NAME + " VARCHAR," +
             COLUMN_COUNT + " INTEGER," +
@@ -192,7 +193,6 @@ public interface QueryConstants {
             REMARKS + " VARCHAR," +
             SELF_REFERENCING_COL_NAME + " VARCHAR," + 
             REF_GENERATION + " VARCHAR," +
-            TABLE_SEQ_NUM + " BIGINT," +
             BUFFER_LENGTH + " INTEGER," +
             NUM_PREC_RADIX + " INTEGER," +
             COLUMN_DEF + " VARCHAR," +

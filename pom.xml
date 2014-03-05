@@ -75,6 +75,9 @@
     <jline.version>2.11</jline.version>
     <snappy.version>1.1.0.1</snappy.version>
     <jruby.version>1.6.8</jruby.version>
+    <netty.version>3.6.6.Final</netty.version>
+    <commons-codec.version>1.7</commons-codec.version>
+    <htrace.version>2.04</htrace.version>
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
@@ -147,7 +150,7 @@
             <excludes>
               <exclude>CHANGES.txt</exclude>
               <exclude>README.md</exclude>
-	      <exclude>dev/phoenix.importorder</exclude>
+	            <exclude>dev/phoenix.importorder</exclude>
               <exclude>**/target/**</exclude>
               <exclude>**/*.versionsBackup</exclude>
               <!-- exclude docs -->
@@ -402,6 +405,21 @@
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-api</artifactId>
         <version>${slf4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.cloudera.htrace</groupId>
+        <artifactId>htrace-core</artifactId>
+        <version>${htrace.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty</artifactId>
+        <version>${netty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-codec</groupId>
+        <artifactId>commons-codec</artifactId>
+        <version>${commons-codec.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -112,6 +113,19 @@ public class MutableIndexTest extends BaseMutableIndexTest {
             assertEquals(1, rs.getInt(1));
             assertTrue(rs.next());
             assertEquals(3, rs.getInt(1));
+            assertFalse(rs.next());
+            
+            query = "SELECT date_col from " + DATA_TABLE_FULL_NAME + " order by date_col" ;
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + INDEX_TABLE_FULL_NAME, QueryUtil.getExplainPlan(rs));
+            
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(date, rs.getDate(1));
+            assertTrue(rs.next());
+            assertEquals(new Date(date.getTime() + TestUtil.MILLIS_IN_DAY), rs.getDate(1));
+            assertTrue(rs.next());
+            assertEquals(new Date(date.getTime() + 2 * TestUtil.MILLIS_IN_DAY), rs.getDate(1));
             assertFalse(rs.next());
         } finally {
             conn.close();

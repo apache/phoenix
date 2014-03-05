@@ -1292,6 +1292,8 @@ public enum PDataType {
                 return toBigDecimal(b, o, l);
             case DATE:
             case TIME:
+            case UNSIGNED_DATE:
+            case UNSIGNED_TIME:
             case LONG:
             case INTEGER:
             case SMALLINT:
@@ -1315,7 +1317,8 @@ public enum PDataType {
                 BigDecimal value = BigDecimal.valueOf(millisPart).add(nanosPart);
                 return value;
             default:
-                return super.toObject(b,o,l,actualType);
+                throw new ConstraintViolationException(actualType + " cannot be coerced to " + this);
+                //return super.toObject(b,o,l,actualType);
             }
         }
 
@@ -1373,6 +1376,11 @@ public enum PDataType {
                 return ((BigDecimal)lhs).compareTo((BigDecimal)rhs);
             }
             return -rhsType.compareTo(rhs, lhs, this);
+        }
+
+        @Override
+        public boolean isCastableTo(PDataType targetType) {
+            return super.isCastableTo(targetType) || targetType.isCastableTo(TIMESTAMP);
         }
 
         @Override
@@ -1597,6 +1605,11 @@ public enum PDataType {
             case TIMESTAMP:
             case UNSIGNED_TIMESTAMP:
                 return object;
+            case DECIMAL:
+                BigDecimal bd = (BigDecimal)object;
+                long ms = bd.longValue();
+                int nanos = (bd.remainder(BigDecimal.ONE).multiply(QueryConstants.BD_MILLIS_NANOS_CONVERSION)).intValue();
+                return DateUtil.getTimestamp(ms, nanos);
             default:
                 return super.toObject(object, actualType);
             }
@@ -1752,6 +1765,8 @@ public enum PDataType {
             case TIME:
             case UNSIGNED_TIME:
                 return object;
+            case DECIMAL:
+                return new Time(((BigDecimal)object).longValueExact());
             default:
                 return super.toObject(object, actualType);
             }
@@ -1843,6 +1858,8 @@ public enum PDataType {
             case DATE:
             case UNSIGNED_DATE:
                 return object;
+            case DECIMAL:
+                return new Date(((BigDecimal)object).longValueExact());
             default:
                 return super.toObject(object, actualType);
             }
@@ -1868,7 +1885,7 @@ public enum PDataType {
 
         @Override
         public boolean isCastableTo(PDataType targetType) {
-            return super.isCastableTo(targetType) || DECIMAL.isCastableTo(targetType);
+            return super.isCastableTo(targetType) || targetType.isCastableTo(DECIMAL);
         }
 
         @Override

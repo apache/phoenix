@@ -827,16 +827,18 @@ public class MetaDataClient {
                     saltBucketNum = null; // Provides a way for an index to not be salted if its data table is salted
                 }
                 addSaltColumn = (saltBucketNum != null);
-                
-                // Can't set MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an index
-                if (tableType != PTableType.INDEX) {
-                    Boolean multiTenantProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.MULTI_TENANT);
-                    multiTenant = Boolean.TRUE.equals(multiTenantProp);
-                    // Don't remove this prop, as we need it when we create the HBase metadata
-                    defaultFamilyName = (String)tableProps.get(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);                
-                }
             }
             
+            boolean removedProp = false;
+            // Can't set MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an index
+            if (tableType != PTableType.INDEX && (tableType != PTableType.VIEW || viewType == ViewType.MAPPED)) {
+                Boolean multiTenantProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.MULTI_TENANT);
+                multiTenant = Boolean.TRUE.equals(multiTenantProp);
+                // Remove, but add back after our check below
+                defaultFamilyName = (String)tableProps.remove(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);  
+                removedProp = (defaultFamilyName != null);
+            }
+
             boolean disableWAL = false;
             Boolean disableWALProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.DISABLE_WAL);
             if (disableWALProp == null) {
@@ -847,6 +849,9 @@ public class MetaDataClient {
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
             if ((statement.getTableType() == PTableType.VIEW || viewIndexId != null) && !tableProps.isEmpty()) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WITH_PROPERTIES).build().buildException();
+            }
+            if (removedProp) {
+                tableProps.put(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME, defaultFamilyName);  
             }
             
             List<ColumnDef> colDefs = statement.getColumnDefs();
@@ -886,16 +891,21 @@ public class MetaDataClient {
 
             // Don't add link for mapped view, as it just points back to itself and causes the drop to
             // fail because it looks like there's always a view associated with it.
-            if (viewType != ViewType.MAPPED && !physicalNames.isEmpty()) {
-                // Add row linking from data table row to physical table row
-                PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
-                for (PName physicalName : physicalNames) {
-                    linkStatement.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
-                    linkStatement.setString(2, schemaName);
-                    linkStatement.setString(3, tableName);
-                    linkStatement.setString(4, physicalName.getString());
-                    linkStatement.setByte(5, LinkType.PHYSICAL_TABLE.getSerializedValue());
-                    linkStatement.execute();
+            if (!physicalNames.isEmpty()) {
+                // Upsert physical name for mapped view only if the full physical table name is different than the full table name
+                // Otherwise, we end up with a self-referencing link and then cannot ever drop the view.
+                if (viewType != ViewType.MAPPED
+                        || !physicalNames.get(0).getString().equals(SchemaUtil.getTableName(schemaName, tableName))) {
+                    // Add row linking from data table row to physical table row
+                    PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
+                    for (PName physicalName : physicalNames) {
+                        linkStatement.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
+                        linkStatement.setString(2, schemaName);
+                        linkStatement.setString(3, tableName);
+                        linkStatement.setString(4, physicalName.getString());
+                        linkStatement.setByte(5, LinkType.PHYSICAL_TABLE.getSerializedValue());
+                        linkStatement.execute();
+                    }
                 }
             }
             
@@ -937,14 +947,6 @@ public class MetaDataClient {
                             .setColumnName(colDef.getColumnDefName().getColumnName())
                             .build().buildException();
                     }
-                    // disallow array type usage in primary key constraint
-                    if (colDef.isArray()) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.ARRAY_NOT_ALLOWED_IN_PRIMARY_KEY)
-                        .setSchemaName(schemaName)
-                        .setTableName(tableName)
-                        .setColumnName(colDef.getColumnDefName().getColumnName())
-                        .build().buildException();
-                    }
                     if (!pkColumns.add(column)) {
                         throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
                     }
@@ -954,10 +956,9 @@ public class MetaDataClient {
                     throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
                 }
                 columns.add(column);
-                if (colDef.getDataType() == PDataType.VARBINARY 
+                if ((colDef.getDataType() == PDataType.VARBINARY || colDef.getDataType().isArrayType())  
                         && SchemaUtil.isPKColumn(column)
-                        && pkColumnsNames.size() > 1 
-                        && column.getPosition() < pkColumnsNames.size() - 1) {
+                        && pkColumnsIterator.hasNext()) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_IN_ROW_KEY)
                         .setSchemaName(schemaName)
                         .setTableName(tableName)

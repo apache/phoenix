@@ -304,7 +304,7 @@ public class MutationState implements SQLCloseable {
                     }
                 }
             }
-            timeStamps[i++] = scn == null ? serverTimeStamp : scn;
+            timeStamps[i++] = scn == null ? serverTimeStamp == QueryConstants.UNSET_TIMESTAMP ? HConstants.LATEST_TIMESTAMP : serverTimeStamp : scn;
         }
         return timeStamps;
     }

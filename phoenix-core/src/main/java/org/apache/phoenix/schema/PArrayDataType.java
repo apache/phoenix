@@ -301,7 +301,7 @@ public class PArrayDataType {
                 int elementLength = 0;
                 if (arrayIndex == (noOfElements - 1)) {
                     elementLength = bytes[currOffset + initPos] == QueryConstants.SEPARATOR_BYTE ? 0 : indexOffset
-                            - currOffset - 3;
+                            - (currOffset + initPos) - 3;
                 } else {
                     elementLength = bytes[currOffset + initPos] == QueryConstants.SEPARATOR_BYTE ? 0 : getOffset(bytes,
                             arrayIndex + 1, useShort, indexOffset) - currOffset - 1;

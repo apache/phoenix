@@ -25,6 +25,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -83,4 +84,52 @@ public class UpsertSelectAutoCommitTest extends BaseHBaseManagedTimeTest {
         assertFalse(rs.next());
         
     }
+
+    @Test
+    public void testDynamicUpsertSelect() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String cursorDDL = " CREATE TABLE IF NOT EXISTS CURSOR (ORGANIZATION_ID VARCHAR(15) NOT NULL, \n"
+                + "QUERY_ID VARCHAR(15) NOT NULL, \n"
+                + "CURSOR_ORDER UNSIGNED_LONG NOT NULL, \n"
+                + "CONSTRAINT API_HBASE_CURSOR_STORAGE_PK PRIMARY KEY (ORGANIZATION_ID, QUERY_ID, CURSOR_ORDER))\n"
+                + "SALT_BUCKETS = 4";
+        conn.createStatement().execute(cursorDDL);
+        
+        String dataTableDDL = "CREATE TABLE IF NOT EXISTS PLINYTEST" +
+                "(" +
+                "ORGANIZATION_ID CHAR(15) NOT NULL, " +
+                "PLINY_ID CHAR(15) NOT NULL, " +
+                "CREATED_DATE DATE NOT NULL, " + 
+                "TEXT VARCHAR, " +
+                "CONSTRAINT PK PRIMARY KEY " +
+                "(" +
+                "ORGANIZATION_ID, " +
+                "PLINY_ID, "  +
+                "CREATED_DATE" +
+                ")" +
+                ")";
+        
+        conn.createStatement().execute(dataTableDDL);
+        PreparedStatement stmt = null;
+        String upsert = "UPSERT INTO PLINYTEST VALUES (?, ?, ?, ?)";
+        stmt = conn.prepareStatement(upsert);
+        stmt.setString(1, getOrganizationId());
+        stmt.setString(2, "aaaaaaaaaaaaaaa");
+        stmt.setDate(3, new Date(System.currentTimeMillis()));
+        stmt.setString(4, "text");
+        stmt.executeUpdate();
+        conn.commit();
+        
+        String upsertSelect = "UPSERT INTO CURSOR (ORGANIZATION_ID, QUERY_ID, CURSOR_ORDER, PLINY_ID CHAR(15),CREATED_DATE DATE) SELECT ?, ?, ?, PLINY_ID, CREATED_DATE FROM PLINYTEST WHERE ORGANIZATION_ID = ?";
+        stmt = conn.prepareStatement(upsertSelect);
+        String orgId = getOrganizationId();
+        stmt.setString(1, orgId);
+        stmt.setString(2, "queryqueryquery");
+
+        stmt.setInt(3, 1);
+        stmt.setString(4, orgId);
+        stmt.executeUpdate();
+        conn.commit();
+    }
+    
 }

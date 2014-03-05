@@ -69,6 +69,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableKey;
@@ -110,17 +111,22 @@ public class ProjectionCompiler {
         return compile(context, statement, groupBy, Collections.<PColumn>emptyList());
     }
     
-    private static void projectAllTableColumns(StatementContext context, TableRef tableRef, boolean resolveColumn, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns) throws SQLException {
-        ColumnResolver resolver = context.getResolver();
-        PTable table = tableRef.getTable();
+    private static int getPosOffset(PTable table, PName tenantId) {
         int posOffset = table.getBucketNum() == null ? 0 : 1;
         // In SELECT *, don't include tenant column or index ID column for tenant connection
-        if (table.isMultiTenant() && context.getConnection().getTenantId() != null) {
+        if (table.isMultiTenant() && tenantId != null) {
             posOffset++;
         }
         if (table.getViewIndexId() != null) {
             posOffset++;
         }
+        return posOffset;
+    }
+    
+    private static void projectAllTableColumns(StatementContext context, TableRef tableRef, boolean resolveColumn, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns, List<? extends PDatum> targetColumns) throws SQLException {
+        ColumnResolver resolver = context.getResolver();
+        PTable table = tableRef.getTable();
+        int posOffset = getPosOffset(table, context.getConnection().getTenantId());
         for (int i = posOffset; i < table.getColumns().size(); i++) {
             ColumnRef ref = new ColumnRef(tableRef,i);
             String colName = ref.getColumn().getName().getString();
@@ -135,20 +141,22 @@ public class ProjectionCompiler {
                 }
             }
             Expression expression = ref.newColumnExpression();
+            expression = coerceIfNecessary(i-posOffset, targetColumns, expression);
             projectedExpressions.add(expression);
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
             projectedColumns.add(new ExpressionProjector(colName, table.getName().getString(), expression, isCaseSensitive));
         }
     }
     
-    private static void projectAllIndexColumns(StatementContext context, TableRef tableRef, boolean resolveColumn, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns) throws SQLException {
+    private static void projectAllIndexColumns(StatementContext context, TableRef tableRef, boolean resolveColumn, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns, List<? extends PDatum> targetColumns) throws SQLException {
         ColumnResolver resolver = context.getResolver();
         PTable index = tableRef.getTable();
         PhoenixConnection conn = context.getConnection();
+        PName tenantId = conn.getTenantId();
         String tableName = index.getParentName().getString();
         PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), tableName));
-        int tableOffset = table.getBucketNum() == null ? 0 : 1;
-        int indexOffset = index.getBucketNum() == null ? 0 : 1;
+        int tableOffset = getPosOffset(table, tenantId);
+        int indexOffset = getPosOffset(index, tenantId);
         if (index.getColumns().size()-indexOffset != table.getColumns().size()-tableOffset) {
             // We'll end up not using this by the optimizer, so just throw
             throw new ColumnNotFoundException(WildcardParseNode.INSTANCE.toString());
@@ -170,6 +178,7 @@ public class ProjectionCompiler {
                 }
             }
             Expression expression = ref.newColumnExpression();
+            expression = coerceIfNecessary(i-tableOffset, targetColumns, expression);
             projectedExpressions.add(expression);
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
             ExpressionProjector projector = new ExpressionProjector(colName, table.getName().getString(), expression, isCaseSensitive);
@@ -209,6 +218,22 @@ public class ProjectionCompiler {
         }
     }
     
+    private static Expression coerceIfNecessary(int index, List<? extends PDatum> targetColumns, Expression expression) throws SQLException {
+        if (index < targetColumns.size()) {
+            PDatum targetColumn = targetColumns.get(index);
+            if (targetColumn.getDataType() != expression.getDataType()) {
+                PDataType targetType = targetColumn.getDataType();
+                // Check if coerce allowed using more relaxed isCastableTo check, since we promote INTEGER to LONG 
+                // during expression evaluation and then convert back to INTEGER on UPSERT SELECT (and we don't have
+                // (an actual value we can specifically check against).
+                if (expression.getDataType() != null && !expression.getDataType().isCastableTo(targetType)) {
+                    throw new ArgumentTypeMismatchException(targetType, expression.getDataType(), "column: " + targetColumn);
+                }
+                expression = CoerceExpression.create(expression, targetType);
+            }
+        }
+        return expression;
+    }
     /**
      * Builds the projection for the scan
      * @param context query context kept between compilation of different query clauses
@@ -243,9 +268,9 @@ public class ProjectionCompiler {
                 }
                 isWildcard = true;
                 if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
-                	projectAllIndexColumns(context, tableRef, false, projectedExpressions, projectedColumns);
+                	projectAllIndexColumns(context, tableRef, false, projectedExpressions, projectedColumns, targetColumns);
                 } else {
-                    projectAllTableColumns(context, tableRef, false, projectedExpressions, projectedColumns);
+                    projectAllTableColumns(context, tableRef, false, projectedExpressions, projectedColumns, targetColumns);
                 }
             } else if (node instanceof TableWildcardParseNode) {
                 TableName tName = ((TableWildcardParseNode) node).getTableName();
@@ -254,9 +279,9 @@ public class ProjectionCompiler {
                     isWildcard = true;
                 }
                 if (tRef.getTable().getType() == PTableType.INDEX && ((TableWildcardParseNode)node).isRewrite()) {
-                    projectAllIndexColumns(context, tRef, true, projectedExpressions, projectedColumns);
+                    projectAllIndexColumns(context, tRef, true, projectedExpressions, projectedColumns, targetColumns);
                 } else {
-                    projectAllTableColumns(context, tRef, true, projectedExpressions, projectedColumns);
+                    projectAllTableColumns(context, tRef, true, projectedExpressions, projectedColumns, targetColumns);
                 }                
             } else if (node instanceof  FamilyWildcardParseNode){
                 // Project everything for SELECT cf.*
@@ -276,19 +301,7 @@ public class ProjectionCompiler {
             } else {
                 Expression expression = node.accept(selectVisitor);
                 projectedExpressions.add(expression);
-                if (index < targetColumns.size()) {
-                    PDatum targetColumn = targetColumns.get(index);
-                    if (targetColumn.getDataType() != expression.getDataType()) {
-                        PDataType targetType = targetColumn.getDataType();
-                        // Check if coerce allowed using more relaxed isCastableTo check, since we promote INTEGER to LONG 
-                        // during expression evaluation and then convert back to INTEGER on UPSERT SELECT (and we don't have
-                        // (an actual value we can specifically check against).
-                        if (expression.getDataType() != null && !expression.getDataType().isCastableTo(targetType)) {
-                            throw new ArgumentTypeMismatchException(targetType, expression.getDataType(), "column: " + targetColumn);
-                        }
-                        expression = CoerceExpression.create(expression, targetType);
-                    }
-                }
+                expression = coerceIfNecessary(index, targetColumns, expression);
                 if (node instanceof BindParseNode) {
                     context.getBindManager().addParamMetaData((BindParseNode)node, expression);
                 }
@@ -340,7 +353,7 @@ public class ProjectionCompiler {
         }
         
         selectVisitor.compile();
-        boolean isProjectEmptyKeyValue = table.getType() != PTableType.VIEW && table.getViewType() != ViewType.MAPPED
+        boolean isProjectEmptyKeyValue = (table.getType() != PTableType.VIEW || table.getViewType() != ViewType.MAPPED)
                 && !isWildcard;
         for (byte[] family : projectedFamilies) {
             projectColumnFamily(table, scan, family);

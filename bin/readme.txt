@@ -8,7 +8,7 @@ Execute SQL from command line. Sqlline manual is available at http://www.hydroma
 	$ sqlline.sh <zookeeper> <optional_sql_file> 
 	Example: 
 	$ sqlline.sh localhost
-	$ sqlline.sh localhost ../examples/stock_symbol.sql
+	$ sqlline.sh localhost ../examples/STOCK_SYMBOL.sql
 
 psql.sh
 =======
@@ -16,12 +16,12 @@ psql.sh
 Usage: psql [-t table-name] [-h comma-separated-column-names | in-line] <zookeeper>  <path-to-sql-or-csv-file>...
 
 Example 1. Create table, upsert row and run query using single .sql file
-./psql localhost ../examples/stock_symbol.sql
+./psql localhost ../examples/STOCK_SYMBOL.sql
 
 Example 2. Create table, load CSV data and run queries using .csv and .sql files:
-./psql.sh localhost ../examples/web_stat.sql ../examples/web_stat.csv ../examples/web_stat_queries.sql
+./psql.sh localhost ../examples/WEB_STAT.sql ../examples/WEB_STAT.csv ../examples/WEB_STAT_QUERIES.sql
 
-Note: Please see comments in web_stat_queries.sql for the sample queries being executed
+Note: Please see comments in WEB_STAT_QUERIES.sql for the sample queries being executed
 
 performance.sh
 ==============

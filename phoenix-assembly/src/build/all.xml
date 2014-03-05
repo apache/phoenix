@@ -35,6 +35,11 @@
       <!-- Enable access to all projects in the current multimodule build. Eclipse 
         says this is an error, but builds from the command line just fine. -->
       <useAllReactorProjects>true</useAllReactorProjects>
+      <!-- Binaries for the dependencies also go in the lib directory -->
+      <binaries>
+        <outputDirectory>lib</outputDirectory>
+        <unpack>false</unpack>
+      </binaries>
     </moduleSet>
   </moduleSets>
 
@@ -171,6 +176,9 @@
         <include>org.apache.hbase:hbase*</include>
         <include>net.sf.opencsv:opencsv</include>
         <include>org.antlr:antlr</include>
+        <include>org.cloudera.htrace:htrace-core</include>
+        <include>io.netty:netty</include>
+        <include>commons-codec:commons-codec</include>
       </includes>
     </dependencySet>
     <!-- Separate dependency set to just pull in the jackson stuff since its test 
