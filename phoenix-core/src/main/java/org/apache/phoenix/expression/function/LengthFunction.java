@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -74,7 +72,7 @@ public class LengthFunction extends ScalarFunction {
             len = ptr.getLength();
         } else {
             try {
-                len = StringUtil.calculateUTF8Length(ptr.get(), ptr.getOffset(), ptr.getLength(), child.getColumnModifier());
+                len = StringUtil.calculateUTF8Length(ptr.get(), ptr.getOffset(), ptr.getLength(), child.getSortOrder());
             } catch (UnsupportedEncodingException e) {
                 return false;
             }

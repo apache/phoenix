@@ -1,3 +1,21 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.phoenix.schema;
 
 import static org.junit.Assert.assertEquals;
@@ -34,9 +52,10 @@ public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
         String schemaName = "";
         String tableName = "T";
         Connection conn = DriverManager.getConnection(getUrl());
-        String fullTableName = SchemaUtil.getTableName(schemaName, tableName) ;
+        String fullTableName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(schemaName),SchemaUtil.normalizeIdentifier(tableName));
         conn.createStatement().execute("CREATE TABLE " + fullTableName + "(" + dataColumns + " CONSTRAINT pk PRIMARY KEY (" + pk + "))  " + (dataProps.isEmpty() ? "" : dataProps) );
-        PTable table = conn.unwrap(PhoenixConnection.class).getPMetaData().getTable(SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(schemaName),SchemaUtil.normalizeIdentifier(tableName)));
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName));
         conn.close();
         StringBuilder buf = new StringBuilder("UPSERT INTO " + fullTableName  + " VALUES(");
         for (int i = 0; i < values.length; i++) {
@@ -52,9 +71,9 @@ public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
         List<KeyValue> dataKeyValues = iterator.next().getSecond();
         KeyValue keyValue = dataKeyValues.get(0);
         
-        List<ColumnModifier> mods = Lists.newArrayListWithExpectedSize(table.getPKColumns().size());
+        List<SortOrder> sortOrders = Lists.newArrayListWithExpectedSize(table.getPKColumns().size());
         for (PColumn col : table.getPKColumns()) {
-            mods.add(col.getColumnModifier());
+            sortOrders.add(col.getSortOrder());
         }
         RowKeySchema schema = table.getRowKeySchema();
         int minOffset = keyValue.getRowOffset();
@@ -76,8 +95,8 @@ public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
             }
             assertTrue(hasValue);
             PDataType type = PDataType.fromLiteral(values[i]);
-            ColumnModifier mod = mods.get(i);
-            Object value = type.toObject(ptr, schema.getField(i).getDataType(), mod);
+            SortOrder sortOrder = sortOrders.get(i);
+            Object value = type.toObject(ptr, schema.getField(i).getDataType(), sortOrder);
             assertEquals(values[i], value);
         }
         assertEquals(nExpectedValues, i);
@@ -90,8 +109,8 @@ public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
             }
             assertTrue(hasValue);
             PDataType type = PDataType.fromLiteral(values[i]);
-            ColumnModifier mod = mods.get(i);
-            Object value = type.toObject(ptr, schema.getField(i).getDataType(), mod);
+            SortOrder sortOrder = sortOrders.get(i);
+            Object value = type.toObject(ptr, schema.getField(i).getDataType(), sortOrder);
             assertEquals(values[i], value);
         }
         assertEquals(-1, i);

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,11 +21,10 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.util.ResultUtil;
 
 
-public class ResultTuple implements Tuple {
+public class ResultTuple extends BaseTuple {
     private Result result;
     
     public ResultTuple(Result result) {

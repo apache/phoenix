@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -38,8 +36,10 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PMetaData;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 
 
@@ -80,21 +80,21 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public PMetaData addColumn(String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum,
-            boolean isImmutableRows) throws SQLException {
-        return getDelegate().addColumn(tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
+    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
+            long tableSeqNum, boolean isImmutableRows) throws SQLException {
+        return getDelegate().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
     }
 
     @Override
-    public PMetaData removeTable(String tableName)
+    public PMetaData removeTable(PName tenantId, String tableName)
             throws SQLException {
-        return getDelegate().removeTable(tableName);
+        return getDelegate().removeTable(tenantId, tableName);
     }
 
     @Override
-    public PMetaData removeColumn(String tableName, String familyName, String columnName, long tableTimeStamp,
-            long tableSeqNum) throws SQLException {
-        return getDelegate().removeColumn(tableName, familyName, columnName, tableTimeStamp, tableSeqNum);
+    public PMetaData removeColumn(PName tenantId, String tableName, String familyName, String columnName,
+            long tableTimeStamp, long tableSeqNum) throws SQLException {
+        return getDelegate().removeColumn(tenantId, tableName, familyName, columnName, tableTimeStamp, tableSeqNum);
     }
 
     @Override
@@ -103,7 +103,7 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public MetaDataMutationResult getTable(byte[] tenantId, byte[] schemaBytes, byte[] tableBytes, long tableTimestamp, long clientTimestamp) throws SQLException {
+    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaBytes, byte[] tableBytes, long tableTimestamp, long clientTimestamp) throws SQLException {
         return getDelegate().getTable(tenantId, schemaBytes, tableBytes, tableTimestamp, clientTimestamp);
     }
 
@@ -120,8 +120,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public MetaDataMutationResult addColumn(List<Mutation> tabeMetaData, PTableType tableType, List<Pair<byte[],Map<String,Object>>> families ) throws SQLException {
-        return getDelegate().addColumn(tabeMetaData, tableType, families);
+    public MetaDataMutationResult addColumn(List<Mutation> tabeMetaData, List<Pair<byte[],Map<String,Object>>> families, PTable table) throws SQLException {
+        return getDelegate().addColumn(tabeMetaData, families, table);
     }
 
 
@@ -183,26 +183,26 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public void reserveSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
+    public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
+            SQLException[] exceptions, Sequence.Action action) throws SQLException {
+        getDelegate().validateSequences(sequenceKeys, timestamp, values, exceptions, action);
+    }
+
+    @Override
+    public void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
             SQLException[] exceptions) throws SQLException {
-        getDelegate().reserveSequenceValues(sequenceKeys, timestamp, values, exceptions);
+        getDelegate().incrementSequences(sequenceKeys, timestamp, values, exceptions);
     }
 
     @Override
-    public void incrementSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
-            SQLException[] exceptions) throws SQLException {
-        getDelegate().incrementSequenceValues(sequenceKeys, timestamp, values, exceptions);
+    public long currentSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException {
+        return getDelegate().currentSequenceValue(sequenceKey, timestamp);
     }
 
     @Override
-    public long getSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException {
-        return getDelegate().getSequenceValue(sequenceKey, timestamp);
-    }
-
-    @Override
-    public void returnSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, SQLException[] exceptions)
+    public void returnSequences(List<SequenceKey> sequenceKeys, long timestamp, SQLException[] exceptions)
             throws SQLException {
-        getDelegate().returnSequenceValues(sequenceKeys, timestamp, exceptions);
+        getDelegate().returnSequences(sequenceKeys, timestamp, exceptions);
     }
 
     @Override

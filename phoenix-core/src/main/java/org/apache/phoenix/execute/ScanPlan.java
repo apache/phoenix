@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -60,7 +58,9 @@ public class ScanPlan extends BasicQueryPlan {
     private List<KeyRange> splits;
     
     public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
-        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, null, parallelIteratorFactory == null ? new SpoolingResultIterator.SpoolingResultIteratorFactory(context.getConnection().getQueryServices()) : parallelIteratorFactory);
+        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, null, 
+                parallelIteratorFactory != null ? parallelIteratorFactory :
+                    new SpoolingResultIterator.SpoolingResultIteratorFactory(context.getConnection().getQueryServices()));
         if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
             int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
                     QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
@@ -94,7 +94,7 @@ public class ScanPlan extends BasicQueryPlan {
             scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions());
         } else {
             if (isSalted && 
-                    (getConnectionQueryServices(context.getConnection().getQueryServices()).getProps().getBoolean(
+                    (context.getConnection().getQueryServices().getProps().getBoolean(
                             QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, 
                             QueryServicesOptions.DEFAULT_ROW_KEY_ORDER_SALTED_TABLE) ||
                      orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY ||

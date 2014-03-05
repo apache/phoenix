@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,7 +20,6 @@ package org.apache.phoenix.query;
 import java.util.concurrent.ExecutorService;
 
 import org.apache.http.annotation.Immutable;
-
 import org.apache.phoenix.iterate.SpoolTooBigToDiskException;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.optimize.QueryOptimizer;
@@ -73,7 +70,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String SCAN_CACHE_SIZE_ATTRIB = "hbase.client.scanner.caching";
     public static final String MAX_MUTATION_SIZE_ATTRIB = "phoenix.mutate.maxSize";
     public static final String MUTATE_BATCH_SIZE_ATTRIB = "phoenix.mutate.batchSize";
-    public static final String MAX_SERVER_CACHE_TIME_TO_LIVE_MS = "phoenix.coprocessor.maxServerCacheTimeToLiveMs";
+    public static final String MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB = "phoenix.coprocessor.maxServerCacheTimeToLiveMs";
     public static final String MAX_INTRA_REGION_PARALLELIZATION_ATTRIB  = "phoenix.query.maxIntraRegionParallelization";
     public static final String ROW_KEY_ORDER_SALTED_TABLE_ATTRIB  = "phoenix.query.rowKeyOrderSaltedTable";
     public static final String USE_INDEXES_ATTRIB  = "phoenix.query.useIndexes";
@@ -95,7 +92,12 @@ public interface QueryServices extends SQLCloseable {
     public static final String ZOOKEEPER_ROOT_NODE_ATTRIB = "zookeeper.znode.parent";
     public static final String DISTINCT_VALUE_COMPRESS_THRESHOLD_ATTRIB = "phoenix.distinct.value.compress.threshold";
     public static final String SEQUENCE_CACHE_SIZE_ATTRIB = "phoenix.sequence.cacheSize";
+    public static final String INDEX_MAX_FILESIZE_PERC_ATTRIB = "phoenix.index.maxDataFileSizePerc";
+    public static final String MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB = "phoenix.coprocessor.maxMetaDataCacheTimeToLiveMs";
+    public static final String MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB = "phoenix.coprocessor.maxMetaDataCacheSize";
+    public static final String MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB = "phoenix.client.maxMetaDataCacheSize";
 
+    public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
     
     /**
      * Get executor service used for parallel scans

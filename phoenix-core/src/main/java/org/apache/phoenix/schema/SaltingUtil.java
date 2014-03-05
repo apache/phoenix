@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -38,10 +36,10 @@ public class SaltingUtil {
     public static final String SALTING_COLUMN_NAME = "_SALT";
     public static final String SALTED_ROW_KEY_NAME = "_SALTED_KEY";
     public static final PColumnImpl SALTING_COLUMN = new PColumnImpl(
-            PNameFactory.newName(SALTING_COLUMN_NAME), null, PDataType.BINARY, 1, 0, false, 0, null, 0);
+            PNameFactory.newName(SALTING_COLUMN_NAME), null, PDataType.BINARY, 1, 0, false, 0, SortOrder.getDefault(), 0, null);
     public static final RowKeySchema VAR_BINARY_SALTED_SCHEMA = new RowKeySchemaBuilder(1)
-        .addField(SALTING_COLUMN, false, null)
-        .addField(SchemaUtil.VAR_BINARY_DATUM, false, null).build();
+        .addField(SALTING_COLUMN, false, SortOrder.getDefault())
+        .addField(SchemaUtil.VAR_BINARY_DATUM, false, SortOrder.getDefault()).build();
 
     public static List<KeyRange> generateAllSaltingRanges(int bucketNum) {
         List<KeyRange> allRanges = Lists.newArrayListWithExpectedSize(bucketNum);

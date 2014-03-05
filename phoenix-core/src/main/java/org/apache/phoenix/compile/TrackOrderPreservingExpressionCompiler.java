@@ -1,3 +1,21 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
@@ -5,8 +23,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import com.google.common.base.Objects;
-import com.google.common.collect.Lists;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -17,9 +33,11 @@ import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.DivideParseNode;
 import org.apache.phoenix.parse.MultiplyParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.collect.Lists;
 
 /**
  * Visitor that builds the expressions of a GROUP BY and ORDER BY clause. While traversing
@@ -158,10 +176,10 @@ public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
         return true;
     }
     
-    public boolean addEntry(Expression expression, ColumnModifier modifier) {
+    public boolean addEntry(Expression expression, SortOrder sortOrder) {
         // If the expression is sorted in a different order than the specified sort order
         // then the expressions are not order preserving.
-        if (!Objects.equal(expression.getColumnModifier(), modifier)) {
+        if (expression.getSortOrder() != sortOrder) {
             if (isReverse == null) {
                 isReverse = true;
             } else if (!isReverse){

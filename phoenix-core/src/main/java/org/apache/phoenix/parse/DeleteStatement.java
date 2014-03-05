@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,7 +20,10 @@ package org.apache.phoenix.parse;
 import java.util.Collections;
 import java.util.List;
 
-public class DeleteStatement extends SingleTableSQLStatement implements FilterableStatement {
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.schema.Sequence.Action;
+
+public class DeleteStatement extends SingleTableStatement implements FilterableStatement {
     private final ParseNode whereNode;
     private final List<OrderByNode> orderBy;
     private final LimitNode limit;
@@ -66,4 +67,13 @@ public class DeleteStatement extends SingleTableSQLStatement implements Filterab
         return false;
     }
 
+    @Override
+    public Operation getOperation() {
+        return Operation.DELETE;
+    }
+    
+    @Override
+    public Action getSequenceAction() {
+        return Action.RESERVE;
+    }
 }

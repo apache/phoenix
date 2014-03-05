@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -37,9 +35,9 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.StringUtil;
 
@@ -118,9 +116,7 @@ public abstract class ExplainTable {
                     }
                     if (filterList.size() > offset+1) {
                         filterDesc = filterList.get(offset+1).toString();
-                        if (filterList.size() > offset+2) {
-                            pageFilter = (PageFilter) filterList.get(offset+2);
-                        }
+                        pageFilter = getPageFilter(filterList);
                     }
                 }
             } else if (filter instanceof FilterList) {
@@ -131,9 +127,7 @@ public abstract class ExplainTable {
                 }
                 if (filterList.size() > offset) {
                     filterDesc = filterList.get(offset).toString();
-                    if (filterList.size() > offset+1) {
-                        pageFilter = (PageFilter) filterList.get(offset+1);
-                    }
+                    pageFilter = getPageFilter(filterList);
                 }
             } else {
                 if (filter instanceof FirstKeyOnlyFilter) {
@@ -154,6 +148,13 @@ public abstract class ExplainTable {
         groupBy.explain(planSteps);
     }
 
+    private PageFilter getPageFilter(List<Filter> filterList) {
+        for (Filter filter : filterList) {
+            if (filter instanceof PageFilter) return (PageFilter)filter;
+        }
+        return null;
+    }
+
     private void appendPKColumnValue(StringBuilder buf, byte[] range, Boolean isNull, int slotIndex) {
         if (Boolean.TRUE.equals(isNull)) {
             buf.append("null");
@@ -169,10 +170,10 @@ public abstract class ExplainTable {
         }
         ScanRanges scanRanges = context.getScanRanges();
         PDataType type = scanRanges.getSchema().getField(slotIndex).getDataType();
-        ColumnModifier modifier = tableRef.getTable().getPKColumns().get(slotIndex).getColumnModifier();
-        if (modifier != null) {
+        SortOrder sortOrder = tableRef.getTable().getPKColumns().get(slotIndex).getSortOrder();
+        if (sortOrder == SortOrder.DESC) {
             buf.append('~');
-            range = modifier.apply(range, 0, new byte[range.length], 0, range.length);
+            range = SortOrder.invert(range, 0, new byte[range.length], 0, range.length);
         }
         Format formatter = context.getConnection().getFormatter(type);
         buf.append(type.toStringLiteral(range, formatter));

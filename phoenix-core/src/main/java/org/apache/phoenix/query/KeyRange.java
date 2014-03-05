@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -38,7 +36,7 @@ import org.apache.hadoop.io.WritableUtils;
 import com.google.common.base.Function;
 import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.Lists;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
@@ -550,7 +548,7 @@ public class KeyRange implements Writable {
     public KeyRange invert() {
         byte[] lower = this.getLowerRange();
         if (!this.lowerUnbound()) {
-            lower = ColumnModifier.SORT_DESC.apply(lower, 0, lower.length);
+            lower = SortOrder.invert(lower, 0, lower.length);
         }
         byte[] upper;
         if (this.isSingleKey()) {
@@ -558,7 +556,7 @@ public class KeyRange implements Writable {
         } else {
             upper = this.getUpperRange();
             if (!this.upperUnbound()) {
-                upper = ColumnModifier.SORT_DESC.apply(upper, 0, upper.length);
+                upper = SortOrder.invert(upper, 0, upper.length);
             }
         }
         return KeyRange.getKeyRange(lower, this.isLowerInclusive(), upper, this.isUpperInclusive());

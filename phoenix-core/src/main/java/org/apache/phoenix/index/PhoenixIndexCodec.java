@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -34,14 +32,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 
 import com.google.common.collect.Lists;
-import org.apache.hadoop.hbase.index.ValueGetter;
-import org.apache.hadoop.hbase.index.covered.IndexCodec;
-import org.apache.hadoop.hbase.index.covered.IndexUpdate;
-import org.apache.hadoop.hbase.index.covered.TableState;
-import org.apache.hadoop.hbase.index.scanner.Scanner;
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
-import org.apache.hadoop.hbase.index.util.IndexManagementUtil;
-import org.apache.hadoop.hbase.index.write.IndexWriter;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.IndexMetaDataCache;
 import org.apache.phoenix.cache.ServerCacheClient;
@@ -49,6 +39,14 @@ import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.hbase.index.ValueGetter;
+import org.apache.phoenix.hbase.index.covered.IndexCodec;
+import org.apache.phoenix.hbase.index.covered.IndexUpdate;
+import org.apache.phoenix.hbase.index.covered.TableState;
+import org.apache.phoenix.hbase.index.scanner.Scanner;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ServerUtil;
 

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -78,14 +76,14 @@ public class ToNumberFunction extends ScalarFunction {
 
         PDataType type = expression.getDataType();
         if (type.isCoercibleTo(PDataType.TIMESTAMP)) {
-        	Date date = (Date) type.toObject(ptr, expression.getColumnModifier());
+        	Date date = (Date) type.toObject(ptr, expression.getSortOrder());
         	BigDecimal time = new BigDecimal(date.getTime());
             byte[] byteValue = getDataType().toBytes(time);
             ptr.set(byteValue);
             return true;
         }
         
-        String stringValue = (String)type.toObject(ptr, expression.getColumnModifier());
+        String stringValue = (String)type.toObject(ptr, expression.getSortOrder());
         if (stringValue == null) {
             ptr.set(EMPTY_BYTE_ARRAY);
             return true;

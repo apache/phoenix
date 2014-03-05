@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -85,7 +83,7 @@ public class RegexpReplaceFunction extends ScalarFunction {
         if (!sourceStrExpression.evaluate(tuple, ptr)) {
             return false;
         }
-        String sourceStr = (String)PDataType.VARCHAR.toObject(ptr, sourceStrExpression.getColumnModifier());
+        String sourceStr = (String)PDataType.VARCHAR.toObject(ptr, sourceStrExpression.getSortOrder());
         if (sourceStr == null) {
             return false;
         }
@@ -95,7 +93,7 @@ public class RegexpReplaceFunction extends ScalarFunction {
             if (!replaceStrExpression.evaluate(tuple, ptr)) {
                 return false;
             }
-            replaceStr = (String)PDataType.VARCHAR.toObject(ptr, replaceStrExpression.getColumnModifier());
+            replaceStr = (String)PDataType.VARCHAR.toObject(ptr, replaceStrExpression.getSortOrder());
         } else {
             replaceStr = "";
         }

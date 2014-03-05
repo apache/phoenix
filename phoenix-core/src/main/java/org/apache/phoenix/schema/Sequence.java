@@ -1,3 +1,21 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CACHE_SIZE_BYTES;
@@ -35,7 +53,8 @@ import com.google.common.collect.Lists;
 public class Sequence {
     public static final int SUCCESS = 0;
     
-    private static final Long AMOUNT = Long.valueOf(0L);
+    public enum Action {VALIDATE, RESERVE};
+    
     // Pre-compute index of sequence key values to prevent binary search
     private static final KeyValue CURRENT_VALUE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SEQUENCE_FAMILY_BYTES, CURRENT_VALUE_BYTES);
     private static final KeyValue INCREMENT_BY_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SEQUENCE_FAMILY_BYTES, INCREMENT_BY_BYTES);
@@ -101,12 +120,15 @@ public class Sequence {
         return value.isDeleted() ? null : value;
     }
     
-    public long incrementValue(long timestamp, int factor) throws EmptySequenceCacheException {
+    public long incrementValue(long timestamp, int factor, Action action) throws EmptySequenceCacheException {
         SequenceValue value = findSequenceValue(timestamp);
         if (value == null) {
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }
         if (value.currentValue == value.nextValue) {
+            if (action == Action.VALIDATE) {
+                return value.currentValue;
+            }
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }
         long returnValue = value.currentValue;
@@ -175,7 +197,7 @@ public class Sequence {
         // before a next val was. Not sure how to prevent that.
         if (result.rawCells().length == 1) {
             Cell errorKV = result.rawCells()[0];
-            int errorCode = PDataType.INTEGER.getCodec().decodeInt(errorKV.getValueArray(), errorKV.getValueOffset(), null);
+            int errorCode = PDataType.INTEGER.getCodec().decodeInt(errorKV.getValueArray(), errorKV.getValueOffset(), SortOrder.getDefault());
             SQLExceptionCode code = SQLExceptionCode.fromErrorCode(errorCode);
             // TODO: We could have the server return the timestamps of the
             // delete markers and we could insert them here, but this seems
@@ -195,7 +217,7 @@ public class Sequence {
         return currentValue;
     }
 
-    public Increment newIncrement(long timestamp) {
+    public Increment newIncrement(long timestamp, Sequence.Action action) {
         Increment inc = new Increment(SchemaUtil.getSequenceKey(key.getTenantId(), key.getSchemaName(), key.getSequenceName()));
         // It doesn't matter what we set the amount too - we always use the values we get
         // from the Get we do to prevent any race conditions. All columns that get added
@@ -207,7 +229,7 @@ public class Sequence {
         }
         for (KeyValue kv : SEQUENCE_KV_COLUMNS) {
             // We don't care about the amount, as we'll add what gets looked up on the server-side
-            inc.addColumn(kv.getFamily(), kv.getQualifier(), AMOUNT);
+            inc.addColumn(kv.getFamily(), kv.getQualifier(), action.ordinal());
         }
         return inc;
     }
@@ -287,9 +309,9 @@ public class Sequence {
             KeyValue incrementByKV = getIncrementByKV(r);
             KeyValue cacheSizeKV = getCacheSizeKV(r);
             timestamp = currentValueKV.getTimestamp();
-            nextValue = PDataType.LONG.getCodec().decodeLong(currentValueKV.getValueArray(), currentValueKV.getValueOffset(), null);
-            incrementBy = PDataType.LONG.getCodec().decodeLong(incrementByKV.getValueArray(), incrementByKV.getValueOffset(), null);
-            cacheSize = PDataType.INTEGER.getCodec().decodeInt(cacheSizeKV.getValueArray(), cacheSizeKV.getValueOffset(), null);
+            nextValue = PDataType.LONG.getCodec().decodeLong(currentValueKV.getValueArray(), currentValueKV.getValueOffset(), SortOrder.getDefault());
+            incrementBy = PDataType.LONG.getCodec().decodeLong(incrementByKV.getValueArray(), incrementByKV.getValueOffset(), SortOrder.getDefault());
+            cacheSize = PDataType.INTEGER.getCodec().decodeInt(cacheSizeKV.getValueArray(), cacheSizeKV.getValueOffset(), SortOrder.getDefault());
             currentValue = nextValue - incrementBy * cacheSize;
         }
     }
@@ -300,7 +322,7 @@ public class Sequence {
             return false;
         }
         long timestamp = statusKV.getTimestamp();
-        int statusCode = PDataType.INTEGER.getCodec().decodeInt(statusKV.getValueArray(), statusKV.getValueOffset(), null);
+        int statusCode = PDataType.INTEGER.getCodec().decodeInt(statusKV.getValueArray(), statusKV.getValueOffset(), SortOrder.getDefault());
         if (statusCode == SUCCESS) {  // Success - update nextValue down to currentValue
             SequenceValue value = findSequenceValue(timestamp);
             if (value == null) {
@@ -343,7 +365,7 @@ public class Sequence {
     public long createSequence(Result result) throws SQLException {
         Cell statusKV = result.rawCells()[0];
         long timestamp = statusKV.getTimestamp();
-        int statusCode = PDataType.INTEGER.getCodec().decodeInt(statusKV.getValueArray(), statusKV.getValueOffset(), null);
+        int statusCode = PDataType.INTEGER.getCodec().decodeInt(statusKV.getValueArray(), statusKV.getValueOffset(), SortOrder.getDefault());
         if (statusCode == 0) {  // Success - add sequence value and return timestamp
             SequenceValue value = new SequenceValue(timestamp);
             insertSequenceValue(value);
@@ -372,7 +394,7 @@ public class Sequence {
     public long dropSequence(Result result) throws SQLException {
         Cell statusKV = result.rawCells()[0];
         long timestamp = statusKV.getTimestamp();
-        int statusCode = PDataType.INTEGER.getCodec().decodeInt(statusKV.getValueArray(), statusKV.getValueOffset(), null);
+        int statusCode = PDataType.INTEGER.getCodec().decodeInt(statusKV.getValueArray(), statusKV.getValueOffset(), SortOrder.getDefault());
         SQLExceptionCode code = statusCode == 0 ? null : SQLExceptionCode.fromErrorCode(statusCode);
         if (code == null) {
             // Insert delete marker so that point-in-time sequences work

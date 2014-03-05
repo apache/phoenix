@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -40,12 +38,12 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
 import org.apache.phoenix.util.StringUtil;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.math.LongMath;
 import com.google.common.primitives.Booleans;
 import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Longs;
-
 
 /**
  * The data types of PColumns
@@ -205,7 +203,7 @@ public enum PDataType {
             if (length == 0) {
                 return null;
             }
-            length = StringUtil.getUnpaddedCharLength(bytes, offset, length, null);
+            length = StringUtil.getUnpaddedCharLength(bytes, offset, length, SortOrder.getDefault());
             String s = Bytes.toString(bytes, offset, length);
             if (length != s.length()) {
                throw new IllegalDataException("CHAR types may only contain single byte characters (" + s + ")");
@@ -387,7 +385,7 @@ public enum PDataType {
             case FLOAT:
             case UNSIGNED_DOUBLE:
             case DOUBLE:
-                return actualType.getCodec().decodeLong(b, o, null);
+                return actualType.getCodec().decodeLong(b, o, SortOrder.getDefault());
             default:
                 return super.toObject(b,o,l,actualType);
             }
@@ -534,7 +532,7 @@ public enum PDataType {
             case UNSIGNED_FLOAT:
             case DOUBLE:
             case UNSIGNED_DOUBLE:
-                return actualType.getCodec().decodeInt(b, o, null);
+                return actualType.getCodec().decodeInt(b, o, SortOrder.getDefault());
             default:
                 return super.toObject(b,o,l,actualType);
             }
@@ -695,7 +693,7 @@ public enum PDataType {
           case UNSIGNED_FLOAT:
           case DOUBLE:
           case UNSIGNED_DOUBLE:
-              return actualType.getCodec().decodeShort(b, o, null);
+              return actualType.getCodec().decodeShort(b, o, SortOrder.getDefault());
           default:
               return super.toObject(b,o,l,actualType);
           }
@@ -834,7 +832,7 @@ public enum PDataType {
           case SMALLINT:
           case UNSIGNED_TINYINT:
           case TINYINT:
-              return actualType.getCodec().decodeByte(b, o, null);
+              return actualType.getCodec().decodeByte(b, o, SortOrder.getDefault());
           default:
               return super.toObject(b,o,l,actualType);
           }
@@ -992,7 +990,7 @@ public enum PDataType {
             case SMALLINT:
             case UNSIGNED_TINYINT:
             case TINYINT:
-                return actualType.getCodec().decodeFloat(b, o, null);
+                return actualType.getCodec().decodeFloat(b, o, SortOrder.getDefault());
             default:
                 return super.toObject(b,o,l,actualType);
             }
@@ -1158,7 +1156,7 @@ public enum PDataType {
             case SMALLINT:
             case UNSIGNED_TINYINT:
             case TINYINT:
-                return actualType.getCodec().decodeDouble(b, o, null);
+                return actualType.getCodec().decodeDouble(b, o, SortOrder.getDefault());
             default:
                 return super.toObject(b,o,l,actualType);
             }
@@ -1280,12 +1278,13 @@ public enum PDataType {
         }
 
         @Override
-        public Object toObject(byte[] b, int o, int l, PDataType actualType, ColumnModifier columnModifier) {
+        public Object toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder) {
+            Preconditions.checkNotNull(sortOrder);        	
             if (l == 0) {
                 return null;
             }
-            if (columnModifier != null) {
-                b = columnModifier.apply(b, o, new byte[l], 0, l);
+            if (sortOrder == SortOrder.DESC) {
+                b = SortOrder.invert(b, o, new byte[l], 0, l);
                 o = 0;
             }
             switch (actualType) {
@@ -1301,13 +1300,13 @@ public enum PDataType {
             case UNSIGNED_INT:
             case UNSIGNED_SMALLINT:
             case UNSIGNED_TINYINT:
-                return BigDecimal.valueOf(actualType.getCodec().decodeLong(b, o, null));
+                return BigDecimal.valueOf(actualType.getCodec().decodeLong(b, o, SortOrder.getDefault()));
             case FLOAT:
             case UNSIGNED_FLOAT:
-                return BigDecimal.valueOf(actualType.getCodec().decodeFloat(b, o, null));
+                return BigDecimal.valueOf(actualType.getCodec().decodeFloat(b, o, SortOrder.getDefault()));
             case DOUBLE:
             case UNSIGNED_DOUBLE:
-                return BigDecimal.valueOf(actualType.getCodec().decodeDouble(b, o, null));
+                return BigDecimal.valueOf(actualType.getCodec().decodeDouble(b, o, SortOrder.getDefault()));
             case TIMESTAMP:
             case UNSIGNED_TIMESTAMP:
                 Timestamp ts = (Timestamp) actualType.toObject(b, o, l) ;
@@ -1545,6 +1544,15 @@ public enum PDataType {
             // No association of runtime byte size from decimal precision.
             return null;
         }
+        
+        @Override
+        public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
+            if (formatter == null) {
+                BigDecimal o = (BigDecimal)toObject(b, offset, length);
+                return o.toPlainString();
+            }
+            return super.toStringLiteral(b,offset, length, formatter);
+        }
     },
     TIMESTAMP("TIMESTAMP", Types.TIMESTAMP, Timestamp.class, new DateCodec()) {
 
@@ -1595,18 +1603,18 @@ public enum PDataType {
         }
 
         @Override
-        public Object toObject(byte[] b, int o, int l, PDataType actualType, ColumnModifier columnModifier) {
+        public Object toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder) {
             if (actualType == null || l == 0) {
                 return null;
             }
-            if (columnModifier != null) {
-                b = columnModifier.apply(b, o, new byte[l], 0, l);
+            if (sortOrder == SortOrder.DESC) {
+                b = SortOrder.invert(b, o, new byte[l], 0, l);
                 o = 0;
             }
             switch (actualType) {
             case TIMESTAMP:
             case UNSIGNED_TIMESTAMP:
-                long millisDeserialized = (actualType == TIMESTAMP ? DATE : UNSIGNED_DATE).getCodec().decodeLong(b, o, null);
+                long millisDeserialized = (actualType == TIMESTAMP ? DATE : UNSIGNED_DATE).getCodec().decodeLong(b, o, SortOrder.getDefault());
                 Timestamp v = new Timestamp(millisDeserialized);
                 int nanosDeserialized = Bytes.toInt(b, o + Bytes.SIZEOF_LONG, Bytes.SIZEOF_INT);
                 /*
@@ -1620,7 +1628,7 @@ public enum PDataType {
             case TIME:
             case UNSIGNED_DATE:
             case UNSIGNED_TIME:
-                return new Timestamp(actualType.getCodec().decodeLong(b, o, null));
+                return new Timestamp(actualType.getCodec().decodeLong(b, o, SortOrder.getDefault()));
             case DECIMAL:
                 BigDecimal bd = (BigDecimal) actualType.toObject(b, o, l);
                 long ms = bd.longValue();
@@ -1687,14 +1695,14 @@ public enum PDataType {
         }
         
         @Override
-        public int getNanos(ImmutableBytesWritable ptr, ColumnModifier cm) {
-            int nanos = PDataType.UNSIGNED_INT.getCodec().decodeInt(ptr.get(), ptr.getOffset() + PDataType.LONG.getByteSize(), cm);
+        public int getNanos(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+            int nanos = PDataType.UNSIGNED_INT.getCodec().decodeInt(ptr.get(), ptr.getOffset() + PDataType.LONG.getByteSize(), sortOrder);
             return nanos;
         }
         
         @Override
-        public long getMillis(ImmutableBytesWritable ptr, ColumnModifier cm) {
-            long millis = PDataType.LONG.getCodec().decodeLong(ptr.get(),ptr.getOffset(), cm);
+        public long getMillis(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+            long millis = PDataType.LONG.getCodec().decodeLong(ptr.get(),ptr.getOffset(), sortOrder);
             return millis;
         }
 
@@ -1723,7 +1731,7 @@ public enum PDataType {
             case TIME:
             case UNSIGNED_DATE:
             case UNSIGNED_TIME:
-                return new Time(actualType.getCodec().decodeLong(b, o, null));
+                return new Time(actualType.getCodec().decodeLong(b, o, SortOrder.getDefault()));
             default:
                 throw new ConstraintViolationException(actualType + " cannot be coerced to " + this);
             }
@@ -1852,7 +1860,7 @@ public enum PDataType {
             case TIME:
             case UNSIGNED_DATE:
             case UNSIGNED_TIME:
-                return new Date(actualType.getCodec().decodeLong(b, o, null));
+                return new Date(actualType.getCodec().decodeLong(b, o, SortOrder.getDefault()));
             default:
                 throw new ConstraintViolationException(actualType + " cannot be coerced to " + this);
             }
@@ -1926,7 +1934,7 @@ public enum PDataType {
         }
         
         @Override
-        public void coerceBytes(ImmutableBytesWritable ptr, PDataType actualType, ColumnModifier actualModifier, ColumnModifier expectedModifier) {
+        public void coerceBytes(ImmutableBytesWritable ptr, PDataType actualType, SortOrder actualModifier, SortOrder expectedModifier) {
             if (ptr.getLength() > 0 && actualType  == PDataType.TIMESTAMP && actualModifier == expectedModifier) {
                 ptr.set(ptr.get(), ptr.getOffset(), getByteSize());
                 return;
@@ -2015,14 +2023,14 @@ public enum PDataType {
         }
         
         @Override
-        public int getNanos(ImmutableBytesWritable ptr, ColumnModifier cm) {
-            int nanos = PDataType.UNSIGNED_INT.getCodec().decodeInt(ptr.get(), ptr.getOffset() + PDataType.LONG.getByteSize(), cm);
+        public int getNanos(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+            int nanos = PDataType.UNSIGNED_INT.getCodec().decodeInt(ptr.get(), ptr.getOffset() + PDataType.LONG.getByteSize(), sortOrder);
             return nanos;
         }
         
         @Override
-        public long getMillis(ImmutableBytesWritable ptr, ColumnModifier cm) {
-            long millis = PDataType.UNSIGNED_LONG.getCodec().decodeLong(ptr.get(),ptr.getOffset(), cm);
+        public long getMillis(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+            long millis = PDataType.UNSIGNED_LONG.getCodec().decodeLong(ptr.get(),ptr.getOffset(), sortOrder);
             return millis;
         }
     },
@@ -2168,7 +2176,7 @@ public enum PDataType {
         }
         
         @Override
-        public void coerceBytes(ImmutableBytesWritable ptr, PDataType actualType, ColumnModifier actualModifier, ColumnModifier expectedModifier) {
+        public void coerceBytes(ImmutableBytesWritable ptr, PDataType actualType, SortOrder actualModifier, SortOrder expectedModifier) {
             if (ptr.getLength() > 0 && actualType  == PDataType.UNSIGNED_TIMESTAMP && actualModifier == expectedModifier) {
                 ptr.set(ptr.get(), ptr.getOffset(), getByteSize());
                 return;
@@ -2277,7 +2285,7 @@ public enum PDataType {
             case UNSIGNED_FLOAT:
             case DOUBLE:
             case UNSIGNED_DOUBLE:
-                return actualType.getCodec().decodeLong(b, o, null);
+                return actualType.getCodec().decodeLong(b, o, SortOrder.getDefault());
             default:
                 return super.toObject(b,o,l,actualType);
             }
@@ -2415,7 +2423,7 @@ public enum PDataType {
             case UNSIGNED_FLOAT:
             case DOUBLE:
             case UNSIGNED_DOUBLE:
-                return actualType.getCodec().decodeInt(b, o, null);
+                return actualType.getCodec().decodeInt(b, o, SortOrder.getDefault());
             default:
                 return super.toObject(b,o,l,actualType);
             }
@@ -2582,7 +2590,7 @@ public enum PDataType {
           case FLOAT:
           case UNSIGNED_DOUBLE:
           case DOUBLE:
-              return actualType.getCodec().decodeShort(b, o, null);
+              return actualType.getCodec().decodeShort(b, o, SortOrder.getDefault());
           default:
               return super.toObject(b,o,l,actualType);
           }
@@ -2710,7 +2718,7 @@ public enum PDataType {
           case FLOAT:
           case UNSIGNED_DOUBLE:
           case DOUBLE:
-              return actualType.getCodec().decodeByte(b, o, null);
+              return actualType.getCodec().decodeByte(b, o, SortOrder.getDefault());
           default:
               return super.toObject(b,o,l,actualType);
           }
@@ -2888,7 +2896,7 @@ public enum PDataType {
             case SMALLINT:
             case UNSIGNED_TINYINT:
             case TINYINT:
-                return actualType.getCodec().decodeFloat(b, o, null);
+                return actualType.getCodec().decodeFloat(b, o, SortOrder.getDefault());
             default:
                 return super.toObject(b,o,l,actualType);
             }
@@ -3093,7 +3101,7 @@ public enum PDataType {
             case SMALLINT:
             case UNSIGNED_TINYINT:
             case TINYINT:
-                return actualType.getCodec().decodeDouble(b, o, null);
+                return actualType.getCodec().decodeDouble(b, o, SortOrder.getDefault());
             default:
                 return super.toObject(b,o,l,actualType);
             }
@@ -3165,15 +3173,15 @@ public enum PDataType {
         }
 
         @Override
-        public byte[] toBytes(Object object, ColumnModifier columnModifier) {
+        public byte[] toBytes(Object object, SortOrder sortOrder) {
             if (object == null) {
                 throw new ConstraintViolationException(this + " may not be null");
             }
             // Override to prevent any byte allocation
-            if (columnModifier == null) {
+            if (sortOrder == SortOrder.ASC) {
                 return ((Boolean)object).booleanValue() ? TRUE_BYTES : FALSE_BYTES;
             }
-            return ((Boolean)object).booleanValue() ? MOD_TRUE_BYTES[columnModifier.ordinal()] : MOD_FALSE_BYTES[columnModifier.ordinal()];
+            return ((Boolean)object).booleanValue() ? INVERTED_TRUE_BYTES : INVERTED_FALSE_BYTES;
         }
 
         @Override
@@ -3233,11 +3241,11 @@ public enum PDataType {
          * Override because we must always create a new byte array
          */
         @Override
-        public byte[] toBytes(Object object, ColumnModifier columnModifier) {
+        public byte[] toBytes(Object object, SortOrder sortOrder) {
             byte[] bytes = toBytes(object);
             // Override because we need to allocate a new buffer in this case
-            if (columnModifier != null) {
-                return columnModifier.apply(bytes, 0, new byte[bytes.length], 0, bytes.length);
+            if (sortOrder == SortOrder.DESC) {
+                return SortOrder.invert(bytes, 0, new byte[bytes.length], 0, bytes.length);
             }
             return bytes;
         }
@@ -3349,10 +3357,10 @@ public enum PDataType {
         }
 
         @Override
-        public byte[] toBytes(Object object, ColumnModifier columnModifier) {
+        public byte[] toBytes(Object object, SortOrder sortOrder) {
             byte[] bytes = toBytes(object);
-            if (columnModifier != null) {
-                return columnModifier.apply(bytes, 0, new byte[bytes.length], 0, bytes.length);
+            if (sortOrder == SortOrder.DESC) {
+                return SortOrder.invert(bytes, 0, new byte[bytes.length], 0, bytes.length);
             }
             return bytes;
         }
@@ -3424,6 +3432,13 @@ public enum PDataType {
         }
 
         @Override
+        public Integer getMaxLength(Object o) {
+            if (o == null) { return null; }
+            byte[] value = (byte[])o;
+            return value.length;
+        }
+
+        @Override
         public Object toObject(String value) {
             if (value == null || value.length() == 0) {
                 return null;
@@ -3486,8 +3501,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.INTEGER, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.INTEGER, sortOrder);
 		}
 		
 		@Override
@@ -3555,8 +3570,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.BOOLEAN, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.BOOLEAN, sortOrder);
 		}
 		
 		@Override
@@ -3624,8 +3639,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.VARCHAR, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.VARCHAR, sortOrder);
 		}
 		
 		@Override
@@ -3645,12 +3660,19 @@ public enum PDataType {
            return true;
         }
 		
-		@Override
-		public boolean isSizeCompatible(PDataType srcType, Object value,
-				byte[] b, Integer maxLength, Integer desiredMaxLength,
-				Integer scale, Integer desiredScale) {
-			return pDataTypeForArray.isSizeCompatible(srcType, value, b,
-					maxLength, desiredMaxLength, scale, desiredScale);		}
+        @Override
+        public boolean isSizeCompatible(PDataType srcType, Object value, byte[] b, Integer maxLength,
+                Integer desiredMaxLength, Integer scale, Integer desiredScale) {
+            return pDataTypeForArray.isSizeCompatible(srcType, value, b, maxLength, desiredMaxLength, scale,
+                    desiredScale);
+        }
+
+        @Override
+        public byte[] coerceBytes(byte[] b, Object object, PDataType actualType, Integer maxLength, Integer scale,
+                Integer desiredMaxLength, Integer desiredScale) {
+            return pDataTypeForArray.coerceBytes(b, object, actualType, maxLength, scale, desiredMaxLength,
+                    desiredScale);
+        }
 		
 	},
 	VARBINARY_ARRAY("VARBINARY_ARRAY", Types.ARRAY + PDataType.VARBINARY.getSqlType(), PhoenixArray.class, null) {
@@ -3699,8 +3721,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.VARBINARY, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.VARBINARY, sortOrder);
 		}
 		
 		@Override
@@ -3727,7 +3749,13 @@ public enum PDataType {
 			return pDataTypeForArray.isSizeCompatible(srcType, value, b,
 					maxLength, desiredMaxLength, scale, desiredScale);
 		}
-		
+
+        @Override
+        public byte[] coerceBytes(byte[] b, Object object, PDataType actualType, Integer maxLength, Integer scale,
+                Integer desiredMaxLength, Integer desiredScale) {
+            return pDataTypeForArray.coerceBytes(b, object, actualType, maxLength, scale, desiredMaxLength,
+                    desiredScale);
+        }
 	},
 	BINARY_ARRAY("BINARY_ARRAY", Types.ARRAY + PDataType.BINARY.getSqlType(), PhoenixArray.class, null) {
 		@Override
@@ -3775,8 +3803,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.BINARY, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.BINARY, sortOrder);
 		}
 		
 		@Override
@@ -3803,6 +3831,13 @@ public enum PDataType {
 			return pDataTypeForArray.isSizeCompatible(srcType, value, b,
 					maxLength, desiredMaxLength, scale, desiredScale);
 		}
+	
+        @Override
+        public byte[] coerceBytes(byte[] b, Object object, PDataType actualType, Integer maxLength, Integer scale,
+                Integer desiredMaxLength, Integer desiredScale) {
+            return pDataTypeForArray.coerceBytes(b, object, actualType, maxLength, scale, desiredMaxLength,
+                    desiredScale);
+        }
 
 	},
 	CHAR_ARRAY("CHAR_ARRAY", Types.ARRAY + PDataType.CHAR.getSqlType(), PhoenixArray.class, null) {
@@ -3852,8 +3887,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.CHAR, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.CHAR, sortOrder);
 		}
 		
 		@Override
@@ -3879,6 +3914,12 @@ public enum PDataType {
 				Integer scale, Integer desiredScale) {
 			return pDataTypeForArray.isSizeCompatible(srcType, value, b,
 					maxLength, desiredMaxLength, scale, desiredScale);
+		}
+		
+		@Override
+		public byte[] coerceBytes(byte[] b, Object object, PDataType actualType, Integer maxLength, Integer scale,
+		        Integer desiredMaxLength, Integer desiredScale) {
+		    return pDataTypeForArray.coerceBytes(b, object, actualType, maxLength, scale, desiredMaxLength, desiredScale);
 		}
 		
 	},
@@ -3928,8 +3969,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.LONG, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.LONG, sortOrder);
 		}
 		
 		@Override
@@ -3996,8 +4037,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.SMALLINT, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.SMALLINT, sortOrder);
 		}
 		
 		@Override
@@ -4064,8 +4105,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.TINYINT, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.TINYINT, sortOrder);
 		}
 		
 		@Override
@@ -4133,8 +4174,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.FLOAT, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.FLOAT, sortOrder);
 		}
 	
 		@Override
@@ -4202,8 +4243,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.DOUBLE, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.DOUBLE, sortOrder);
 		}
 		
 		@Override
@@ -4271,8 +4312,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.DECIMAL, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.DECIMAL, sortOrder);
 		}
 	
 		@Override
@@ -4348,8 +4389,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.TIMESTAMP, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.TIMESTAMP, sortOrder);
 		}
 		
 		@Override
@@ -4417,8 +4458,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_TIMESTAMP, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_TIMESTAMP, sortOrder);
 		}
 		
 		@Override
@@ -4485,8 +4526,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.TIME, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.TIME, sortOrder);
 		}
 		
 		@Override
@@ -4553,8 +4594,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_TIME, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_TIME, sortOrder);
 		}
 		
 		@Override
@@ -4621,8 +4662,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.DATE, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.DATE, sortOrder);
 		}
 		
 		@Override
@@ -4689,8 +4730,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_DATE, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_DATE, sortOrder);
 		}
 		
 		@Override
@@ -4757,8 +4798,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_LONG, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_LONG, sortOrder);
 		}
 		
 		@Override
@@ -4825,8 +4866,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_INT, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_INT, sortOrder);
 		}
 
 		@Override
@@ -4894,8 +4935,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_SMALLINT, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_SMALLINT, sortOrder);
 		}
 		
 		@Override
@@ -4963,8 +5004,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_TINYINT, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_TINYINT, sortOrder);
 		}
 		
 		@Override
@@ -5030,8 +5071,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_FLOAT, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_FLOAT, sortOrder);
 		}
 
 		@Override
@@ -5099,8 +5140,8 @@ public enum PDataType {
 		
 		@Override
 		public Object toObject(byte[] bytes, int offset, int length,
-				PDataType actualType, ColumnModifier columnModifier) {
-			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_DOUBLE, columnModifier);
+				PDataType actualType, SortOrder sortOrder) {
+			return pDataTypeForArray.toObject(bytes, offset, length, PDataType.UNSIGNED_DOUBLE, sortOrder);
 		}
 		
 		@Override
@@ -5162,18 +5203,11 @@ public enum PDataType {
         if(isArrayType()) {
             PhoenixArray array = (PhoenixArray)o;
             int noOfElements = array.numElements;
-            //int vIntSize = WritableUtils.getVIntSize(noOfElements);
-            int vIntSize = Bytes.SIZEOF_INT;
-
             int totalVarSize = 0;
             for (int i = 0; i < noOfElements; i++) {
                 totalVarSize += array.estimateByteSize(i);
             }
-            /**
-             * Calculate the totalVarSize including the vInt and byte needed for the 
-             * number of elements and version respectively
-             */
-            return vIntSize + (totalVarSize) + Bytes.SIZEOF_BYTE;
+            return totalVarSize;
         }
         // Non fixed width types must override this
         throw new UnsupportedOperationException();
@@ -5216,38 +5250,40 @@ public enum PDataType {
     public boolean isArrayType() {
     	return false;
     }
-    public final int compareTo(byte[] lhs, int lhsOffset, int lhsLength, ColumnModifier lhsColumnModifier,
-                               byte[] rhs, int rhsOffset, int rhsLength, ColumnModifier rhsColumnModifier, PDataType rhsType) {
+    public final int compareTo(byte[] lhs, int lhsOffset, int lhsLength, SortOrder lhsSortOrder,
+                               byte[] rhs, int rhsOffset, int rhsLength, SortOrder rhsSortOrder, PDataType rhsType) {
+        Preconditions.checkNotNull(lhsSortOrder);    	    	
+        Preconditions.checkNotNull(rhsSortOrder);    	
         if (this.isBytesComparableWith(rhsType)) { // directly compare the bytes
-            return compareTo(lhs, lhsOffset, lhsLength, lhsColumnModifier, rhs, rhsOffset, rhsLength, rhsColumnModifier);
+            return compareTo(lhs, lhsOffset, lhsLength, lhsSortOrder, rhs, rhsOffset, rhsLength, rhsSortOrder);
         }
         PDataCodec lhsCodec = this.getCodec();
         if (lhsCodec == null) { // no lhs native type representation, so convert rhsType to bytes representation of lhsType
-            byte[] rhsConverted = this.toBytes(this.toObject(rhs, rhsOffset, rhsLength, rhsType, rhsColumnModifier));            
-            if (rhsColumnModifier != null) {
-                rhsColumnModifier = null;
-            }            
-            if (lhsColumnModifier != null) {
-                lhs = lhsColumnModifier.apply(lhs, lhsOffset, new byte[lhsLength], 0, lhsLength);
+            byte[] rhsConverted = this.toBytes(this.toObject(rhs, rhsOffset, rhsLength, rhsType, rhsSortOrder));            
+            if (rhsSortOrder == SortOrder.DESC) {
+                rhsSortOrder = SortOrder.ASC;
+            }
+            if (lhsSortOrder == SortOrder.DESC) {
+                lhs = SortOrder.invert(lhs, lhsOffset, new byte[lhsLength], 0, lhsLength);
             }                        
             return Bytes.compareTo(lhs, lhsOffset, lhsLength, rhsConverted, 0, rhsConverted.length);
         }
         PDataCodec rhsCodec = rhsType.getCodec();
         if (rhsCodec == null) {
-            byte[] lhsConverted = rhsType.toBytes(rhsType.toObject(lhs, lhsOffset, lhsLength, this, lhsColumnModifier));
-            if (lhsColumnModifier != null) {
-                lhsColumnModifier = null;
+            byte[] lhsConverted = rhsType.toBytes(rhsType.toObject(lhs, lhsOffset, lhsLength, this, lhsSortOrder));
+            if (lhsSortOrder == SortOrder.DESC) {
+                lhsSortOrder = SortOrder.ASC;
             }
-            if (rhsColumnModifier != null) {
-                rhs = rhsColumnModifier.apply(rhs, rhsOffset, new byte[rhsLength], 0, rhsLength);
+            if (rhsSortOrder == SortOrder.DESC) {
+                rhs = SortOrder.invert(rhs, rhsOffset, new byte[rhsLength], 0, rhsLength);
             }            
             return Bytes.compareTo(lhsConverted, 0, lhsConverted.length, rhs, rhsOffset, rhsLength);
         }
         // convert to native and compare
         if(this.isCoercibleTo(PDataType.LONG) && rhsType.isCoercibleTo(PDataType.LONG)) { // native long to long comparison
-            return Longs.compare(this.getCodec().decodeLong(lhs, lhsOffset, lhsColumnModifier), rhsType.getCodec().decodeLong(rhs, rhsOffset, rhsColumnModifier));
+            return Longs.compare(this.getCodec().decodeLong(lhs, lhsOffset, lhsSortOrder), rhsType.getCodec().decodeLong(rhs, rhsOffset, rhsSortOrder));
         } else if (isDoubleOrFloat(this) && isDoubleOrFloat(rhsType)) { // native double to double comparison
-            return Doubles.compare(this.getCodec().decodeDouble(lhs, lhsOffset, lhsColumnModifier), rhsType.getCodec().decodeDouble(rhs, rhsOffset, rhsColumnModifier));
+            return Doubles.compare(this.getCodec().decodeDouble(lhs, lhsOffset, lhsSortOrder), rhsType.getCodec().decodeDouble(rhs, rhsOffset, rhsSortOrder));
         } else { // native float/double to long comparison
             float fvalue = 0.0F;
             double dvalue = 0.0;
@@ -5256,22 +5292,22 @@ public enum PDataType {
             int invert = 1;
             
             if (this.isCoercibleTo(PDataType.LONG)) {
-                lvalue = this.getCodec().decodeLong(lhs, lhsOffset, lhsColumnModifier);
+                lvalue = this.getCodec().decodeLong(lhs, lhsOffset, lhsSortOrder);
             } else if (this == PDataType.FLOAT) {
                 isFloat = true;
-                fvalue = this.getCodec().decodeFloat(lhs, lhsOffset, lhsColumnModifier);
+                fvalue = this.getCodec().decodeFloat(lhs, lhsOffset, lhsSortOrder);
             } else if (this.isCoercibleTo(PDataType.DOUBLE)) {
-                dvalue = this.getCodec().decodeDouble(lhs, lhsOffset, lhsColumnModifier);
+                dvalue = this.getCodec().decodeDouble(lhs, lhsOffset, lhsSortOrder);
             }
             if (rhsType.isCoercibleTo(PDataType.LONG)) {
-                lvalue = rhsType.getCodec().decodeLong(rhs, rhsOffset, rhsColumnModifier);
+                lvalue = rhsType.getCodec().decodeLong(rhs, rhsOffset, rhsSortOrder);
             } else if (rhsType == PDataType.FLOAT) {
                 invert = -1;
                 isFloat = true;
-                fvalue = rhsType.getCodec().decodeFloat(rhs, rhsOffset, rhsColumnModifier);
+                fvalue = rhsType.getCodec().decodeFloat(rhs, rhsOffset, rhsSortOrder);
             } else if (rhsType.isCoercibleTo(PDataType.DOUBLE)) {
                 invert = -1;
-                dvalue = rhsType.getCodec().decodeDouble(rhs, rhsOffset, rhsColumnModifier);
+                dvalue = rhsType.getCodec().decodeDouble(rhs, rhsOffset, rhsSortOrder);
             }
             // Invert the comparison if float/double value is on the RHS
             return invert * (isFloat ? compareFloatToLong(fvalue, lvalue) : compareDoubleToLong(dvalue, lvalue));
@@ -5317,18 +5353,18 @@ public enum PDataType {
     }
 
     public static interface PDataCodec {
-        public long decodeLong(ImmutableBytesWritable ptr, ColumnModifier columnModifier);
-        public long decodeLong(byte[] b, int o, ColumnModifier columnModifier);
-        public int decodeInt(ImmutableBytesWritable ptr, ColumnModifier columnModifier);
-        public int decodeInt(byte[] b, int o, ColumnModifier columnModifier);
-        public byte decodeByte(ImmutableBytesWritable ptr, ColumnModifier columnModifier);
-        public byte decodeByte(byte[] b, int o, ColumnModifier columnModifier);
-        public short decodeShort(ImmutableBytesWritable ptr, ColumnModifier columnModifier);
-        public short decodeShort(byte[] b, int o, ColumnModifier columnModifier);
-        public float decodeFloat(ImmutableBytesWritable ptr, ColumnModifier columnModifier);
-        public float decodeFloat(byte[] b, int o, ColumnModifier columnModifier);
-        public double decodeDouble(ImmutableBytesWritable ptr, ColumnModifier columnModifier);
-        public double decodeDouble(byte[] b, int o, ColumnModifier columnModifier);
+        public long decodeLong(ImmutableBytesWritable ptr, SortOrder sortOrder);
+        public long decodeLong(byte[] b, int o, SortOrder sortOrder);
+        public int decodeInt(ImmutableBytesWritable ptr, SortOrder sortOrder);
+        public int decodeInt(byte[] b, int o, SortOrder sortOrder);
+        public byte decodeByte(ImmutableBytesWritable ptr, SortOrder sortOrder);
+        public byte decodeByte(byte[] b, int o, SortOrder sortOrder);
+        public short decodeShort(ImmutableBytesWritable ptr, SortOrder sortOrder);
+        public short decodeShort(byte[] b, int o, SortOrder sortOrder);
+        public float decodeFloat(ImmutableBytesWritable ptr, SortOrder sortOrder);
+        public float decodeFloat(byte[] b, int o, SortOrder sortOrder);
+        public double decodeDouble(ImmutableBytesWritable ptr, SortOrder sortOrder);
+        public double decodeDouble(byte[] b, int o, SortOrder sortOrder);
 
         public int encodeLong(long v, ImmutableBytesWritable ptr);
         public int encodeLong(long v, byte[] b, int o);
@@ -5347,42 +5383,42 @@ public enum PDataType {
 
     public static abstract class BaseCodec implements PDataCodec {
         @Override
-        public int decodeInt(ImmutableBytesWritable ptr, ColumnModifier columnModifier) {
-            return decodeInt(ptr.get(), ptr.getOffset(), columnModifier);
+        public int decodeInt(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+            return decodeInt(ptr.get(), ptr.getOffset(), sortOrder);
         }
 
         @Override
-        public long decodeLong(ImmutableBytesWritable ptr, ColumnModifier columnModifier) {
-            return decodeLong(ptr.get(),ptr.getOffset(), columnModifier);
+        public long decodeLong(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+            return decodeLong(ptr.get(),ptr.getOffset(), sortOrder);
         }
 
         @Override
-        public byte decodeByte(ImmutableBytesWritable ptr, ColumnModifier columnModifier) {
-            return decodeByte(ptr.get(), ptr.getOffset(), columnModifier);
+        public byte decodeByte(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+            return decodeByte(ptr.get(), ptr.getOffset(), sortOrder);
         }
         
         @Override
-        public short decodeShort(ImmutableBytesWritable ptr, ColumnModifier columnModifier) {
-            return decodeShort(ptr.get(), ptr.getOffset(), columnModifier);
+        public short decodeShort(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+            return decodeShort(ptr.get(), ptr.getOffset(), sortOrder);
         }
         
         @Override
-        public float decodeFloat(ImmutableBytesWritable ptr, ColumnModifier columnModifier) {
-            return decodeFloat(ptr.get(), ptr.getOffset(), columnModifier);
+        public float decodeFloat(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+            return decodeFloat(ptr.get(), ptr.getOffset(), sortOrder);
         }
         
         @Override
-        public float decodeFloat(byte[] b, int o, ColumnModifier columnModifier) {
+        public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
             throw new UnsupportedOperationException();
         }
         
         @Override
-        public double decodeDouble(ImmutableBytesWritable ptr, ColumnModifier columnModifier) {
-            return decodeDouble(ptr.get(), ptr.getOffset(), columnModifier);
+        public double decodeDouble(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+            return decodeDouble(ptr.get(), ptr.getOffset(), sortOrder);
         }
         
         @Override
-        public double decodeDouble(byte[] b, int o, ColumnModifier columnModifier) {
+        public double decodeDouble(byte[] b, int o, SortOrder sortOrder) {
             throw new UnsupportedOperationException();
         }
         
@@ -5454,26 +5490,27 @@ public enum PDataType {
         }
         
         @Override
-        public float decodeFloat(byte[] b, int o, ColumnModifier columnModifier) {
-            return decodeLong(b, o, columnModifier);
+        public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
+            return decodeLong(b, o, sortOrder);
         }
         
         @Override
-        public double decodeDouble(byte[] b, int o, ColumnModifier columnModifier) {
-            return decodeLong(b, o, columnModifier);
+        public double decodeDouble(byte[] b, int o, SortOrder sortOrder) {
+            return decodeLong(b, o, sortOrder);
         }
 
         @Override
-        public long decodeLong(byte[] bytes, int o, ColumnModifier columnModifier) {
+        public long decodeLong(byte[] bytes, int o, SortOrder sortOrder) {
+        	Preconditions.checkNotNull(sortOrder);
             long v;
             byte b = bytes[o];
-            if (columnModifier == null) {
+            if (sortOrder == SortOrder.ASC) {
                 v = b ^ 0x80; // Flip sign bit back
                 for (int i = 1; i < Bytes.SIZEOF_LONG; i++) {
                     b = bytes[o + i];
                     v = (v << 8) + (b & 0xff);
                 }
-            } else { // ColumnModifier.SORT_DESC
+            } else {
                 b = (byte)(b ^ 0xff);
                 v = b ^ 0x80; // Flip sign bit back
                 for (int i = 1; i < Bytes.SIZEOF_LONG; i++) {
@@ -5487,8 +5524,8 @@ public enum PDataType {
 
 
         @Override
-        public int decodeInt(byte[] b, int o, ColumnModifier columnModifier) {
-            long v = decodeLong(b, o, columnModifier);
+        public int decodeInt(byte[] b, int o, SortOrder sortOrder) {
+            long v = decodeLong(b, o, sortOrder);
             if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
                 throw new IllegalDataException("Value " + v + " cannot be cast to Integer without changing its value");
             }
@@ -5525,8 +5562,8 @@ public enum PDataType {
         }
 
         @Override
-        public byte decodeByte(byte[] b, int o, ColumnModifier columnModifier) {
-          long v = decodeLong(b, o, columnModifier);
+        public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
+          long v = decodeLong(b, o, sortOrder);
           if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
               throw new IllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
           }
@@ -5534,8 +5571,8 @@ public enum PDataType {
         }
 
         @Override
-        public short decodeShort(byte[] b, int o, ColumnModifier columnModifier) {
-          long v = decodeLong(b, o, columnModifier);
+        public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
+          long v = decodeLong(b, o, sortOrder);
           if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
               throw new IllegalDataException("Value " + v + " cannot be cast to Short without changing its value");
           }
@@ -5569,30 +5606,31 @@ public enum PDataType {
         }
 
         @Override
-        public long decodeLong(byte[] b, int o, ColumnModifier columnModifier) {
-            return decodeInt(b, o, columnModifier);
+        public long decodeLong(byte[] b, int o, SortOrder sortOrder) {
+            return decodeInt(b, o, sortOrder);
         }
         
         @Override
-        public float decodeFloat(byte[] b, int o, ColumnModifier columnModifier) {
-            return decodeInt(b, o, columnModifier);
+        public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
+            return decodeInt(b, o, sortOrder);
         }
         
         @Override
         public double decodeDouble(byte[] b, int o,
-                ColumnModifier columnModifier) {
-            return decodeInt(b, o, columnModifier);
+                SortOrder sortOrder) {
+            return decodeInt(b, o, sortOrder);
         }
 
         @Override
-        public int decodeInt(byte[] bytes, int o, ColumnModifier columnModifier) {            
+        public int decodeInt(byte[] bytes, int o, SortOrder sortOrder) {
+        	Preconditions.checkNotNull(sortOrder);
             int v;
-            if (columnModifier == null) {
+            if (sortOrder == SortOrder.ASC) {
                 v = bytes[o] ^ 0x80; // Flip sign bit back
                 for (int i = 1; i < Bytes.SIZEOF_INT; i++) {
                     v = (v << 8) + (bytes[o + i] & 0xff);
                 }
-            } else { // ColumnModifier.SORT_DESC
+            } else { 
                 v = bytes[o] ^ 0xff ^ 0x80; // Flip sign bit back
                 for (int i = 1; i < Bytes.SIZEOF_INT; i++) {
                     v = (v << 8) + ((bytes[o + i] ^ 0xff) & 0xff);
@@ -5635,8 +5673,8 @@ public enum PDataType {
         }
 
         @Override
-        public byte decodeByte(byte[] b, int o, ColumnModifier columnModifier) {
-          int v = decodeInt(b, o, columnModifier);
+        public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
+          int v = decodeInt(b, o, sortOrder);
           if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
               throw new IllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
           }
@@ -5644,8 +5682,8 @@ public enum PDataType {
         }
 
         @Override
-        public short decodeShort(byte[] b, int o, ColumnModifier columnModifier) {
-          int v = decodeInt(b, o, columnModifier);
+        public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
+          int v = decodeInt(b, o, sortOrder);
           if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
               throw new IllegalDataException("Value " + v + " cannot be cast to Short without changing its value");
           }
@@ -5679,18 +5717,18 @@ public enum PDataType {
       }
       
       @Override
-      public long decodeLong(byte[] b, int o, ColumnModifier columnModifier) {
-        return decodeShort(b, o, columnModifier);
+      public long decodeLong(byte[] b, int o, SortOrder sortOrder) {
+        return decodeShort(b, o, sortOrder);
       }
 
       @Override
-      public int decodeInt(byte[] b, int o, ColumnModifier columnModifier) {
-        return decodeShort(b, o, columnModifier);
+      public int decodeInt(byte[] b, int o, SortOrder sortOrder) {
+        return decodeShort(b, o, sortOrder);
       }
 
       @Override
-      public byte decodeByte(byte[] b, int o, ColumnModifier columnModifier) {
-        short v = decodeShort(b, o, columnModifier);
+      public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
+        short v = decodeShort(b, o, sortOrder);
         if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
             throw new IllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
         }
@@ -5698,14 +5736,15 @@ public enum PDataType {
       }
 
       @Override
-      public short decodeShort(byte[] b, int o, ColumnModifier columnModifier) {
+      public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
+    	Preconditions.checkNotNull(sortOrder);
         int v;
-        if (columnModifier == null) {
+        if (sortOrder == SortOrder.ASC) {
             v = b[o] ^ 0x80; // Flip sign bit back
             for (int i = 1; i < Bytes.SIZEOF_SHORT; i++) {
                 v = (v << 8) + (b[o + i] & 0xff);
             }
-        } else { // ColumnModifier.SORT_DESC
+        } else {
             v = b[o] ^ 0xff ^ 0x80; // Flip sign bit back
             for (int i = 1; i < Bytes.SIZEOF_SHORT; i++) {
                 v = (v << 8) + ((b[o + i] ^ 0xff) & 0xff);
@@ -5743,14 +5782,14 @@ public enum PDataType {
       }
       
       @Override
-      public float decodeFloat(byte[] b, int o, ColumnModifier columnModifier) {
-          return decodeShort(b, o, columnModifier);
+      public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
+          return decodeShort(b, o, sortOrder);
       }
       
       @Override
       public double decodeDouble(byte[] b, int o,
-              ColumnModifier columnModifier) {
-          return decodeShort(b, o, columnModifier);
+              SortOrder sortOrder) {
+          return decodeShort(b, o, sortOrder);
       }
       
       @Override
@@ -5786,29 +5825,30 @@ public enum PDataType {
       }
       
       @Override
-      public long decodeLong(byte[] b, int o, ColumnModifier columnModifier) {
-        return decodeByte(b, o, columnModifier);
+      public long decodeLong(byte[] b, int o, SortOrder sortOrder) {
+        return decodeByte(b, o, sortOrder);
       }
 
       @Override
-      public int decodeInt(byte[] b, int o, ColumnModifier columnModifier) {
-        return decodeByte(b, o, columnModifier);
+      public int decodeInt(byte[] b, int o, SortOrder sortOrder) {
+        return decodeByte(b, o, sortOrder);
       }
 
       @Override
-      public byte decodeByte(byte[] b, int o, ColumnModifier columnModifier) {
+      public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
+    	Preconditions.checkNotNull(sortOrder);
         int v;
-        if (columnModifier == null) {
+        if (sortOrder == SortOrder.ASC) {
             v = b[o] ^ 0x80; // Flip sign bit back
-        } else { // ColumnModifier.SORT_DESC
+        } else {
             v = b[o] ^ 0xff ^ 0x80; // Flip sign bit back
         }
         return (byte)v;
       }
 
       @Override
-      public short decodeShort(byte[] b, int o, ColumnModifier columnModifier) {
-          return decodeByte(b, o, columnModifier);
+      public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
+          return decodeByte(b, o, sortOrder);
       }
       
       @Override
@@ -5842,13 +5882,13 @@ public enum PDataType {
       }
         @Override
         public double decodeDouble(byte[] b, int o,
-                ColumnModifier columnModifier) {
-            return decodeByte(b, o, columnModifier);
+                SortOrder sortOrder) {
+            return decodeByte(b, o, sortOrder);
         }
 
         @Override
-        public float decodeFloat(byte[] b, int o, ColumnModifier columnModifier) {
-            return decodeByte(b, o, columnModifier);
+        public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
+            return decodeByte(b, o, sortOrder);
         }
       
         @Override
@@ -5883,9 +5923,10 @@ public enum PDataType {
       }
 
       @Override
-      public byte decodeByte(byte[] b, int o, ColumnModifier columnModifier) {
-        if (columnModifier != null) {
-          b = columnModifier.apply(b, o, new byte[Bytes.SIZEOF_BYTE], 0, Bytes.SIZEOF_BYTE);
+      public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
+    	Preconditions.checkNotNull(sortOrder);
+        if (sortOrder == SortOrder.DESC) {
+          b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_BYTE], 0, Bytes.SIZEOF_BYTE);
         }
         byte v = b[o];
         if (v < 0) {
@@ -5910,14 +5951,15 @@ public enum PDataType {
         }
 
         @Override
-        public long decodeLong(byte[] b, int o, ColumnModifier columnModifier) {
+        public long decodeLong(byte[] b, int o, SortOrder sortOrder) {
+        	Preconditions.checkNotNull(sortOrder);
             long v = 0;
-            if (columnModifier == null) {
+            if (sortOrder == SortOrder.ASC) {
                 for(int i = o; i < o + Bytes.SIZEOF_LONG; i++) {
                   v <<= 8;
                   v ^= b[i] & 0xFF;
                 }
-            } else { // ColumnModifier.SORT_DESC
+            } else {
                 for(int i = o; i < o + Bytes.SIZEOF_LONG; i++) {
                     v <<= 8;
                     v ^= (b[i] & 0xFF) ^ 0xFF;
@@ -5944,9 +5986,10 @@ public enum PDataType {
       }
       
       @Override
-      public short decodeShort(byte[] b, int o, ColumnModifier columnModifier) {
-          if (columnModifier != null) {
-              b = columnModifier.apply(b, o, new byte[Bytes.SIZEOF_INT], 0, Bytes.SIZEOF_INT);
+      public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
+    	  Preconditions.checkNotNull(sortOrder);
+          if (sortOrder == SortOrder.DESC) {
+              b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_INT], 0, Bytes.SIZEOF_INT);
           }
           short v = Bytes.toShort(b, o);
           if (v < 0) {
@@ -5971,9 +6014,10 @@ public enum PDataType {
         }
 
         @Override
-        public int decodeInt(byte[] b, int o, ColumnModifier columnModifier) {
-            if (columnModifier != null) {
-                b = columnModifier.apply(b, o, new byte[Bytes.SIZEOF_INT], 0, Bytes.SIZEOF_INT);
+        public int decodeInt(byte[] b, int o, SortOrder sortOrder) {
+        	Preconditions.checkNotNull(sortOrder);
+            if (sortOrder == SortOrder.DESC) {
+                b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_INT], 0, Bytes.SIZEOF_INT);
             }
             int v = Bytes.toInt(b, o);
             if (v < 0) {
@@ -5998,8 +6042,8 @@ public enum PDataType {
         }
         
         @Override
-        public long decodeLong(byte[] b, int o, ColumnModifier columnModifier) {
-            float v = decodeFloat(b, o, columnModifier);
+        public long decodeLong(byte[] b, int o, SortOrder sortOrder) {
+            float v = decodeFloat(b, o, sortOrder);
             if (v < Long.MIN_VALUE || v > Long.MAX_VALUE) {
                 throw new IllegalDataException("Value " + v + " cannot be cast to Long without changing its value");
             }
@@ -6007,8 +6051,8 @@ public enum PDataType {
         }
 
         @Override
-        public int decodeInt(byte[] b, int o, ColumnModifier columnModifier) {
-            float v = decodeFloat(b, o, columnModifier);
+        public int decodeInt(byte[] b, int o, SortOrder sortOrder) {
+            float v = decodeFloat(b, o, sortOrder);
             if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
                 throw new IllegalDataException("Value " + v + " cannot be cast to Integer without changing its value");
             }
@@ -6016,8 +6060,8 @@ public enum PDataType {
         }
 
         @Override
-        public byte decodeByte(byte[] b, int o, ColumnModifier columnModifier) {
-            float v = decodeFloat(b, o, columnModifier);
+        public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
+            float v = decodeFloat(b, o, sortOrder);
             if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
                 throw new IllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
             }
@@ -6025,8 +6069,8 @@ public enum PDataType {
         }
 
         @Override
-        public short decodeShort(byte[] b, int o, ColumnModifier columnModifier) {
-            float v = decodeFloat(b, o, columnModifier);
+        public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
+            float v = decodeFloat(b, o, sortOrder);
             if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
                 throw new IllegalDataException("Value " + v + " cannot be cast to Short without changing its value");
             }
@@ -6035,13 +6079,14 @@ public enum PDataType {
 
         @Override
         public double decodeDouble(byte[] b, int o,
-                ColumnModifier columnModifier) {
-            return decodeFloat(b, o, columnModifier);
+                SortOrder sortOrder) {
+            return decodeFloat(b, o, sortOrder);
         }
         
         @Override
-        public float decodeFloat(byte[] b, int o, ColumnModifier columnModifier) {
-            if (columnModifier != null) {// ColumnModifier.SORT_DESC
+        public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
+        	Preconditions.checkNotNull(sortOrder);
+            if (sortOrder == SortOrder.DESC) {
                 for (int i = o; i < Bytes.SIZEOF_INT; i++) {
                     b[i] = (byte) (b[i] ^ 0xff);
                 }
@@ -6109,8 +6154,8 @@ public enum PDataType {
         }
         
         @Override
-        public long decodeLong(byte[] b, int o, ColumnModifier columnModifier) {
-            double v = decodeDouble(b, o, columnModifier);
+        public long decodeLong(byte[] b, int o, SortOrder sortOrder) {
+            double v = decodeDouble(b, o, sortOrder);
             if (v < Long.MIN_VALUE || v > Long.MAX_VALUE) {
                 throw new IllegalDataException("Value " + v + " cannot be cast to Long without changing its value");
             }
@@ -6118,8 +6163,8 @@ public enum PDataType {
         }
 
         @Override
-        public int decodeInt(byte[] b, int o, ColumnModifier columnModifier) {
-            double v = decodeDouble(b, o, columnModifier);
+        public int decodeInt(byte[] b, int o, SortOrder sortOrder) {
+            double v = decodeDouble(b, o, sortOrder);
             if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
                 throw new IllegalDataException("Value " + v + " cannot be cast to Integer without changing its value");
             }
@@ -6127,8 +6172,8 @@ public enum PDataType {
         }
 
         @Override
-        public byte decodeByte(byte[] b, int o, ColumnModifier columnModifier) {
-            double v = decodeDouble(b, o, columnModifier);
+        public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
+            double v = decodeDouble(b, o, sortOrder);
             if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
                 throw new IllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
             }
@@ -6136,8 +6181,8 @@ public enum PDataType {
         }
 
         @Override
-        public short decodeShort(byte[] b, int o, ColumnModifier columnModifier) {
-            double v = decodeDouble(b, o, columnModifier);
+        public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
+            double v = decodeDouble(b, o, sortOrder);
             if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
                 throw new IllegalDataException("Value " + v + " cannot be cast to Short without changing its value");
             }
@@ -6145,8 +6190,9 @@ public enum PDataType {
         }
         
         @Override
-        public double decodeDouble(byte[] b, int o, ColumnModifier columnModifier) {
-            if (columnModifier != null) {// ColumnModifier.SORT_DESC
+        public double decodeDouble(byte[] b, int o, SortOrder sortOrder) {
+        	Preconditions.checkNotNull(sortOrder);
+            if (sortOrder == SortOrder.DESC) {
                 for (int i = o; i < Bytes.SIZEOF_LONG; i++) {
                     b[i] = (byte) (b[i] ^ 0xff);
                 }
@@ -6158,8 +6204,8 @@ public enum PDataType {
         }
         
         @Override
-        public float decodeFloat(byte[] b, int o, ColumnModifier columnModifier) {
-            double v = decodeDouble(b, o, columnModifier);
+        public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
+            double v = decodeDouble(b, o, sortOrder);
             if (Double.isNaN(v) || v == Double.NEGATIVE_INFINITY
                     || v == Double.POSITIVE_INFINITY
                     || (v >= -Float.MAX_VALUE && v <= Float.MAX_VALUE)) {
@@ -6228,9 +6274,10 @@ public enum PDataType {
         }
         
         @Override
-        public float decodeFloat(byte[] b, int o, ColumnModifier columnModifier) {
-            if (columnModifier != null) {
-                b = columnModifier.apply(b, o, new byte[Bytes.SIZEOF_FLOAT], 0, Bytes.SIZEOF_FLOAT);
+        public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
+        	Preconditions.checkNotNull(sortOrder);
+            if (sortOrder == SortOrder.DESC) {
+                b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_FLOAT], 0, Bytes.SIZEOF_FLOAT);
             }
             float v = Bytes.toFloat(b, o);
             if (v < 0) {
@@ -6255,9 +6302,10 @@ public enum PDataType {
         
         @Override
         public double decodeDouble(byte[] b, int o,
-                ColumnModifier columnModifier) {
-            if (columnModifier != null) {
-                b = columnModifier.apply(b, o, new byte[Bytes.SIZEOF_DOUBLE], 0, Bytes.SIZEOF_DOUBLE);
+                SortOrder sortOrder) {
+        	Preconditions.checkNotNull(sortOrder);
+            if (sortOrder == SortOrder.DESC) {
+                b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_DOUBLE], 0, Bytes.SIZEOF_DOUBLE);
             }
             double v = Bytes.toDouble(b, o);
             if (v < 0) {
@@ -6273,7 +6321,7 @@ public enum PDataType {
         }
 
         @Override
-        public int decodeInt(byte[] b, int o, ColumnModifier columnModifier) {
+        public int decodeInt(byte[] b, int o, SortOrder sortOrder) {
             throw new UnsupportedOperationException();
         }
         
@@ -6295,7 +6343,7 @@ public enum PDataType {
         }
 
         @Override
-        public int decodeInt(byte[] b, int o, ColumnModifier columnModifier) {
+        public int decodeInt(byte[] b, int o, SortOrder sortOrder) {
             throw new UnsupportedOperationException();
         }
         
@@ -6333,18 +6381,8 @@ public enum PDataType {
     private static final byte TRUE_BYTE = 1;
     public static final byte[] FALSE_BYTES = new byte[] {FALSE_BYTE};
     public static final byte[] TRUE_BYTES = new byte[] {TRUE_BYTE};
-    public static final byte[] MOD_FALSE_BYTES[] = new byte[ColumnModifier.values().length][];
-    static {
-        for (ColumnModifier columnModifier : ColumnModifier.values()) {
-            MOD_FALSE_BYTES[columnModifier.ordinal()] = columnModifier.apply(FALSE_BYTES, 0, new byte[FALSE_BYTES.length], 0, FALSE_BYTES.length);
-        }
-    }
-    public static final byte[] MOD_TRUE_BYTES[] = new byte[ColumnModifier.values().length][];
-    static {
-        for (ColumnModifier columnModifier : ColumnModifier.values()) {
-            MOD_TRUE_BYTES[columnModifier.ordinal()] = columnModifier.apply(TRUE_BYTES, 0, new byte[TRUE_BYTES.length], 0, TRUE_BYTES.length);
-        }
-    }
+    public static final byte[] INVERTED_FALSE_BYTES = SortOrder.invert(FALSE_BYTES, 0, new byte[FALSE_BYTES.length], 0, FALSE_BYTES.length);
+    public static final byte[] INVERTED_TRUE_BYTES = SortOrder.invert(TRUE_BYTES, 0, new byte[TRUE_BYTES.length], 0, TRUE_BYTES.length);
     public static final byte[] NULL_BYTES = ByteUtil.EMPTY_BYTE_ARRAY;
     private static final Integer BOOLEAN_LENGTH = 1;
 
@@ -6577,23 +6615,25 @@ public enum PDataType {
     }
 
     public int compareTo(byte[] b1, byte[] b2) {
-        return compareTo(b1, 0, b1.length, null, b2, 0, b2.length, null);
+        return compareTo(b1, 0, b1.length, SortOrder.getDefault(), b2, 0, b2.length, SortOrder.getDefault());
     }
 
     public int compareTo(ImmutableBytesWritable ptr1, ImmutableBytesWritable ptr2) {
-        return compareTo(ptr1.get(), ptr1.getOffset(), ptr1.getLength(), null, ptr2.get(), ptr2.getOffset(), ptr2.getLength(), null);
+        return compareTo(ptr1.get(), ptr1.getOffset(), ptr1.getLength(), SortOrder.getDefault(), ptr2.get(), ptr2.getOffset(), ptr2.getLength(), SortOrder.getDefault());
     }
 
-    public int compareTo(byte[] ba1, int offset1, int length1, ColumnModifier mod1, byte[] ba2, int offset2, int length2, ColumnModifier mod2) {
-        if (mod1 != mod2) {
+    public int compareTo(byte[] ba1, int offset1, int length1, SortOrder so1, byte[] ba2, int offset2, int length2, SortOrder so2) {
+    	Preconditions.checkNotNull(so1);
+    	Preconditions.checkNotNull(so2);
+        if (so1 != so2) {
             int length = Math.min(length1, length2);
             for (int i = 0; i < length; i++) {
                 byte b1 = ba1[offset1+i];
                 byte b2 = ba2[offset2+i];
-                if (mod1 != null) {
-                    b1 = mod1.apply(b1);
+                if (so1 == SortOrder.DESC) {
+                    b1 = SortOrder.invert(b1);
                 } else {
-                    b2 = mod2.apply(b2);
+                    b2 = SortOrder.invert(b2);
                 }
                 int c = b1 - b2;
                 if (c != 0) {
@@ -6602,11 +6642,11 @@ public enum PDataType {
             }
             return (length1 - length2);
         }
-        return Bytes.compareTo(ba1, offset1, length1, ba2, offset2, length2) * (mod1 == ColumnModifier.SORT_DESC ? -1 : 1);
+        return Bytes.compareTo(ba1, offset1, length1, ba2, offset2, length2) * (so1 == SortOrder.DESC ? -1 : 1);
     }
 
-    public int compareTo(ImmutableBytesWritable ptr1, ColumnModifier ptr1ColumnModifier, ImmutableBytesWritable ptr2, ColumnModifier ptr2ColumnModifier, PDataType type2) {
-        return compareTo(ptr1.get(), ptr1.getOffset(), ptr1.getLength(), ptr1ColumnModifier, ptr2.get(), ptr2.getOffset(), ptr2.getLength(), ptr2ColumnModifier, type2);
+    public int compareTo(ImmutableBytesWritable ptr1, SortOrder ptr1SortOrder, ImmutableBytesWritable ptr2, SortOrder ptr2SortOrder, PDataType type2) {
+        return compareTo(ptr1.get(), ptr1.getOffset(), ptr1.getLength(), ptr1SortOrder, ptr2.get(), ptr2.getOffset(), ptr2.getLength(), ptr2SortOrder, type2);
     }
 
     public abstract int compareTo(Object lhs, Object rhs, PDataType rhsType);
@@ -6618,12 +6658,22 @@ public enum PDataType {
     public abstract boolean isFixedWidth();
     public abstract Integer getByteSize();
 
+    /*
+     * We need an empty byte array to mean null, since
+     * we have no other representation in the row key
+     * for null.
+     */
+    public final boolean isNull(byte[] value) {
+        return value == null || value.length == 0;
+    }
+    
     public abstract byte[] toBytes(Object object);
     
-    public byte[] toBytes(Object object, ColumnModifier columnModifier) {
+    public byte[] toBytes(Object object, SortOrder sortOrder) {
+    	Preconditions.checkNotNull(sortOrder);    	
     	byte[] bytes = toBytes(object);
-    	if (columnModifier != null) {
-            columnModifier.apply(bytes, 0, bytes, 0, bytes.length);
+    	if (sortOrder == SortOrder.DESC) {
+            SortOrder.invert(bytes, 0, bytes, 0, bytes.length);
     	}
     	return bytes;
     }
@@ -6640,12 +6690,14 @@ public enum PDataType {
    
 //   TODO: we need one that coerces and inverts and scales
 //    public void coerceBytes(ImmutableBytesWritable ptr, PDataType actualType, 
-//            Integer actualMaxLength, Integer actualScale, ColumnModifier actualModifier,
-//            Integer desiredMaxLength, Integer desiredScale, ColumnModifier desiredModifier) {
+//            Integer actualMaxLength, Integer actualScale, SortOrder actualSortOrder,
+//            Integer desiredMaxLength, Integer desiredScale, SortOrder desiredSortOrder) {
 //        
 //    }
     
-    public void coerceBytes(ImmutableBytesWritable ptr, PDataType actualType, ColumnModifier actualModifier, ColumnModifier expectedModifier) {
+    public void coerceBytes(ImmutableBytesWritable ptr, PDataType actualType, SortOrder actualModifier, SortOrder expectedModifier) {
+    	Preconditions.checkNotNull(actualModifier);
+    	Preconditions.checkNotNull(expectedModifier);
         if (ptr.getLength() == 0) {
             return;
         }
@@ -6653,9 +6705,8 @@ public enum PDataType {
             if (actualModifier == expectedModifier) {
                 return;
             }
-            // TODO: generalize ColumnModifier?
             byte[] b = ptr.copyBytes();
-            ColumnModifier.SORT_DESC.apply(b, 0, b, 0, b.length);
+            SortOrder.invert(b, 0, b, 0, b.length);
             ptr.set(b);
             return;
         }
@@ -6694,15 +6745,16 @@ public enum PDataType {
     }
 
     public Object toObject(byte[] bytes, int offset, int length, PDataType actualType) {
-        return toObject(bytes, offset, length, actualType, null);
+        return toObject(bytes, offset, length, actualType, SortOrder.getDefault());
     }
     
-    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType, ColumnModifier columnModifier) {
+    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType, SortOrder sortOrder) {
+    	Preconditions.checkNotNull(sortOrder);    	
     	if (actualType == null) {
             return null;
         }
-    	if (columnModifier != null) {
-    	    bytes = columnModifier.apply(bytes, offset, new byte[length], 0, length);
+    	if (sortOrder == SortOrder.DESC) {
+    	    bytes = SortOrder.invert(bytes, offset, new byte[length], 0, length);
     	    offset = 0;
     	}
         Object o = actualType.toObject(bytes, offset, length);
@@ -6710,10 +6762,11 @@ public enum PDataType {
     }
     
     public Object toObject(ImmutableBytesWritable ptr, PDataType actualType) {
-        return toObject(ptr, actualType, null);
+        return toObject(ptr, actualType, SortOrder.getDefault());
     }    
     
-    public Object toObject(ImmutableBytesWritable ptr, PDataType actualType, ColumnModifier sortOrder) { 
+    public Object toObject(ImmutableBytesWritable ptr, PDataType actualType, SortOrder sortOrder) {
+    	Preconditions.checkNotNull(sortOrder);
         return this.toObject(ptr.get(), ptr.getOffset(), ptr.getLength(), actualType, sortOrder);
     }
     
@@ -6722,8 +6775,8 @@ public enum PDataType {
         return toObject(ptr.get(), ptr.getOffset(), ptr.getLength());
     }
     
-    public Object toObject(ImmutableBytesWritable ptr, ColumnModifier columnModifier) {
-        return toObject(ptr.get(), ptr.getOffset(), ptr.getLength(), this, columnModifier);        
+    public Object toObject(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+        return toObject(ptr.get(), ptr.getOffset(), ptr.getLength(), this, sortOrder);        
     }    
 
     public Object toObject(byte[] bytes, int offset, int length) {
@@ -6732,11 +6785,11 @@ public enum PDataType {
     
 
     public Object toObject(byte[] bytes) {
-        return toObject(bytes, (ColumnModifier)null);
+        return toObject(bytes, SortOrder.getDefault());
     }
 
-    public Object toObject(byte[] bytes, ColumnModifier columnModifier) {
-        return toObject(bytes, 0, bytes.length, this, columnModifier);
+    public Object toObject(byte[] bytes, SortOrder sortOrder) {
+        return toObject(bytes, 0, bytes.length, this, sortOrder);
     }
 
     private static final Map<String, PDataType> SQL_TYPE_NAME_TO_PCOLUMN_DATA_TYPE;
@@ -6917,11 +6970,11 @@ public enum PDataType {
         throw new UnsupportedOperationException("Unsupported literal value [" + value + "] of type " + value.getClass().getName());
     }
     
-    public int getNanos(ImmutableBytesWritable ptr, ColumnModifier cm) {
+    public int getNanos(ImmutableBytesWritable ptr, SortOrder sortOrder) {
         throw new UnsupportedOperationException("Operation not supported for type " + this);
     }
     
-    public long getMillis(ImmutableBytesWritable ptr, ColumnModifier cm) {
+    public long getMillis(ImmutableBytesWritable ptr, SortOrder sortOrder) {
         throw new UnsupportedOperationException("Operation not supported for type " + this);
     }
     

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,7 +20,6 @@ package org.apache.phoenix.query;
 import static org.apache.phoenix.query.QueryServicesOptions.withDefaults;
 
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
-
 import org.apache.phoenix.util.ReadOnlyProps;
 
 
@@ -37,7 +34,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     private static final int DEFAULT_THREAD_POOL_SIZE = 8;
     private static final int DEFAULT_QUEUE_SIZE = 0;
     // TODO: setting this down to 5mb causes insufficient memory exceptions. Need to investigate why
-    private static final int DEFAULT_MAX_MEMORY_PERC = 50; // 50% of heap
+    private static final int DEFAULT_MAX_MEMORY_PERC = 30; // 30% of heap
     private static final int DEFAULT_THREAD_TIMEOUT_MS = 60000*5; //5min
     private static final int DEFAULT_SPOOL_THRESHOLD_BYTES = 1024 * 1024; // 1m
     private static final int DEFAULT_MAX_MEMORY_WAIT_MS = 0;
@@ -53,6 +50,8 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     private static final int DEFAULT_REGIONSERVER_LEASE_PERIOD_MS = 9000000;
     private static final int DEFAULT_RPC_TIMEOUT_MS = 9000000;
     private static final String DEFAULT_WAL_EDIT_CODEC = IndexedWALEditCodec.class.getName();
+    public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE =  1024L*1024L*4L; // 4 Mb
+    public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE =  1024L*1024L*2L; // 2 Mb
     
     public QueryServicesTestImpl() {
         this(ReadOnlyProps.EMPTY_PROPS);
@@ -78,6 +77,8 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setRpcTimeoutMs(DEFAULT_RPC_TIMEOUT_MS)
                 .setWALEditCodec(DEFAULT_WAL_EDIT_CODEC)
                 .setDropMetaData(DEFAULT_DROP_METADATA)
+                .setMaxClientMetaDataCacheSize(DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE)
+                .setMaxServerMetaDataCacheSize(DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE)
                 .setAll(overrideProps)
         );
     }    

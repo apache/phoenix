@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -38,7 +36,7 @@ public class JoinTableNode extends TableNode {
     private final TableNode table;
     
     JoinTableNode(JoinType type, ParseNode on, TableNode table) {
-        super(table.getAlias(), table.isRewrite());
+        super(table.getAlias());
         this.type = type;
         this.on = on;
         this.table = table;

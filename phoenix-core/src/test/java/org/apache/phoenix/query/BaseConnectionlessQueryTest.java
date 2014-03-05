@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,10 +21,10 @@ import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.FUNKY_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE;
-import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE;
-import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE;
-import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE;
+import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.MULTI_CF_NAME;
 import static org.apache.phoenix.util.TestUtil.PHOENIX_CONNECTIONLESS_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
@@ -35,29 +33,31 @@ import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import java.sql.DriverManager;
 import java.util.Properties;
 
-import org.junit.BeforeClass;
-
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.BeforeClass;
 
 
 
 public class BaseConnectionlessQueryTest extends BaseTest {
 
     public static PTable ATABLE;
-    public static PColumn ORGANIZATION_ID;
-    public static PColumn ENTITY_ID;
-    public static PColumn A_INTEGER;
-    public static PColumn A_STRING;
-    public static PColumn B_STRING;
-    public static PColumn A_DATE;
-    public static PColumn A_TIME;
-    public static PColumn A_TIMESTAMP;
-    public static PColumn X_DECIMAL;
+    public static Expression ORGANIZATION_ID;
+    public static Expression ENTITY_ID;
+    public static Expression A_INTEGER;
+    public static Expression A_STRING;
+    public static Expression B_STRING;
+    public static Expression A_DATE;
+    public static Expression A_TIME;
+    public static Expression A_TIMESTAMP;
+    public static Expression X_DECIMAL;
     
     protected static String getUrl() {
         return TestUtil.PHOENIX_CONNECTIONLESS_JDBC_URL;
@@ -75,27 +75,27 @@ public class BaseConnectionlessQueryTest extends BaseTest {
         ensureTableCreated(getUrl(), FUNKY_NAME);
         ensureTableCreated(getUrl(), PTSDB_NAME);
         ensureTableCreated(getUrl(), MULTI_CF_NAME);
-        ensureTableCreated(getUrl(), JOIN_ORDER_TABLE);
-        ensureTableCreated(getUrl(), JOIN_CUSTOMER_TABLE);
-        ensureTableCreated(getUrl(), JOIN_ITEM_TABLE);
-        ensureTableCreated(getUrl(), JOIN_SUPPLIER_TABLE);
+        ensureTableCreated(getUrl(), JOIN_ORDER_TABLE_FULL_NAME);
+        ensureTableCreated(getUrl(), JOIN_CUSTOMER_TABLE_FULL_NAME);
+        ensureTableCreated(getUrl(), JOIN_ITEM_TABLE_FULL_NAME);
+        ensureTableCreated(getUrl(), JOIN_SUPPLIER_TABLE_FULL_NAME);
         ensureTableCreated(getUrl(), TABLE_WITH_ARRAY);
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_TABLE_TIMESTAMP));
+        //props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_TABLE_TIMESTAMP));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(HConstants.LATEST_TIMESTAMP));
         PhoenixConnection conn = DriverManager.getConnection(PHOENIX_CONNECTIONLESS_JDBC_URL, props).unwrap(PhoenixConnection.class);
         try {
-            PTable table = conn.getPMetaData().getTable(ATABLE_NAME);
+            PTable table = conn.getMetaDataCache().getTable(new PTableKey(null, ATABLE_NAME));
             ATABLE = table;
-            ORGANIZATION_ID = table.getColumn("ORGANIZATION_ID");
-            ENTITY_ID = table.getColumn("ENTITY_ID");
-            A_INTEGER = table.getColumn("A_INTEGER");
-            A_STRING = table.getColumn("A_STRING");
-            B_STRING = table.getColumn("B_STRING");
-            ENTITY_ID = table.getColumn("ENTITY_ID");
-            A_DATE = table.getColumn("A_DATE");
-            A_TIME = table.getColumn("A_TIME");
-            A_TIMESTAMP = table.getColumn("A_TIMESTAMP");
-            X_DECIMAL = table.getColumn("X_DECIMAL");
+            ORGANIZATION_ID = new ColumnRef(new TableRef(table), table.getColumn("ORGANIZATION_ID").getPosition()).newColumnExpression();
+            ENTITY_ID = new ColumnRef(new TableRef(table), table.getColumn("ENTITY_ID").getPosition()).newColumnExpression();
+            A_INTEGER = new ColumnRef(new TableRef(table), table.getColumn("A_INTEGER").getPosition()).newColumnExpression();
+            A_STRING = new ColumnRef(new TableRef(table), table.getColumn("A_STRING").getPosition()).newColumnExpression();
+            B_STRING = new ColumnRef(new TableRef(table), table.getColumn("B_STRING").getPosition()).newColumnExpression();
+            A_DATE = new ColumnRef(new TableRef(table), table.getColumn("A_DATE").getPosition()).newColumnExpression();
+            A_TIME = new ColumnRef(new TableRef(table), table.getColumn("A_TIME").getPosition()).newColumnExpression();
+            A_TIMESTAMP = new ColumnRef(new TableRef(table), table.getColumn("A_TIMESTAMP").getPosition()).newColumnExpression();
+            X_DECIMAL = new ColumnRef(new TableRef(table), table.getColumn("X_DECIMAL").getPosition()).newColumnExpression();
         } finally {
             conn.close();
         }

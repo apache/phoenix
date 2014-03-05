@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,8 +17,12 @@
  */
 package org.apache.phoenix.parse;
 
-public class CreateSequenceStatement implements BindableStatement {
+public class CreateSequenceStatement extends MutableStatement {
 
+    public static CreateSequenceStatement create(TableName sequenceName) {
+        return new CreateSequenceStatement(sequenceName, null, null, null, true, 0);
+    }
+    
 	private final TableName sequenceName;
 	private final ParseNode startWith;
 	private final ParseNode incrementBy;

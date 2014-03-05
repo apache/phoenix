@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +17,9 @@
  */
 package org.apache.phoenix.parse;
 
-public class DropSequenceStatement implements BindableStatement {
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+
+public class DropSequenceStatement extends MutableStatement {
 
     private final TableName sequenceName;
     private final boolean ifExists;
@@ -42,5 +42,10 @@ public class DropSequenceStatement implements BindableStatement {
 
     public boolean ifExists() {
         return ifExists;
+    }
+    
+    @Override
+    public Operation getOperation() {
+        return Operation.DELETE;
     }
 }

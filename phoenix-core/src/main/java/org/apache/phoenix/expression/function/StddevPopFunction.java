@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -61,9 +59,9 @@ public class StddevPopFunction extends DistinctValueWithCountAggregateFunction {
     public DistinctValueWithCountClientAggregator newClientAggregator() {
         if (children.get(0).getDataType() == PDataType.DECIMAL) {
             // Special Aggregators for DECIMAL datatype for more precision than double
-            return new DecimalStddevPopAggregator(children, getAggregatorExpression().getColumnModifier());
+            return new DecimalStddevPopAggregator(children, getAggregatorExpression().getSortOrder());
         }
-        return new StddevPopAggregator(children, getAggregatorExpression().getColumnModifier());
+        return new StddevPopAggregator(children, getAggregatorExpression().getSortOrder());
     }
     
     @Override

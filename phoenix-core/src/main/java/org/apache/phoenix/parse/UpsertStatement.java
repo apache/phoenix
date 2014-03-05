@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,7 +20,7 @@ package org.apache.phoenix.parse;
 import java.util.Collections;
 import java.util.List;
 
-public class UpsertStatement extends SingleTableSQLStatement { 
+public class UpsertStatement extends SingleTableStatement { 
     private final List<ColumnName> columns;
     private final List<ParseNode> values;
     private final SelectStatement select;

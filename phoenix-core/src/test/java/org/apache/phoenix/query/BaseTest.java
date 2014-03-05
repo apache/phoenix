@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -30,10 +28,10 @@ import static org.apache.phoenix.util.TestUtil.HBASE_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.util.TestUtil.HBASE_NATIVE;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_TABLE;
-import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE;
-import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE;
-import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE;
-import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE;
+import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.KEYONLY_NAME;
 import static org.apache.phoenix.util.TestUtil.MDTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.MULTI_CF_NAME;
@@ -59,15 +57,15 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
-import org.junit.AfterClass;
-
-import com.google.common.collect.ImmutableMap;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.AfterClass;
+
+import com.google.common.collect.ImmutableMap;
 
 public abstract class BaseTest {
     private static final Map<String,String> tableDDLMap;
@@ -322,21 +320,21 @@ public abstract class BaseTest {
                 );
         builder.put("SumDoubleTest","create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
-        builder.put(JOIN_ORDER_TABLE, "create table " + JOIN_ORDER_TABLE +
+        builder.put(JOIN_ORDER_TABLE_FULL_NAME, "create table " + JOIN_ORDER_TABLE_FULL_NAME +
                 "   (\"order_id\" char(15) not null primary key, " +
                 "    \"customer_id\" char(10) not null, " +
                 "    \"item_id\" char(10) not null, " +
                 "    price integer not null, " +
                 "    quantity integer not null, " +
                 "    date timestamp not null)");
-        builder.put(JOIN_CUSTOMER_TABLE, "create table " + JOIN_CUSTOMER_TABLE +
+        builder.put(JOIN_CUSTOMER_TABLE_FULL_NAME, "create table " + JOIN_CUSTOMER_TABLE_FULL_NAME +
                 "   (\"customer_id\" char(10) not null primary key, " +
                 "    name varchar not null, " +
                 "    phone char(12), " +
                 "    address varchar, " +
                 "    loc_id char(5), " +
                 "    date date)");
-        builder.put(JOIN_ITEM_TABLE, "create table " + JOIN_ITEM_TABLE +
+        builder.put(JOIN_ITEM_TABLE_FULL_NAME, "create table " + JOIN_ITEM_TABLE_FULL_NAME +
                 "   (\"item_id\" char(10) not null primary key, " +
                 "    name varchar not null, " +
                 "    price integer, " +
@@ -344,7 +342,7 @@ public abstract class BaseTest {
                 "    discount2 integer, " +
                 "    \"supplier_id\" char(10), " +
                 "    description varchar)");
-        builder.put(JOIN_SUPPLIER_TABLE, "create table " + JOIN_SUPPLIER_TABLE +
+        builder.put(JOIN_SUPPLIER_TABLE_FULL_NAME, "create table " + JOIN_SUPPLIER_TABLE_FULL_NAME +
                 "   (\"supplier_id\" char(10) not null primary key, " +
                 "    name varchar not null, " +
                 "    phone char(12), " +
@@ -369,10 +367,10 @@ public abstract class BaseTest {
     protected static PhoenixTestDriver driver;
     private static int driverRefCount = 0;
 
-    protected static synchronized PhoenixTestDriver initDriver(QueryServices services) throws Exception {
+    protected static synchronized PhoenixTestDriver initDriver(ReadOnlyProps props) throws Exception {
         if (driver == null) {
             if (driverRefCount == 0) {
-                BaseTest.driver = new PhoenixTestDriver(services);
+                BaseTest.driver = new PhoenixTestDriver(props);
                 DriverManager.registerDriver(driver);
                 driverRefCount++;
             }
@@ -412,7 +410,7 @@ public abstract class BaseTest {
         // only load the test driver if we are testing locally - for integration tests, we want to
         // test on a wider scale
         if (PhoenixEmbeddedDriver.isTestUrl(url)) {
-            PhoenixTestDriver driver = initDriver(new QueryServicesTestImpl(props));
+            PhoenixTestDriver driver = initDriver(props);
             assertTrue(DriverManager.getDriver(url) == driver);
             driver.connect(url, TestUtil.TEST_PROPERTIES);
         }

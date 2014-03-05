@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,10 +17,12 @@
  */
 package org.apache.phoenix.schema;
 
-import com.google.protobuf.HBaseZeroCopyByteString;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.SizedUtil;
+
 import com.google.common.base.Preconditions;
+import com.google.protobuf.HBaseZeroCopyByteString;
 
 public class PColumnImpl implements PColumn {
     private PName name;
@@ -32,8 +32,9 @@ public class PColumnImpl implements PColumn {
     private Integer scale;
     private boolean nullable;
     private int position;
-    private ColumnModifier columnModifier;
+    private SortOrder sortOrder;
     private Integer arraySize;
+    private byte[] viewConstant;
 
     public PColumnImpl() {
     }
@@ -45,13 +46,13 @@ public class PColumnImpl implements PColumn {
                        Integer scale,
                        boolean nullable,
                        int position,
-                       ColumnModifier sortOrder, Integer arrSize) {
-        init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize);
+                       SortOrder sortOrder, Integer arrSize, byte[] viewConstant) {
+        init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize, viewConstant);
     }
 
     public PColumnImpl(PColumn column, int position) {
         this(column.getName(), column.getFamilyName(), column.getDataType(), column.getMaxLength(),
-                column.getScale(), column.isNullable(), position, column.getColumnModifier(), column.getArraySize());
+                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), column.getViewConstant());
     }
 
     private void init(PName name,
@@ -61,8 +62,10 @@ public class PColumnImpl implements PColumn {
             Integer scale,
             boolean nullable,
             int position,
-            ColumnModifier columnModifier,
-            Integer arrSize) {
+            SortOrder sortOrder,
+            Integer arrSize,
+            byte[] viewConstant) {
+    	Preconditions.checkNotNull(sortOrder);
         this.dataType = dataType;
         if (familyName == null) {
             // Allow nullable columns in PK, but only if they're variable length.
@@ -79,8 +82,16 @@ public class PColumnImpl implements PColumn {
         this.scale = scale;
         this.nullable = nullable;
         this.position = position;
-        this.columnModifier = columnModifier;
+        this.sortOrder = sortOrder;
         this.arraySize = arrSize;
+        this.viewConstant = viewConstant;
+    }
+
+    @Override
+    public int getEstimatedSize() {
+        return SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 8 + SizedUtil.INT_OBJECT_SIZE * 3 + SizedUtil.INT_SIZE + 
+                name.getEstimatedSize() + (familyName == null ? 0 : familyName.getEstimatedSize()) +
+                (viewConstant == null ? 0 : (SizedUtil.ARRAY_SIZE + viewConstant.length));
     }
 
     @Override
@@ -126,8 +137,8 @@ public class PColumnImpl implements PColumn {
     }
     
     @Override
-    public ColumnModifier getColumnModifier() {
-    	return columnModifier;
+    public SortOrder getSortOrder() {
+    	return sortOrder;
     }
 
     @Override
@@ -164,6 +175,11 @@ public class PColumnImpl implements PColumn {
         return arraySize;
     }
 
+    @Override
+    public byte[] getViewConstant() {
+        return viewConstant;
+    }
+
   /**
    * Create a PColumn instance from PBed PColumn instance
    * @param column
@@ -186,13 +202,17 @@ public class PColumnImpl implements PColumn {
     }
     boolean nullable = column.getNullable();
     int position = column.getPosition();
-    ColumnModifier columnModifier = ColumnModifier.fromSystemValue(column.getColumnModifier());
+    SortOrder sortOrder = SortOrder.fromSystemValue(column.getSortOrder());
     Integer arraySize = null;
     if(column.hasArraySize()){
       arraySize = column.getArraySize();
     }
+    byte[] viewConstant = null;
+    if (column.hasViewConstant()) {
+        viewConstant = column.getViewConstant().toByteArray(); 
+    }
     return new PColumnImpl(columnName, familyName, dataType, maxLength, scale, nullable, position,
-        columnModifier, arraySize);
+    		sortOrder, arraySize, viewConstant);
   }
 
   public static PTableProtos.PColumn toProto(PColumn column) {
@@ -210,9 +230,12 @@ public class PColumnImpl implements PColumn {
     }
     builder.setNullable(column.isNullable());
     builder.setPosition(column.getPosition());
-    builder.setColumnModifier(ColumnModifier.toSystemValue(column.getColumnModifier()));
+    builder.setSortOrder(column.getSortOrder().getSystemValue());
     if(column.getArraySize() != null){
       builder.setArraySize(column.getArraySize());
+    }
+    if(column.getViewConstant() != null){
+      builder.setViewConstant(HBaseZeroCopyByteString.wrap(column.getViewConstant()));
     }
     return builder.build();
   }

@@ -1,3 +1,21 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
@@ -13,19 +31,20 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
-import com.google.common.collect.Maps;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import com.google.common.collect.Maps;
 
 public class SequenceTest extends BaseClientManagedTimeTest {
     private static final long BATCH_SIZE = 3;
@@ -316,10 +335,24 @@ public class SequenceTest extends BaseClientManagedTimeTest {
         conn.commit();
         
         nextConnection();
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k from foo");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(3, rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(4, rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(5, rs.getInt(1));
+        assertFalse(rs.next());
+
+        nextConnection();
         conn.setAutoCommit(true);;
         conn.createStatement().execute("UPSERT INTO bar SELECT NEXT VALUE FOR foo.bar,v FROM foo GROUP BY v");
         nextConnection();
-        ResultSet rs = conn.createStatement().executeQuery("SELECT * from bar");
+        rs = conn.createStatement().executeQuery("SELECT * from bar");
         assertTrue(rs.next());
         assertEquals(6, rs.getInt(1));
         assertEquals("a", rs.getString(2));
@@ -520,6 +553,37 @@ public class SequenceTest extends BaseClientManagedTimeTest {
         conn2.close();
     }
 
+    @Test
+    public void testExplainPlanValidatesSequences() throws Exception {
+        nextConnection();
+        conn.createStatement().execute("CREATE SEQUENCE bar");
+        conn.createStatement().execute("CREATE TABLE foo (k BIGINT NOT NULL PRIMARY KEY)");
+        
+        nextConnection();
+        Connection conn2 = conn;
+        conn = null; // So that call to nextConnection doesn't close it
+        ResultSet rs = conn2.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR bar FROM foo");
+        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER FOO\n" + 
+        		"CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
+        
+        nextConnection();
+        rs = conn.createStatement().executeQuery("SELECT sequence_name, current_value FROM SYSTEM.\"SEQUENCE\" WHERE sequence_name='BAR'");
+        assertTrue(rs.next());
+        assertEquals("BAR", rs.getString(1));
+        assertEquals(1, rs.getLong(2));
+        conn.close();
+        conn2.close();
+
+        nextConnection();
+        try {
+            conn.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR zzz FROM foo");
+            fail();
+        } catch (SequenceNotFoundException e) {
+            // expected
+        }
+        conn.close();
+    }
+    
 	private void nextConnection() throws Exception {
 	    if (conn != null) conn.close();
 	    long ts = nextTimestamp();

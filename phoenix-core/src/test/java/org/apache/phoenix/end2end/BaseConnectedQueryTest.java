@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +17,11 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
@@ -36,6 +38,7 @@ import static org.apache.phoenix.util.TestUtil.ENTITYHISTID9;
 import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_SALTED_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
+import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.apache.phoenix.util.TestUtil.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.PARENTID1;
 import static org.apache.phoenix.util.TestUtil.PARENTID2;
@@ -65,6 +68,8 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Types;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
@@ -89,13 +94,6 @@ import org.junit.BeforeClass;
  * @since 0.1
  */
 public abstract class BaseConnectedQueryTest extends BaseTest {
-
-    private static String TEST_URL = TestUtil.PHOENIX_JDBC_URL;
-
-    public static void setUrl(String url) {
-        BaseConnectedQueryTest.TEST_URL = url;
-    }
-
     protected static byte[][] getDefaultSplits(String tenantId) {
         return new byte[][] { 
             Bytes.toBytes(tenantId + "00A"),
@@ -116,11 +114,12 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
       }
       // reconstruct url when running against a live cluster
       if (isDistributedCluster) {
-        return "jdbc:phoenix:" + conf.get(HConstants.ZOOKEEPER_QUORUM, "localhost") + ":"
+        return JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + conf.get(HConstants.ZOOKEEPER_QUORUM, LOCALHOST) 
+            + JDBC_PROTOCOL_SEPARATOR
             + conf.getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT)
-            + ":"
+            + JDBC_PROTOCOL_SEPARATOR
             + conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT)
-            + ";test=true";
+            + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
       } else {
         return TestUtil.PHOENIX_JDBC_URL;
       }
@@ -138,21 +137,9 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
     protected static void deletePriorTables(long ts, String tenantId) throws Exception {
         Properties props = new Properties();
         if (ts != HConstants.LATEST_TIMESTAMP) {
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+            props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
         }
         Connection conn = null;
-        if (tenantId != null) {
-            props.setProperty(TENANT_ID_ATTRIB, tenantId);
-            try {
-                conn = DriverManager.getConnection(getUrl(), props);
-                deletePriorTables(ts, conn);
-                deletePriorSequences(ts, conn);
-            }
-            finally {
-                conn.close();
-            }
-            props.remove(TENANT_ID_ATTRIB);
-        }
         conn = DriverManager.getConnection(getUrl(), props);
         try {
             deletePriorTables(ts, conn);
@@ -163,28 +150,41 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
         }
     }
     
-    private static void deletePriorTables(long ts, Connection conn) throws Exception {
-        DatabaseMetaData dbmd = conn.getMetaData();
-        // Drop VIEWs first, as we don't allow a TABLE with views to be dropped.
-        ResultSet rs = dbmd.getTables(null, null, null, new String[] {PTableType.VIEW.toString()});
-        while (rs.next()) {
-            String fullTableName = SchemaUtil.getEscapedTableName(
-                    rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM_NAME),
-                    rs.getString(PhoenixDatabaseMetaData.TABLE_NAME_NAME));
-            String ddl = "DROP " + rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE_NAME) + " " + fullTableName;
-            conn.createStatement().executeUpdate(ddl);
-        }
-        rs = dbmd.getTables(null, null, null, new String[] {PTableType.TABLE.toString()});
-        while (rs.next()) {
-            String fullTableName = SchemaUtil.getEscapedTableName(
-                    rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM_NAME),
-                    rs.getString(PhoenixDatabaseMetaData.TABLE_NAME_NAME));
-            String ddl = "DROP " + rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE_NAME) + " " + fullTableName;
-            conn.createStatement().executeUpdate(ddl);
+    private static void deletePriorTables(long ts, Connection globalConn) throws Exception {
+        DatabaseMetaData dbmd = globalConn.getMetaData();
+        // Drop VIEWs first, as we don't allow a TABLE with views to be dropped
+        // Tables are sorted by TENANT_ID
+        List<String[]> tableTypesList = Arrays.asList(new String[] {PTableType.VIEW.toString()}, new String[] {PTableType.TABLE.toString()});
+        for (String[] tableTypes: tableTypesList) {
+            ResultSet rs = dbmd.getTables(null, null, null, tableTypes);
+            String lastTenantId = null;
+            Connection conn = globalConn;
+            while (rs.next()) {
+                String fullTableName = SchemaUtil.getEscapedTableName(
+                        rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
+                        rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+                String ddl = "DROP " + rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE) + " " + fullTableName;
+                String tenantId = rs.getString(1);
+                if (tenantId != null && !tenantId.equals(lastTenantId))  {
+                    if (lastTenantId != null) {
+                        conn.close();
+                    }
+                    // Open tenant-specific connection when we find a new one
+                    Properties props = new Properties(globalConn.getClientInfo());
+                    props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                    conn = DriverManager.getConnection(getUrl(), props);
+                    lastTenantId = tenantId;
+                }
+                conn.createStatement().executeUpdate(ddl);
+            }
+            if (lastTenantId != null) {
+                conn.close();
+            }
         }
     }
     
     private static void deletePriorSequences(long ts, Connection conn) throws Exception {
+        // TODO: drop tenant-specific sequences too
         ResultSet rs = conn.createStatement().executeQuery("SELECT " 
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + "," 
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME 
@@ -261,7 +261,7 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
     protected static void initTablesWithArrays(String tenantId, Date date, Long ts, boolean useNull) throws Exception {
     	 Properties props = new Properties();
          if (ts != null) {
-             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, ts.toString());
+             props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
          }
          Connection conn = DriverManager.getConnection(getUrl(), props);
          try {
@@ -345,7 +345,7 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
         
         Properties props = new Properties();
         if (ts != null) {
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts-3));
+            props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts-3));
         }
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -558,7 +558,7 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
         
         Properties props = new Properties();
         if (ts != null) {
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, ts.toString());
+            props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
         }
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -662,7 +662,7 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
         
         Properties props = new Properties();
         if (ts != null) {
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, ts.toString());
+            props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
         }
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {

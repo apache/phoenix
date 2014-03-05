@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -86,7 +84,8 @@ public interface ParseNodeVisitor<E> {
     public E visit(ColumnParseNode node) throws SQLException;
     public E visit(LiteralParseNode node) throws SQLException;
     public E visit(BindParseNode node) throws SQLException;
-    public E visit(WildcardParseNode node) throws SQLException;  
+    public E visit(WildcardParseNode node) throws SQLException;
+    public E visit(TableWildcardParseNode node) throws SQLException;
     public E visit(FamilyWildcardParseNode node) throws SQLException;  
     public E visit(ParseNode node) throws SQLException;  
     

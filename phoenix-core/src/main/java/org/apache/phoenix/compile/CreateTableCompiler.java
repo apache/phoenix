@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -41,6 +39,7 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.visitor.TraverseNoExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
@@ -48,6 +47,8 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PTable;
@@ -72,19 +73,22 @@ public class CreateTableCompiler {
 
     public MutationPlan compile(final CreateTableStatement create) throws SQLException {
         final PhoenixConnection connection = statement.getConnection();
-        ColumnResolver resolver = FromCompiler.getResolver(create, connection);
+        ColumnResolver resolver = FromCompiler.getResolverForCreation(create, connection);
         PTableType type = create.getTableType();
         PhoenixConnection connectionToBe = connection;
         PTable parentToBe = null;
         ViewType viewTypeToBe = null;
         Scan scan = new Scan();
-        final StatementContext context = new StatementContext(statement, resolver, statement.getParameters(), scan);
-        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
+        final StatementContext context = new StatementContext(statement, resolver, scan);
         // TODO: support any statement for a VIEW instead of just a WHERE clause
         ParseNode whereNode = create.getWhereClause();
         String viewStatementToBe = null;
+        byte[][] viewColumnConstantsToBe = MetaDataClient.EMPTY_VIEW_CONSTANTS;
         if (type == PTableType.VIEW) {
             TableRef tableRef = resolver.getTables().get(0);
+            viewColumnConstantsToBe = new byte[tableRef.getTable().getColumns().size()][];
+            // Used to track column references and their
+            ExpressionCompiler expressionCompiler = new ColumnTrackingExpressionCompiler(context, viewColumnConstantsToBe);
             parentToBe = tableRef.getTable();
             viewTypeToBe = parentToBe.getViewType() == ViewType.MAPPED ? ViewType.MAPPED : ViewType.UPDATABLE;
             if (whereNode == null) {
@@ -105,9 +109,9 @@ public class CreateTableCompiler {
                     TableName baseTableName = create.getBaseTableName();
                     String schemaName = baseTableName.getSchemaName();
                     // Only form we currently support for VIEWs: SELECT * FROM t WHERE ...
-                    viewStatementToBe = SELECT + " " + WildcardParseNode.NAME + " " + FROM +
+                    viewStatementToBe = SELECT + " " + WildcardParseNode.NAME + " " + FROM + " " +
                             (schemaName == null ? "" : "\"" + schemaName + "\".") +
-                            (" \"" + baseTableName.getTableName() + "\" ") +
+                            ("\"" + baseTableName.getTableName() + "\" ") +
                             (WHERE + " " + where.toString());
                 }
                 if (viewTypeToBe != ViewType.MAPPED) {
@@ -129,7 +133,7 @@ public class CreateTableCompiler {
                                 }
                             },
                             connection, tableRef.getTimeStamp());
-                    ViewWhereExpressionVisitor visitor = new ViewWhereExpressionVisitor();
+                    ViewWhereExpressionVisitor visitor = new ViewWhereExpressionVisitor(parentToBe, viewColumnConstantsToBe);
                     where.accept(visitor);
                     viewTypeToBe = visitor.isUpdatable() ? ViewType.UPDATABLE : ViewType.READ_ONLY;
                 }
@@ -137,9 +141,11 @@ public class CreateTableCompiler {
         }
         final ViewType viewType = viewTypeToBe;
         final String viewStatement = viewStatementToBe;
+        final byte[][] viewColumnConstants = viewColumnConstantsToBe;
         List<ParseNode> splitNodes = create.getSplitNodes();
         final byte[][] splits = new byte[splitNodes.size()][];
         ImmutableBytesWritable ptr = context.getTempPtr();
+        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         for (int i = 0; i < splits.length; i++) {
             ParseNode node = splitNodes.get(i);
             if (node.isStateless()) {
@@ -165,7 +171,7 @@ public class CreateTableCompiler {
             @Override
             public MutationState execute() throws SQLException {
                 try {
-                    return client.createTable(create, splits, parent, viewStatement, viewType);
+                    return client.createTable(create, splits, parent, viewStatement, viewType, viewColumnConstants);
                 } finally {
                     if (client.getConnection() != connection) {
                         client.getConnection().close();
@@ -183,12 +189,45 @@ public class CreateTableCompiler {
                 return connection;
             }
             
+            @Override
+            public StatementContext getContext() {
+                return context;
+            }
         };
+    }
+    
+    private static class ColumnTrackingExpressionCompiler extends ExpressionCompiler {
+        private final byte[][] columnValues;
+        
+        public ColumnTrackingExpressionCompiler(StatementContext context, byte[][] columnValues) {
+            super(context);
+            this.columnValues = columnValues;
+        }
+        
+        @Override
+        protected ColumnRef resolveColumn(ColumnParseNode node) throws SQLException {
+            ColumnRef ref = super.resolveColumn(node);
+            // Set columnValue at position to any non null value.
+            // We always strip the last byte so that we can recognize null
+            // as a value with a single byte.
+            // Will be overridden during ViewWhereExpressionVisitor 
+            columnValues[ref.getColumn().getPosition()] = QueryConstants.SEPARATOR_BYTE_ARRAY;
+            return ref;
+        }
     }
     
     private static class ViewWhereExpressionVisitor extends TraverseNoExpressionVisitor<Boolean> {
         private boolean isUpdatable = true;
+        private final PTable table;
+        private int position;
+        private final byte[][] columnValues;
+        private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
+        public ViewWhereExpressionVisitor (PTable table, byte[][] columnValues) {
+            this.table = table;
+            this.columnValues = columnValues;
+        }
+        
         public boolean isUpdatable() {
             return isUpdatable;
         }
@@ -213,12 +252,26 @@ public class CreateTableCompiler {
 
         @Override
         public Iterator<Expression> visitEnter(ComparisonExpression node) {
-            return node.getFilterOp() == CompareOp.EQUAL && node.getChildren().get(1).isStateless() && node.getChildren().get(1).isDeterministic() ? Iterators.singletonIterator(node.getChildren().get(0)) : super.visitEnter(node);
+            if (node.getFilterOp() == CompareOp.EQUAL && node.getChildren().get(1).isStateless() && node.getChildren().get(1).isDeterministic()) {
+                return Iterators.singletonIterator(node.getChildren().get(0));
+            }
+            return super.visitEnter(node);
         }
 
         @Override
         public Boolean visitLeave(ComparisonExpression node, List<Boolean> l) {
-            return l.isEmpty() ? null : Boolean.TRUE;
+            if (l.isEmpty()) {
+                return null;
+            }
+            
+            node.getChildren().get(1).evaluate(null, ptr);
+            // Set the columnValue at the position of the column to the
+            // constant with which it is being compared.
+            // We always strip the last byte so that we can recognize null
+            // as a value with a single byte.
+            columnValues[position] = new byte [ptr.getLength() + 1];
+            System.arraycopy(ptr.get(), ptr.getOffset(), columnValues[position], 0, ptr.getLength());
+            return Boolean.TRUE;
         }
 
         @Override
@@ -228,16 +281,23 @@ public class CreateTableCompiler {
         
         @Override
         public Boolean visitLeave(IsNullExpression node, List<Boolean> l) {
+            // Nothing to do as we've already set the position to an empty byte array
             return l.isEmpty() ? null : Boolean.TRUE;
         }
         
         @Override
         public Boolean visit(RowKeyColumnExpression node) {
+            this.position = table.getPKColumns().get(node.getPosition()).getPosition();
             return Boolean.TRUE;
         }
 
         @Override
         public Boolean visit(KeyValueColumnExpression node) {
+            try {
+                this.position = table.getColumnFamily(node.getColumnFamily()).getColumn(node.getColumnName()).getPosition();
+            } catch (SQLException e) {
+                throw new RuntimeException(e); // Impossible
+            }
             return Boolean.TRUE;
         }
         

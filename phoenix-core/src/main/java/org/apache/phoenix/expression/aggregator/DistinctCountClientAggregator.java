@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,7 +18,8 @@
 package org.apache.phoenix.expression.aggregator;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.schema.ColumnModifier;
+
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -32,8 +31,8 @@ import org.apache.phoenix.schema.tuple.Tuple;
  */
 public class DistinctCountClientAggregator extends DistinctValueWithCountClientAggregator {
 
-    public DistinctCountClientAggregator(ColumnModifier columnModifier) {
-        super(columnModifier);
+    public DistinctCountClientAggregator(SortOrder sortOrder) {
+        super(sortOrder);
     }
 
     @Override

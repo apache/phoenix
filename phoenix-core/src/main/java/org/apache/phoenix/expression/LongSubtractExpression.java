@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -55,7 +53,7 @@ public class LongSubtractExpression extends SubtractExpression {
             }
             PDataType childType = child.getDataType();
             boolean isDate = childType.isCoercibleTo(PDataType.DATE);
-            long childvalue = childType.getCodec().decodeLong(ptr, child.getColumnModifier());
+            long childvalue = childType.getCodec().decodeLong(ptr, child.getSortOrder());
             if (i == 0) {
                 finalResult = childvalue;
             } else {

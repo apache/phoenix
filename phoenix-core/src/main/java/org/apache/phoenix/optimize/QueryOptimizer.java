@@ -1,3 +1,21 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.phoenix.optimize;
 
 import java.sql.SQLException;
@@ -6,6 +24,8 @@ import java.util.Comparator;
 import java.util.List;
 
 import org.apache.phoenix.compile.ColumnProjector;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexStatementRewriter;
 import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
@@ -23,6 +43,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 
 import com.google.common.collect.Lists;
@@ -38,23 +59,34 @@ public class QueryOptimizer {
         this.useIndexes = this.services.getProps().getBoolean(QueryServices.USE_INDEXES_ATTRIB, QueryServicesOptions.DEFAULT_USE_INDEXES);
     }
 
-    public QueryPlan optimize(SelectStatement select, PhoenixStatement statement) throws SQLException {
-        return optimize(select, statement, Collections.<PColumn>emptyList(), null);
+    public QueryPlan optimize(PhoenixStatement statement, QueryPlan dataPlan) throws SQLException {
+        if (dataPlan.getTableRef() == null) {
+            return dataPlan;
+        }
+        return optimize(dataPlan, statement, Collections.<PColumn>emptyList(), null);
     }
 
-    public QueryPlan optimize(SelectStatement select, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
-        QueryCompiler compiler = new QueryCompiler(statement, targetColumns, parallelIteratorFactory);
-        QueryPlan dataPlan = compiler.compile(select);
+    public QueryPlan optimize(PhoenixStatement statement, SelectStatement select) throws SQLException {
+        return optimize(statement, select, FromCompiler.getResolverForQuery(select, statement.getConnection()), Collections.<PColumn>emptyList(), null);
+    }
+
+    public QueryPlan optimize(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
+        QueryCompiler compiler = new QueryCompiler(statement, select, resolver, targetColumns, parallelIteratorFactory);
+        QueryPlan dataPlan = compiler.compile();
+        return optimize(dataPlan, statement, targetColumns, parallelIteratorFactory);
+    }
+    
+    public QueryPlan optimize(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
+        // Get the statement as it's been normalized now
+        // TODO: the recompile for the index tables could skip the normalize step
+        SelectStatement select = (SelectStatement)dataPlan.getStatement();
         // TODO: consider not even compiling index plans if we have a point lookup
         if (!useIndexes || select.getFrom().size() > 1) {
             return dataPlan;
         }
-        // Get the statement as it's been normalized now
-        // TODO: the recompile for the index tables could skip the normalize step
-        select = (SelectStatement)dataPlan.getStatement();
         PTable dataTable = dataPlan.getTableRef().getTable();
         List<PTable>indexes = Lists.newArrayList(dataTable.getIndexes());
-        if (indexes.isEmpty() || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX)) {
+        if (indexes.isEmpty() || dataPlan.isDegenerate() || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX)) {
             return dataPlan;
         }
         
@@ -79,7 +111,14 @@ public class QueryOptimizer {
             return hintedPlan;
         }
         for (PTable index : indexes) {
-            addPlan(statement, translatedIndexSelect, index, targetColumns, parallelIteratorFactory, plans);
+            QueryPlan plan = addPlan(statement, translatedIndexSelect, index, targetColumns, parallelIteratorFactory, dataPlan);
+            if (plan != null) {
+                // Query can't possibly return anything so just return this plan.
+                if (plan.isDegenerate()) {
+                    return plan;
+                }
+                plans.add(plan);
+            }
         }
         
         return chooseBestPlan(select, plans);
@@ -120,8 +159,9 @@ public class QueryOptimizer {
                 int indexPos = getIndexPosition(indexes, indexName);
                 if (indexPos >= 0) {
                     // Hinted index is applicable, so return it. It'll be the plan at position 1, after the data plan
-                    if (addPlan(statement, select, indexes.get(indexPos), targetColumns, parallelIteratorFactory, plans)) {
-                        return plans.get(1);
+                    QueryPlan plan = addPlan(statement, select, indexes.get(indexPos), targetColumns, parallelIteratorFactory, dataPlan);
+                    if (plan != null) {
+                        return plan;
                     }
                     indexes.remove(indexPos);
                 }
@@ -140,8 +180,7 @@ public class QueryOptimizer {
         return -1;
     }
     
-    private static boolean addPlan(PhoenixStatement statement, SelectStatement select, PTable index, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, List<QueryPlan> plans) throws SQLException {
-        QueryPlan dataPlan = plans.get(0);
+    private static QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, QueryPlan dataPlan) throws SQLException {
         int nColumns = dataPlan.getProjector().getColumnCount();
         String alias = '"' + dataPlan.getTableRef().getTableAlias() + '"'; // double quote in case it's case sensitive
         String schemaName = dataPlan.getTableRef().getTable().getSchemaName().getString();
@@ -150,14 +189,17 @@ public class QueryOptimizer {
         String tableName = '"' + index.getTableName().getString() + '"';
         List<? extends TableNode> tables = Collections.singletonList(FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName)));
         try {
-            SelectStatement indexSelect = FACTORY.select(select, tables);            
-            QueryCompiler compiler = new QueryCompiler(statement, targetColumns, parallelIteratorFactory);
-            QueryPlan plan = compiler.compile(indexSelect);
-            // Checking the index status and number of columns handles the wildcard cases correctly
-            // We can't check the status earlier, because the index table may be out-of-date.
-            if (plan.getTableRef().getTable().getIndexState() == PIndexState.ACTIVE && plan.getProjector().getColumnCount() == nColumns) {
-                plans.add(plan);
-                return true;
+            SelectStatement indexSelect = FACTORY.select(select, tables);
+            ColumnResolver resolver = FromCompiler.getResolverForQuery(indexSelect, statement.getConnection());
+            // Check index state of now potentially updated index table to make sure it's active
+            if (PIndexState.ACTIVE.equals(resolver.getTables().get(0).getTable().getIndexState())) {
+                QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory);
+                QueryPlan plan = compiler.compile();
+                // Checking number of columns handles the wildcard cases correctly, as in that case the index
+                // must contain all columns from the data table to be able to be used.
+                if (plan.getTableRef().getTable().getIndexState() == PIndexState.ACTIVE && plan.getProjector().getColumnCount() == nColumns) {
+                    return plan;
+                }
             }
         } catch (ColumnNotFoundException e) {
             /* Means that a column is being used that's not in our index.
@@ -166,7 +208,7 @@ public class QueryOptimizer {
              * the index table to the data table.
              */
         }
-        return false;
+        return null;
     }
     
     /**
@@ -183,9 +225,9 @@ public class QueryOptimizer {
      * @return QueryPlan
      */
     private QueryPlan chooseBestPlan(SelectStatement select, List<QueryPlan> plans) {
-        QueryPlan firstPlan = plans.get(0);
+        final QueryPlan dataPlan = plans.get(0);
         if (plans.size() == 1) {
-            return firstPlan;
+            return dataPlan;
         }
         
         /**
@@ -221,12 +263,31 @@ public class QueryOptimizer {
         if (bestCandidates.isEmpty()) {
             bestCandidates.addAll(stillCandidates);
         }
+        
+        int nViewConstants = 0;
+        PTable dataTable = dataPlan.getTableRef().getTable();
+        if (dataTable.getViewType() == ViewType.UPDATABLE) {
+            for (PColumn column : dataTable.getColumns()) {
+                if (column.getViewConstant() != null) {
+                    nViewConstants++;
+                }
+            }
+        }
+        final int boundRanges = nViewConstants;
         final int comparisonOfDataVersusIndexTable = select.getHint().hasHint(Hint.USE_DATA_OVER_INDEX_TABLE) ? -1 : 1;
         Collections.sort(bestCandidates, new Comparator<QueryPlan>() {
 
             @Override
             public int compare(QueryPlan plan1, QueryPlan plan2) {
+                PTable table1 = plan1.getTableRef().getTable();
+                PTable table2 = plan2.getTableRef().getTable();
                 int c = plan2.getContext().getScanRanges().getRanges().size() - plan1.getContext().getScanRanges().getRanges().size();
+                // Account for potential view constants which are always bound
+                if (plan1 == dataPlan) { // plan2 is index plan. Ignore the viewIndexId if present
+                    c += boundRanges - (table2.getViewIndexId() == null ? 0 : 1);
+                } else { // plan1 is index plan. Ignore the viewIndexId if present
+                    c -= boundRanges - (table1.getViewIndexId() == null ? 0 : 1);
+                }
                 if (c != 0) return c;
                 if (plan1.getGroupBy()!=null && plan2.getGroupBy()!=null) {
                     if (plan1.getGroupBy().isOrderPreserving() != plan2.getGroupBy().isOrderPreserving()) {
@@ -234,8 +295,6 @@ public class QueryOptimizer {
                     }
                 }
                 // Use smaller table (table with fewest kv columns)
-                PTable table1 = plan1.getTableRef().getTable();
-                PTable table2 = plan2.getTableRef().getTable();
                 c = (table1.getColumns().size() - table1.getPKColumns().size()) - (table2.getColumns().size() - table2.getPKColumns().size());
                 if (c != 0) return c;
                 

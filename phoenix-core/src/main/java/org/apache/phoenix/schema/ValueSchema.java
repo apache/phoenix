@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,7 +26,9 @@ import java.util.List;
 
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.util.SizedUtil;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
@@ -54,6 +54,12 @@ public abstract class ValueSchema implements Writable {
     
     protected ValueSchema(int minNullable, List<Field> fields) {
         init(minNullable, fields);
+    }
+    
+    public int getEstimatedSize() { // Memory size of ValueSchema
+        int count = fieldIndexByPosition.length;
+        return SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE + SizedUtil.INT_SIZE * (4 + count) + 
+                SizedUtil.ARRAY_SIZE + count * Field.ESTIMATED_SIZE + SizedUtil.sizeOfArrayList(count);
     }
 
     private void init(int minNullable, List<Field> fields) {
@@ -138,8 +144,8 @@ public abstract class ValueSchema implements Writable {
             final int prime = 31;
             int result = 1;
             result = prime * result + byteSize;
-            result = prime * result + type.hashCode();
-            result = prime * result + ((columnModifier == null) ? 0 : columnModifier.hashCode());
+            result = prime * result + type.hashCode();            
+            result = prime * result + sortOrder.hashCode();
             result = prime * result + (isNullable ? 1231 : 1237);
             return result;
         }
@@ -151,28 +157,33 @@ public abstract class ValueSchema implements Writable {
             if (getClass() != obj.getClass()) return false;
             Field other = (Field)obj;
             if (byteSize != other.byteSize) return false;
-            if (columnModifier != other.columnModifier) return false;
+            if (sortOrder != other.sortOrder) return false;
             if (isNullable != other.isNullable) return false;
             if (type != other.type) return false;
             return true;
         }
+        
+        public static final int ESTIMATED_SIZE = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 2 + SizedUtil.INT_SIZE * 3;
 
         private int count;
         private PDataType type;
         private int byteSize = 0;
         private boolean isNullable;
-        private ColumnModifier columnModifier;
+        private SortOrder sortOrder;
         
         public Field() {
         }
         
-        private Field(PDatum datum, boolean isNullable, int count, ColumnModifier columnModifier) {
+        private Field(PDatum datum, boolean isNullable, int count, SortOrder sortOrder) {
+            Preconditions.checkNotNull(sortOrder);
             this.type = datum.getDataType();
-            this.columnModifier = columnModifier;
+            this.sortOrder = sortOrder;
             this.count = count;
             this.isNullable = isNullable;
             if (this.type.isFixedWidth() && this.type.getByteSize() == null) {
-                this.byteSize = datum.getByteSize();
+                if (datum.getByteSize() != null) {
+                    this.byteSize = datum.getByteSize();
+                }
             }
         }
         
@@ -180,10 +191,11 @@ public abstract class ValueSchema implements Writable {
             this.type = field.getDataType();
             this.byteSize = field.byteSize;
             this.count = count;
+            this.sortOrder = SortOrder.getDefault();
         }
         
-        public final ColumnModifier getColumnModifier() {
-            return columnModifier;
+        public final SortOrder getSortOrder() {
+            return sortOrder;
         }
         
         public final PDataType getDataType() {
@@ -214,7 +226,9 @@ public abstract class ValueSchema implements Writable {
             this.count = WritableUtils.readVInt(input);
             if (this.count < 0) {
                 this.count *= -1;
-                this.columnModifier = ColumnModifier.SORT_DESC;
+                this.sortOrder = SortOrder.DESC;
+            } else {
+            	this.sortOrder = SortOrder.ASC;
             }
             if (this.type.isFixedWidth() && this.type.getByteSize() == null) {
                 this.byteSize = WritableUtils.readVInt(input);
@@ -224,7 +238,7 @@ public abstract class ValueSchema implements Writable {
         @Override
         public void write(DataOutput output) throws IOException {
             WritableUtils.writeVInt(output, (type.ordinal() + 1) * (this.isNullable ? -1 : 1));
-            WritableUtils.writeVInt(output, count * (columnModifier == null ? 1 : -1));
+            WritableUtils.writeVInt(output, count * (sortOrder == SortOrder.ASC ? 1 : -1));
             if (type.isFixedWidth() && type.getByteSize() == null) {
                 WritableUtils.writeVInt(output, byteSize);
             }
@@ -260,8 +274,8 @@ public abstract class ValueSchema implements Writable {
             return this;
         }
         
-        protected ValueSchemaBuilder addField(PDatum datum, boolean isNullable, ColumnModifier columnModifier) {
-            fields.add(new Field(datum, isNullable, 1, columnModifier));
+        protected ValueSchemaBuilder addField(PDatum datum, boolean isNullable, SortOrder sortOrder) {
+            fields.add(new Field(datum, isNullable, 1, sortOrder));
             return this;
         }
     }

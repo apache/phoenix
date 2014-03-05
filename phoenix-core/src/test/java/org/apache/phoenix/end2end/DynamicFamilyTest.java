@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -41,9 +39,6 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.junit.Before;
-import org.junit.Test;
-
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -52,6 +47,8 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Before;
+import org.junit.Test;
 
 /**
  * Basic tests for Phoenix dynamic family querying "cf.*"
@@ -115,21 +112,21 @@ public class DynamicFamilyTest extends BaseHBaseManagedTimeTest {
             Put put;
             List<Row> mutations = new ArrayList<Row>();
             put = new Put(Bytes.toBytes("entry1"));
-            put.add(A_CF, QueryConstants.EMPTY_COLUMN_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
+            put.add(A_CF, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
             put.add(A_CF, ByteUtil.concat(MAX_CLICK_COUNT_DYNCOL_PREFIX, USER_ID2_BYTES), PDataType.INTEGER.toBytes(ENTRY1_CLICK_COUNT));
             put.add(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID1_BYTES), PDataType.TIME.toBytes(ENTRY1_USER_ID1_LOGIN_TIME));
             put.add(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID2_BYTES), PDataType.TIME.toBytes(ENTRY1_USER_ID2_LOGIN_TIME));
             mutations.add(put);
             
             put = new Put(Bytes.toBytes("entry2"));
-            put.add(A_CF, QueryConstants.EMPTY_COLUMN_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
+            put.add(A_CF, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
             put.add(A_CF, ByteUtil.concat(MAX_CLICK_COUNT_DYNCOL_PREFIX, USER_ID3_BYTES), PDataType.INTEGER.toBytes(ENTRY2_CLICK_COUNT));
             put.add(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID2_BYTES), PDataType.TIME.toBytes(ENTRY2_USER_ID2_LOGIN_TIME));
             put.add(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID3_BYTES), PDataType.TIME.toBytes(ENTRY2_USER_ID3_LOGIN_TIME));
             mutations.add(put);
             
             put = new Put(Bytes.toBytes("entry3"));
-            put.add(A_CF, QueryConstants.EMPTY_COLUMN_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
+            put.add(A_CF, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
             put.add(A_CF, ByteUtil.concat(MAX_CLICK_COUNT_DYNCOL_PREFIX, USER_ID1_BYTES), PDataType.INTEGER.toBytes(ENTRY3_CLICK_COUNT));
             put.add(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID1_BYTES), PDataType.TIME.toBytes(ENTRY3_USER_ID1_LOGIN_TIME));
             put.add(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID2_BYTES), PDataType.TIME.toBytes(ENTRY3_USER_ID2_LOGIN_TIME));

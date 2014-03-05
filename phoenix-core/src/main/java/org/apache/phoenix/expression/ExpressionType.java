@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,7 +19,6 @@ package org.apache.phoenix.expression;
 
 import java.util.Map;
 
-import com.google.common.collect.Maps;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.ArrayLengthFunction;
 import org.apache.phoenix.expression.function.CeilDateExpression;
@@ -66,6 +63,8 @@ import org.apache.phoenix.expression.function.ToNumberFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.TruncFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
+
+import com.google.common.collect.Maps;
 
 /**
  * 
@@ -144,7 +143,6 @@ public enum ExpressionType {
     RowValueConstructorExpression(RowValueConstructorExpression.class),
     MD5Function(MD5Function.class),
     SQLTableTypeFunction(SQLTableTypeFunction.class),
-    IndexKeyValue(IndexKeyValueColumnExpression.class),
     IndexStateName(IndexStateNameFunction.class),
     InvertFunction(InvertFunction.class),
     ProjectedColumnExpression(ProjectedColumnExpression.class),

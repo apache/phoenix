@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,8 +22,10 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
+import org.apache.phoenix.schema.Sequence.Action;
 
 /**
  * 
@@ -175,5 +175,15 @@ public class SelectStatement implements FilterableStatement {
     @Override
     public boolean isAggregate() {
         return isAggregate;
+    }
+
+    @Override
+    public Operation getOperation() {
+        return Operation.QUERY;
+    }
+
+    @Override
+    public Action getSequenceAction() {
+        return Action.RESERVE;
     }
 }

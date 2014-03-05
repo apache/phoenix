@@ -40,8 +40,9 @@ message PColumn {
   optional int32 scale = 5;
   required bool nullable = 6;
   required int32 position = 7;
-  required int32 columnModifier = 8;
+  required int32 sortOrder = 8;
   optional int32 arraySize = 9;
+  optional bytes viewConstant = 10;
 }
 
 message PTableStats {
@@ -68,5 +69,7 @@ message PTable {
   required bool multiTenant = 16;
   optional bytes viewType = 17;
   optional bytes viewStatement = 18;
-  repeated bytes physicalNames = 19; 
+  repeated bytes physicalNames = 19;
+  optional bytes tenantId = 20;
+  optional int32 viewIndexId = 21; 
 }

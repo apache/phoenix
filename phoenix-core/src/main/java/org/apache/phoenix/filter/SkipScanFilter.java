@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -141,6 +139,15 @@ public class SkipScanFilter extends FilterBase implements Writable {
         return null;
     }
     
+    private boolean areSlotsSingleKey(int startPosInclusive, int endPosExclusive) {
+        for (int i = startPosInclusive; i < endPosExclusive; i++) {
+            if (!slots.get(i).get(position[i]).isSingleKey()) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
     private boolean intersect(byte[] lowerInclusiveKey, byte[] upperExclusiveKey, List<List<KeyRange>> newSlots) {
         boolean lowerUnbound = (lowerInclusiveKey.length == 0);
         Arrays.fill(position, 0);
@@ -201,7 +208,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         } else if (endCode == ReturnCode.SEEK_NEXT_USING_HINT) {
             // The upperExclusive key is smaller than the slots stored in the position. Check if it's the same position
             // as the slots for lowerInclusive. If so, there is no intersection.
-            if (Arrays.equals(lowerPosition, position)) {
+            if (Arrays.equals(lowerPosition, position) && areSlotsSingleKey(0, position.length-1)) {
                 return false;
             }
         }

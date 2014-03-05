@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +23,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.NumberUtil;
@@ -53,8 +51,8 @@ public class DecimalDivideExpression extends DivideExpression {
             }
             
             PDataType childType = childExpr.getDataType();
-            ColumnModifier childColumnModifier = childExpr.getColumnModifier();
-            BigDecimal bd= (BigDecimal)PDataType.DECIMAL.toObject(ptr, childType, childColumnModifier);
+            SortOrder childSortOrder = childExpr.getSortOrder();
+            BigDecimal bd= (BigDecimal)PDataType.DECIMAL.toObject(ptr, childType, childSortOrder);
             
             if (result == null) {
                 result = bd;

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,16 +18,9 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.concurrent.*;
 
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
@@ -37,28 +28,21 @@ import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
+import org.apache.phoenix.compile.*;
+import org.apache.phoenix.filter.ColumnProjectionFilter;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.job.JobManager.JobCallable;
+import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.query.*;
+import org.apache.phoenix.schema.*;
+import org.apache.phoenix.schema.PTable.ViewType;
+import org.apache.phoenix.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Function;
-import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.compile.RowProjector;
-import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.job.JobManager.JobCallable;
-import org.apache.phoenix.parse.FilterableStatement;
-import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.SaltingUtil;
-import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SQLCloseables;
-import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
 
 
 /**
@@ -75,7 +59,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
     private final ParallelIteratorFactory iteratorFactory;
     
     public static interface ParallelIteratorFactory {
-        PeekingResultIterator newIterator(ResultIterator scanner) throws SQLException;
+        PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner) throws SQLException;
     }
 
     private static final int DEFAULT_THREAD_TIMEOUT_MS = 60000; // 1min
@@ -87,7 +71,9 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         }
     };
 
-    public ParallelIterators(StatementContext context, TableRef tableRef, FilterableStatement statement, RowProjector projector, GroupBy groupBy, Integer limit, ParallelIteratorFactory iteratorFactory) throws SQLException {
+    public ParallelIterators(StatementContext context, TableRef tableRef, FilterableStatement statement,
+            RowProjector projector, GroupBy groupBy, Integer limit, ParallelIteratorFactory iteratorFactory)
+            throws SQLException {
         super(context, tableRef, groupBy);
         this.splits = getSplits(context, tableRef, statement.getHint());
         this.iteratorFactory = iteratorFactory;
@@ -98,13 +84,16 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
             // If nothing projected into scan and we only have one column family, just allow everything
             // to be projected and use a FirstKeyOnlyFilter to skip from row to row. This turns out to
             // be quite a bit faster.
-            if (familyMap.isEmpty() && table.getColumnFamilies().size() == 1) {
+            // Where condition columns also will get added into familyMap
+            // When where conditions are present, we can not add FirstKeyOnlyFilter at beginning.
+            if (familyMap.isEmpty() && context.getWhereCoditionColumns().isEmpty()
+                    && table.getColumnFamilies().size() == 1) {
                 // Project the one column family. We must project a column family since it's possible
                 // that there are other non declared column families that we need to ignore.
                 scan.addFamily(table.getColumnFamilies().get(0).getName().getBytes());
                 ScanUtil.andFilterAtBeginning(scan, new FirstKeyOnlyFilter());
             } else {
-                byte[] ecf = SchemaUtil.getEmptyColumnFamily(table.getColumnFamilies());
+                byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
                 // Project empty key value unless the column family containing it has
                 // been projected in its entirety.
                 if (!familyMap.containsKey(ecf) || familyMap.get(ecf) != null) {
@@ -114,6 +103,82 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         }
         if (limit != null) {
             ScanUtil.andFilterAtEnd(scan, new PageFilter(limit));
+        }
+
+        if (!(statement.isAggregate())) {
+            doColumnProjectionOptimization(context, scan, table);
+        } else {
+            // TODO avoid code duplication.
+            for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
+                scan.addColumn(whereCol.getFirst(), whereCol.getSecond());
+            }
+            if (table.getViewType() == ViewType.MAPPED) {
+                // Since we don't have the empty key value in MAPPED tables, we must select all CFs in HRS. But only the
+                // selected column values are returned back to client
+                for (PColumnFamily family : table.getColumnFamilies()) {
+                    scan.addFamily(family.getName().getBytes());
+                }
+            }
+        }
+    }
+
+    private void doColumnProjectionOptimization(StatementContext context, Scan scan, PTable table) {
+        Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
+        if (familyMap != null && !familyMap.isEmpty()) {
+            // columnsTracker contain cf -> qualifiers which should get returned.
+            Map<ImmutableBytesPtr, NavigableSet<ImmutableBytesPtr>> columnsTracker = 
+                    new TreeMap<ImmutableBytesPtr, NavigableSet<ImmutableBytesPtr>>();
+            Set<byte[]> conditionOnlyCfs = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
+            int referencedCfCount = familyMap.size();
+            for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
+                if (!(familyMap.containsKey(whereCol.getFirst()))) {
+                    referencedCfCount++;
+                }
+            }
+            boolean useOptimization = referencedCfCount == 1;
+            // when referencedCfCount is >1 we are not using the optimization as of now
+            // TODO support adding a HINT in query so that in case of cf count>1 also, this optimization can be applied.
+            if (useOptimization) {
+                for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
+                    ImmutableBytesPtr cf = new ImmutableBytesPtr(entry.getKey());
+                    NavigableSet<byte[]> qs = entry.getValue();
+                    NavigableSet<ImmutableBytesPtr> cols = null;
+                    if (qs != null) {
+                        cols = new TreeSet<ImmutableBytesPtr>();
+                        for (byte[] q : qs) {
+                            cols.add(new ImmutableBytesPtr(q));
+                        }
+                    }
+                    columnsTracker.put(cf, cols);
+                }
+            }
+            // Making sure that where condition CFs are getting scanned at HRS.
+            for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
+                if (useOptimization) {
+                    if (!(familyMap.containsKey(whereCol.getFirst()))) {
+                        scan.addFamily(whereCol.getFirst());
+                        conditionOnlyCfs.add(whereCol.getFirst());
+                    }
+                } else {
+                    scan.addColumn(whereCol.getFirst(), whereCol.getSecond());
+                }
+            }
+            if (useOptimization && !columnsTracker.isEmpty()) {
+                for (ImmutableBytesPtr f : columnsTracker.keySet()) {
+                    // This addFamily will remove explicit cols in scan familyMap and make it as entire row.
+                    // We don't want the ExplicitColumnTracker to be used. Instead we have the ColumnProjectionFilter
+                    scan.addFamily(f.get());
+                }
+                ScanUtil.andFilterAtEnd(scan, new ColumnProjectionFilter(SchemaUtil.getEmptyColumnFamily(table),
+                        columnsTracker, conditionOnlyCfs));
+            }
+            if (table.getViewType() == ViewType.MAPPED) {
+                // Since we don't have the empty key value in MAPPED tables, we must select all CFs in HRS. But only the
+                // selected column values are returned back to client
+                for (PColumnFamily family : table.getColumnFamilies()) {
+                    scan.addFamily(family.getName().getBytes());
+                }
+            }
         }
     }
 
@@ -175,7 +240,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                             if (logger.isDebugEnabled()) {
                             	logger.debug("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + splitScan);
                             }
-                            return iteratorFactory.newIterator(scanner);
+                            return iteratorFactory.newIterator(context, scanner);
                         }
 
                         /**

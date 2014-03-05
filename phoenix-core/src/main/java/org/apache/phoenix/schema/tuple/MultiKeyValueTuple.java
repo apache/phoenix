@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,14 +20,13 @@ package org.apache.phoenix.schema.tuple;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
-import com.google.common.collect.ImmutableList;
 import org.apache.phoenix.util.KeyValueUtil;
 
+import com.google.common.collect.ImmutableList;
 
-public class MultiKeyValueTuple implements Tuple {
+
+public class MultiKeyValueTuple extends BaseTuple {
     private List<Cell> values;
     
     public MultiKeyValueTuple(List<Cell> values) {

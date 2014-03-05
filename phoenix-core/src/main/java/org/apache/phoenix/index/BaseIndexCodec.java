@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,7 +22,7 @@ import java.io.IOException;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 
-import org.apache.hadoop.hbase.index.covered.IndexCodec;
+import org.apache.phoenix.hbase.index.covered.IndexCodec;
 
 /**
  *

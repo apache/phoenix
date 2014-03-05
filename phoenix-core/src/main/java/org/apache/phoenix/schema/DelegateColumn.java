@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,6 +21,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import org.apache.phoenix.util.SizedUtil;
+
 public class DelegateColumn extends DelegateDatum implements PColumn {
     
     public DelegateColumn(PColumn delegate) {
@@ -40,8 +40,8 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
     }
     
     @Override
-    public ColumnModifier getColumnModifier() {
-    	return getDelegate().getColumnModifier();
+    public SortOrder getSortOrder() {
+    	return getDelegate().getSortOrder();
     }
 
     @Override
@@ -57,5 +57,15 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
     @Override
     public Integer getArraySize() {
         return getDelegate().getArraySize();
+    }
+
+    @Override
+    public byte[] getViewConstant() {
+        return getDelegate().getViewConstant();
+    }
+
+    @Override
+    public int getEstimatedSize() {
+        return SizedUtil.OBJECT_SIZE + getDelegate().getEstimatedSize();
     }
 }

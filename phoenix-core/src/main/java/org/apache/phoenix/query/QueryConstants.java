@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,7 +24,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CACHE_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHAR_OCTET_LENGTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_MODIFIER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CURRENT_VALUE;
@@ -40,35 +38,38 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_AUTOINCREMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NULLABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_PREC_RADIX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REF_GENERATION_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REMARKS_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REF_GENERATION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REMARKS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCOPE_CATALOG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCOPE_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCOPE_TABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SELF_REFERENCING_COL_NAME_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SELF_REFERENCING_COL_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SEQUENCE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SEQUENCE_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SOURCE_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SQL_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SQL_DATETIME_SUB;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.START_WITH;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 
@@ -76,12 +77,12 @@ import java.math.BigDecimal;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNormalizedName;
+import org.apache.phoenix.schema.PNameFactory;
 
 
 /**
@@ -103,8 +104,8 @@ public interface QueryConstants {
     public final static String PHOENIX_SCHEMA = "system";
     public final static String PHOENIX_METADATA = "table";
 
-    public final static PName SINGLE_COLUMN_NAME = new PNormalizedName("s");
-    public final static PName SINGLE_COLUMN_FAMILY_NAME = new PNormalizedName("s");
+    public final static PName SINGLE_COLUMN_NAME = PNameFactory.newNormalizedName("s");
+    public final static PName SINGLE_COLUMN_FAMILY_NAME = PNameFactory.newNormalizedName("s");
     public final static byte[] SINGLE_COLUMN = SINGLE_COLUMN_NAME.getBytes();
     public final static byte[] SINGLE_COLUMN_FAMILY = SINGLE_COLUMN_FAMILY_NAME.getBytes();
 
@@ -115,6 +116,10 @@ public interface QueryConstants {
     public final static byte[] UNGROUPED_AGG_ROW_KEY = Bytes.toBytes("a");
     public final static PName AGG_COLUMN_NAME = SINGLE_COLUMN_NAME;
     public final static PName AGG_COLUMN_FAMILY_NAME = SINGLE_COLUMN_FAMILY_NAME;
+    
+    public static final byte[] ARRAY_VALUE_COLUMN_FAMILY = Bytes.toBytes("_a");
+    // TODO: use empty byte array so as not to accidentally conflict with any other columns
+    public static final byte[] ARRAY_VALUE_COLUMN_QUALIFIER = ARRAY_VALUE_COLUMN_FAMILY;
 
     public static final byte[] TRUE = new byte[] {1};
 
@@ -132,76 +137,81 @@ public interface QueryConstants {
     public static final byte[] EMPTY_COLUMN_BYTES = Bytes.toBytes(EMPTY_COLUMN_NAME);
     public static final ImmutableBytesPtr EMPTY_COLUMN_BYTES_PTR = new ImmutableBytesPtr(
             EMPTY_COLUMN_BYTES);
-    public static final String DEFAULT_COLUMN_FAMILY = EMPTY_COLUMN_NAME;
-    public static final byte[] DEFAULT_COLUMN_FAMILY_BYTES = EMPTY_COLUMN_BYTES;
+
+    public static final String DEFAULT_COLUMN_FAMILY = "0";
+    public static final byte[] DEFAULT_COLUMN_FAMILY_BYTES = Bytes.toBytes(DEFAULT_COLUMN_FAMILY);
+    public static final ImmutableBytesPtr DEFAULT_COLUMN_FAMILY_BYTES_PTR = new ImmutableBytesPtr(
+            DEFAULT_COLUMN_FAMILY_BYTES);
+    
     public static final String ALL_FAMILY_PROPERTIES_KEY = "";
     public static final String SYSTEM_TABLE_PK_NAME = "pk";
     
     public static final double MILLIS_TO_NANOS_CONVERTOR = Math.pow(10, 6);
     public static final BigDecimal BD_MILLIS_NANOS_CONVERSION = BigDecimal.valueOf(MILLIS_TO_NANOS_CONVERTOR);
     public static final BigDecimal BD_MILLIS_IN_DAY = BigDecimal.valueOf(QueryConstants.MILLIS_IN_DAY);
-    
+    public static final String SPECIFIC_ARRAY_INDEX = "SpecificArrayIndex";
 
     public static final String CREATE_TABLE_METADATA =
-            // Do not use IF NOT EXISTS as we sometimes catch the TableAlreadyExists exception
-            // and add columns to the SYSTEM.TABLE dynamically.
-            "CREATE TABLE " + TYPE_SCHEMA + ".\"" + TYPE_TABLE + "\"(\n" +
+            // Do not use IF NOT EXISTS as we sometimes catch the TableAlreadyExists
+            // exception and add columns to the SYSTEM.TABLE dynamically.
+            "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"(\n" +
             // PK columns
             TENANT_ID + " VARCHAR NULL," +
-            TABLE_SCHEM_NAME + " VARCHAR NULL," +
-            TABLE_NAME_NAME + " VARCHAR NOT NULL," +
-            COLUMN_NAME + " VARCHAR NULL," + // null only for table row
-            TABLE_CAT_NAME + " VARCHAR NULL," + // using for CF - ensures uniqueness for columns
+            TABLE_SCHEM + " VARCHAR NULL," +
+            TABLE_NAME + " VARCHAR NOT NULL," +
+            COLUMN_NAME + " VARCHAR NULL," + // null for table row
+            COLUMN_FAMILY + " VARCHAR NULL," + // using for CF to uniqueness for columns
             // Table metadata (will be null for column rows)
-            TABLE_TYPE_NAME + " CHAR(1)," +
-            REMARKS_NAME + " VARCHAR," +
-            DATA_TYPE + " INTEGER," +
+            TABLE_TYPE + " CHAR(1)," +
             PK_NAME + " VARCHAR," +
-            TYPE_NAME + " VARCHAR," +
-            SELF_REFERENCING_COL_NAME_NAME + " VARCHAR," +
-            REF_GENERATION_NAME + " VARCHAR," +
-            TABLE_SEQ_NUM + " BIGINT," +
             COLUMN_COUNT + " INTEGER," +
-            // Column metadata (will be null for table row)
-            COLUMN_SIZE + " INTEGER," +
-            BUFFER_LENGTH + " INTEGER," +
-            DECIMAL_DIGITS + " INTEGER," +
-            NUM_PREC_RADIX + " INTEGER," +
-            NULLABLE + " INTEGER," +
-            COLUMN_DEF + " VARCHAR," +
-            SQL_DATA_TYPE + " INTEGER," +
-            SQL_DATETIME_SUB + " INTEGER," +
-            CHAR_OCTET_LENGTH + " INTEGER," +
-            ORDINAL_POSITION + " INTEGER," +
-            IS_NULLABLE + " VARCHAR," +
-            SCOPE_CATALOG + " VARCHAR," +
-            SCOPE_SCHEMA + " VARCHAR," +
-            SCOPE_TABLE + " VARCHAR," +
-            SOURCE_DATA_TYPE + " INTEGER," + // supposed to be SHORT
-            IS_AUTOINCREMENT + " VARCHAR," +
-            // Columns added in 1.2.1
-            COLUMN_MODIFIER + " INTEGER," +
             SALT_BUCKETS + " INTEGER," +
-            // Columns added in 2.0.0
             DATA_TABLE_NAME + " VARCHAR," +
             INDEX_STATE + " CHAR(1),\n" +
             IMMUTABLE_ROWS + " BOOLEAN,\n" +
-            // Columns added in 3.0.0
             VIEW_STATEMENT + " VARCHAR,\n" +
             DEFAULT_COLUMN_FAMILY_NAME + " VARCHAR,\n" +
             DISABLE_WAL + " BOOLEAN,\n" +
             MULTI_TENANT + " BOOLEAN,\n" +
             VIEW_TYPE + " UNSIGNED_TINYINT,\n" +
-            LINK_TYPE + " UNSIGNED_TINYINT,\n" +
+            VIEW_INDEX_ID + " SMALLINT,\n" +
+            // Column metadata (will be null for table row)
+            DATA_TYPE + " INTEGER," +
+            COLUMN_SIZE + " INTEGER," +
+            DECIMAL_DIGITS + " INTEGER," +
+            NULLABLE + " INTEGER," +
+            ORDINAL_POSITION + " INTEGER," +
+            SORT_ORDER + " INTEGER," +
             ARRAY_SIZE + " INTEGER,\n" +
+            VIEW_CONSTANT + " VARBINARY,\n" +
+            KEY_SEQ + " SMALLINT,\n" +
+            // Link metadata (only set on rows linking table to index or view)
+            LINK_TYPE + " UNSIGNED_TINYINT,\n" +
+            // Unused
+            TYPE_NAME + " VARCHAR," +
+            REMARKS + " VARCHAR," +
+            SELF_REFERENCING_COL_NAME + " VARCHAR," + 
+            REF_GENERATION + " VARCHAR," +
+            TABLE_SEQ_NUM + " BIGINT," +
+            BUFFER_LENGTH + " INTEGER," +
+            NUM_PREC_RADIX + " INTEGER," +
+            COLUMN_DEF + " VARCHAR," +
+            SQL_DATA_TYPE + " INTEGER," +
+            SQL_DATETIME_SUB + " INTEGER," +
+            CHAR_OCTET_LENGTH + " INTEGER," +
+            IS_NULLABLE + " VARCHAR," +
+            SCOPE_CATALOG + " VARCHAR," +
+            SCOPE_SCHEMA + " VARCHAR," +
+            SCOPE_TABLE + " VARCHAR," +
+            SOURCE_DATA_TYPE + " SMALLINT," +
+            IS_AUTOINCREMENT + " VARCHAR," +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ","
-            + TABLE_SCHEM_NAME + "," + TABLE_NAME_NAME + "," + COLUMN_NAME + "," + TABLE_CAT_NAME + "))\n" +
+            + TABLE_SCHEM + "," + TABLE_NAME + "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" +
             HConstants.VERSIONS + "=" + MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS + ",\n" +
-            DEFAULT_COLUMN_FAMILY_NAME + "=" + "'_0'" + ",\n" + // Use original default for b/w compat
             HTableDescriptor.SPLIT_POLICY + "='" + MetaDataSplitPolicy.class.getName() + "'\n";
     
     public static final String CREATE_SEQUENCE_METADATA =
-            "CREATE TABLE IF NOT EXISTS " + TYPE_SCHEMA + ".\"" + TYPE_SEQUENCE + "\"(\n" +                                    
+            "CREATE TABLE IF NOT EXISTS " + SYSTEM_CATALOG_SCHEMA + ".\"" + TYPE_SEQUENCE + "\"(\n" +                                    
             TENANT_ID + " VARCHAR NULL," +
     		SEQUENCE_SCHEMA + " VARCHAR NULL, \n" + 
             SEQUENCE_NAME +  " VARCHAR NOT NULL, \n" +

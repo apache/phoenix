@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -41,6 +39,7 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLXML;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Calendar;
@@ -48,6 +47,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.phoenix.compile.BindManager;
+import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -71,7 +71,7 @@ import org.apache.phoenix.util.SQLCloseable;
  */
 public class PhoenixPreparedStatement extends PhoenixStatement implements PreparedStatement, SQLCloseable {
     private final List<Object> parameters;
-    private final ExecutableStatement statement;
+    private final CompilableStatement statement;
 
     private final String query;
 
@@ -93,10 +93,19 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         Collections.fill(parameters, BindManager.UNBOUND_PARAMETER);
     }
 
+    public PhoenixPreparedStatement(PhoenixPreparedStatement statement) throws SQLException {
+        super(statement.connection);
+        this.query = statement.query;
+        this.statement = statement.statement;
+        this.parameters = new ArrayList<Object>(statement.parameters);
+    }
+
     @Override
     public void addBatch() throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        throwIfUnboundParameters();
+        batch.add(new PhoenixPreparedStatement(this));
     }
+
 
     @Override
     public void clearParameters() throws SQLException {
@@ -119,58 +128,55 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         }
     }
     
+    
+    public QueryPlan compileQuery() throws SQLException {
+        return compileQuery(statement, query);
+    }
+
+    public MutationPlan compileMutation() throws SQLException {
+        return compileMutation(statement, query);
+    }
+
+    boolean execute(boolean batched) throws SQLException {
+        throwIfUnboundParameters();
+        if (!batched && statement.getOperation().isMutation() && !batch.isEmpty()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
+            .build().buildException();
+        }
+        return execute(statement);
+    }
+
     @Override
     public boolean execute() throws SQLException {
-        throwIfUnboundParameters();
-        try {
-            return statement.execute();
-        } catch (RuntimeException e) {
-            // FIXME: Expression.evaluate does not throw SQLException
-            // so this will unwrap throws from that.
-            if (e.getCause() instanceof SQLException) {
-                throw (SQLException) e.getCause();
-            }
-            throw e;
-        }
+        return execute(false);
     }
 
     @Override
     public ResultSet executeQuery() throws SQLException {
         throwIfUnboundParameters();
-        try {
-            return statement.executeQuery();
-        } catch (RuntimeException e) {
-            // FIXME: Expression.evaluate does not throw SQLException
-            // so this will unwrap throws from that.
-            if (e.getCause() instanceof SQLException) {
-                throw (SQLException) e.getCause();
-            }
-            throw e;
-        }
+        return executeQuery(statement);
     }
 
     @Override
     public int executeUpdate() throws SQLException {
         throwIfUnboundParameters();
-        try {
-            return statement.executeUpdate();
-        } catch (RuntimeException e) {
-            // FIXME: Expression.evaluate does not throw SQLException
-            // so this will unwrap throws from that.
-            if (e.getCause() instanceof SQLException) {
-                throw (SQLException) e.getCause();
-            }
-            throw e;
+        if (!batch.isEmpty()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
+            .build().buildException();
         }
+        return executeMutation(statement);
     }
 
     public QueryPlan optimizeQuery() throws SQLException {
         throwIfUnboundParameters();
-        return (QueryPlan)statement.optimizePlan();
+        return optimizeQuery(statement);
     }
 
     @Override
     public ResultSetMetaData getMetaData() throws SQLException {
+        if (statement.getOperation().isMutation()) {
+            return null;
+        }
         int paramCount = statement.getBindCount();
         List<Object> params = this.getParameters();
         BitSet unsetParams = new BitSet(statement.getBindCount());
@@ -181,7 +187,9 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
             }
         }
         try {
-            return statement.getResultSetMetaData();
+            // Just compile top level query without optimizing to get ResultSetMetaData
+            QueryPlan plan = statement.compilePlan(this);
+            return new PhoenixResultSetMetaData(this.getConnection(), plan.getProjector());
         } finally {
             int lastSetBit = 0;
             while ((lastSetBit = unsetParams.nextSetBit(lastSetBit)) != -1) {
@@ -203,7 +211,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
             }
         }
         try {
-            StatementPlan plan = statement.compilePlan();
+            StatementPlan plan = statement.compilePlan(this);
             return plan.getParameterMetaData();
         } finally {
             int lastSetBit = 0;

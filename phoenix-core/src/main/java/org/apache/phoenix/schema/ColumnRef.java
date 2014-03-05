@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,13 +17,13 @@
  */
 package org.apache.phoenix.schema;
 
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.http.annotation.Immutable;
-
 import org.apache.phoenix.expression.ColumnExpression;
-import org.apache.phoenix.expression.IndexKeyValueColumnExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -92,25 +90,37 @@ public final class ColumnRef {
     }
 
     public ColumnExpression newColumnExpression() {
-        boolean isIndex = tableRef.getTable().getType() == PTableType.INDEX;
-        if (SchemaUtil.isPKColumn(this.getColumn())) {
-            String name = this.getColumn().getName().getString();
+        PTable table = tableRef.getTable();
+        PColumn column = this.getColumn();
+        boolean isIndex = table.getType() == PTableType.INDEX;
+        if (SchemaUtil.isPKColumn(column)) {
+            String name = column.getName().getString();
             if (isIndex) {
                 name = IndexUtil.getDataColumnName(name);
             }
             return new RowKeyColumnExpression(
-                    getColumn(), 
-                    new RowKeyValueAccessor(this.getTable().getPKColumns(), pkSlotPosition),
+                    column, 
+                    new RowKeyValueAccessor(table.getPKColumns(), pkSlotPosition),
                     name);
         }
         
-        if (isIndex)
-        	return new IndexKeyValueColumnExpression(getColumn());
+        if (isIndex) {
+            // Translate to the data table column name
+            String indexColumnName = column.getName().getString();
+            String dataFamilyName = IndexUtil.getDataColumnFamilyName(indexColumnName);
+            String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
+            String defaultFamilyName = table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : table.getDefaultFamilyName().getString();
+            String displayName = SchemaUtil.getColumnDisplayName(defaultFamilyName.equals(dataFamilyName) ? null : dataFamilyName, dataColumnName);
+        	return new KeyValueColumnExpression(column, displayName);
+        }
         
-        if (tableRef.getTable().getType() == PTableType.JOIN)
-        	return new ProjectedColumnExpression(getColumn(), tableRef.getTable());
+        if (table.getType() == PTableType.JOIN) {
+        	return new ProjectedColumnExpression(column, table, column.getName().getString());
+        }
        
-        return new KeyValueColumnExpression(getColumn());
+        byte[] defaultFamily = table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes();
+        String displayName = SchemaUtil.getColumnDisplayName(Bytes.compareTo(defaultFamily, column.getFamilyName().getBytes()) == 0  ? null : column.getFamilyName().getBytes(), column.getName().getBytes());
+        return new KeyValueColumnExpression(column, displayName);
     }
 
     public int getColumnPosition() {

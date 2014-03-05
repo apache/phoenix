@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,15 +17,20 @@
  */
 package org.apache.phoenix.iterate;
 
-import java.io.*;
+import java.io.BufferedInputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.commons.io.output.DeferredFileOutputStream;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
@@ -35,7 +38,10 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ResultUtil;
+import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.TupleUtil;
 
 
 
@@ -57,7 +63,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
             this.services = services;
         }
         @Override
-        public PeekingResultIterator newIterator(ResultIterator scanner) throws SQLException {
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner) throws SQLException {
             return new SpoolingResultIterator(scanner, services);
         }
         

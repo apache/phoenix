@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,7 +25,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import com.google.common.collect.ListMultimap;
 
 
-public class CreateIndexStatement extends SingleTableSQLStatement {
+public class CreateIndexStatement extends SingleTableStatement {
     private final TableName indexTableName;
     private final PrimaryKeyConstraint indexConstraint;
     private final List<ColumnName> includeColumns;
@@ -39,7 +37,7 @@ public class CreateIndexStatement extends SingleTableSQLStatement {
             PrimaryKeyConstraint indexConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
             ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, int bindCount) {
         super(dataTable, bindCount);
-        this.indexTableName =TableName.createNormalized(dataTable.getName().getSchemaName(),indexTableName.getName());
+        this.indexTableName =TableName.create(dataTable.getName().getSchemaName(),indexTableName.getName());
         this.indexConstraint = indexConstraint == null ? PrimaryKeyConstraint.EMPTY : indexConstraint;
         this.includeColumns = includeColumns == null ? Collections.<ColumnName>emptyList() : includeColumns;
         this.splitNodes = splits == null ? Collections.<ParseNode>emptyList() : splits;

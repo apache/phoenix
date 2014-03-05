@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -29,13 +27,15 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
+
+import com.google.common.base.Preconditions;
 
 
 
@@ -70,7 +70,7 @@ public class LiteralExpression extends BaseTerminalExpression {
     private Integer byteSize;
     private Integer maxLength;
     private Integer scale;
-    private ColumnModifier columnModifier;
+    private SortOrder sortOrder;
 
 
     public static boolean isFalse(Expression child) {
@@ -98,7 +98,7 @@ public class LiteralExpression extends BaseTerminalExpression {
         }
         PDataType type = PDataType.fromLiteral(value);
         byte[] b = type.toBytes(value);
-        if (b.length == 0) {
+        if (type.isNull(b)) {
             return TYPED_NULL_EXPRESSIONS[type.ordinal() + ( isDeterministic ? 0 : TYPED_NULL_EXPRESSIONS.length/2)];
         }
         if (type == PDataType.VARCHAR) {
@@ -115,27 +115,27 @@ public class LiteralExpression extends BaseTerminalExpression {
     }
     
     public static LiteralExpression newConstant(Object value, PDataType type, boolean isDeterministic) throws SQLException {
-        return newConstant(value, type, null, isDeterministic);
+        return newConstant(value, type, SortOrder.getDefault(), isDeterministic);
     }
     
-    public static LiteralExpression newConstant(Object value, PDataType type, ColumnModifier columnModifier) throws SQLException {
-        return newConstant(value, type, null, null, columnModifier, true);
+    public static LiteralExpression newConstant(Object value, PDataType type, SortOrder sortOrder) throws SQLException {
+        return newConstant(value, type, null, null, sortOrder, true);
     }
     
-    public static LiteralExpression newConstant(Object value, PDataType type, ColumnModifier columnModifier, boolean isDeterministic) throws SQLException {
-        return newConstant(value, type, null, null, columnModifier, isDeterministic);
+    public static LiteralExpression newConstant(Object value, PDataType type, SortOrder sortOrder, boolean isDeterministic) throws SQLException {
+        return newConstant(value, type, null, null, sortOrder, isDeterministic);
     }
     
     public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale) throws SQLException {
-        return newConstant(value, type, maxLength, scale, null, true);
+        return newConstant(value, type, maxLength, scale, SortOrder.getDefault(), true);
     }
     
     public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale, boolean isDeterministic) throws SQLException { // remove?
-        return newConstant(value, type, maxLength, scale, null, isDeterministic);
+        return newConstant(value, type, maxLength, scale, SortOrder.getDefault(), isDeterministic);
     }
 
     // TODO: cache?
-    public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale, ColumnModifier columnModifier, boolean isDeterministic)
+    public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale, SortOrder sortOrder, boolean isDeterministic)
             throws SQLException {
         if (value == null) {
             if (type == null) {
@@ -157,7 +157,7 @@ public class LiteralExpression extends BaseTerminalExpression {
         }
         value = type.toObject(value, actualType);
         try {
-            byte[] b = type.toBytes(value, columnModifier);
+            byte[] b = type.toBytes(value, sortOrder);
             if (type == PDataType.VARCHAR || type == PDataType.CHAR) {
                 if (type == PDataType.CHAR && maxLength != null  && b.length < maxLength) {
                     b = StringUtil.padChar(b, maxLength);
@@ -168,7 +168,7 @@ public class LiteralExpression extends BaseTerminalExpression {
             if (b.length == 0) {
                 return TYPED_NULL_EXPRESSIONS[type.ordinal()];
             }
-            return new LiteralExpression(value, type, b, maxLength, scale, columnModifier, isDeterministic);
+            return new LiteralExpression(value, type, b, maxLength, scale, sortOrder, isDeterministic);
         } catch (IllegalDataException e) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA).setRootCause(e).build().buildException();
         }
@@ -182,18 +182,19 @@ public class LiteralExpression extends BaseTerminalExpression {
     }
 
     private LiteralExpression(Object value, PDataType type, byte[] byteValue, boolean isDeterministic) {
-        this(value, type, byteValue, type == null? null : type.getMaxLength(value), type == null? null : type.getScale(value), null, isDeterministic);
+        this(value, type, byteValue, type == null? null : type.getMaxLength(value), type == null? null : type.getScale(value), SortOrder.getDefault(), isDeterministic);
     }
 
     private LiteralExpression(Object value, PDataType type, byte[] byteValue,
-            Integer maxLength, Integer scale, ColumnModifier columnModifier, boolean isDeterministic) {
+            Integer maxLength, Integer scale, SortOrder sortOrder, boolean isDeterministic) {
+    	Preconditions.checkNotNull(sortOrder);
         this.value = value;
         this.type = type;
         this.byteValue = byteValue;
         this.byteSize = byteValue.length;
         this.maxLength = maxLength;
         this.scale = scale;
-        this.columnModifier = columnModifier;
+        this.sortOrder = sortOrder;
         this.isDeterministic = isDeterministic;
     }
 
@@ -234,7 +235,7 @@ public class LiteralExpression extends BaseTerminalExpression {
         int byteLength = Math.abs(encodedByteLengthAndBool)-1;
         this.byteValue = new byte[byteLength];
         input.readFully(byteValue, 0, byteLength);
-        columnModifier = ColumnModifier.fromSystemValue(WritableUtils.readVInt(input));
+        sortOrder = SortOrder.fromSystemValue(WritableUtils.readVInt(input));
         int typeOrdinal = WritableUtils.readVInt(input);
         if (typeOrdinal < 0) {
             this.type = null;
@@ -244,7 +245,7 @@ public class LiteralExpression extends BaseTerminalExpression {
         if (this.byteValue.length == 0) {
             this.value = null;
         } else {
-            this.value = this.type.toObject(byteValue, 0, byteValue.length, this.type, columnModifier);
+            this.value = this.type.toObject(byteValue, 0, byteValue.length, this.type, sortOrder);
         }
         // Only to prevent continual reallocations of Integer
         this.byteSize = this.byteValue.length;
@@ -254,7 +255,7 @@ public class LiteralExpression extends BaseTerminalExpression {
     public void write(DataOutput output) throws IOException {
         WritableUtils.writeVInt(output, (byteValue.length + 1) * (this.isDeterministic ? 1 : -1));
         output.write(byteValue);
-        WritableUtils.writeVInt(output, ColumnModifier.toSystemValue(columnModifier));
+        WritableUtils.writeVInt(output, sortOrder.getSystemValue());
         WritableUtils.writeVInt(output, type == null ? -1 : this.type.ordinal());
     }
 
@@ -286,8 +287,8 @@ public class LiteralExpression extends BaseTerminalExpression {
     }
     
     @Override
-    public ColumnModifier getColumnModifier() {
-        return columnModifier;
+    public SortOrder getSortOrder() {
+        return sortOrder;
     }
 
     @Override

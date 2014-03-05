@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,6 +17,11 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.util.PhoenixRuntime.CONNECTIONLESS;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -56,10 +59,12 @@ import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
+import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.expression.function.SubstrFunction;
 import org.apache.phoenix.filter.MultiCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.MultiKeyValueComparisonFilter;
 import org.apache.phoenix.filter.RowKeyComparisonFilter;
@@ -67,6 +72,7 @@ import org.apache.phoenix.filter.SingleCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SingleKeyValueComparisonFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
@@ -133,8 +139,9 @@ public class TestUtil {
     public final static List<String> ENTITYHISTIDS = Lists.newArrayList(ENTITYHISTID1, ENTITYHISTID2, ENTITYHISTID3, ENTITYHISTID4, ENTITYHISTID5, ENTITYHISTID6, ENTITYHISTID7, ENTITYHISTID8, ENTITYHISTID9);
     
     public static final long MILLIS_IN_DAY = 1000 * 60 * 60 * 24;
-    public static final String PHOENIX_JDBC_URL = "jdbc:phoenix:localhost;test=true";
-    public static final String PHOENIX_CONNECTIONLESS_JDBC_URL = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + PhoenixRuntime.CONNECTIONLESS  + ";test=true";
+    public static final String LOCALHOST = "localhost";
+    public static final String PHOENIX_JDBC_URL = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+    public static final String PHOENIX_CONNECTIONLESS_JDBC_URL = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + CONNECTIONLESS  + JDBC_PROTOCOL_TERMINATOR  + PHOENIX_TEST_DRIVER_URL_PARAM;
 
     public static final String TEST_SCHEMA_FILE_NAME = "config" + File.separator + "test-schema.xml";
     public static final String CED_SCHEMA_FILE_NAME = "config" + File.separator + "schema.xml";
@@ -169,14 +176,19 @@ public class TestUtil {
     public static final String INDEX_DATA_SCHEMA = "INDEX_TEST";
     public static final String INDEX_DATA_TABLE = "INDEX_DATA_TABLE";
     public static final String MUTABLE_INDEX_DATA_TABLE = "MUTABLE_INDEX_DATA_TABLE";
-    public static final String JOIN_ORDER_TABLE_NORMALIZED = "joinOrderTable";
-    public static final String JOIN_CUSTOMER_TABLE_NORMALIZED = "joinCustomerTable";
-    public static final String JOIN_ITEM_TABLE_NORMALIZED = "joinItemTable";
-    public static final String JOIN_SUPPLIER_TABLE_NORMALIZED = "joinSupplierTable";
-    public static final String JOIN_ORDER_TABLE = '"' + JOIN_ORDER_TABLE_NORMALIZED + '"';
-    public static final String JOIN_CUSTOMER_TABLE = '"' + JOIN_CUSTOMER_TABLE_NORMALIZED + '"';
-    public static final String JOIN_ITEM_TABLE = '"' + JOIN_ITEM_TABLE_NORMALIZED + '"';
-    public static final String JOIN_SUPPLIER_TABLE = '"' + JOIN_SUPPLIER_TABLE_NORMALIZED + '"';
+    public static final String JOIN_SCHEMA = "Join";
+    public static final String JOIN_ORDER_TABLE = "OrderTable";
+    public static final String JOIN_CUSTOMER_TABLE = "CustomerTable";
+    public static final String JOIN_ITEM_TABLE = "ItemTable";
+    public static final String JOIN_SUPPLIER_TABLE = "SupplierTable";
+    public static final String JOIN_ORDER_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_ORDER_TABLE + '"';
+    public static final String JOIN_CUSTOMER_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_CUSTOMER_TABLE + '"';
+    public static final String JOIN_ITEM_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_ITEM_TABLE + '"';
+    public static final String JOIN_SUPPLIER_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_SUPPLIER_TABLE + '"';
+    public static final String JOIN_ORDER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_ORDER_TABLE;
+    public static final String JOIN_CUSTOMER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_CUSTOMER_TABLE;
+    public static final String JOIN_ITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_ITEM_TABLE;
+    public static final String JOIN_SUPPLIER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_SUPPLIER_TABLE;
  
     public static final Properties TEST_PROPERTIES = new Properties();
 
@@ -221,8 +233,16 @@ public class TestUtil {
         return  new ComparisonExpression(op, Arrays.asList(e, LiteralExpression.newConstant(o)));
     }
 
-    public static Expression columnComparison(CompareOp op, PColumn c1, PColumn c2) {
-        return  new ComparisonExpression(op, Arrays.<Expression>asList(new KeyValueColumnExpression(c1), new KeyValueColumnExpression(c2)));
+    public static Expression like(Expression e, Object o) {
+        return  new LikeExpression(Arrays.asList(e, LiteralExpression.newConstant(o)));
+    }
+
+    public static Expression substr(Expression e, Object offset, Object length) {
+        return  new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset), LiteralExpression.newConstant(length)));
+    }
+
+    public static Expression columnComparison(CompareOp op, Expression c1, Expression c2) {
+        return  new ComparisonExpression(op, Arrays.<Expression>asList(c1, c2));
     }
 
     public static SingleKeyValueComparisonFilter singleKVFilter(Expression e) {
@@ -310,7 +330,7 @@ public class TestUtil {
 
     public static void clearMetaDataCache(Connection conn) throws Throwable {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        HTableInterface htable = pconn.getQueryServices().getTable(PhoenixDatabaseMetaData.TYPE_TABLE_NAME_BYTES);
+        HTableInterface htable = pconn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW,
             HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataService, ClearCacheResponse>() {
                 @Override
@@ -343,5 +363,11 @@ public class TestUtil {
     public static void closeStmtAndConn(Statement stmt, Connection conn) {
         closeStatement(stmt);
         closeConnection(conn);
+    }
+
+    public static void bindParams(PhoenixPreparedStatement stmt, List<Object> binds) throws SQLException {
+        for (int i = 0; i < binds.size(); i++) {
+            stmt.setObject(i+1, binds.get(i));
+        }
     }
 }

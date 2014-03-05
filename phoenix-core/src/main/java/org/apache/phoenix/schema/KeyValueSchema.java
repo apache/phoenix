@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -67,7 +65,7 @@ public class KeyValueSchema extends ValueSchema {
         }
         
         public KeyValueSchemaBuilder addField(PDatum datum) {
-            super.addField(datum, fields.size() <  this.minNullable, null);
+            super.addField(datum, fields.size() <  this.minNullable, SortOrder.getDefault());
             return this;
         }
     }

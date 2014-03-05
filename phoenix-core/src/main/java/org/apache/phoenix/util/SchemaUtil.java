@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +17,7 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_TABLE_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -29,18 +27,17 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -52,6 +49,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SaltingUtil;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 
 /**
@@ -93,12 +91,12 @@ public class SchemaUtil {
         }
     
         @Override
-        public ColumnModifier getColumnModifier() {
-            return null;
+        public SortOrder getSortOrder() {
+            return SortOrder.getDefault();
         }
         
     };
-    public static final RowKeySchema VAR_BINARY_SCHEMA = new RowKeySchemaBuilder(1).addField(VAR_BINARY_DATUM, false, null).build();
+    public static final RowKeySchema VAR_BINARY_SCHEMA = new RowKeySchemaBuilder(1).addField(VAR_BINARY_DATUM, false, SortOrder.getDefault()).build();
     
     /**
      * May not be instantiated
@@ -201,11 +199,11 @@ public class SchemaUtil {
     }
 
     public static String getColumnDisplayName(byte[] cf, byte[] cq) {
-        return getName(cf == null || cf.length == 0 || Bytes.compareTo(cf, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES) == 0 ? ByteUtil.EMPTY_BYTE_ARRAY : cf, cq);
+        return getName(cf == null || cf.length == 0 ? ByteUtil.EMPTY_BYTE_ARRAY : cf, cq);
     }
 
     public static String getColumnDisplayName(String cf, String cq) {
-        return getName(cf == null || cf.isEmpty() || QueryConstants.DEFAULT_COLUMN_FAMILY.equals(cf) ? null : cf, cq);
+        return getName(cf == null || cf.isEmpty() ? null : cf, cq);
     }
 
     public static String getMetaDataEntityName(String schemaName, String tableName, String familyName, String columnName) {
@@ -329,17 +327,23 @@ public class SchemaUtil {
         return isString ? ("'" + type.toObject(value).toString() + "'") : type.toObject(value).toString();
     }
 
-    public static byte[] getEmptyColumnFamily(List<PColumnFamily> families) {
-        return families.isEmpty() ? QueryConstants.EMPTY_COLUMN_BYTES : families.get(0).getName().getBytes();
+    public static byte[] getEmptyColumnFamily(PName defaultColumnFamily, List<PColumnFamily> families) {
+        return families.isEmpty() ? defaultColumnFamily == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : defaultColumnFamily.getBytes() : families.get(0).getName().getBytes();
     }
 
-    public static ImmutableBytesPtr getEmptyColumnFamilyPtr(List<PColumnFamily> families) {
-        return families.isEmpty() ? QueryConstants.EMPTY_COLUMN_BYTES_PTR : families.get(0)
+    public static byte[] getEmptyColumnFamily(PTable table) {
+        List<PColumnFamily> families = table.getColumnFamilies();
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes() : families.get(0).getName().getBytes();
+    }
+
+    public static ImmutableBytesPtr getEmptyColumnFamilyPtr(PTable table) {
+        List<PColumnFamily> families = table.getColumnFamilies();
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES_PTR : table.getDefaultFamilyName().getBytesPtr() : families.get(0)
                 .getName().getBytesPtr();
     }
 
     public static boolean isMetaTable(byte[] tableName) {
-        return Bytes.compareTo(tableName, TYPE_TABLE_NAME_BYTES) == 0;
+        return Bytes.compareTo(tableName, SYSTEM_CATALOG_NAME_BYTES) == 0;
     }
     
     public static boolean isSequenceTable(byte[] tableName) {
@@ -347,15 +351,15 @@ public class SchemaUtil {
     }
 
     public static boolean isMetaTable(PTable table) {
-        return PhoenixDatabaseMetaData.TYPE_SCHEMA.equals(table.getSchemaName().getString()) && PhoenixDatabaseMetaData.TYPE_TABLE.equals(table.getTableName().getString());
+        return PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(table.getSchemaName().getString()) && PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE.equals(table.getTableName().getString());
     }
     
     public static boolean isMetaTable(byte[] schemaName, byte[] tableName) {
-        return Bytes.compareTo(schemaName, PhoenixDatabaseMetaData.TYPE_SCHEMA_BYTES) == 0 && Bytes.compareTo(tableName, PhoenixDatabaseMetaData.TYPE_TABLE_BYTES) == 0;
+        return Bytes.compareTo(schemaName, PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES) == 0 && Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA_BYTES) == 0;
     }
     
     public static boolean isMetaTable(String schemaName, String tableName) {
-        return PhoenixDatabaseMetaData.TYPE_SCHEMA.equals(schemaName) && PhoenixDatabaseMetaData.TYPE_TABLE.equals(tableName);
+        return PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(schemaName) && PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE.equals(tableName);
     }
 
     // Given the splits and the rowKeySchema, find out the keys that 
@@ -433,9 +437,6 @@ public class SchemaUtil {
         return length;
     }
     
-    public static final String UPGRADE_TO_2_0 = "UpgradeTo20";
-    public static final String UPGRADE_TO_2_1 = "UpgradeTo21";
-
     public static String getEscapedTableName(String schemaName, String tableName) {
         if (schemaName == null || schemaName.length() == 0) {
             return "\"" + tableName + "\"";
@@ -446,7 +447,7 @@ public class SchemaUtil {
     protected static PhoenixConnection addMetaDataColumn(PhoenixConnection conn, long scn, String columnDef) throws SQLException {
         String url = conn.getURL();
         Properties props = conn.getClientInfo();
-        PMetaData metaData = conn.getPMetaData();
+        PMetaData metaData = conn.getMetaDataCache();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
         PhoenixConnection metaConnection = null;
 
@@ -533,5 +534,19 @@ public class SchemaUtil {
             maxKeyLength += maxSlotLength;
         }
         return maxKeyLength;
+    }
+
+    public static short getMaxKeySeq(PTable table) {
+        int offset = 0;
+        if (table.getBucketNum() != null) {
+            offset++;
+        }
+        if (table.isMultiTenant()) {
+            offset++;
+        }
+        if (table.getViewIndexId() != null) {
+            offset++;
+        }
+        return (short)(table.getPKColumns().size() - offset);
     }
 }

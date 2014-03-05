@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +23,7 @@ import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.*;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -39,8 +37,8 @@ public class PercentRankClientAggregator extends DistinctValueWithCountClientAgg
 
     private final List<Expression> exps;
 
-    public PercentRankClientAggregator(List<Expression> exps, ColumnModifier columnModifier) {
-        super(columnModifier);
+    public PercentRankClientAggregator(List<Expression> exps, SortOrder sortOrder) {
+        super(sortOrder);
         this.exps = exps;
     }
 

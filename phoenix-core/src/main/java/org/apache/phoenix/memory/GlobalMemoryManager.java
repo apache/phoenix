@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -153,10 +151,10 @@ public class GlobalMemoryManager implements MemoryManager {
         @Override
         protected void finalize() throws Throwable {
             try {
-                close();
                 if (size > 0) {
                     logger.warn("Orphaned chunk of " + size + " bytes found during finalize");
                 }
+                close();
                 // TODO: log error here, but we can't use SFDC logging
                 // because this runs in an hbase coprocessor.
                 // Create a gack-like API (talk with GridForce or HBase folks)

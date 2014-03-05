@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -51,4 +49,6 @@ public interface PColumnFamily {
      * @throws ColumnNotFoundException if the column cannot be found
      */
     PColumn getColumn(String name) throws ColumnNotFoundException;
+    
+    int getEstimatedSize();
 }

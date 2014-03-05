@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -48,10 +46,10 @@ import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PLongColumn;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.AssertResults;
@@ -90,7 +88,7 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
             };
 
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
-        StatementContext context = new StatementContext(new PhoenixStatement(pconn), null, Collections.emptyList(), new Scan());
+        StatementContext context = new StatementContext(new PhoenixStatement(pconn), null, new Scan());
         AggregationManager aggregationManager = context.getAggregationManager();
         SumAggregateFunction func = new SumAggregateFunction(Arrays.<Expression>asList(new KeyValueColumnExpression(new PLongColumn() {
             @Override
@@ -107,13 +105,18 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
             }
             
             @Override
-            public ColumnModifier getColumnModifier() {
-            	return null;
+            public SortOrder getSortOrder() {
+            	return SortOrder.getDefault();
             }
             
             @Override
             public Integer getArraySize() {
                 return 0;
+            }
+            
+            @Override
+            public byte[] getViewConstant() {
+                return null;
             }
         })), null);
         aggregationManager.setAggregators(new ClientAggregators(Collections.<SingleAggregateFunction>singletonList(func), 1));

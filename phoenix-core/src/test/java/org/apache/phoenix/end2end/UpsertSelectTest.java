@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -44,13 +42,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
 
-import org.junit.Test;
-
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Test;
 
 
 public class UpsertSelectTest extends BaseClientManagedTimeTest {
@@ -85,7 +82,7 @@ public class UpsertSelectTest extends BaseClientManagedTimeTest {
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         conn.setAutoCommit(true);
         String upsert = "UPSERT INTO " + CUSTOM_ENTITY_DATA_FULL_NAME + "(custom_entity_data_id, key_prefix, organization_id, created_by) " +
-            "SELECT substr(entity_id, 4), substr(entity_id, 1, 3), organization_id, a_string  FROM ATABLE WHERE a_string = ?";
+            "SELECT substr(entity_id, 4), substr(entity_id, 1, 3), organization_id, a_string  FROM ATABLE WHERE ?=a_string";
         if (createIndex) { // Confirm index is used
             upsertStmt = conn.prepareStatement("EXPLAIN " + upsert);
             upsertStmt.setString(1, tenantId);
@@ -685,5 +682,48 @@ public class UpsertSelectTest extends BaseClientManagedTimeTest {
         assertFalse(rs.next());
         conn.close();
 
+    }
+    
+    @Test
+    public void testUpsertSelectWithSequence() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn.createStatement().execute("create table t1 (id bigint not null primary key, v varchar)");
+        conn.createStatement().execute("create table t2 (k varchar primary key)");
+        conn.createStatement().execute("create sequence s");
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn.createStatement().execute("upsert into t2 values ('a')");
+        conn.createStatement().execute("upsert into t2 values ('b')");
+        conn.createStatement().execute("upsert into t2 values ('c')");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn.createStatement().execute("upsert into t1 select next value for s, k from t2");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        ResultSet rs = conn.createStatement().executeQuery("select * from t1");
+        
+        assertTrue(rs.next());
+        assertEquals(1,rs.getLong(1));
+        assertEquals("a",rs.getString(2));
+        
+        assertTrue(rs.next());
+        assertEquals(2,rs.getLong(1));
+        assertEquals("b",rs.getString(2));
+        
+        assertTrue(rs.next());
+        assertEquals(3,rs.getLong(1));
+        assertEquals("c",rs.getString(2));
+        
+        assertFalse(rs.next());
+        conn.close();
     }
 }

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -47,7 +45,7 @@ public class DoubleDivideExpression extends DivideExpression {
                 return true;
             }
             double childvalue = child.getDataType().getCodec()
-                    .decodeDouble(ptr, child.getColumnModifier());
+                    .decodeDouble(ptr, child.getSortOrder());
             if (!Double.isNaN(childvalue)
                     && childvalue != Double.NEGATIVE_INFINITY
                     && childvalue != Double.POSITIVE_INFINITY) {

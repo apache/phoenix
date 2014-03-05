@@ -1,3 +1,21 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.phoenix.index;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -20,21 +38,22 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
-import org.junit.Test;
-
-import com.google.common.collect.Maps;
-import org.apache.hadoop.hbase.index.ValueGetter;
-import org.apache.hadoop.hbase.index.covered.update.ColumnReference;
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.client.ClientKeyValueBuilder;
 import org.apache.phoenix.client.GenericKeyValueBuilder;
 import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
+import org.apache.phoenix.hbase.index.ValueGetter;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Test;
+
+import com.google.common.collect.Maps;
 
 public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
     private static final String DEFAULT_SCHEMA_NAME = "";
@@ -80,12 +99,14 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
             String pk, String indexColumns, Object[] values, String includeColumns,
             String dataProps, String indexProps, KeyValueBuilder builder) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String fullTableName = SchemaUtil.getTableName(schemaName, tableName) ;
+        String fullTableName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(schemaName),SchemaUtil.normalizeIdentifier(tableName));
+        String fullIndexName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(schemaName),SchemaUtil.normalizeIdentifier("idx"));
         conn.createStatement().execute("CREATE TABLE " + fullTableName + "(" + dataColumns + " CONSTRAINT pk PRIMARY KEY (" + pk + "))  " + (dataProps.isEmpty() ? "" : dataProps) );
         try {
             conn.createStatement().execute("CREATE INDEX idx ON " + fullTableName + "(" + indexColumns + ") " + (includeColumns.isEmpty() ? "" : "INCLUDE (" + includeColumns + ") ") + (indexProps.isEmpty() ? "" : indexProps));
-            PTable table = conn.unwrap(PhoenixConnection.class).getPMetaData().getTable(SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(schemaName),SchemaUtil.normalizeIdentifier(tableName)));
-            PTable index = conn.unwrap(PhoenixConnection.class).getPMetaData().getTable(SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(schemaName),SchemaUtil.normalizeIdentifier("idx")));
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            PTable table = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName));
+            PTable index = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(),fullIndexName));
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             table.getIndexMaintainers(ptr);
             List<IndexMaintainer> c1 = IndexMaintainer.deserialize(ptr, builder);

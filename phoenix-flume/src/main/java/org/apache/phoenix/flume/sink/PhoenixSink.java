@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.flume.Channel;
+import org.apache.flume.ChannelException;
 import org.apache.flume.Context;
 import org.apache.flume.Event;
 import org.apache.flume.EventDeliveryException;
@@ -32,7 +31,9 @@ import org.apache.flume.Transaction;
 import org.apache.flume.conf.Configurable;
 import org.apache.flume.instrumentation.SinkCounter;
 import org.apache.flume.sink.AbstractSink;
-import org.jboss.netty.channel.ChannelException;
+import org.apache.phoenix.flume.FlumeConstants;
+import org.apache.phoenix.flume.serializer.EventSerializer;
+import org.apache.phoenix.flume.serializer.EventSerializers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,9 +42,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
-import org.apache.phoenix.flume.FlumeConstants;
-import org.apache.phoenix.flume.serializer.EventSerializer;
-import org.apache.phoenix.flume.serializer.EventSerializers;
 
 public final class PhoenixSink  extends AbstractSink implements Configurable {
     private static final Logger logger = LoggerFactory.getLogger(PhoenixSink.class);

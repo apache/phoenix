@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -36,11 +34,16 @@ import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 
 
 public interface ConnectionQueryServices extends QueryServices, MetaDataMutated {
+    public static final int INITIAL_META_DATA_TABLE_CAPACITY = 100;
+
     /**
      * Get (and create if necessary) a child QueryService for a given tenantId.
      * The QueryService will be cached for the lifetime of the parent QueryService
@@ -66,10 +69,10 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     public PhoenixConnection connect(String url, Properties info) throws SQLException;
 
-    public MetaDataMutationResult getTable(byte[] tenantId, byte[] schemaName, byte[] tableName, long tableTimestamp, long clientTimetamp) throws SQLException;
+    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaName, byte[] tableName, long tableTimestamp, long clientTimetamp) throws SQLException;
     public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] tableName, PTableType tableType, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits) throws SQLException;
     public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, PTableType tableType) throws SQLException;
-    public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, PTableType tableType, List<Pair<byte[],Map<String,Object>>> families) throws SQLException;
+    public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, List<Pair<byte[],Map<String,Object>>> families, PTable table) throws SQLException;
     public MetaDataMutationResult dropColumn(List<Mutation> tableMetadata, PTableType tableType) throws SQLException;
     public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata, String parentTableName) throws SQLException;
     public MutationState updateData(MutationPlan plan) throws SQLException;
@@ -85,10 +88,11 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     
     long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, int batchSize, long timestamp) throws SQLException;
     long dropSequence(String tenantId, String schemaName, String sequenceName, long timestamp) throws SQLException;
-    void reserveSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException;
-    void incrementSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException;
-    long getSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException;
-    void returnSequenceValues(List<SequenceKey> sequenceKeys, long timestamp, SQLException[] exceptions) throws SQLException;
+    void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions, Sequence.Action action) throws SQLException;
+    void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException;
+    long currentSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException;
+    void returnSequences(List<SequenceKey> sequenceKeys, long timestamp, SQLException[] exceptions) throws SQLException;
+
     void addConnection(PhoenixConnection connection) throws SQLException;
     void removeConnection(PhoenixConnection connection) throws SQLException;
 

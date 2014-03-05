@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,6 +19,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.util.SchemaUtil;
+
 
 
 /**
@@ -35,7 +35,7 @@ public class DerivedTableNode extends TableNode {
     private final SelectStatement select;
 
     DerivedTableNode(String alias, SelectStatement select) {
-        super(alias);
+        super(SchemaUtil.normalizeIdentifier(alias));
         this.select = select;
     }
 

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -33,6 +31,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -65,7 +64,8 @@ public class SaltedIndexTest extends BaseIndexTest{
             conn.createStatement().execute("DELETE FROM " + DATA_TABLE_FULL_NAME);
             conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " SET IMMUTABLE_ROWS=true");
             conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + DATA_TABLE_FULL_NAME).next();
-            assertTrue(conn.unwrap(PhoenixConnection.class).getPMetaData().getTable(DATA_TABLE_FULL_NAME).isImmutableRows());
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            assertTrue(pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), DATA_TABLE_FULL_NAME)).isImmutableRows());
         } finally {
             conn.close();
         }

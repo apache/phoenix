@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,18 +18,29 @@
 package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.List;
 
 import com.google.common.collect.Lists;
 
+import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.BetweenParseNode;
+import org.apache.phoenix.parse.BindTableNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.ComparisonParseNode;
+import org.apache.phoenix.parse.DerivedTableNode;
+import org.apache.phoenix.parse.FamilyWildcardParseNode;
+import org.apache.phoenix.parse.JoinTableNode;
 import org.apache.phoenix.parse.LessThanOrEqualParseNode;
+import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeRewriter;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.parse.TableNode;
+import org.apache.phoenix.parse.TableNodeVisitor;
+import org.apache.phoenix.parse.TableWildcardParseNode;
+import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.util.SchemaUtil;
 
 
@@ -45,11 +54,11 @@ import org.apache.phoenix.util.SchemaUtil;
  * @since 0.1
  */
 public class StatementNormalizer extends ParseNodeRewriter {
-    private boolean useFullNameForAlias;
+    private boolean multiTable;
     
-    public StatementNormalizer(ColumnResolver resolver, int expectedAliasCount, boolean useFullNameForAlias) {
+    public StatementNormalizer(ColumnResolver resolver, int expectedAliasCount, boolean multiTable) {
         super(resolver, expectedAliasCount);
-        this.useFullNameForAlias = useFullNameForAlias;
+        this.multiTable = multiTable;
     }
 
     public static ParseNode normalize(ParseNode where, ColumnResolver resolver) throws SQLException {
@@ -65,8 +74,68 @@ public class StatementNormalizer extends ParseNodeRewriter {
      * @throws SQLException 
      */
     public static SelectStatement normalize(SelectStatement statement, ColumnResolver resolver) throws SQLException {
-        return rewrite(statement, new StatementNormalizer(resolver, statement.getSelect().size(), statement.getFrom().size() > 1));
+        List<TableNode> from = statement.getFrom();
+        boolean multiTable = from.size() > 1;
+        // Replace WildcardParse with a list of TableWildcardParseNode for multi-table queries
+        if (multiTable) {
+            List<AliasedNode> selectNodes = statement.getSelect();
+            List<AliasedNode> normSelectNodes = selectNodes;
+            for (int i = 0; i < selectNodes.size(); i++) {
+                AliasedNode aliasedNode = selectNodes.get(i);
+                ParseNode selectNode = aliasedNode.getNode();
+                if (selectNode == WildcardParseNode.INSTANCE) {
+                    if (selectNodes == normSelectNodes) {
+                        normSelectNodes = Lists.newArrayList(selectNodes.subList(0, i));
+                    }
+                    for (TableNode tNode : from) {
+                        TableNameVisitor visitor = new TableNameVisitor();
+                        tNode.accept(visitor);
+                        TableWildcardParseNode node = NODE_FACTORY.tableWildcard(visitor.getTableName());
+                        normSelectNodes.add(NODE_FACTORY.aliasedNode(null, node));
+                    }
+                } else if (selectNodes != normSelectNodes) {
+                    normSelectNodes.add(aliasedNode);
+                }
+            }
+            if (selectNodes != normSelectNodes) {
+                statement = NODE_FACTORY.select(statement.getFrom(), statement.getHint(), statement.isDistinct(),
+                        normSelectNodes, statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(),
+                        statement.getLimit(), statement.getBindCount(), statement.isAggregate());
+            }
+        }
+        
+        return rewrite(statement, new StatementNormalizer(resolver, statement.getSelect().size(), multiTable));
     }
+
+    private static class TableNameVisitor implements TableNodeVisitor {
+        private TableName tableName;
+        
+        public TableName getTableName() {
+            return tableName;
+        }
+
+        @Override
+        public void visit(BindTableNode boundTableNode) throws SQLException {
+            tableName = boundTableNode.getAlias() == null ? boundTableNode.getName() : TableName.create(null, boundTableNode.getAlias());
+        }
+
+        @Override
+        public void visit(JoinTableNode joinNode) throws SQLException {
+            joinNode.getTable().accept(this);
+        }
+
+        @Override
+        public void visit(NamedTableNode namedTableNode)
+                throws SQLException {
+            tableName = namedTableNode.getAlias() == null ? namedTableNode.getName() : TableName.create(null, namedTableNode.getAlias());
+        }
+
+        @Override
+        public void visit(DerivedTableNode subselectNode)
+                throws SQLException {
+            throw new SQLFeatureNotSupportedException();
+        }
+    };
     
     @Override
     public ParseNode visitLeave(ComparisonParseNode node, List<ParseNode> nodes) throws SQLException {
@@ -93,7 +162,7 @@ public class StatementNormalizer extends ParseNodeRewriter {
 
     @Override
     public ParseNode visit(ColumnParseNode node) throws SQLException {
-        if (useFullNameForAlias 
+        if (multiTable 
                 && node.getAlias() != null 
                 && node.getTableName() != null
                 && SchemaUtil.normalizeIdentifier(node.getAlias()).equals(node.getName())) {
@@ -102,6 +171,14 @@ public class StatementNormalizer extends ParseNodeRewriter {
                     node.isCaseSensitive() ? '"' + node.getFullName() + '"' : node.getFullName());
         }
         return super.visit(node);
+    }
+    
+    @Override
+    public ParseNode visit(FamilyWildcardParseNode node) throws SQLException {
+        if (!multiTable)
+            return super.visit(node);
+        
+        return super.visit(NODE_FACTORY.tableWildcard(NODE_FACTORY.table(null, node.isCaseSensitive() ? '"' + node.getName() + '"' : node.getName())));
     }
 }
 

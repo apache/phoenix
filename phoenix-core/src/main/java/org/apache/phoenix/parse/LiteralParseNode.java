@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -45,6 +43,13 @@ public class LiteralParseNode extends TerminalParseNode {
     
     public LiteralParseNode(Object value) {
         this.type = PDataType.fromLiteral(value);
+        // This will make the value null if the value passed through represents null for the given type.
+        // For example, an empty string is treated as a null.
+        this.value = this.type == null ? null : this.type.toObject(value, this.type);
+    }
+
+    public LiteralParseNode(Object value, PDataType type) {
+        this.type = type;
         // This will make the value null if the value passed through represents null for the given type.
         // For example, an empty string is treated as a null.
         this.value = this.type == null ? null : this.type.toObject(value, this.type);

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -29,10 +27,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.FilterList;
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -42,6 +38,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -61,16 +58,17 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -96,10 +94,14 @@ public class DeleteCompiler {
             PTable table = tableRef.getTable();
             List<PColumn> pkColumns = table.getPKColumns();
             boolean isMultiTenant = table.isMultiTenant() && tenantId != null;
-            int offset = (table.getBucketNum() == null ? 0 : 1) + (isMultiTenant ? 1 : 0); // Take into account salting and multi-tenant
+            boolean isSharedViewIndex = table.getViewIndexId() != null;
+            int offset = (table.getBucketNum() == null ? 0 : 1);
             byte[][] values = new byte[pkColumns.size()][];
             if (isMultiTenant) {
-                values[offset-1] = tenantId;
+                values[offset++] = tenantId;
+            }
+            if (isSharedViewIndex) {
+                values[offset++] = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
             }
             ResultSet rs = new PhoenixResultSet(iterator, projector, statement);
             int rowCount = 0;
@@ -108,9 +110,9 @@ public class DeleteCompiler {
                     byte[] byteValue = rs.getBytes(i+1-offset);
                     // The ResultSet.getBytes() call will have inverted it - we need to invert it back.
                     // TODO: consider going under the hood and just getting the bytes
-                    if (pkColumns.get(i).getColumnModifier() == ColumnModifier.SORT_DESC) {
+                    if (pkColumns.get(i).getSortOrder() == SortOrder.DESC) {
                         byte[] tempByteValue = Arrays.copyOf(byteValue, byteValue.length);
-                        byteValue = ColumnModifier.SORT_DESC.apply(byteValue, 0, tempByteValue, 0, byteValue.length);
+                        byteValue = SortOrder.invert(byteValue, 0, tempByteValue, 0, byteValue.length);
                     }
                     values[i] = byteValue;
                 }
@@ -145,7 +147,7 @@ public class DeleteCompiler {
         }
         
         @Override
-        protected MutationState mutate(PhoenixConnection connection, ResultIterator iterator) throws SQLException {
+        protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException {
             PhoenixStatement statement = new PhoenixStatement(connection);
             return deleteRows(statement, tableRef, iterator, projector);
         }
@@ -178,7 +180,7 @@ public class DeleteCompiler {
         final PhoenixConnection connection = statement.getConnection();
         final boolean isAutoCommit = connection.getAutoCommit();
         final ConnectionQueryServices services = connection.getQueryServices();
-        final ColumnResolver resolver = FromCompiler.getResolver(delete, connection);
+        final ColumnResolver resolver = FromCompiler.getResolverForMutation(delete, connection);
         final TableRef tableRef = resolver.getTables().get(0);
         final PTable table = tableRef.getTable();
         if (table.getType() == PTableType.VIEW && table.getViewType().isReadOnly()) {
@@ -196,7 +198,8 @@ public class DeleteCompiler {
         List<AliasedNode> aliasedNodes = Lists.newArrayListWithExpectedSize(table.getPKColumns().size());
         boolean isSalted = table.getBucketNum() != null;
         boolean isMultiTenant = connection.getTenantId() != null && table.isMultiTenant();
-        for (int i = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0); i < table.getPKColumns().size(); i++) {
+        boolean isSharedViewIndex = table.getViewIndexId() != null;
+        for (int i = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0); i < table.getPKColumns().size(); i++) {
             PColumn column = table.getPKColumns().get(i);
             aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(null, '"' + column.getName().getString() + '"', null)));
         }
@@ -206,8 +209,9 @@ public class DeleteCompiler {
                 Collections.<ParseNode>emptyList(), null, 
                 delete.getOrderBy(), delete.getLimit(),
                 delete.getBindCount(), false);
+        select = StatementNormalizer.normalize(select, resolver);
         DeletingParallelIteratorFactory parallelIteratorFactory = hasLimit ? null : new DeletingParallelIteratorFactory(connection, tableRef);
-        final QueryPlan plan = new QueryOptimizer(services).optimize(select, statement, Collections.<PColumn>emptyList(), parallelIteratorFactory);
+        final QueryPlan plan = new QueryOptimizer(services).optimize(statement, select, resolver, Collections.<PColumn>emptyList(), parallelIteratorFactory);
         if (!plan.getTableRef().equals(tableRef)) {
             runOnServer = false;
             noQueryReqd = false;
@@ -255,6 +259,11 @@ public class DeleteCompiler {
                 public PhoenixConnection getConnection() {
                     return connection;
                 }
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
             };
         } else if (runOnServer) {
             // TODO: better abstraction
@@ -277,6 +286,11 @@ public class DeleteCompiler {
                 @Override
                 public ParameterMetaData getParameterMetaData() {
                     return context.getBindManager().getParameterMetaData();
+                }
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
                 }
 
                 @Override
@@ -338,6 +352,11 @@ public class DeleteCompiler {
                 }
 
                 @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+                @Override
                 public MutationState execute() throws SQLException {
                     ResultIterator iterator = plan.iterator();
                     if (!hasLimit) {
@@ -345,7 +364,7 @@ public class DeleteCompiler {
                         long totalRowCount = 0;
                         while ((tuple=iterator.next()) != null) {// Runs query
                             Cell kv = tuple.getValue(0);
-                            totalRowCount += PDataType.LONG.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), null);
+                            totalRowCount += PDataType.LONG.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
                         }
                         // Return total number of rows that have been delete. In the case of auto commit being off
                         // the mutations will all be in the mutation state of the current connection.

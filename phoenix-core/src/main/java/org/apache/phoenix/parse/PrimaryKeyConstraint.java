@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,33 +25,33 @@ import org.apache.hadoop.hbase.util.Pair;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 
 public class PrimaryKeyConstraint extends NamedNode {
-    public static final PrimaryKeyConstraint EMPTY = new PrimaryKeyConstraint(null, Collections.<Pair<ColumnName, ColumnModifier>>emptyList());
+    public static final PrimaryKeyConstraint EMPTY = new PrimaryKeyConstraint(null, Collections.<Pair<ColumnName, SortOrder>>emptyList());
 
-    private final List<Pair<ColumnName, ColumnModifier>> columns;
-    private final HashMap<ColumnName, Pair<ColumnName, ColumnModifier>> columnNameToModifier;
+    private final List<Pair<ColumnName, SortOrder>> columns;
+    private final HashMap<ColumnName, Pair<ColumnName, SortOrder>> columnNameToSortOrder;
     
-    PrimaryKeyConstraint(String name, List<Pair<ColumnName, ColumnModifier>> columns) {
+    PrimaryKeyConstraint(String name, List<Pair<ColumnName, SortOrder>> columns) {
         super(name);
-        this.columns = columns == null ? Collections.<Pair<ColumnName, ColumnModifier>>emptyList() : ImmutableList.copyOf(columns);
-        this.columnNameToModifier = Maps.newHashMapWithExpectedSize(this.columns.size());
-        for (Pair<ColumnName, ColumnModifier> p : this.columns) {
-            this.columnNameToModifier.put(p.getFirst(), p);
+        this.columns = columns == null ? Collections.<Pair<ColumnName, SortOrder>>emptyList() : ImmutableList.copyOf(columns);
+        this.columnNameToSortOrder = Maps.newHashMapWithExpectedSize(this.columns.size());
+        for (Pair<ColumnName, SortOrder> p : this.columns) {
+            this.columnNameToSortOrder.put(p.getFirst(), p);
         }
     }
 
-    public List<Pair<ColumnName, ColumnModifier>> getColumnNames() {
+    public List<Pair<ColumnName, SortOrder>> getColumnNames() {
         return columns;
     }
     
-    public Pair<ColumnName, ColumnModifier> getColumn(ColumnName columnName) {
-    	return columnNameToModifier.get(columnName);
+    public Pair<ColumnName, SortOrder> getColumn(ColumnName columnName) {
+    	return columnNameToSortOrder.get(columnName);
     }
     
     public boolean contains(ColumnName columnName) {
-        return columnNameToModifier.containsKey(columnName);
+        return columnNameToSortOrder.containsKey(columnName);
     }
     
     @Override

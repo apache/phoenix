@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,7 +21,6 @@ import java.io.IOException;
 import java.io.Reader;
 import java.sql.ParameterMetaData;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLWarning;
@@ -36,10 +33,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Pair;
-
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
 import org.apache.phoenix.compile.ColumnProjector;
+import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.CreateIndexCompiler;
 import org.apache.phoenix.compile.CreateSequenceCompiler;
 import org.apache.phoenix.compile.CreateTableCompiler;
@@ -47,13 +42,19 @@ import org.apache.phoenix.compile.DeleteCompiler;
 import org.apache.phoenix.compile.DropSequenceCompiler;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExpressionProjector;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.exception.BatchUpdateExecution;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -75,6 +76,7 @@ import org.apache.phoenix.parse.DropIndexStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.ExplainStatement;
+import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.LimitNode;
 import org.apache.phoenix.parse.NamedNode;
@@ -88,10 +90,10 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.UpsertStatement;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.MetaDataClient;
@@ -100,6 +102,8 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
@@ -107,6 +111,9 @@ import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ServerUtil;
+
+import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
 
 
 /**
@@ -128,20 +135,27 @@ import org.apache.phoenix.util.ServerUtil;
  * @since 0.1
  */
 public class PhoenixStatement implements Statement, SQLCloseable, org.apache.phoenix.jdbc.Jdbc7Shim.Statement {
-    public enum UpdateOperation {
-        DELETED("deleted"),
-        UPSERTED("upserted");
+    public enum Operation {
+        QUERY("queried", false),
+        DELETE("deleted", true),
+        UPSERT("upserted", true);
         
         private final String toString;
-        UpdateOperation(String toString) {
+        private final boolean isMutation;
+        Operation(String toString, boolean isMutation) {
             this.toString = toString;
+            this.isMutation = isMutation;
+        }
+        
+        public boolean isMutation() {
+            return isMutation;
         }
         
         @Override
         public String toString() {
             return toString;
         }
-        };
+    };
 
     protected final PhoenixConnection connection;
     private static final int NO_UPDATE = -1;
@@ -149,9 +163,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     private QueryPlan lastQueryPlan;
     private PhoenixResultSet lastResultSet;
     private int lastUpdateCount = NO_UPDATE;
-    private UpdateOperation lastUpdateOperation;
+    private Operation lastUpdateOperation;
     private boolean isClosed = false;
-    private ResultSetMetaData resultSetMetaData;
     private int maxRows;
     
     
@@ -164,626 +177,94 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     }
     
     protected PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector) throws SQLException {
-        return new PhoenixResultSet(iterator, projector, PhoenixStatement.this);
+        return new PhoenixResultSet(iterator, projector, this);
     }
     
-    protected static interface ExecutableStatement extends BindableStatement {
-        public boolean execute() throws SQLException;
-        public int executeUpdate() throws SQLException;
-        public PhoenixResultSet executeQuery() throws SQLException;
-        public ResultSetMetaData getResultSetMetaData() throws SQLException;
-        public StatementPlan optimizePlan() throws SQLException;
-        public StatementPlan compilePlan() throws SQLException;
+    protected boolean execute(CompilableStatement stmt) throws SQLException {
+        if (stmt.getOperation().isMutation()) {
+            executeMutation(stmt);
+            return false;
+        }
+        executeQuery(stmt);
+        return true;
     }
     
-    protected static interface MutatableStatement extends ExecutableStatement {
-        @Override
-        public MutationPlan optimizePlan() throws SQLException;
+    protected QueryPlan optimizeQuery(CompilableStatement stmt) throws SQLException {
+        QueryPlan plan = stmt.compilePlan(this);
+        return connection.getQueryServices().getOptimizer().optimize(this, plan);
     }
     
-    private class ExecutableSelectStatement extends SelectStatement implements ExecutableStatement {
+    protected PhoenixResultSet executeQuery(CompilableStatement stmt) throws SQLException {
+        try {
+            QueryPlan plan = stmt.compilePlan(this);
+            plan = connection.getQueryServices().getOptimizer().optimize(this, plan);
+            plan.getContext().getSequenceManager().validateSequences(stmt.getSequenceAction());;
+            PhoenixResultSet rs = newResultSet(plan.iterator(), plan.getProjector());
+            resultSets.add(rs);
+            setLastQueryPlan(plan);
+            setLastResultSet(rs);
+            setLastUpdateCount(NO_UPDATE);
+            setLastUpdateOperation(stmt.getOperation());
+            return rs;
+        } catch (RuntimeException e) {
+            // FIXME: Expression.evaluate does not throw SQLException
+            // so this will unwrap throws from that.
+            if (e.getCause() instanceof SQLException) {
+                throw (SQLException) e.getCause();
+            }
+            throw e;
+        }
+    }
+    
+    protected int executeMutation(CompilableStatement stmt) throws SQLException {
+        // Note that the upsert select statements will need to commit any open transaction here,
+        // since they'd update data directly from coprocessors, and should thus operate on
+        // the latest state
+        try {
+            MutationPlan plan = stmt.compilePlan(this);
+            plan.getContext().getSequenceManager().validateSequences(stmt.getSequenceAction());;
+            MutationState state = plan.execute();
+            connection.getMutationState().join(state);
+            if (connection.getAutoCommit()) {
+                connection.commit();
+            }
+            setLastResultSet(null);
+            setLastQueryPlan(null);
+            // Unfortunately, JDBC uses an int for update count, so we
+            // just max out at Integer.MAX_VALUE
+            int lastUpdateCount = (int)Math.min(Integer.MAX_VALUE, state.getUpdateCount());
+            setLastUpdateCount(lastUpdateCount);
+            setLastUpdateOperation(stmt.getOperation());
+            return lastUpdateCount;
+        } catch (RuntimeException e) {
+            // FIXME: Expression.evaluate does not throw SQLException
+            // so this will unwrap throws from that.
+            if (e.getCause() instanceof SQLException) {
+                throw (SQLException) e.getCause();
+            }
+            throw e;
+        }
+    }
+    
+    protected static interface CompilableStatement extends BindableStatement {
+        public <T extends StatementPlan> T compilePlan (PhoenixStatement stmt) throws SQLException;
+    }
+    
+    private static class ExecutableSelectStatement extends SelectStatement implements CompilableStatement {
         private ExecutableSelectStatement(List<? extends TableNode> from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
                 List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate) {
             super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate);
         }
 
+        @SuppressWarnings("unchecked")
         @Override
-        public PhoenixResultSet executeQuery() throws SQLException {
-            QueryPlan plan = optimizePlan();
-            PhoenixResultSet rs = newResultSet(plan.iterator(), plan.getProjector());
-            resultSets.add(rs);
-            lastResultSet = rs;
-            lastUpdateCount = NO_UPDATE;
-            lastUpdateOperation = null;
-            return rs;
-        }
-
-        @Override
-        public boolean execute() throws SQLException {
-            executeQuery();
-            return true;
-        }
-
-        @Override
-        public int executeUpdate() throws SQLException {
-            throw new ExecuteUpdateNotApplicableException(this.toString());
-        }
-
-        @Override
-        public QueryPlan optimizePlan() throws SQLException {
-            return lastQueryPlan = connection.getQueryServices().getOptimizer().optimize(this, PhoenixStatement.this);
-        }
-        
-        @Override
-        public StatementPlan compilePlan() throws SQLException {
-            return new QueryCompiler(PhoenixStatement.this).compile(this);
-        }
-        
-        @Override
-        public ResultSetMetaData getResultSetMetaData() throws SQLException {
-            if (resultSetMetaData == null) {
-                // Just compile top level query without optimizing to get ResultSetMetaData
-                QueryPlan plan = new QueryCompiler(PhoenixStatement.this).compile(this);
-                resultSetMetaData = new PhoenixResultSetMetaData(connection, plan.getProjector());
-            }
-            return resultSetMetaData;
+        public QueryPlan compilePlan(PhoenixStatement stmt) throws SQLException {
+            ColumnResolver resolver = FromCompiler.getResolverForQuery(this, stmt.getConnection());
+            SelectStatement select = StatementNormalizer.normalize(this, resolver);
+            return new QueryCompiler(stmt, select, resolver).compile();
         }
     }
     
-    private int executeMutation(MutationPlan plan) throws SQLException {
-        // Note that the upsert select statements will need to commit any open transaction here,
-        // since they'd update data directly from coprocessors, and should thus operate on
-        // the latest state
-        MutationState state = plan.execute();
-        connection.getMutationState().join(state);
-        if (connection.getAutoCommit()) {
-            connection.commit();
-        }
-        lastResultSet = null;
-        lastQueryPlan = null;
-        // Unfortunately, JDBC uses an int for update count, so we
-        // just max out at Integer.MAX_VALUE
-        long updateCount = state.getUpdateCount();
-        lastUpdateCount = (int)Math.min(Integer.MAX_VALUE, updateCount);
-        return lastUpdateCount;
-    }
-    
-    private class ExecutableUpsertStatement extends UpsertStatement implements MutatableStatement {
-        private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount) {
-            super(table, hintNode, columns, values, select, bindCount);
-        }
-
-        @Override
-        public PhoenixResultSet executeQuery() throws SQLException {
-            throw new ExecuteQueryNotApplicableException("upsert", this.toString());
-        }
-
-        @Override
-        public boolean execute() throws SQLException {
-            executeUpdate();
-            return false;
-        }
-
-        @Override
-        public int executeUpdate() throws SQLException {
-            lastUpdateOperation = UpdateOperation.UPSERTED;
-            return executeMutation(optimizePlan());
-        }
-
-        @Override
-        public ResultSetMetaData getResultSetMetaData() throws SQLException {
-            return null;
-        }
-
-        @Override
-        public MutationPlan compilePlan() throws SQLException {
-            UpsertCompiler compiler = new UpsertCompiler(PhoenixStatement.this);
-            return compiler.compile(this);
-        }
-        
-        @Override
-        public MutationPlan optimizePlan() throws SQLException {
-            return compilePlan();
-        }
-    }
-    
-    private class ExecutableDeleteStatement extends DeleteStatement implements MutatableStatement {
-        private ExecutableDeleteStatement(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount) {
-            super(table, hint, whereNode, orderBy, limit, bindCount);
-        }
-
-        @Override
-        public PhoenixResultSet executeQuery() throws SQLException {
-            throw new ExecuteQueryNotApplicableException("delete", this.toString());
-        }
-
-        @Override
-        public boolean execute() throws SQLException {
-            executeUpdate();
-            return false;
-        }
-
-        @Override
-        public int executeUpdate() throws SQLException {
-            lastUpdateOperation = UpdateOperation.DELETED;
-            return executeMutation(optimizePlan());
-        }
-
-        @Override
-        public ResultSetMetaData getResultSetMetaData() throws SQLException {
-            return null;
-        }
-
-        @Override
-        public MutationPlan compilePlan() throws SQLException {
-            DeleteCompiler compiler = new DeleteCompiler(PhoenixStatement.this);
-            return compiler.compile(this);
-        }
-        
-        @Override
-        public MutationPlan optimizePlan() throws SQLException {
-            return compilePlan();
-        }
-    }
-    
-    private class ExecutableCreateTableStatement extends CreateTableStatement implements ExecutableStatement {
-        ExecutableCreateTableStatement(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columnDefs,
-                PrimaryKeyConstraint pkConstraint, List<ParseNode> splitNodes, PTableType tableType, boolean ifNotExists,
-                TableName baseTableName, ParseNode tableTypeIdNode, int bindCount) {
-            super(tableName, props, columnDefs, pkConstraint, splitNodes, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount);
-        }
-
-        @Override
-        public PhoenixResultSet executeQuery() throws SQLException {
-            throw new ExecuteQueryNotApplicableException("CREATE TABLE", this.toString());
-        }
-
-        @Override
-        public boolean execute() throws SQLException {
-            executeUpdate();
-            return false;
-        }
-
-        @Override
-        public int executeUpdate() throws SQLException {
-            MutationPlan plan = optimizePlan();
-            MutationState state = plan.execute();
-            lastQueryPlan = null;
-            lastResultSet = null;
-            lastUpdateCount = (int)Math.min(state.getUpdateCount(), Integer.MAX_VALUE);
-            lastUpdateOperation = UpdateOperation.UPSERTED;
-            return lastUpdateCount;
-        }
-
-        @Override
-        public ResultSetMetaData getResultSetMetaData() throws SQLException {
-            return null;
-        }
-
-        @Override
-        public MutationPlan compilePlan() throws SQLException {
-            CreateTableCompiler compiler = new CreateTableCompiler(PhoenixStatement.this);
-            return compiler.compile(this);
-        }
-        
-        @Override
-        public MutationPlan optimizePlan() throws SQLException {
-            return compilePlan();
-        }
-    }
-
-    private class ExecutableCreateIndexStatement extends CreateIndexStatement implements ExecutableStatement {
-
-        public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable, PrimaryKeyConstraint pkConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
-                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, int bindCount) {
-            super(indexName, dataTable, pkConstraint, includeColumns, splits, props, ifNotExists, bindCount);
-        }
-
-        @Override
-        public PhoenixResultSet executeQuery() throws SQLException {
-            throw new ExecuteQueryNotApplicableException("CREATE INDEX", this.toString());
-        }
-
-        @Override
-        public boolean execute() throws SQLException {
-            executeUpdate();
-            return false;
-        }
-
-        @Override
-        public int executeUpdate() throws SQLException {
-            MutationPlan plan = optimizePlan();
-            MutationState state = plan.execute();
-            lastQueryPlan = null;
-            lastResultSet = null;
-            lastUpdateCount = (int)Math.min(state.getUpdateCount(), Integer.MAX_VALUE);
-            lastUpdateOperation = UpdateOperation.UPSERTED;
-            return lastUpdateCount;
-        }
-
-        @Override
-        public ResultSetMetaData getResultSetMetaData() throws SQLException {
-            return null;
-        }
-
-        @Override
-        public MutationPlan compilePlan() throws SQLException {
-            CreateIndexCompiler compiler = new CreateIndexCompiler(PhoenixStatement.this);
-            return compiler.compile(this);
-        }
-        
-        @Override
-        public MutationPlan optimizePlan() throws SQLException {
-            return compilePlan();
-        }
-    }
-    
-    private class ExecutableCreateSequenceStatement extends	CreateSequenceStatement implements ExecutableStatement {
-
-		public ExecutableCreateSequenceStatement(TableName sequenceName, ParseNode startWith, ParseNode incrementBy, ParseNode cacheSize, boolean ifNotExists, int bindCount) {
-			super(sequenceName, startWith, incrementBy, cacheSize, ifNotExists, bindCount);
-		}
-
-		@Override
-		public PhoenixResultSet executeQuery() throws SQLException {
-			throw new ExecuteQueryNotApplicableException("CREATE SEQUENCE",	this.toString());
-		}
-
-		@Override
-		public boolean execute() throws SQLException {
-		    executeUpdate();
-		    return false;
-		}
-
-		@Override
-		public int executeUpdate() throws SQLException {
-            MutationPlan plan = optimizePlan();
-            MutationState state = plan.execute();
-            lastQueryPlan = null;
-            lastResultSet = null;
-            lastUpdateCount = (int)Math.min(state.getUpdateCount(), Integer.MAX_VALUE);
-            lastUpdateOperation = UpdateOperation.UPSERTED;
-            return lastUpdateCount;
-		}
-
-		@Override
-		public ResultSetMetaData getResultSetMetaData() throws SQLException {
-			return null;
-		}
-
-		@Override
-		public MutationPlan compilePlan() throws SQLException {
-		    CreateSequenceCompiler compiler = new CreateSequenceCompiler(PhoenixStatement.this);
-            return compiler.compile(this);
-		}
-
-        @Override
-        public MutationPlan optimizePlan() throws SQLException {
-            return compilePlan();
-        }
-	}
-
-    private class ExecutableDropSequenceStatement extends DropSequenceStatement implements ExecutableStatement {
-
-
-        public ExecutableDropSequenceStatement(TableName sequenceName, boolean ifExists, int bindCount) {
-            super(sequenceName, ifExists, bindCount);
-        }
-
-        @Override
-        public PhoenixResultSet executeQuery() throws SQLException {
-            throw new ExecuteQueryNotApplicableException("DROP SEQUENCE", this.toString());
-        }
-
-        @Override
-        public boolean execute() throws SQLException {
-            executeUpdate();
-            return false;
-        }
-
-        @Override
-        public int executeUpdate() throws SQLException {
-            MutationPlan plan = optimizePlan();
-            MutationState state = plan.execute();
-            lastQueryPlan = null;
-            lastResultSet = null;
-            lastUpdateCount = (int)Math.min(state.getUpdateCount(), Integer.MAX_VALUE);
-            lastUpdateOperation = UpdateOperation.UPSERTED;
-            return lastUpdateCount;
-        }
-
-        @Override
-        public ResultSetMetaData getResultSetMetaData() throws SQLException {
-            return null;
-        }
-
-        @Override
-        public MutationPlan compilePlan() throws SQLException {
-            DropSequenceCompiler compiler = new DropSequenceCompiler(PhoenixStatement.this);
-            return compiler.compile(this);
-        }
-
-        @Override
-        public MutationPlan optimizePlan() throws SQLException {
-            return compilePlan();
-        }
-    }
-
-    private class ExecutableDropTableStatement extends DropTableStatement implements ExecutableStatement {
-
-        ExecutableDropTableStatement(TableName tableName, PTableType tableType, boolean ifExists) {
-            super(tableName, tableType, ifExists);
-        }
-
-        @Override
-        public PhoenixResultSet executeQuery() throws SQLException {
-            throw new ExecuteQueryNotApplicableException("DROP TABLE", this.toString());
-        }
-
-        @Override
-        public boolean execute() throws SQLException {
-            executeUpdate();
-            return false;
-        }
-
-        @Override
-        public int executeUpdate() throws SQLException {
-            MetaDataClient client = new MetaDataClient(connection);
-            MutationState state = client.dropTable(this);
-            lastQueryPlan = null;
-            lastResultSet = null;
-            lastUpdateCount = (int)Math.min(state.getUpdateCount(), Integer.MAX_VALUE);
-            lastUpdateOperation = UpdateOperation.DELETED;
-            return lastUpdateCount;
-        }
-
-        @Override
-        public ResultSetMetaData getResultSetMetaData() throws SQLException {
-            return null;
-        }
-
-        @Override
-        public StatementPlan compilePlan() throws SQLException {
-            return new StatementPlan() {
-
-                @Override
-                public ParameterMetaData getParameterMetaData() {
-                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
-                }
-
-                @Override
-                public ExplainPlan getExplainPlan() throws SQLException {
-                    return new ExplainPlan(Collections.singletonList("DROP TABLE"));
-                }
-            };
-        }
-        
-        @Override
-        public StatementPlan optimizePlan() throws SQLException {
-            return compilePlan();
-        }
-    }
-
-    private class ExecutableDropIndexStatement extends DropIndexStatement implements ExecutableStatement {
-
-        public ExecutableDropIndexStatement(NamedNode indexName, TableName tableName, boolean ifExists) {
-            super(indexName, tableName, ifExists);
-        }
-
-        @Override
-        public PhoenixResultSet executeQuery() throws SQLException {
-            throw new ExecuteQueryNotApplicableException("DROP INDEX", this.toString());
-        }
-
-        @Override
-        public boolean execute() throws SQLException {
-            executeUpdate();
-            return false;
-        }
-
-        @Override
-        public int executeUpdate() throws SQLException {
-            MetaDataClient client = new MetaDataClient(connection);
-            MutationState state = client.dropIndex(this);
-            lastQueryPlan = null;
-            lastResultSet = null;
-            lastUpdateCount = (int)Math.min(state.getUpdateCount(), Integer.MAX_VALUE);
-            lastUpdateOperation = UpdateOperation.DELETED;
-            return lastUpdateCount;
-        }
-
-        @Override
-        public ResultSetMetaData getResultSetMetaData() throws SQLException {
-            return null;
-        }
-
-        @Override
-        public StatementPlan compilePlan() throws SQLException {
-            return new StatementPlan() {
-                
-                @Override
-                public ParameterMetaData getParameterMetaData() {
-                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
-                }
-                
-                @Override
-                public ExplainPlan getExplainPlan() throws SQLException {
-                    return new ExplainPlan(Collections.singletonList("DROP INDEX"));
-                }
-            };
-        }
-        
-        @Override
-        public StatementPlan optimizePlan() throws SQLException {
-            return compilePlan();
-        }
-    }
-
-    private class ExecutableAlterIndexStatement extends AlterIndexStatement implements ExecutableStatement {
-
-        public ExecutableAlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state) {
-            super(indexTableNode, dataTableName, ifExists, state);
-        }
-
-        @Override
-        public PhoenixResultSet executeQuery() throws SQLException {
-            throw new ExecuteQueryNotApplicableException("ALTER INDEX", this.toString());
-        }
-
-        @Override
-        public boolean execute() throws SQLException {
-            executeUpdate();
-            return false;
-        }
-
-        @Override
-        public int executeUpdate() throws SQLException {
-            MetaDataClient client = new MetaDataClient(connection);
-            MutationState state = client.alterIndex(this);
-            lastQueryPlan = null;
-            lastResultSet = null;
-            lastUpdateCount = (int)Math.min(state.getUpdateCount(), Integer.MAX_VALUE);
-            lastUpdateOperation = UpdateOperation.UPSERTED;
-            return lastUpdateCount;
-        }
-
-        @Override
-        public ResultSetMetaData getResultSetMetaData() throws SQLException {
-            return null;
-        }
-
-        @Override
-        public StatementPlan compilePlan() throws SQLException {
-            return new StatementPlan() {
-                
-                @Override
-                public ParameterMetaData getParameterMetaData() {
-                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
-                }
-                
-                @Override
-                public ExplainPlan getExplainPlan() throws SQLException {
-                    return new ExplainPlan(Collections.singletonList("ALTER INDEX"));
-                }
-            };
-        }
-        
-        @Override
-        public StatementPlan optimizePlan() throws SQLException {
-            return compilePlan();
-        }
-    }
-
-    private class ExecutableAddColumnStatement extends AddColumnStatement implements ExecutableStatement {
-
-        ExecutableAddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, Map<String, Object> props) {
-            super(table, tableType, columnDefs, ifNotExists, props);
-        }
-
-        @Override
-        public PhoenixResultSet executeQuery() throws SQLException {
-            throw new ExecuteQueryNotApplicableException("ALTER TABLE", this.toString());
-        }
-
-        @Override
-        public boolean execute() throws SQLException {
-            executeUpdate();
-            return false;
-        }
-
-        @Override
-        public int executeUpdate() throws SQLException {
-            MetaDataClient client = new MetaDataClient(connection);
-            MutationState state = client.addColumn(this);
-            lastQueryPlan = null;
-            lastResultSet = null;
-            lastUpdateCount = (int)Math.min(state.getUpdateCount(), Integer.MAX_VALUE);
-            lastUpdateOperation = UpdateOperation.UPSERTED;
-            return lastUpdateCount;
-        }
-
-        @Override
-        public ResultSetMetaData getResultSetMetaData() throws SQLException {
-            return null;
-        }
-
-        @Override
-        public StatementPlan compilePlan() throws SQLException {
-            return new StatementPlan() {
-
-                @Override
-                public ParameterMetaData getParameterMetaData() {
-                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
-                }
-
-                @Override
-                public ExplainPlan getExplainPlan() throws SQLException {
-                    return new ExplainPlan(Collections.singletonList("ALTER " + getTableType() + " ADD COLUMN"));
-                }
-            };
-        }
-        
-        @Override
-        public StatementPlan optimizePlan() throws SQLException {
-            return compilePlan();
-        }
-    }
-
-    private class ExecutableDropColumnStatement extends DropColumnStatement implements ExecutableStatement {
-
-        ExecutableDropColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnName> columnRefs, boolean ifExists) {
-            super(table, tableType, columnRefs, ifExists);
-        }
-
-        @Override
-        public PhoenixResultSet executeQuery() throws SQLException {
-            throw new ExecuteQueryNotApplicableException("ALTER TABLE", this.toString());
-        }
-
-        @Override
-        public boolean execute() throws SQLException {
-            executeUpdate();
-            return false;
-        }
-
-        @Override
-        public int executeUpdate() throws SQLException {
-            MetaDataClient client = new MetaDataClient(connection);
-            MutationState state = client.dropColumn(this);
-            lastQueryPlan = null;
-            lastResultSet = null;
-            lastUpdateCount = (int)Math.min(state.getUpdateCount(), Integer.MAX_VALUE);
-            lastUpdateOperation = UpdateOperation.UPSERTED;
-            return lastUpdateCount;
-        }
-
-        @Override
-        public ResultSetMetaData getResultSetMetaData() throws SQLException {
-            return null;
-        }
-
-        @Override
-        public StatementPlan compilePlan() throws SQLException {
-            return new StatementPlan() {
-
-                @Override
-                public ParameterMetaData getParameterMetaData() {
-                    return new PhoenixParameterMetaData(0);
-                }
-
-                @Override
-                public ExplainPlan getExplainPlan() throws SQLException {
-                    return new ExplainPlan(Collections.singletonList("ALTER " + getTableType() + " DROP COLUMN"));
-                }
-            };
-        }
-        
-        @Override
-        public StatementPlan optimizePlan() throws SQLException {
-            return compilePlan();
-        }
-    }
-
     private static final byte[] EXPLAIN_PLAN_FAMILY = QueryConstants.SINGLE_COLUMN_FAMILY;
     private static final byte[] EXPLAIN_PLAN_COLUMN = PDataType.VARCHAR.toBytes("Plan");
     private static final String EXPLAIN_PLAN_ALIAS = "PLAN";
@@ -809,25 +290,26 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         public Integer getScale() {
             return null;
         }
-		@Override
-		public ColumnModifier getColumnModifier() {
-			return null;
-		}
+        @Override
+        public SortOrder getSortOrder() {
+            return SortOrder.getDefault();
+        }
     };
+
     private static final RowProjector EXPLAIN_PLAN_ROW_PROJECTOR = new RowProjector(Arrays.<ColumnProjector>asList(
             new ExpressionProjector(EXPLAIN_PLAN_ALIAS, EXPLAIN_PLAN_TABLE_NAME, 
                     new RowKeyColumnExpression(EXPLAIN_PLAN_DATUM,
                             new RowKeyValueAccessor(Collections.<PDatum>singletonList(EXPLAIN_PLAN_DATUM), 0)), false)
             ), 0, true);
-    private class ExecutableExplainStatement extends ExplainStatement implements ExecutableStatement {
+    private static class ExecutableExplainStatement extends ExplainStatement implements CompilableStatement {
 
         public ExecutableExplainStatement(BindableStatement statement) {
             super(statement);
         }
 
         @Override
-        public ExecutableStatement getStatement() {
-            return (ExecutableStatement) super.getStatement();
+        public CompilableStatement getStatement() {
+            return (CompilableStatement) super.getStatement();
         }
         
         @Override
@@ -835,50 +317,380 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
             return getStatement().getBindCount();
         }
 
+        @SuppressWarnings("unchecked")
         @Override
-        public PhoenixResultSet executeQuery() throws SQLException {
-            StatementPlan plan = getStatement().optimizePlan();
+        public QueryPlan compilePlan(PhoenixStatement stmt) throws SQLException {
+            CompilableStatement compilableStmt = getStatement();
+            final StatementPlan plan = compilableStmt.compilePlan(stmt);
             List<String> planSteps = plan.getExplainPlan().getPlanSteps();
             List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
             for (String planStep : planSteps) {
                 Tuple tuple = new SingleKeyValueTuple(KeyValueUtil.newKeyValue(PDataType.VARCHAR.toBytes(planStep), EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_COLUMN, MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
                 tuples.add(tuple);
             }
-            PhoenixResultSet rs = new PhoenixResultSet(new MaterializedResultIterator(tuples),EXPLAIN_PLAN_ROW_PROJECTOR, new PhoenixStatement(connection));
-            lastResultSet = rs;
-            lastQueryPlan = null;
-            lastUpdateCount = NO_UPDATE;
-            return rs;
-        }
+            final ResultIterator iterator = new MaterializedResultIterator(tuples);
+            return new QueryPlan() {
 
-        @Override
-        public boolean execute() throws SQLException {
-            executeQuery();
-            return true;
-        }
+                @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                }
 
-        @Override
-        public int executeUpdate() throws SQLException {
-            throw new ExecuteUpdateNotApplicableException("ALTER TABLE", this.toString());
-        }
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("EXPLAIN PLAN"));
+                }
 
-        @Override
-        public ResultSetMetaData getResultSetMetaData() throws SQLException {
-            return new PhoenixResultSetMetaData(connection, EXPLAIN_PLAN_ROW_PROJECTOR);
-        }
+                @Override
+                public ResultIterator iterator() throws SQLException {
+                    return iterator;
+                }
 
-        @Override
-        public StatementPlan compilePlan() throws SQLException {
-            return StatementPlan.EMPTY_PLAN;
-        }
-        
-        @Override
-        public StatementPlan optimizePlan() throws SQLException {
-            return compilePlan();
+                @Override
+                public long getEstimatedSize() {
+                    return 0;
+                }
+
+                @Override
+                public TableRef getTableRef() {
+                    return null;
+                }
+
+                @Override
+                public RowProjector getProjector() {
+                    return EXPLAIN_PLAN_ROW_PROJECTOR;
+                }
+
+                @Override
+                public Integer getLimit() {
+                    return null;
+                }
+
+                @Override
+                public OrderBy getOrderBy() {
+                    return OrderBy.EMPTY_ORDER_BY;
+                }
+
+                @Override
+                public GroupBy getGroupBy() {
+                    return GroupBy.EMPTY_GROUP_BY;
+                }
+
+                @Override
+                public List<KeyRange> getSplits() {
+                    return Collections.emptyList();
+                }
+
+                @Override
+                public StatementContext getContext() {
+                    return plan.getContext();
+                }
+
+                @Override
+                public FilterableStatement getStatement() {
+                    return null;
+                }
+
+                @Override
+                public boolean isDegenerate() {
+                    return false;
+                }
+                
+            };
         }
     }
 
-    protected class ExecutableNodeFactory extends ParseNodeFactory {
+    private static class ExecutableUpsertStatement extends UpsertStatement implements CompilableStatement {
+        private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount) {
+            super(table, hintNode, columns, values, select, bindCount);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt) throws SQLException {
+            UpsertCompiler compiler = new UpsertCompiler(stmt);
+            return compiler.compile(this);
+        }
+    }
+    
+    private static class ExecutableDeleteStatement extends DeleteStatement implements CompilableStatement {
+        private ExecutableDeleteStatement(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount) {
+            super(table, hint, whereNode, orderBy, limit, bindCount);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt) throws SQLException {
+            DeleteCompiler compiler = new DeleteCompiler(stmt);
+            return compiler.compile(this);
+        }
+    }
+    
+    private static class ExecutableCreateTableStatement extends CreateTableStatement implements CompilableStatement {
+        ExecutableCreateTableStatement(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columnDefs,
+                PrimaryKeyConstraint pkConstraint, List<ParseNode> splitNodes, PTableType tableType, boolean ifNotExists,
+                TableName baseTableName, ParseNode tableTypeIdNode, int bindCount) {
+            super(tableName, props, columnDefs, pkConstraint, splitNodes, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt) throws SQLException {
+            CreateTableCompiler compiler = new CreateTableCompiler(stmt);
+            return compiler.compile(this);
+        }
+    }
+
+    private static class ExecutableCreateIndexStatement extends CreateIndexStatement implements CompilableStatement {
+
+        public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable, PrimaryKeyConstraint pkConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
+                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, int bindCount) {
+            super(indexName, dataTable, pkConstraint, includeColumns, splits, props, ifNotExists, bindCount);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt) throws SQLException {
+            CreateIndexCompiler compiler = new CreateIndexCompiler(stmt);
+            return compiler.compile(this);
+        }
+    }
+    
+    private static class ExecutableCreateSequenceStatement extends	CreateSequenceStatement implements CompilableStatement {
+
+		public ExecutableCreateSequenceStatement(TableName sequenceName, ParseNode startWith, ParseNode incrementBy, ParseNode cacheSize, boolean ifNotExists, int bindCount) {
+			super(sequenceName, startWith, incrementBy, cacheSize, ifNotExists, bindCount);
+		}
+
+		@SuppressWarnings("unchecked")
+        @Override
+		public MutationPlan compilePlan(PhoenixStatement stmt) throws SQLException {
+		    CreateSequenceCompiler compiler = new CreateSequenceCompiler(stmt);
+            return compiler.compile(this);
+		}
+	}
+
+    private static class ExecutableDropSequenceStatement extends DropSequenceStatement implements CompilableStatement {
+
+
+        public ExecutableDropSequenceStatement(TableName sequenceName, boolean ifExists, int bindCount) {
+            super(sequenceName, ifExists, bindCount);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt) throws SQLException {
+            DropSequenceCompiler compiler = new DropSequenceCompiler(stmt);
+            return compiler.compile(this);
+        }
+    }
+
+    private static class ExecutableDropTableStatement extends DropTableStatement implements CompilableStatement {
+
+        ExecutableDropTableStatement(TableName tableName, PTableType tableType, boolean ifExists) {
+            super(tableName, tableType, ifExists);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new MutationPlan() {
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+                @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                }
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("DROP TABLE"));
+                }
+
+                @Override
+                public PhoenixConnection getConnection() {
+                    return stmt.getConnection();
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getConnection());
+                    return client.dropTable(ExecutableDropTableStatement.this);
+                }
+            };
+        }
+    }
+
+    private static class ExecutableDropIndexStatement extends DropIndexStatement implements CompilableStatement {
+
+        public ExecutableDropIndexStatement(NamedNode indexName, TableName tableName, boolean ifExists) {
+            super(indexName, tableName, ifExists);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new MutationPlan() {
+                
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+               @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                }
+                
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("DROP INDEX"));
+                }
+
+                @Override
+                public PhoenixConnection getConnection() {
+                    return stmt.getConnection();
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getConnection());
+                    return client.dropIndex(ExecutableDropIndexStatement.this);
+                }
+            };
+        }
+    }
+
+    private static class ExecutableAlterIndexStatement extends AlterIndexStatement implements CompilableStatement {
+
+        public ExecutableAlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state) {
+            super(indexTableNode, dataTableName, ifExists, state);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new MutationPlan() {
+                
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+                @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                }
+                
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("ALTER INDEX"));
+                }
+
+                @Override
+                public PhoenixConnection getConnection() {
+                    return stmt.getConnection();
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getConnection());
+                    return client.alterIndex(ExecutableAlterIndexStatement.this);
+                }
+            };
+        }
+    }
+
+    private static class ExecutableAddColumnStatement extends AddColumnStatement implements CompilableStatement {
+
+        ExecutableAddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, Map<String, Object> props) {
+            super(table, tableType, columnDefs, ifNotExists, props);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new MutationPlan() {
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+                @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                }
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("ALTER " + getTableType() + " ADD COLUMN"));
+                }
+
+                @Override
+                public PhoenixConnection getConnection() {
+                    return stmt.getConnection();
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getConnection());
+                    return client.addColumn(ExecutableAddColumnStatement.this);
+                }
+            };
+        }
+    }
+
+    private static class ExecutableDropColumnStatement extends DropColumnStatement implements CompilableStatement {
+
+        ExecutableDropColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnName> columnRefs, boolean ifExists) {
+            super(table, tableType, columnRefs, ifExists);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new MutationPlan() {
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+               @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return new PhoenixParameterMetaData(0);
+                }
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("ALTER " + getTableType() + " DROP COLUMN"));
+                }
+
+                @Override
+                public PhoenixConnection getConnection() {
+                    return stmt.getConnection();
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getConnection());
+                    return client.dropColumn(ExecutableDropColumnStatement.this);
+                }
+            };
+        }
+    }
+
+    protected static class ExecutableNodeFactory extends ParseNodeFactory {
         @Override
         public ExecutableSelectStatement select(List<? extends TableNode> from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
                                                 ParseNode where, List<ParseNode> groupBy, ParseNode having,
@@ -958,13 +770,13 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
         
         @Override
-        public ExecutableStatement nextStatement(ParseNodeFactory nodeFactory) throws SQLException {
-            return (ExecutableStatement) super.nextStatement(nodeFactory);
+        public CompilableStatement nextStatement(ParseNodeFactory nodeFactory) throws SQLException {
+            return (CompilableStatement) super.nextStatement(nodeFactory);
         }
 
         @Override
-        public ExecutableStatement parseStatement() throws SQLException {
-            return (ExecutableStatement) super.parseStatement();
+        public CompilableStatement parseStatement() throws SQLException {
+            return (CompilableStatement) super.parseStatement();
         }
     }
     
@@ -972,18 +784,43 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         return connection.getFormatter(type);
     }
     
+    protected final List<PhoenixPreparedStatement> batch = Lists.newArrayList();
+    
     @Override
     public void addBatch(String sql) throws SQLException {
-        throw new SQLFeatureNotSupportedException();
-    }
-
-    @Override
-    public void cancel() throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        batch.add(new PhoenixPreparedStatement(connection, sql));
     }
 
     @Override
     public void clearBatch() throws SQLException {
+        batch.clear();
+    }
+
+    /**
+     * Execute the current batch of statements. If any exception occurs
+     * during execution, a {@link org.apache.phoenix.exception.BatchUpdateException}
+     * is thrown which includes the index of the statement within the
+     * batch when the exception occurred.
+     */
+    @Override
+    public int[] executeBatch() throws SQLException {
+        int i = 0;
+        try {
+            int[] returnCodes = new int [batch.size()];
+            for (i = 0; i < returnCodes.length; i++) {
+                PhoenixPreparedStatement statement = batch.get(i);
+                returnCodes[i] = statement.execute(true) ? Statement.SUCCESS_NO_INFO : statement.getUpdateCount();
+            }
+            // If we make it all the way through, clear the batch
+            clearBatch();
+            return returnCodes;
+        } catch (Throwable t) {
+            throw new BatchUpdateExecution(t,i);
+        }
+    }
+
+    @Override
+    public void cancel() throws SQLException {
         throw new SQLFeatureNotSupportedException();
     }
 
@@ -1013,38 +850,81 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         return Collections.<Object>emptyList();
     }
     
-    protected ExecutableStatement parseStatement(String sql) throws SQLException {
+    protected CompilableStatement parseStatement(String sql) throws SQLException {
         PhoenixStatementParser parser = null;
         try {
             parser = new PhoenixStatementParser(sql, new ExecutableNodeFactory());
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
         }
-        ExecutableStatement statement = parser.parseStatement();
+        CompilableStatement statement = parser.parseStatement();
         return statement;
     }
     
-    @Override
-    public boolean execute(String sql) throws SQLException {
-        return parseStatement(sql).execute();
-    }
-
     public QueryPlan optimizeQuery(String sql) throws SQLException {
-        return (QueryPlan)parseStatement(sql).optimizePlan();
+        QueryPlan plan = compileQuery(sql);
+        return connection.getQueryServices().getOptimizer().optimize(this, plan);
     }
 
     public QueryPlan compileQuery(String sql) throws SQLException {
-        return (QueryPlan)parseStatement(sql).compilePlan();
+        CompilableStatement stmt = parseStatement(sql);
+        return compileQuery(stmt, sql);
+    }
+
+    public QueryPlan compileQuery(CompilableStatement stmt, String query) throws SQLException {
+        if (stmt.getOperation().isMutation()) {
+            throw new ExecuteQueryNotApplicableException(query);
+        }
+        return stmt.compilePlan(this);
+    }
+
+    public MutationPlan compileMutation(CompilableStatement stmt, String query) throws SQLException {
+        if (!stmt.getOperation().isMutation()) {
+            throw new ExecuteUpdateNotApplicableException(query);
+        }
+        return stmt.compilePlan(this);
+    }
+
+    public MutationPlan compileMutation(String sql) throws SQLException {
+        CompilableStatement stmt = parseStatement(sql);
+        return compileMutation(stmt, sql);
     }
 
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
-        return parseStatement(sql).executeQuery();
+        CompilableStatement stmt = parseStatement(sql);
+        if (stmt.getOperation().isMutation()) {
+            throw new ExecuteQueryNotApplicableException(sql);
+        }
+        return executeQuery(stmt);
     }
 
     @Override
     public int executeUpdate(String sql) throws SQLException {
-        return parseStatement(sql).executeUpdate();
+        CompilableStatement stmt = parseStatement(sql);
+        if (!stmt.getOperation().isMutation) {
+            throw new ExecuteUpdateNotApplicableException(sql);
+        }
+        if (!batch.isEmpty()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
+            .build().buildException();
+        }
+        return executeMutation(stmt);
+    }
+
+    @Override
+    public boolean execute(String sql) throws SQLException {
+        CompilableStatement stmt = parseStatement(sql);
+        if (stmt.getOperation().isMutation()) {
+            if (!batch.isEmpty()) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
+                .build().buildException();
+            }
+            executeMutation(stmt);
+            return false;
+        }
+        executeQuery(stmt);
+        return true;
     }
 
     @Override
@@ -1059,11 +939,6 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     @Override
     public boolean execute(String sql, String[] columnNames) throws SQLException {
-        throw new SQLFeatureNotSupportedException();
-    }
-
-    @Override
-    public int[] executeBatch() throws SQLException {
         throw new SQLFeatureNotSupportedException();
     }
 
@@ -1129,13 +1004,13 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     // For testing
     public QueryPlan getQueryPlan() {
-        return lastQueryPlan;
+        return getLastQueryPlan();
     }
     
     @Override
     public ResultSet getResultSet() throws SQLException {
-        ResultSet rs = lastResultSet;
-        lastResultSet = null;
+        ResultSet rs = getLastResultSet();
+        setLastResultSet(null);
         return rs;
     }
 
@@ -1155,17 +1030,17 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         return ResultSet.TYPE_FORWARD_ONLY;
     }
 
-    public UpdateOperation getUpdateOperation() {
-        return lastUpdateOperation;
+    public Operation getUpdateOperation() {
+        return getLastUpdateOperation();
     }
     
     @Override
     public int getUpdateCount() throws SQLException {
-        int updateCount = lastUpdateCount;
+        int updateCount = getLastUpdateCount();
         // Only first call can get the update count, otherwise
         // some SQL clients get into an infinite loop when an
         // update occurs.
-        lastUpdateCount = NO_UPDATE;
+        setLastUpdateCount(NO_UPDATE);
         return updateCount;
     }
 
@@ -1254,5 +1129,37 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     @Override
     public boolean isCloseOnCompletion() throws SQLException {
         throw new SQLFeatureNotSupportedException();
+    }
+
+    private PhoenixResultSet getLastResultSet() {
+        return lastResultSet;
+    }
+
+    private void setLastResultSet(PhoenixResultSet lastResultSet) {
+        this.lastResultSet = lastResultSet;
+    }
+
+    private int getLastUpdateCount() {
+        return lastUpdateCount;
+    }
+
+    private void setLastUpdateCount(int lastUpdateCount) {
+        this.lastUpdateCount = lastUpdateCount;
+    }
+
+    private Operation getLastUpdateOperation() {
+        return lastUpdateOperation;
+    }
+
+    private void setLastUpdateOperation(Operation lastUpdateOperation) {
+        this.lastUpdateOperation = lastUpdateOperation;
+    }
+
+    private QueryPlan getLastQueryPlan() {
+        return lastQueryPlan;
+    }
+
+    private void setLastQueryPlan(QueryPlan lastQueryPlan) {
+        this.lastQueryPlan = lastQueryPlan;
     }
 }

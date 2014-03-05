@@ -136,7 +136,7 @@ import java.util.Stack;
 import java.sql.SQLException;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
@@ -407,29 +407,29 @@ drop_sequence_node returns [DropSequenceStatement ret]
     ;
 
 pk_constraint returns [PrimaryKeyConstraint ret]
-    :   COMMA? CONSTRAINT n=identifier PRIMARY KEY LPAREN cols=col_name_with_mod_list RPAREN { $ret = factory.primaryKey(n,cols); }
+    :   COMMA? CONSTRAINT n=identifier PRIMARY KEY LPAREN cols=col_name_with_sort_order_list RPAREN { $ret = factory.primaryKey(n,cols); }
     ;
 
-col_name_with_mod_list returns [List<Pair<ColumnName, ColumnModifier>> ret]
-@init{ret = new ArrayList<Pair<ColumnName, ColumnModifier>>(); }
-    :   p=col_name_with_mod {$ret.add(p);}  (COMMA p = col_name_with_mod {$ret.add(p);} )*
+col_name_with_sort_order_list returns [List<Pair<ColumnName, SortOrder>> ret]
+@init{ret = new ArrayList<Pair<ColumnName, SortOrder>>(); }
+    :   p=col_name_with_sort_order {$ret.add(p);}  (COMMA p = col_name_with_sort_order {$ret.add(p);} )*
 ;
 
-col_name_with_mod returns [Pair<ColumnName, ColumnModifier> ret]
-    :   f=identifier (order=ASC|order=DESC)? {$ret = Pair.newPair(factory.columnName(f), order == null ? null : ColumnModifier.fromDDLValue(order.getText()));}
+col_name_with_sort_order returns [Pair<ColumnName, SortOrder> ret]
+    :   f=identifier (order=ASC|order=DESC)? {$ret = Pair.newPair(factory.columnName(f), order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()));}
 ;
 
 index_pk_constraint returns [PrimaryKeyConstraint ret]
-    :   cols = col_def_name_with_mod_list {$ret = factory.primaryKey(null, cols); }
+    :   cols = col_def_name_with_sort_order_list {$ret = factory.primaryKey(null, cols); }
     ;
 
-col_def_name_with_mod_list returns [List<Pair<ColumnName, ColumnModifier>> ret]
-@init{ret = new ArrayList<Pair<ColumnName, ColumnModifier>>(); }
-    :   p=col_def_name_with_mod {$ret.add(p);}  (COMMA p = col_def_name_with_mod {$ret.add(p);} )*
+col_def_name_with_sort_order_list returns [List<Pair<ColumnName, SortOrder>> ret]
+@init{ret = new ArrayList<Pair<ColumnName, SortOrder>>(); }
+    :   p=col_def_name_with_sort_order {$ret.add(p);}  (COMMA p = col_def_name_with_sort_order {$ret.add(p);} )*
 ;
 
-col_def_name_with_mod returns [Pair<ColumnName, ColumnModifier> ret]
-    :   c=column_name (order=ASC|order=DESC)? {$ret = Pair.newPair(c, order == null ? null : ColumnModifier.fromDDLValue(order.getText()));}
+col_def_name_with_sort_order returns [Pair<ColumnName, SortOrder> ret]
+    :   c=column_name (order=ASC|order=DESC)? {$ret = Pair.newPair(c, order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()));}
 ;
 
 fam_properties returns [ListMultimap<String,Pair<String,Object>> ret]
@@ -502,7 +502,7 @@ column_def returns [ColumnDef ret]
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
             pk != null, 
-            order == null ? null : ColumnModifier.fromDDLValue(order.getText()) ); }
+            order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()) ); }
     ;
 
 dyn_column_defs returns [List<ColumnDef> ret]
@@ -516,7 +516,7 @@ dyn_column_def returns [ColumnDef ret]
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
             false, 
-            null); }
+            SortOrder.getDefault()); }
     ;
 
 dyn_column_name_or_def returns [ColumnDef ret]
@@ -525,7 +525,7 @@ dyn_column_name_or_def returns [ColumnDef ret]
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
             false, 
-            null); }
+            SortOrder.getDefault()); }
     ;
 
 select_expression returns [SelectStatement ret]
@@ -600,6 +600,7 @@ select_list returns [List<AliasedNode> ret]
 selectable returns [AliasedNode ret]
     :   field=expression (a=parseAlias)? { $ret = factory.aliasedNode(a, field); }
     | 	familyName=identifier DOT ASTERISK { $ret = factory.aliasedNode(null, factory.family(familyName));} // i.e. the 'cf.*' in 'select cf.* from' cf being column family of an hbase table    
+    |   s=identifier DOT t=identifier DOT ASTERISK { $ret = factory.aliasedNode(null, factory.tableWildcard(factory.table(s, t))); }
     ;
 
 

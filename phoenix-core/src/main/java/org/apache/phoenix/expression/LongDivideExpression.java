@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -45,7 +43,7 @@ public class LongDivideExpression extends DivideExpression {
             if (!child.evaluate(tuple, ptr) || ptr.getLength() == 0) {
                 return false;
             }
-            long childvalue = child.getDataType().getCodec().decodeLong(ptr, child.getColumnModifier()); 
+            long childvalue = child.getDataType().getCodec().decodeLong(ptr, child.getSortOrder()); 
             if (i == 0) {
                 finalResult = childvalue;
             } else {

@@ -425,5 +425,21 @@ public class ClientKeyValue extends KeyValue {
             this.ts, type, value.get(), value.getOffset(), value.getLength());
     return this.delegate.getBuffer();
   }
+  
+  public ImmutableBytesWritable getRawRow() {
+    return this.row;
+  }
+
+  public ImmutableBytesWritable getRawFamily() {
+    return this.family;
+  }
+
+  public ImmutableBytesWritable getRawQualifier() {
+    return this.qualifier;
+  }
+
+  public ImmutableBytesWritable getRawValue() {
+    return this.value;
+  }
 }
 

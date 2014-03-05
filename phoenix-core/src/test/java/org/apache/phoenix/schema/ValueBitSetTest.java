@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -56,8 +54,8 @@ public class ValueBitSetTest {
                         return null;
                     }
 					@Override
-					public ColumnModifier getColumnModifier() {
-						return null;
+					public SortOrder getSortOrder() {
+						return SortOrder.getDefault();
 					}
                 };
                 builder.addField(datum);

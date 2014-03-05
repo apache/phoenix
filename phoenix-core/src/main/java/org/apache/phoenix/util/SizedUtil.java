@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -54,9 +52,17 @@ public class SizedUtil {
     private SizedUtil() {
     }
     
+    public static int sizeOfArrayList(int capacity) {
+        return SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE + SizedUtil.INT_SIZE + SizedUtil.ARRAY_SIZE + SizedUtil.POINTER_SIZE * capacity;
+    }
+    
+    public static int sizeOfMap(int nRows) {
+        return sizeOfMap(nRows, SizedUtil.POINTER_SIZE, SizedUtil.POINTER_SIZE);
+    }
+    
     public static int sizeOfMap(int nRows, int keySize, int valueSize) {
-        return nRows * (
-                SizedUtil.MAP_ENTRY_SIZE + // entry
+        return SizedUtil.OBJECT_SIZE * 4 + sizeOfArrayList(nRows) /* key set */ + nRows * (
+                SizedUtil.MAP_ENTRY_SIZE + /* entry set */
                 keySize + // key size
                 valueSize); // value size
     }

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -30,7 +28,7 @@ import org.apache.phoenix.expression.aggregator.MinAggregator;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.MinAggregateParseNode;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -68,8 +66,8 @@ public class MinAggregateFunction extends DelegateConstantToCountAggregateFuncti
     @Override 
     public Aggregator newServerAggregator(Configuration conf) {
         final PDataType type = getAggregatorExpression().getDataType();
-        ColumnModifier columnModifier = getAggregatorExpression().getColumnModifier();
-        return new MinAggregator(columnModifier) {
+        SortOrder sortOrder = getAggregatorExpression().getSortOrder();
+        return new MinAggregator(sortOrder) {
             @Override
             public PDataType getDataType() {
                 return type;
@@ -78,8 +76,8 @@ public class MinAggregateFunction extends DelegateConstantToCountAggregateFuncti
     }
     
     @Override
-    public ColumnModifier getColumnModifier() {
-       return getAggregatorExpression().getColumnModifier(); 
+    public SortOrder getSortOrder() {
+       return getAggregatorExpression().getSortOrder(); 
     }
     
     @Override

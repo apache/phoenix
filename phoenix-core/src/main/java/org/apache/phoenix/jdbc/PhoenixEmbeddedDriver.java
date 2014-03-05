@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,17 +17,28 @@
  */
 package org.apache.phoenix.jdbc;
 
-import java.sql.*;
-import java.util.*;
+import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
+
+import java.sql.Connection;
+import java.sql.Driver;
+import java.sql.DriverPropertyInfo;
+import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
+import java.util.Map;
+import java.util.Properties;
+import java.util.StringTokenizer;
 import java.util.logging.Logger;
 
-import com.google.common.collect.Maps;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SQLCloseable;
+
+import com.google.common.collect.Maps;
 
 
 
@@ -47,26 +56,22 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
     private final static String DNC_JDBC_PROTOCOL_SUFFIX = "//";
     private static final String TERMINATOR = "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
     private static final String DELIMITERS = TERMINATOR + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+    private static final String TEST_URL_AT_END =  "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+    private static final String TEST_URL_IN_MIDDLE = TEST_URL_AT_END + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 
     private final static DriverPropertyInfo[] EMPTY_INFO = new DriverPropertyInfo[0];
     public final static String MAJOR_VERSION_PROP = "DriverMajorVersion";
     public final static String MINOR_VERSION_PROP = "DriverMinorVersion";
     public final static String DRIVER_NAME_PROP = "DriverName";
     
-    private final QueryServices services;
-
-    
-    PhoenixEmbeddedDriver(QueryServices queryServices) {
-        services = queryServices;
+    PhoenixEmbeddedDriver() {
     }
     
     private String getDriverName() {
         return this.getClass().getName();
     }
     
-    public QueryServices getQueryServices() {
-        return services;
-    }
+    abstract public QueryServices getQueryServices();
      
     @Override
     public boolean acceptsURL(String url) throws SQLException {
@@ -320,6 +325,6 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
     }
 
     public static boolean isTestUrl(String url) {
-        return url.endsWith(";test=true") || url.contains(";test=true;");
+        return url.endsWith(TEST_URL_AT_END) || url.contains(TEST_URL_IN_MIDDLE);
     }
 }

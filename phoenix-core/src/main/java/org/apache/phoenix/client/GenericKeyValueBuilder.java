@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,13 +17,14 @@
  */
 package org.apache.phoenix.client;
 
+import static org.apache.phoenix.hbase.index.util.ImmutableBytesPtr.copyBytesIfNecessary;
+
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
-import static org.apache.hadoop.hbase.index.util.ImmutableBytesPtr.copyBytesIfNecessary;
+import org.apache.hadoop.hbase.util.Bytes;
 
 /**
  * {@link KeyValueBuilder} that does simple byte[] copies to build the underlying key-value. This is
@@ -67,5 +66,16 @@ public class GenericKeyValueBuilder extends KeyValueBuilder {
       ImmutableBytesWritable qualifier, long ts, KeyValue.Type type, ImmutableBytesWritable value) {
     return new KeyValue(copyBytesIfNecessary(row), copyBytesIfNecessary(family),
         copyBytesIfNecessary(qualifier), ts, type, value == null? null: copyBytesIfNecessary(value));
+  }
+
+  @Override
+  public int compareQualifier(KeyValue kv, byte[] key, int offset, int length) {
+    return Bytes.compareTo(kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength(), key,
+      offset, length);
+  }
+
+  @Override
+  public void getValueAsPtr(KeyValue kv, ImmutableBytesWritable writable) {
+    writable.set(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength());
   }
 }

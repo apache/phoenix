@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +23,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
@@ -75,13 +73,13 @@ public class StringConcatExpression extends BaseCompoundExpression {
                 continue;
             }
             PDataType childType = children.get(i).getDataType();
-            ColumnModifier columnModifier = children.get(i).getColumnModifier();
+            SortOrder sortOrder = children.get(i).getSortOrder();
             // We could potentially not invert the bytes, but we might as well since we're allocating
             // additional space here anyway.
             if (childType.isCoercibleTo(PDataType.VARCHAR)) {
-                result = ByteUtil.concat(result, ByteUtil.concat(columnModifier, ptr));
+                result = ByteUtil.concat(result, ByteUtil.concat(sortOrder, ptr));
             } else {
-                result = ByteUtil.concat(result, PDataType.VARCHAR.toBytes(childType.toObject(ptr, columnModifier).toString()));
+                result = ByteUtil.concat(result, PDataType.VARCHAR.toBytes(childType.toObject(ptr, sortOrder).toString()));
             }
         }
         ptr.set(result);

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,9 +21,7 @@ import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
 
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -37,10 +33,10 @@ import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.SortOrder;
 
 
 public class CreateSequenceCompiler {
@@ -78,8 +74,8 @@ public class CreateSequenceCompiler {
         }
 
         @Override
-        public ColumnModifier getColumnModifier() {
-            return null;
+        public SortOrder getSortOrder() {
+            return SortOrder.getDefault();
         }
         
     }
@@ -111,8 +107,8 @@ public class CreateSequenceCompiler {
         }
 
         @Override
-        public ColumnModifier getColumnModifier() {
-            return null;
+        public SortOrder getSortOrder() {
+            return SortOrder.getDefault();
         }
         
     }
@@ -140,9 +136,8 @@ public class CreateSequenceCompiler {
         }
         
         final PhoenixConnection connection = statement.getConnection();
-        final ColumnResolver resolver = FromCompiler.EMPTY_TABLE_RESOLVER;
         
-        final StatementContext context = new StatementContext(statement, resolver, statement.getParameters(), new Scan());
+        final StatementContext context = new StatementContext(statement);
         if (startsWithNode instanceof BindParseNode) {
             context.getBindManager().addParamMetaData((BindParseNode)startsWithNode, LONG_DATUM);
         }
@@ -208,6 +203,10 @@ public class CreateSequenceCompiler {
                 return context.getBindManager().getParameterMetaData();
             }
 
+            @Override
+            public StatementContext getContext() {
+                return context;
+            }
         };
     }
 }

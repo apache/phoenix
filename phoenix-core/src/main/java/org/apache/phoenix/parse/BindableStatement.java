@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +17,12 @@
  */
 package org.apache.phoenix.parse;
 
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.schema.Sequence;
+
 
 public interface BindableStatement {
     public int getBindCount();
+    public Operation getOperation();
+    public Sequence.Action getSequenceAction();
 }

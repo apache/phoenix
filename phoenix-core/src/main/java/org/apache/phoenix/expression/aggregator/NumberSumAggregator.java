@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,7 +19,7 @@ package org.apache.phoenix.expression.aggregator;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SizedUtil;
@@ -37,16 +35,16 @@ abstract public class NumberSumAggregator extends BaseAggregator {
     private long sum = 0;
     private byte[] buffer;
 
-    public NumberSumAggregator(ColumnModifier columnModifier) {
-        super(columnModifier);
+    public NumberSumAggregator(SortOrder sortOrder) {
+        super(sortOrder);
     }
 
-    public NumberSumAggregator(ColumnModifier columnModifier,
+    public NumberSumAggregator(SortOrder sortOrder,
             ImmutableBytesWritable ptr) {
-        this(columnModifier);
+        this(sortOrder);
         if (ptr != null) {
             initBuffer();
-            sum = PDataType.LONG.getCodec().decodeLong(ptr, columnModifier);
+            sum = PDataType.LONG.getCodec().decodeLong(ptr, sortOrder);
         }
     }
 
@@ -68,7 +66,7 @@ abstract public class NumberSumAggregator extends BaseAggregator {
     public void aggregate(Tuple tuple, ImmutableBytesWritable ptr) {
         // Get either IntNative or LongNative depending on input type
         long value = getInputDataType().getCodec().decodeLong(ptr,
-                columnModifier);
+                sortOrder);
         sum += value;
         if (buffer == null) {
             initBuffer();

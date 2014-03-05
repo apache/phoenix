@@ -19,8 +19,8 @@ package org.apache.phoenix.schema;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.http.annotation.Immutable;
-
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.util.SizedUtil;
 
 @Immutable
 public class PNameImpl implements PName {
@@ -41,6 +41,13 @@ public class PNameImpl implements PName {
         }
     }
     private PNameImplData data = new PNameImplData();
+
+
+    @Override
+    public int getEstimatedSize() {
+        return SizedUtil.OBJECT_SIZE * 3 + SizedUtil.ARRAY_SIZE + SizedUtil.IMMUTABLE_BYTES_PTR_SIZE +
+                data.stringName.length() * SizedUtil.CHAR_SIZE + data.bytesName.length;
+    }
 
     PNameImpl(String name) {
         this.data.stringName = name;
@@ -86,11 +93,12 @@ public class PNameImpl implements PName {
     public boolean equals(Object obj) {
         if (this == obj) return true;
         if (obj == null) return false;
-        if (getClass() != obj.getClass()) return false;
-        PNameImpl other = (PNameImpl) obj;
+        if (! (obj instanceof PName) ) return false;
+        PName other = (PName)obj;
+        if (hashCode() != other.hashCode()) return false;
         // Compare normalized stringName for equality, since bytesName
         // may differ since it remains case sensitive.
-        if (!data.stringName.equals(other.data.stringName)) return false;
+        if (!getString().equals(other.getString())) return false;
         return true;
     }
 

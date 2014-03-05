@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,10 +19,11 @@ package org.apache.phoenix.expression.aggregator;
 
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.BaseTerminalExpression;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.SizedUtil;
+
+import com.google.common.base.Preconditions;
 
 /**
  * Base class for Aggregator implementations
@@ -34,10 +33,11 @@ import org.apache.phoenix.util.SizedUtil;
  */
 public abstract class BaseAggregator extends BaseTerminalExpression implements Aggregator {
     
-    protected final ColumnModifier columnModifier;    
+    protected final SortOrder sortOrder;    
     
-    public BaseAggregator(ColumnModifier columnModifier) {
-        this.columnModifier = columnModifier;
+    public BaseAggregator(SortOrder sortOrder) {
+    	Preconditions.checkNotNull(sortOrder);
+        this.sortOrder = sortOrder;
     }
     
     @Override

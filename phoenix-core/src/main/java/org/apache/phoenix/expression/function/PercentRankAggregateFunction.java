@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -59,7 +57,7 @@ public class PercentRankAggregateFunction extends DistinctValueWithCountAggregat
 
     @Override
     public DistinctValueWithCountClientAggregator newClientAggregator() {
-        return new PercentRankClientAggregator(children, getAggregatorExpression().getColumnModifier());
+        return new PercentRankClientAggregator(children, getAggregatorExpression().getSortOrder());
     }
 
     @Override

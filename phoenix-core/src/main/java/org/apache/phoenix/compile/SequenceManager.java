@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,9 +25,6 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
@@ -37,15 +32,17 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
+import org.apache.phoenix.schema.tuple.DelegateTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 public class SequenceManager {
     private final PhoenixStatement statement;
     private int[] sequencePosition;
-    private long[] srcSequenceValues;
-    private long[] dstSequenceValues;
-    private SQLException[] sqlExceptions;
     private List<SequenceKey> nextSequences;
     private List<SequenceKey> currentSequences;
     private Map<SequenceKey,SequenceValueExpression> sequenceMap;
@@ -59,7 +56,7 @@ public class SequenceManager {
         return sequenceMap == null ? 0 : sequenceMap.size();
     }
     
-    private void setSequenceValues() throws SQLException {
+    private void setSequenceValues(long[] srcSequenceValues, long[] dstSequenceValues, SQLException[] sqlExceptions) throws SQLException {
         SQLException eTop = null;
         for (int i = 0; i < sqlExceptions.length; i++) {
             SQLException e = sqlExceptions[i];
@@ -79,18 +76,42 @@ public class SequenceManager {
         }
     }
     
-    public void incrementSequenceValues() throws SQLException {
-        if (sequenceMap == null) {
-            return;
+    public Tuple newSequenceTuple(Tuple tuple) throws SQLException {
+        return new SequenceTuple(tuple);
+    }
+    
+    private class SequenceTuple extends DelegateTuple {
+        private final long[] srcSequenceValues;
+        private final long[] dstSequenceValues;
+        private final SQLException[] sqlExceptions;
+        
+        public SequenceTuple(Tuple delegate) throws SQLException {
+            super(delegate);
+            int maxSize = sequenceMap.size();
+            dstSequenceValues = new long[maxSize];
+            srcSequenceValues = new long[nextSequences.size()];
+            sqlExceptions = new SQLException[nextSequences.size()];
+            incrementSequenceValues();
         }
-        Long scn = statement.getConnection().getSCN();
-        long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
-        ConnectionQueryServices services = this.statement.getConnection().getQueryServices();
-        services.incrementSequenceValues(nextSequences, timestamp, srcSequenceValues, sqlExceptions);
-        setSequenceValues();
-        int offset = nextSequences.size();
-        for (int i = 0; i < currentSequences.size(); i++) {
-            dstSequenceValues[sequencePosition[offset+i]] = services.getSequenceValue(currentSequences.get(i), timestamp);
+        
+        private void incrementSequenceValues() throws SQLException {
+            if (sequenceMap == null) {
+                return;
+            }
+            Long scn = statement.getConnection().getSCN();
+            long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
+            ConnectionQueryServices services = statement.getConnection().getQueryServices();
+            services.incrementSequences(nextSequences, timestamp, srcSequenceValues, sqlExceptions);
+            setSequenceValues(srcSequenceValues, dstSequenceValues, sqlExceptions);
+            int offset = nextSequences.size();
+            for (int i = 0; i < currentSequences.size(); i++) {
+                dstSequenceValues[sequencePosition[offset+i]] = services.currentSequenceValue(currentSequences.get(i), timestamp);
+            }
+        }
+
+        @Override
+        public long getSequenceValue(int index) {
+            return dstSequenceValues[index];
         }
     }
 
@@ -117,12 +138,12 @@ public class SequenceManager {
         return expression;
     }
     
-    public void initSequences() throws SQLException {
-        if (sequenceMap == null) {
+    public void validateSequences(Sequence.Action action) throws SQLException {
+        if (sequenceMap == null || sequenceMap.isEmpty()) {
             return;
         }
         int maxSize = sequenceMap.size();
-        dstSequenceValues = new long[maxSize];
+        long[] dstSequenceValues = new long[maxSize];
         sequencePosition = new int[maxSize];
         nextSequences = Lists.newArrayListWithExpectedSize(maxSize);
         currentSequences = Lists.newArrayListWithExpectedSize(maxSize);
@@ -133,8 +154,8 @@ public class SequenceManager {
                 currentSequences.add(entry.getKey());
             }
         }
-        srcSequenceValues = new long[nextSequences.size()];
-        sqlExceptions = new SQLException[nextSequences.size()];
+        long[] srcSequenceValues = new long[nextSequences.size()];
+        SQLException[] sqlExceptions = new SQLException[nextSequences.size()];
         Collections.sort(nextSequences);
         // Create reverse indexes
         for (int i = 0; i < nextSequences.size(); i++) {
@@ -147,8 +168,8 @@ public class SequenceManager {
         ConnectionQueryServices services = this.statement.getConnection().getQueryServices();
         Long scn = statement.getConnection().getSCN();
         long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
-        services.reserveSequenceValues(nextSequences, timestamp, srcSequenceValues, sqlExceptions);
-        setSequenceValues();
+        services.validateSequences(nextSequences, timestamp, srcSequenceValues, sqlExceptions, action);
+        setSequenceValues(srcSequenceValues, dstSequenceValues, sqlExceptions);
     }
     
     private class SequenceValueExpression extends BaseTerminalExpression {
@@ -165,7 +186,7 @@ public class SequenceManager {
         
         @Override
         public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-            PDataType.LONG.getCodec().encodeLong(dstSequenceValues[index], valueBuffer, 0);
+            PDataType.LONG.getCodec().encodeLong(tuple.getSequenceValue(index), valueBuffer, 0);
             ptr.set(valueBuffer);
             return true;
         }

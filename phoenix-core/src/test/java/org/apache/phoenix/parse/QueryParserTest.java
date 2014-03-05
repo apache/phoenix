@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -33,7 +31,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.junit.Test;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 
 
 public class QueryParserTest {
@@ -390,12 +388,12 @@ public class QueryParserTest {
 
     @Test
     public void testParseCreateTableInlinePrimaryKeyWithOrder() throws Exception {
-    	for (String order : new String[]{"asc", "desc", ""}) {
+    	for (String order : new String[]{"asc", "desc"}) {
             String s = "create table core.entity_history_archive (id char(15) primary key ${o})".replace("${o}", order);
     		CreateTableStatement stmt = (CreateTableStatement)new SQLParser(new StringReader(s)).parseStatement();
     		List<ColumnDef> columnDefs = stmt.getColumnDefs();
     		assertEquals(1, columnDefs.size());
-    		assertEquals(ColumnModifier.fromDDLValue(order), columnDefs.iterator().next().getColumnModifier()); 
+    		assertEquals(SortOrder.fromDDLValue(order), columnDefs.iterator().next().getSortOrder()); 
     	}
     }
     
@@ -415,14 +413,14 @@ public class QueryParserTest {
     
     @Test
     public void testParseCreateTablePrimaryKeyConstraintWithOrder() throws Exception {
-    	for (String order : new String[]{"asc", "desc", ""}) {
+    	for (String order : new String[]{"asc", "desc"}) {
     		String s = "create table core.entity_history_archive (id CHAR(15), name VARCHAR(150), constraint pk primary key (id ${o}, name ${o}))".replace("${o}", order);
     		CreateTableStatement stmt = (CreateTableStatement)new SQLParser(new StringReader(s)).parseStatement();
     		PrimaryKeyConstraint pkConstraint = stmt.getPrimaryKeyConstraint();
-    		List<Pair<ColumnName,ColumnModifier>> columns = pkConstraint.getColumnNames();
+    		List<Pair<ColumnName,SortOrder>> columns = pkConstraint.getColumnNames();
     		assertEquals(2, columns.size());
-    		for (Pair<ColumnName,ColumnModifier> pair : columns) {
-    			assertEquals(ColumnModifier.fromDDLValue(order), pkConstraint.getColumn(pair.getFirst()).getSecond());
+    		for (Pair<ColumnName,SortOrder> pair : columns) {
+    			assertEquals(SortOrder.fromDDLValue(order), pkConstraint.getColumn(pair.getFirst()).getSecond());
     		}    		
     	}
     }

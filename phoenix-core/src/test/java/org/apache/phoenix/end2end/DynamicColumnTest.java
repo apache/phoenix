@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -41,14 +39,13 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 /**
  * Basic tests for Phoenix dynamic upserting
@@ -92,8 +89,8 @@ public class DynamicColumnTest extends BaseClientManagedTimeTest {
             byte[] key = Bytes.toBytes("entry1");
 
             Put put = new Put(key);
-            put.add(QueryConstants.EMPTY_COLUMN_BYTES, dv, Bytes.toBytes("default"));
-            put.add(QueryConstants.EMPTY_COLUMN_BYTES, first, Bytes.toBytes("first"));
+            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dv, Bytes.toBytes("default"));
+            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, first, Bytes.toBytes("first"));
             put.add(FAMILY_NAME, f1v1, Bytes.toBytes("f1value1"));
             put.add(FAMILY_NAME, f1v2, Bytes.toBytes("f1value2"));
             put.add(FAMILY_NAME2, f2v1, Bytes.toBytes("f2value1"));

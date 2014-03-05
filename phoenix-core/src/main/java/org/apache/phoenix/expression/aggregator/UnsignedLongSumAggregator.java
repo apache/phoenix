@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +17,7 @@
  */
 package org.apache.phoenix.expression.aggregator;
 
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 
 /**
@@ -32,8 +30,8 @@ import org.apache.phoenix.schema.PDataType;
  */
 public class UnsignedLongSumAggregator extends NumberSumAggregator {
     
-    public UnsignedLongSumAggregator(ColumnModifier columnModifier) {
-        super(columnModifier);
+    public UnsignedLongSumAggregator(SortOrder sortOrder) {
+        super(sortOrder);
     }
     
     @Override

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -37,12 +35,11 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.Properties;
 
-import org.junit.Test;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Test;
 
 
 public class UpsertValuesTest extends BaseClientManagedTimeTest {
@@ -363,4 +360,92 @@ public class UpsertValuesTest extends BaseClientManagedTimeTest {
         }
     }
         
+    
+    @Test
+    public void testBatchedUpsert() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            pstmt = conn.prepareStatement("create table t (k varchar primary key, v integer)");
+            pstmt.execute();
+        } finally {
+            closeStmtAndConn(pstmt, conn);
+        }
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            pstmt = conn.prepareStatement("upsert into t values (?, ?)");
+            pstmt.setString(1, "a");
+            pstmt.setInt(2, 1);
+            pstmt.addBatch();
+            pstmt.setString(1, "b");
+            pstmt.setInt(2, 2);
+            pstmt.addBatch();
+            pstmt.executeBatch();
+            conn.commit();
+        } finally {
+             closeStmtAndConn(pstmt, conn);
+        }
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            pstmt = conn.prepareStatement("select * from t");
+            ResultSet rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals(1, rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertEquals(2, rs.getInt(2));
+            assertFalse(rs.next());
+        } finally {
+             closeStmtAndConn(pstmt, conn);
+        }
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
+        conn = DriverManager.getConnection(getUrl(), props);
+        Statement stmt = conn.createStatement();
+        try {
+            stmt.addBatch("upsert into t values ('c', 3)");
+            stmt.addBatch("select count(*) from t");
+            stmt.addBatch("upsert into t values ('a', 4)");
+            ResultSet rs = stmt.executeQuery("select count(*) from t");
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            int[] result = stmt.executeBatch();
+            assertEquals(3,result.length);
+            assertEquals(result[0], 1);
+            assertEquals(result[1], -2);
+            assertEquals(result[2], 1);
+            conn.commit();
+        } finally {
+             closeStmtAndConn(pstmt, conn);
+        }
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 8));
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            pstmt = conn.prepareStatement("select * from t");
+            ResultSet rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals(4, rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertEquals(2, rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals("c", rs.getString(1));
+            assertEquals(3, rs.getInt(2));
+            assertFalse(rs.next());
+        } finally {
+             closeStmtAndConn(pstmt, conn);
+        }
+        
+    }
 }

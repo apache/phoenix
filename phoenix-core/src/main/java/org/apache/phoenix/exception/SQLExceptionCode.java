@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,7 +20,7 @@ package org.apache.phoenix.exception;
 import java.sql.SQLException;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.AmbiguousTableException;
@@ -208,9 +206,10 @@ public enum SQLExceptionCode {
     CANNOT_CREATE_TENANT_SPECIFIC_TABLE(1030, "42Y89", "Cannot create table for tenant-specific connection"),
     CANNOT_DEFINE_PK_FOR_VIEW(1031, "42Y90", "Defining PK columns for a VIEW is not allowed."),
     DEFAULT_COLUMN_FAMILY_ONLY_ON_CREATE_TABLE(1034, "42Y93", "Default column family may only be specified when creating a table."),
-    INSUFFICIENT_MULTI_TENANT_COLUMNS(1040, "42Y96", "A MULTI_TENANT table must have 2 or more PK columns with the first column being VARCHAR or CHAR."),
+    INSUFFICIENT_MULTI_TENANT_COLUMNS(1040, "42Y96", "A MULTI_TENANT table must have two or more PK columns with the first column being NOT NULL and of type VARCHAR or CHAR."),
     VIEW_WHERE_IS_CONSTANT(1045, "43A02", "WHERE clause in VIEW should not evaluate to a constant."),
     CANNOT_UPDATE_VIEW_COLUMN(1046, "43A03", "Column used in WHERE clause of VIEW may not be updated."),
+    TOO_MANY_VIEW_INDEXES(1047, "43A04", "Too many indexes have already been created on the physical table."),
         
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
@@ -247,6 +246,8 @@ public enum SQLExceptionCode {
     EXECUTE_QUERY_NOT_APPLICABLE(1103, "XCL03", "executeQuery may not be used."),
     EXECUTE_UPDATE_NOT_APPLICABLE(1104, "XCL03", "executeUpdate may not be used."),
     SPLIT_POINT_NOT_CONSTANT(1105, "XCL04", "Split points must be constants."),
+    BATCH_EXCEPTION(1106, "XCL05", "Exception while executing batch."),
+    EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH(1107, "XCL06", "An executeUpdate is prohibited when the batch is not empty. Use clearBatch to empty the batch first."),
     
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).

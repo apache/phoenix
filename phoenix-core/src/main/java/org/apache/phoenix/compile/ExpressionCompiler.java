@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -89,7 +87,6 @@ import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.StringConcatParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.parse.UnsupportedAllParseNodeVisitor;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.DelegateDatum;
@@ -99,6 +96,7 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.SchemaUtil;
@@ -314,11 +312,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ColumnRef ref = context.getResolver().resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
         PTable table = ref.getTable();
         int pkPosition = ref.getPKSlotPosition();
-        // Disallow explicit reference to SALT or TENANT_ID columns
+        // Disallow explicit reference to salting column, tenant ID column, and index ID column
         if (pkPosition >= 0) {
             boolean isSalted = table.getBucketNum() != null;
             boolean isMultiTenant = context.getConnection().getTenantId() != null && table.isMultiTenant();
-            int minPosition = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0);
+            boolean isSharedViewIndex = table.getViewIndexId() != null;
+            int minPosition = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
             if (pkPosition < minPosition) {
                 throw new ColumnNotFoundException(table.getSchemaName().getString(), table.getTableName().getString(), null, ref.getColumn().getName().getString());
             }
@@ -569,8 +568,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             return PDataType.DEFAULT_SCALE;
         }
         @Override
-        public ColumnModifier getColumnModifier() {
-            return null;
+        public SortOrder getSortOrder() {
+            return SortOrder.getDefault();
         }        
     };
 
@@ -696,8 +695,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                             return expression.getScale();
                         }
                         @Override
-                        public ColumnModifier getColumnModifier() {
-                            return expression.getColumnModifier();
+                        public SortOrder getSortOrder() {
+                            return expression.getSortOrder();
                         }                        
                     };
                 } else if (expression.getDataType() != null
@@ -725,8 +724,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                             return expression.getScale();
                         }
                         @Override
-                        public ColumnModifier getColumnModifier() {
-                            return expression.getColumnModifier();
+                        public SortOrder getSortOrder() {
+                            return expression.getSortOrder();
                         }
                     };
                 }
@@ -873,8 +872,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                             return expression.getScale();
                         }
                         @Override
-                        public ColumnModifier getColumnModifier() {
-                            return expression.getColumnModifier();
+                        public SortOrder getSortOrder() {
+                            return expression.getSortOrder();
                         }
                     };
                 }
@@ -1151,7 +1150,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 Expression child = children.get(i);
                 isDeterministic &= child.isDeterministic();
                 child.evaluate(null, ptr);
-                Object value = arrayElemDataType.toObject(ptr, child.getDataType(), child.getColumnModifier());
+                Object value = arrayElemDataType.toObject(ptr, child.getDataType(), child.getSortOrder());
                 elements[i] = LiteralExpression.newConstant(value, child.getDataType(), child.isDeterministic()).getValue();
             }
             Object value = PArrayDataType.instantiatePhoenixArray(arrayElemDataType, elements);

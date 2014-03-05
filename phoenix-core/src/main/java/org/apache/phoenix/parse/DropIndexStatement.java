@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +17,9 @@
  */
 package org.apache.phoenix.parse;
 
-public class DropIndexStatement implements BindableStatement {
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+
+public class DropIndexStatement extends MutableStatement {
     private final TableName tableName;
     private final NamedNode indexName;
     private final boolean ifExists;
@@ -47,4 +47,8 @@ public class DropIndexStatement implements BindableStatement {
         return ifExists;
     }
 
+    @Override
+    public Operation getOperation() {
+        return Operation.DELETE;
+    }
 }

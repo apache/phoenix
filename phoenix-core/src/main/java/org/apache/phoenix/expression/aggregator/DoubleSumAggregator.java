@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,7 +19,7 @@ package org.apache.phoenix.expression.aggregator;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SizedUtil;
@@ -31,11 +29,11 @@ public class DoubleSumAggregator extends BaseAggregator {
     private double sum = 0;
     private byte[] buffer;
 
-    public DoubleSumAggregator(ColumnModifier columnModifier, ImmutableBytesWritable ptr) {
-        super(columnModifier);
+    public DoubleSumAggregator(SortOrder sortOrder, ImmutableBytesWritable ptr) {
+        super(sortOrder);
         if (ptr != null) {
             initBuffer();
-            sum = PDataType.DOUBLE.getCodec().decodeDouble(ptr, columnModifier);
+            sum = PDataType.DOUBLE.getCodec().decodeDouble(ptr, sortOrder);
         }
     }
     
@@ -49,7 +47,7 @@ public class DoubleSumAggregator extends BaseAggregator {
 
     @Override
     public void aggregate(Tuple tuple, ImmutableBytesWritable ptr) {
-        double value = getInputDataType().getCodec().decodeDouble(ptr, columnModifier);
+        double value = getInputDataType().getCodec().decodeDouble(ptr, sortOrder);
         sum += value;
         if (buffer == null) {
             initBuffer();

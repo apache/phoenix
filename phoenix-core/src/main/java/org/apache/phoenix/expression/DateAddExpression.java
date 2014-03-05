@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +23,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -53,16 +51,16 @@ public class DateAddExpression extends AddExpression {
             }
             long value;
             PDataType type = children.get(i).getDataType();
-            ColumnModifier columnModifier = children.get(i).getColumnModifier();
+            SortOrder sortOrder = children.get(i).getSortOrder();
             if (type == PDataType.DECIMAL) {
-                BigDecimal bd = (BigDecimal)PDataType.DECIMAL.toObject(ptr, columnModifier);
+                BigDecimal bd = (BigDecimal)PDataType.DECIMAL.toObject(ptr, sortOrder);
                 value = bd.multiply(BD_MILLIS_IN_DAY).longValue();
             } else if (type.isCoercibleTo(PDataType.LONG)) {
-                value = type.getCodec().decodeLong(ptr, columnModifier) * QueryConstants.MILLIS_IN_DAY;
+                value = type.getCodec().decodeLong(ptr, sortOrder) * QueryConstants.MILLIS_IN_DAY;
             } else if (type.isCoercibleTo(PDataType.DOUBLE)) {
-                value = (long)(type.getCodec().decodeDouble(ptr, columnModifier) * QueryConstants.MILLIS_IN_DAY);
+                value = (long)(type.getCodec().decodeDouble(ptr, sortOrder) * QueryConstants.MILLIS_IN_DAY);
             } else {
-                value = type.getCodec().decodeLong(ptr, columnModifier);
+                value = type.getCodec().decodeLong(ptr, sortOrder);
             }
             finalResult += value;
         }

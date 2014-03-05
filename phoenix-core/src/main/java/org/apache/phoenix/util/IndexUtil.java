@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,14 +25,14 @@ import java.util.Map;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.index.ValueGetter;
-import org.apache.hadoop.hbase.index.covered.update.ColumnReference;
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.hbase.index.ValueGetter;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
@@ -139,7 +137,7 @@ public class IndexUtil {
     }
 
     private static boolean isEmptyKeyValue(PTable table, ColumnReference ref) {
-        byte[] emptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(table.getColumnFamilies());
+        byte[] emptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(table);
         return (Bytes.compareTo(emptyKeyValueCF, ref.getFamily()) == 0 &&
                 Bytes.compareTo(QueryConstants.EMPTY_COLUMN_BYTES, ref.getQualifier()) == 0);
     }

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,6 +16,8 @@
  * limitations under the License.
  */
 package org.apache.phoenix.schema;
+
+import org.apache.phoenix.util.SizedUtil;
 
 
 /**
@@ -49,4 +49,9 @@ public abstract class PBaseColumn implements PColumn {
     public boolean isNullable() {
         return false;
     }
- }
+    
+    @Override
+    public int getEstimatedSize() {
+        return SizedUtil.OBJECT_SIZE; // Not really interested in sized of these
+    }
+}

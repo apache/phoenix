@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,6 +17,9 @@
  */
 package org.apache.phoenix.parse;
 
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.schema.Sequence.Action;
+
 public class ExplainStatement implements BindableStatement {
     private final BindableStatement statement;
     
@@ -33,5 +34,15 @@ public class ExplainStatement implements BindableStatement {
     @Override
     public int getBindCount() {
         return statement.getBindCount();
+    }
+
+    @Override
+    public Operation getOperation() {
+        return Operation.QUERY;
+    }
+
+    @Override
+    public Action getSequenceAction() {
+        return Action.VALIDATE;
     }
 }

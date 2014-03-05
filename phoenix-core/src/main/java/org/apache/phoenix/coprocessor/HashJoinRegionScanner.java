@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,10 +24,10 @@ import java.util.List;
 import java.util.Queue;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -37,6 +35,7 @@ import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.HashCache;
 import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.ScanProjector;
 import org.apache.phoenix.join.ScanProjector.ProjectedValueTuple;
@@ -70,7 +69,7 @@ public class HashJoinRegionScanner implements RegionScanner {
         if (joinInfo != null) {
             for (JoinType type : joinInfo.getJoinTypes()) {
                 if (type != JoinType.Inner && type != JoinType.Left)
-                    throw new IOException("Got join type '" + type + "'. Expect only INNER or LEFT with hash-joins.");
+                    throw new DoNotRetryIOException("Got join type '" + type + "'. Expect only INNER or LEFT with hash-joins.");
             }
             int count = joinInfo.getJoinIds().length;
             this.tempTuples = new List[count];
@@ -81,7 +80,9 @@ public class HashJoinRegionScanner implements RegionScanner {
                 ImmutableBytesPtr joinId = joinInfo.getJoinIds()[i];
                 HashCache hashCache = (HashCache)cache.getServerCache(joinId);
                 if (hashCache == null)
-                    throw new IOException("Could not find hash cache for joinId: " + Bytes.toString(joinId.get(), joinId.getOffset(), joinId.getLength()));
+                    throw new DoNotRetryIOException("Could not find hash cache for joinId: " 
+                            + Bytes.toString(joinId.get(), joinId.getOffset(), joinId.getLength()) 
+                            + ". The cache might have expired and have been removed.");
                 hashCaches[i] = hashCache;
                 tempSrcBitSet[i] = ValueBitSet.newInstance(joinInfo.getSchemas()[i]);
             }

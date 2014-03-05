@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -32,23 +30,13 @@ import java.sql.SQLException;
  */
 public abstract class TableNode {
     private final String alias;
-    private final boolean isRewrite;
 
     TableNode(String alias) {
-        this(alias, false);
-    }
-
-    TableNode(String alias, boolean isRewrite) {
         this.alias = alias;
-        this.isRewrite = isRewrite;
     }
 
     public String getAlias() {
         return alias;
-    }
-    
-    public boolean isRewrite() {
-        return isRewrite;
     }
 
     public abstract void accept(TableNodeVisitor visitor) throws SQLException;

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,8 +21,9 @@ import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.SortOrder;
 
-import org.apache.phoenix.schema.ColumnModifier;
+import com.google.common.base.Preconditions;
 
 
 public class StringUtil {
@@ -37,13 +36,7 @@ public class StringUtil {
     private static final int BYTES_3_MASK = 0xFF << 4; // 1110xxxx is a triple byte char
     private static final int BYTES_4_MASK = 0xFF << 3; // 11110xxx is a quadruple byte char
     
-    public static final byte[] MOD_SPACE_UTF8 = new byte[ColumnModifier.values().length];
-    static {
-        for (ColumnModifier columnModifier : ColumnModifier.values()) {
-            MOD_SPACE_UTF8[columnModifier.ordinal()] = columnModifier.apply(new byte[] {SPACE_UTF8}, 0, new byte[1], 0, 1)[0];
-        }
-    }
-
+    public static final byte INVERTED_SPACE_UTF8 = SortOrder.invert(new byte[] {SPACE_UTF8}, 0, new byte[1], 0, 1)[0]; 
     public final static char SINGLE_CHAR_WILDCARD = '?';
     public final static char SINGLE_CHAR_LIKE = '_';
     public final static char MULTI_CHAR_WILDCARD = '*';
@@ -120,9 +113,10 @@ public class StringUtil {
         return sb.toString();
     }
 
-    public static int getBytesInChar(byte b, ColumnModifier columnModifier) {
-        if (columnModifier != null) {
-            b = columnModifier.apply(b);
+    public static int getBytesInChar(byte b, SortOrder sortOrder) {
+    	Preconditions.checkNotNull(sortOrder);
+        if (sortOrder == SortOrder.DESC) {
+            b = SortOrder.invert(b);
         }
         int c = b & 0xff;
         if ((c & BYTES_1_MASK) == 0)
@@ -137,11 +131,11 @@ public class StringUtil {
         throw new RuntimeException("Undecodable byte: " + b);
     }
 
-    public static int calculateUTF8Length(byte[] bytes, int offset, int length, ColumnModifier columnModifier) throws UnsupportedEncodingException {
+    public static int calculateUTF8Length(byte[] bytes, int offset, int length, SortOrder sortOrder) throws UnsupportedEncodingException {
         int i = offset, endOffset = offset + length;
         length = 0;
         while (i < endOffset) {
-            int charLength = getBytesInChar(bytes[i], columnModifier);
+            int charLength = getBytesInChar(bytes[i], sortOrder);
             i += charLength;
             length++;
         }
@@ -152,10 +146,10 @@ public class StringUtil {
     // parameter, return the actual index into the byte array which would represent a substring
     // of <length> starting from the character at <offset>. We assume the <offset> is the start
     // byte of an UTF-8 character.
-    public static int getByteLengthForUtf8SubStr(byte[] bytes, int offset, int length, ColumnModifier columnModifier) throws UnsupportedEncodingException {
+    public static int getByteLengthForUtf8SubStr(byte[] bytes, int offset, int length, SortOrder sortOrder) throws UnsupportedEncodingException {
         int byteLength = 0;
         while(length > 0 && offset + byteLength < bytes.length) {
-            int charLength = getBytesInChar(bytes[offset + byteLength], columnModifier);
+            int charLength = getBytesInChar(bytes[offset + byteLength], sortOrder);
             byteLength += charLength;
             length--;
         }
@@ -172,9 +166,9 @@ public class StringUtil {
         return false;
     }
 
-    public static int getFirstNonBlankCharIdxFromStart(byte[] string, int offset, int length, ColumnModifier columnModifier) {
+    public static int getFirstNonBlankCharIdxFromStart(byte[] string, int offset, int length, SortOrder sortOrder) {
         int i = offset;
-        byte space = columnModifier == null ? SPACE_UTF8 : MOD_SPACE_UTF8[columnModifier.ordinal()];
+        byte space = sortOrder == SortOrder.ASC ? SPACE_UTF8 : INVERTED_SPACE_UTF8;
         for ( ; i < offset + length; i++) {
             if (string[i] != space) {
                 break;
@@ -183,9 +177,9 @@ public class StringUtil {
         return i;
     }
 
-    public static int getFirstNonBlankCharIdxFromEnd(byte[] string, int offset, int length, ColumnModifier columnModifier) {
+    public static int getFirstNonBlankCharIdxFromEnd(byte[] string, int offset, int length, SortOrder sortOrder) {
         int i = offset + length - 1;
-        byte space = columnModifier == null ? SPACE_UTF8 : MOD_SPACE_UTF8[columnModifier.ordinal()];
+        byte space = sortOrder == SortOrder.ASC ? SPACE_UTF8 : INVERTED_SPACE_UTF8;
         for ( ; i >= offset; i--) {
             if (string[i] != space) {
                 break;
@@ -207,8 +201,8 @@ public class StringUtil {
         return replace(s, LIKE_UNESCAPED_SEQS, LIKE_ESCAPE_SEQS);
     }
 
-    public static int getUnpaddedCharLength(byte[] b, int offset, int length, ColumnModifier columnModifier) {
-        return getFirstNonBlankCharIdxFromEnd(b, offset, length, columnModifier) - offset + 1;
+    public static int getUnpaddedCharLength(byte[] b, int offset, int length, SortOrder sortOrder) {
+        return getFirstNonBlankCharIdxFromEnd(b, offset, length, sortOrder) - offset + 1;
     }
 
     public static byte[] padChar(byte[] value, int offset, int length, int paddedLength) {

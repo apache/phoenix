@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -32,11 +30,12 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
+
+import com.google.common.base.Preconditions;
 
 
 /**
@@ -279,7 +278,8 @@ public class ByteUtil {
         return result;
     }
 
-    public static byte[] concat(ColumnModifier columnModifier, ImmutableBytesWritable... writables) {
+    public static byte[] concat(SortOrder sortOrder, ImmutableBytesWritable... writables) {
+        Preconditions.checkNotNull(sortOrder);
         int totalLength = 0;
         for (ImmutableBytesWritable writable : writables) {
             totalLength += writable.getLength();
@@ -288,8 +288,8 @@ public class ByteUtil {
         int offset = 0;
         for (ImmutableBytesWritable array : writables) {
             byte[] bytes = array.get();
-            if (columnModifier != null) {
-                bytes = columnModifier.apply(bytes, array.getOffset(), new byte[array.getLength()], 0, array.getLength());
+            if (sortOrder == SortOrder.DESC) {
+                bytes = SortOrder.invert(bytes, array.getOffset(), new byte[array.getLength()], 0, array.getLength());
             }
             System.arraycopy(bytes, array.getOffset(), result, offset, array.getLength());
             offset += array.getLength();

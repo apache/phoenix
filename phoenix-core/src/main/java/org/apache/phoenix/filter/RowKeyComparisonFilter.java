@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -30,11 +28,10 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Writables;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.schema.tuple.Tuple;
 
 
 /**
@@ -84,7 +81,7 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
         return keepRow ? ReturnCode.INCLUDE : ReturnCode.NEXT_ROW;
     }
 
-    private final class RowKeyTuple implements Tuple {
+    private final class RowKeyTuple extends BaseTuple {
         private byte[] buf;
         private int offset;
         private int length;

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
-import org.apache.hadoop.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
 
@@ -53,6 +51,11 @@ public interface PName {
         public ImmutableBytesPtr getBytesPtr() {
             return ByteUtil.EMPTY_BYTE_ARRAY_PTR;
         }
+
+        @Override
+        public int getEstimatedSize() {
+            return 0;
+        }
     };
     public static PName EMPTY_COLUMN_NAME = new PName() {
         @Override
@@ -74,6 +77,11 @@ public interface PName {
         public ImmutableBytesPtr getBytesPtr() {
             return QueryConstants.EMPTY_COLUMN_BYTES_PTR;
         }
+
+        @Override
+        public int getEstimatedSize() {
+            return 0;
+        }
     };
     /**
      * Get the client-side, normalized name as referenced
@@ -93,4 +101,6 @@ public interface PName {
      * @return a pointer to the underlying bytes
      */
     ImmutableBytesPtr getBytesPtr();
+    
+    int getEstimatedSize();
 }

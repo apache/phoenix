@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -31,8 +29,8 @@ import org.apache.phoenix.util.SchemaUtil;
 public abstract class ConcreteTableNode extends TableNode {
     private final TableName name;
     
-    ConcreteTableNode(String alias, TableName name, boolean isRewrite) {
-        super(SchemaUtil.normalizeIdentifier(alias), isRewrite);
+    ConcreteTableNode(String alias, TableName name) {
+        super(SchemaUtil.normalizeIdentifier(alias));
         this.name = name;
     }
 

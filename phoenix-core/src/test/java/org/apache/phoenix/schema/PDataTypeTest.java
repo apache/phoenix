@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -46,33 +44,33 @@ public class PDataTypeTest {
     @Test
     public void testFloatToLongComparison() {
         // Basic tests
-        assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(1e100), 0, PDataType.FLOAT.getByteSize(), null,
-                PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), null, PDataType.LONG) > 0);
-        assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(0.001), 0, PDataType.FLOAT.getByteSize(), null,
-                PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), null, PDataType.LONG) < 0);
+        assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(1e100), 0, PDataType.FLOAT.getByteSize(), SortOrder.getDefault(),
+                PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) > 0);
+        assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(0.001), 0, PDataType.FLOAT.getByteSize(), SortOrder.getDefault(),
+                PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) < 0);
 
         // Edge tests
         assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(Integer.MAX_VALUE), 0,
-                PDataType.FLOAT.getByteSize(), null, PDataType.LONG.toBytes(Integer.MAX_VALUE - 1), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) > 0);
+                PDataType.FLOAT.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Integer.MAX_VALUE - 1), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) > 0);
         assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(Integer.MIN_VALUE), 0,
-                PDataType.FLOAT.getByteSize(), null, PDataType.LONG.toBytes(Integer.MIN_VALUE + 1), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) < 0);
+                PDataType.FLOAT.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Integer.MIN_VALUE + 1), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) < 0);
         assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(Integer.MIN_VALUE), 0,
-                PDataType.FLOAT.getByteSize(), null, PDataType.LONG.toBytes(Integer.MIN_VALUE), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) == 0);
+                PDataType.FLOAT.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Integer.MIN_VALUE), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) == 0);
         assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(Integer.MAX_VALUE + 1.0F), 0,
-                PDataType.FLOAT.getByteSize(), null, PDataType.LONG.toBytes(Integer.MAX_VALUE), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) > 0); // Passes due to rounding
+                PDataType.FLOAT.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Integer.MAX_VALUE), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) > 0); // Passes due to rounding
         assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(Integer.MAX_VALUE + 129.0F), 0,
-                PDataType.FLOAT.getByteSize(), null, PDataType.LONG.toBytes(Integer.MAX_VALUE), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) > 0);
+                PDataType.FLOAT.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Integer.MAX_VALUE), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) > 0);
         assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(Integer.MIN_VALUE - 128.0F), 0,
-                PDataType.FLOAT.getByteSize(), null, PDataType.LONG.toBytes(Integer.MIN_VALUE), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) == 0);
+                PDataType.FLOAT.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Integer.MIN_VALUE), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) == 0);
         assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(Integer.MIN_VALUE - 129.0F), 0,
-                PDataType.FLOAT.getByteSize(), null, PDataType.LONG.toBytes(Integer.MIN_VALUE), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) < 0);
+                PDataType.FLOAT.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Integer.MIN_VALUE), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) < 0);
 
         float f1 = 9111111111111111.0F;
         float f2 = 9111111111111112.0F;
@@ -81,108 +79,108 @@ public class PDataTypeTest {
         assertTrue(f1 > Integer.MAX_VALUE);
         assertTrue(la == f1);
         assertTrue(la == f2);
-        assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(f1), 0, PDataType.FLOAT.getByteSize(), null,
-                PDataType.LONG.toBytes(la), 0, PDataType.LONG.getByteSize(), null, PDataType.LONG) == 0);
-        assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(f2), 0, PDataType.FLOAT.getByteSize(), null,
-                PDataType.LONG.toBytes(la), 0, PDataType.LONG.getByteSize(), null, PDataType.LONG) == 0);
+        assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(f1), 0, PDataType.FLOAT.getByteSize(), SortOrder.getDefault(),
+                PDataType.LONG.toBytes(la), 0, PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) == 0);
+        assertTrue(PDataType.FLOAT.compareTo(PDataType.FLOAT.toBytes(f2), 0, PDataType.FLOAT.getByteSize(), SortOrder.getDefault(),
+                PDataType.LONG.toBytes(la), 0, PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) == 0);
 
         // Same as above, but reversing LHS and RHS
-        assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), null,
-                PDataType.FLOAT.toBytes(1e100), 0, PDataType.FLOAT.getByteSize(), null, PDataType.FLOAT) < 0);
-        assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), null,
-                PDataType.FLOAT.toBytes(0.001), 0, PDataType.FLOAT.getByteSize(), null, PDataType.FLOAT) > 0);
+        assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), SortOrder.getDefault(),
+                PDataType.FLOAT.toBytes(1e100), 0, PDataType.FLOAT.getByteSize(), SortOrder.getDefault(), PDataType.FLOAT) < 0);
+        assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), SortOrder.getDefault(),
+                PDataType.FLOAT.toBytes(0.001), 0, PDataType.FLOAT.getByteSize(), SortOrder.getDefault(), PDataType.FLOAT) > 0);
 
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Integer.MAX_VALUE - 1), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.FLOAT.toBytes(Integer.MAX_VALUE), 0,
-                PDataType.FLOAT.getByteSize(), null, PDataType.FLOAT) < 0);
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.FLOAT.toBytes(Integer.MAX_VALUE), 0,
+                PDataType.FLOAT.getByteSize(), SortOrder.getDefault(), PDataType.FLOAT) < 0);
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Integer.MIN_VALUE + 1), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.FLOAT.toBytes(Integer.MIN_VALUE), 0,
-                PDataType.FLOAT.getByteSize(), null, PDataType.FLOAT) > 0);
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.FLOAT.toBytes(Integer.MIN_VALUE), 0,
+                PDataType.FLOAT.getByteSize(), SortOrder.getDefault(), PDataType.FLOAT) > 0);
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Integer.MIN_VALUE), 0, PDataType.LONG.getByteSize(),
-                null, PDataType.FLOAT.toBytes(Integer.MIN_VALUE), 0, PDataType.FLOAT.getByteSize(), null,
+        		SortOrder.getDefault(), PDataType.FLOAT.toBytes(Integer.MIN_VALUE), 0, PDataType.FLOAT.getByteSize(), SortOrder.getDefault(),
                 PDataType.FLOAT) == 0);
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Integer.MAX_VALUE), 0, PDataType.LONG.getByteSize(),
-                null, PDataType.FLOAT.toBytes(Integer.MAX_VALUE + 1.0F), 0, PDataType.FLOAT.getByteSize(), null,
+        		SortOrder.getDefault(), PDataType.FLOAT.toBytes(Integer.MAX_VALUE + 1.0F), 0, PDataType.FLOAT.getByteSize(), SortOrder.getDefault(),
                 PDataType.FLOAT) < 0); // Passes due to rounding
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Integer.MAX_VALUE), 0, PDataType.LONG.getByteSize(),
-                null, PDataType.FLOAT.toBytes(Integer.MAX_VALUE + 129.0F), 0, PDataType.FLOAT.getByteSize(), null,
+        		SortOrder.getDefault(), PDataType.FLOAT.toBytes(Integer.MAX_VALUE + 129.0F), 0, PDataType.FLOAT.getByteSize(), SortOrder.getDefault(),
                 PDataType.FLOAT) < 0);
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Integer.MIN_VALUE), 0, PDataType.LONG.getByteSize(),
-                null, PDataType.FLOAT.toBytes(Integer.MIN_VALUE - 128.0F), 0, PDataType.FLOAT.getByteSize(), null,
+        		SortOrder.getDefault(), PDataType.FLOAT.toBytes(Integer.MIN_VALUE - 128.0F), 0, PDataType.FLOAT.getByteSize(), SortOrder.getDefault(),
                 PDataType.FLOAT) == 0);
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Integer.MIN_VALUE), 0, PDataType.LONG.getByteSize(),
-                null, PDataType.FLOAT.toBytes(Integer.MIN_VALUE - 129.0F), 0, PDataType.FLOAT.getByteSize(), null,
+        		SortOrder.getDefault(), PDataType.FLOAT.toBytes(Integer.MIN_VALUE - 129.0F), 0, PDataType.FLOAT.getByteSize(), SortOrder.getDefault(),
                 PDataType.FLOAT) > 0);
 
-        assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(la), 0, PDataType.LONG.getByteSize(), null,
-                PDataType.FLOAT.toBytes(f1), 0, PDataType.FLOAT.getByteSize(), null, PDataType.FLOAT) == 0);
-        assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(la), 0, PDataType.LONG.getByteSize(), null,
-                PDataType.FLOAT.toBytes(f2), 0, PDataType.FLOAT.getByteSize(), null, PDataType.FLOAT) == 0);
+        assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(la), 0, PDataType.LONG.getByteSize(), SortOrder.getDefault(),
+                PDataType.FLOAT.toBytes(f1), 0, PDataType.FLOAT.getByteSize(), SortOrder.getDefault(), PDataType.FLOAT) == 0);
+        assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(la), 0, PDataType.LONG.getByteSize(), SortOrder.getDefault(),
+                PDataType.FLOAT.toBytes(f2), 0, PDataType.FLOAT.getByteSize(), SortOrder.getDefault(), PDataType.FLOAT) == 0);
     }        
         
     @Test
     public void testDoubleToDecimalComparison() {
         // Basic tests
-        assertTrue(PDataType.DOUBLE.compareTo(PDataType.DOUBLE.toBytes(1.23), 0, PDataType.DOUBLE.getByteSize(), null,
-                   PDataType.DECIMAL.toBytes(BigDecimal.valueOf(1.24)), 0, PDataType.DECIMAL.getByteSize(), null, PDataType.DECIMAL) < 0);
+        assertTrue(PDataType.DOUBLE.compareTo(PDataType.DOUBLE.toBytes(1.23), 0, PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(),
+                   PDataType.DECIMAL.toBytes(BigDecimal.valueOf(1.24)), 0, PDataType.DECIMAL.getByteSize(), SortOrder.getDefault(), PDataType.DECIMAL) < 0);
     }
     
     @Test
     public void testDoubleToLongComparison() {
         // Basic tests
-        assertTrue(PDataType.DOUBLE.compareTo(PDataType.DOUBLE.toBytes(-1e100), 0, PDataType.DOUBLE.getByteSize(), null,
-                PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), null, PDataType.LONG) < 0);
-        assertTrue(PDataType.DOUBLE.compareTo(PDataType.DOUBLE.toBytes(0.001), 0, PDataType.DOUBLE.getByteSize(), null,
-                PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), null, PDataType.LONG) < 0);
+        assertTrue(PDataType.DOUBLE.compareTo(PDataType.DOUBLE.toBytes(-1e100), 0, PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(),
+                PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) < 0);
+        assertTrue(PDataType.DOUBLE.compareTo(PDataType.DOUBLE.toBytes(0.001), 0, PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(),
+                PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) < 0);
 
         assertTrue(PDataType.DOUBLE.compareTo(PDataType.DOUBLE.toBytes(Long.MAX_VALUE), 0,
-                PDataType.DOUBLE.getByteSize(), null, PDataType.LONG.toBytes(Long.MAX_VALUE - 1), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) > 0);
+                PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Long.MAX_VALUE - 1), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) > 0);
         assertTrue(PDataType.DOUBLE.compareTo(PDataType.DOUBLE.toBytes(Long.MIN_VALUE), 0,
-                PDataType.DOUBLE.getByteSize(), null, PDataType.LONG.toBytes(Long.MIN_VALUE + 1), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) < 0);
+                PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Long.MIN_VALUE + 1), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) < 0);
         assertTrue(PDataType.DOUBLE.compareTo(PDataType.DOUBLE.toBytes(Long.MIN_VALUE), 0,
-                PDataType.DOUBLE.getByteSize(), null, PDataType.LONG.toBytes(Long.MIN_VALUE), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) == 0);
+                PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Long.MIN_VALUE), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) == 0);
         assertTrue(PDataType.DOUBLE.compareTo(PDataType.DOUBLE.toBytes(Long.MAX_VALUE + 1024.0), 0,
-                PDataType.DOUBLE.getByteSize(), null, PDataType.LONG.toBytes(Long.MAX_VALUE), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) == 0);
+                PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Long.MAX_VALUE), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) == 0);
         assertTrue(PDataType.DOUBLE.compareTo(PDataType.DOUBLE.toBytes(Long.MAX_VALUE + 1025.0), 0,
-                PDataType.DOUBLE.getByteSize(), null, PDataType.LONG.toBytes(Long.MAX_VALUE), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) > 0);
+                PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Long.MAX_VALUE), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) > 0);
         assertTrue(PDataType.DOUBLE.compareTo(PDataType.DOUBLE.toBytes(Long.MIN_VALUE - 1024.0), 0,
-                PDataType.DOUBLE.getByteSize(), null, PDataType.LONG.toBytes(Long.MIN_VALUE), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) == 0);
+                PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Long.MIN_VALUE), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) == 0);
         assertTrue(PDataType.DOUBLE.compareTo(PDataType.DOUBLE.toBytes(Long.MIN_VALUE - 1025.0), 0,
-                PDataType.DOUBLE.getByteSize(), null, PDataType.LONG.toBytes(Long.MIN_VALUE), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.LONG) < 0);
+                PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(), PDataType.LONG.toBytes(Long.MIN_VALUE), 0,
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.LONG) < 0);
 
         // Same as above, but reversing LHS and RHS
-        assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), null,
-                PDataType.DOUBLE.toBytes(-1e100), 0, PDataType.DOUBLE.getByteSize(), null, PDataType.DOUBLE) > 0);
-        assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), null,
-                PDataType.DOUBLE.toBytes(0.001), 0, PDataType.DOUBLE.getByteSize(), null, PDataType.DOUBLE) > 0);
+        assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), SortOrder.getDefault(),
+                PDataType.DOUBLE.toBytes(-1e100), 0, PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(), PDataType.DOUBLE) > 0);
+        assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(1), 0, PDataType.LONG.getByteSize(), SortOrder.getDefault(),
+                PDataType.DOUBLE.toBytes(0.001), 0, PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(), PDataType.DOUBLE) > 0);
 
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Long.MAX_VALUE - 1), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.DOUBLE.toBytes(Long.MAX_VALUE), 0,
-                PDataType.DOUBLE.getByteSize(), null, PDataType.DOUBLE) < 0);
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.DOUBLE.toBytes(Long.MAX_VALUE), 0,
+                PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(), PDataType.DOUBLE) < 0);
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Long.MIN_VALUE + 1), 0,
-                PDataType.LONG.getByteSize(), null, PDataType.DOUBLE.toBytes(Long.MIN_VALUE), 0,
-                PDataType.DOUBLE.getByteSize(), null, PDataType.DOUBLE) > 0);
+                PDataType.LONG.getByteSize(), SortOrder.getDefault(), PDataType.DOUBLE.toBytes(Long.MIN_VALUE), 0,
+                PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(), PDataType.DOUBLE) > 0);
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Long.MIN_VALUE), 0, PDataType.LONG.getByteSize(),
-                null, PDataType.DOUBLE.toBytes(Long.MIN_VALUE), 0, PDataType.DOUBLE.getByteSize(), null,
+        		SortOrder.getDefault(), PDataType.DOUBLE.toBytes(Long.MIN_VALUE), 0, PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(),
                 PDataType.DOUBLE) == 0);
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Long.MAX_VALUE), 0, PDataType.LONG.getByteSize(),
-                null, PDataType.DOUBLE.toBytes(Long.MAX_VALUE + 1024.0), 0, PDataType.DOUBLE.getByteSize(), null,
+        		SortOrder.getDefault(), PDataType.DOUBLE.toBytes(Long.MAX_VALUE + 1024.0), 0, PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(),
                 PDataType.DOUBLE) == 0);
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Long.MAX_VALUE), 0, PDataType.LONG.getByteSize(),
-                null, PDataType.DOUBLE.toBytes(Long.MAX_VALUE + 1025.0), 0, PDataType.DOUBLE.getByteSize(), null,
+        		SortOrder.getDefault(), PDataType.DOUBLE.toBytes(Long.MAX_VALUE + 1025.0), 0, PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(),
                 PDataType.DOUBLE) < 0);
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Long.MIN_VALUE), 0, PDataType.LONG.getByteSize(),
-                null, PDataType.DOUBLE.toBytes(Long.MIN_VALUE - 1024.0), 0, PDataType.DOUBLE.getByteSize(), null,
+        		SortOrder.getDefault(), PDataType.DOUBLE.toBytes(Long.MIN_VALUE - 1024.0), 0, PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(),
                 PDataType.DOUBLE) == 0);
         assertTrue(PDataType.LONG.compareTo(PDataType.LONG.toBytes(Long.MIN_VALUE), 0, PDataType.LONG.getByteSize(),
-                null, PDataType.DOUBLE.toBytes(Long.MIN_VALUE - 1025.0), 0, PDataType.DOUBLE.getByteSize(), null,
+        		SortOrder.getDefault(), PDataType.DOUBLE.toBytes(Long.MIN_VALUE - 1025.0), 0, PDataType.DOUBLE.getByteSize(), SortOrder.getDefault(),
                 PDataType.DOUBLE) > 0);
 
         long i = 10;
@@ -359,10 +357,10 @@ public class PDataTypeTest {
         assertEquals(na,nb);
         
         na = 4;
-        b = PDataType.SMALLINT.toBytes(na, ColumnModifier.SORT_DESC);
+        b = PDataType.SMALLINT.toBytes(na, SortOrder.DESC);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         ptr.set(b);
-        nb = PDataType.SMALLINT.getCodec().decodeShort(ptr, ColumnModifier.SORT_DESC);
+        nb = PDataType.SMALLINT.getCodec().decodeShort(ptr, SortOrder.DESC);
         assertEquals(na,nb);
 
         na = 1;
@@ -546,10 +544,10 @@ public class PDataTypeTest {
         assertEquals(na,nb);
         
         na = 10.0f;
-        b = PDataType.UNSIGNED_FLOAT.toBytes(na, ColumnModifier.SORT_DESC);
+        b = PDataType.UNSIGNED_FLOAT.toBytes(na, SortOrder.DESC);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         ptr.set(b);
-        nb = PDataType.UNSIGNED_FLOAT.getCodec().decodeFloat(ptr, ColumnModifier.SORT_DESC);
+        nb = PDataType.UNSIGNED_FLOAT.getCodec().decodeFloat(ptr, SortOrder.DESC);
         assertEquals(na,nb);
         
         na = 2.0f;
@@ -595,10 +593,10 @@ public class PDataTypeTest {
         assertEquals(na,nb);
         
         na = 10.0;
-        b = PDataType.UNSIGNED_DOUBLE.toBytes(na, ColumnModifier.SORT_DESC);
+        b = PDataType.UNSIGNED_DOUBLE.toBytes(na, SortOrder.DESC);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         ptr.set(b);
-        nb = PDataType.UNSIGNED_DOUBLE.getCodec().decodeDouble(ptr, ColumnModifier.SORT_DESC);
+        nb = PDataType.UNSIGNED_DOUBLE.getCodec().decodeDouble(ptr, SortOrder.DESC);
         assertEquals(na,nb);
 
         na = 2.0;
@@ -650,10 +648,10 @@ public class PDataTypeTest {
         assertEquals(na,nb);
         
         na = 10.0f;
-        b = PDataType.FLOAT.toBytes(na, ColumnModifier.SORT_DESC);
+        b = PDataType.FLOAT.toBytes(na, SortOrder.DESC);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         ptr.set(b);
-        nb = PDataType.FLOAT.getCodec().decodeFloat(ptr, ColumnModifier.SORT_DESC);
+        nb = PDataType.FLOAT.getCodec().decodeFloat(ptr, SortOrder.DESC);
         assertEquals(na,nb);
         
         na = 1.0f;
@@ -729,8 +727,8 @@ public class PDataTypeTest {
         nb = -1.0f;
         ba = PDataType.FLOAT.toBytes(na);
         bb = PDataType.FLOAT.toBytes(nb);
-        float nna = PDataType.FLOAT.getCodec().decodeFloat(ba, 0, ColumnModifier.SORT_DESC);
-        float nnb = PDataType.FLOAT.getCodec().decodeFloat(bb, 0, ColumnModifier.SORT_DESC);
+        float nna = PDataType.FLOAT.getCodec().decodeFloat(ba, 0, SortOrder.DESC);
+        float nnb = PDataType.FLOAT.getCodec().decodeFloat(bb, 0, SortOrder.DESC);
         assertTrue(Float.compare(nna, nnb) < 0);
     }
     
@@ -742,10 +740,10 @@ public class PDataTypeTest {
         assertEquals(na,nb);
         
         na = 10.0;
-        b = PDataType.DOUBLE.toBytes(na, ColumnModifier.SORT_DESC);
+        b = PDataType.DOUBLE.toBytes(na, SortOrder.DESC);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         ptr.set(b);
-        nb = PDataType.DOUBLE.getCodec().decodeDouble(ptr, ColumnModifier.SORT_DESC);
+        nb = PDataType.DOUBLE.getCodec().decodeDouble(ptr, SortOrder.DESC);
         assertEquals(na,nb);
 
         na = 1.0;
@@ -816,8 +814,8 @@ public class PDataTypeTest {
         nb = -1.0;
         ba = PDataType.DOUBLE.toBytes(na);
         bb = PDataType.DOUBLE.toBytes(nb);
-        double nna = PDataType.DOUBLE.getCodec().decodeDouble(ba, 0, ColumnModifier.SORT_DESC);
-        double nnb = PDataType.DOUBLE.getCodec().decodeDouble(bb, 0, ColumnModifier.SORT_DESC);
+        double nna = PDataType.DOUBLE.getCodec().decodeDouble(ba, 0, SortOrder.DESC);
+        double nnb = PDataType.DOUBLE.getCodec().decodeDouble(bb, 0, SortOrder.DESC);
         assertTrue(Double.compare(nna, nnb) < 0);
         
         assertEquals(1, PDataType.DOUBLE.compareTo(Double.valueOf(101), Long.valueOf(100), PDataType.LONG));

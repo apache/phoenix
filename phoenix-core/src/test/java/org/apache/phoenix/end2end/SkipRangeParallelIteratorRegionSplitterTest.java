@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -37,15 +35,6 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
-
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
@@ -56,16 +45,25 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
+
+import com.google.common.base.Function;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 
 /**
@@ -74,7 +72,6 @@ import org.apache.phoenix.util.SchemaUtil;
 @RunWith(Parameterized.class)
 public class SkipRangeParallelIteratorRegionSplitterTest extends BaseClientManagedTimeTest {
 
-    private static final String SCHEMA_NAME = "";
     private static final String TABLE_NAME = "TEST_SKIP_RANGE_PARALLEL_ITERATOR";
     private static final String DDL = "CREATE TABLE " + TABLE_NAME + " (id char(3) NOT NULL PRIMARY KEY, \"value\" integer)";
     private static final byte[] Ka1A = Bytes.toBytes("a1A");
@@ -107,7 +104,7 @@ public class SkipRangeParallelIteratorRegionSplitterTest extends BaseClientManag
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        TableRef tableRef = new TableRef(null,pconn.getPMetaData().getTable(SchemaUtil.getTableName(SCHEMA_NAME, TABLE_NAME)),ts, false);
+        TableRef tableRef = new TableRef(null,pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), TABLE_NAME)),ts, false);
         List<HRegionLocation> regions = pconn.getQueryServices().getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
         
         conn.close();
@@ -272,10 +269,10 @@ public class SkipRangeParallelIteratorRegionSplitterTest extends BaseClientManag
                     return null;
                 }
                 @Override
-                public ColumnModifier getColumnModifier() {
-                    return null;
+                public SortOrder getSortOrder() {
+                    return SortOrder.getDefault();
                 }
-            }, false, null);
+            }, false, SortOrder.getDefault());
         }
         return builder.build();
     }
@@ -348,13 +345,19 @@ public class SkipRangeParallelIteratorRegionSplitterTest extends BaseClientManag
             }
 
             @Override
+            public TableRef resolveTable(String schemaName, String tableName)
+                    throws SQLException {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
             public ColumnRef resolveColumn(String schemaName, String tableName, String colName) throws SQLException {
                 throw new UnsupportedOperationException();
             }
             
         };
         PhoenixConnection connection = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
-        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, Collections.emptyList(), scan);
+        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, scan);
         context.setScanRanges(scanRanges);
         SkipRangeParallelIteratorRegionSplitter splitter = SkipRangeParallelIteratorRegionSplitter.getInstance(context, tableRef, HintNode.EMPTY_HINT_NODE);
         List<KeyRange> keyRanges = splitter.getSplits();

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,14 +21,14 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.schema.PTableType;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ListMultimap;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.schema.PTableType;
 
-public class CreateTableStatement implements BindableStatement {
+public class CreateTableStatement extends MutableStatement {
     private final TableName tableName;
     private final PTableType tableType;
     private final List<ColumnDef> columns;
@@ -47,7 +45,7 @@ public class CreateTableStatement implements BindableStatement {
             TableName baseTableName, ParseNode whereClause, int bindCount) {
         this.tableName = tableName;
         this.props = props == null ? ImmutableListMultimap.<String,Pair<String,Object>>of() : props;
-        this.tableType = PhoenixDatabaseMetaData.TYPE_SCHEMA.equals(tableName.getSchemaName()) ? PTableType.SYSTEM : tableType;
+        this.tableType = PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(tableName.getSchemaName()) ? PTableType.SYSTEM : tableType;
         this.columns = columns == null ? ImmutableList.<ColumnDef>of() : ImmutableList.<ColumnDef>copyOf(columns);
         this.pkConstraint = pkConstraint == null ? PrimaryKeyConstraint.EMPTY : pkConstraint;
         this.splitNodes = splitNodes == null ? Collections.<ParseNode>emptyList() : ImmutableList.copyOf(splitNodes);

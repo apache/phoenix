@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -38,18 +36,18 @@ import java.sql.Types;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.junit.Test;
-
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Test;
 
 
 public class IndexMetadataTest extends BaseHBaseManagedTimeTest{
@@ -99,7 +97,8 @@ public class IndexMetadataTest extends BaseHBaseManagedTimeTest{
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         conn.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName).next(); // client side cache will update
-        conn.unwrap(PhoenixConnection.class).getPMetaData().getTable(fullTableName).getIndexMaintainers(ptr);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr);
         assertTrue(ptr.getLength() > 0);
     }
     
@@ -107,7 +106,8 @@ public class IndexMetadataTest extends BaseHBaseManagedTimeTest{
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         conn.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName).next(); // client side cache will update
-        conn.unwrap(PhoenixConnection.class).getPMetaData().getTable(fullTableName).getIndexMaintainers(ptr);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr);
         assertTrue(ptr.getLength() == 0);
     }
     

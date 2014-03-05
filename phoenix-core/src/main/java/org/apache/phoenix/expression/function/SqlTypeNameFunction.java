@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -64,7 +62,7 @@ public class SqlTypeNameFunction extends ScalarFunction {
         if (ptr.getLength() == 0) {
             return true;
         }
-        int sqlType = child.getDataType().getCodec().decodeInt(ptr, child.getColumnModifier());
+        int sqlType = child.getDataType().getCodec().decodeInt(ptr, child.getSortOrder());
         try {
             byte[] sqlTypeNameBytes = PDataType.fromTypeId(sqlType).getSqlTypeNameBytes();
             ptr.set(sqlTypeNameBytes);

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,16 +25,17 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.ColumnModifier;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+
+import com.google.common.base.Preconditions;
 
 
 public class CoerceExpression extends BaseSingleExpression {
     private PDataType toType;
-    private ColumnModifier toMod;
+    private SortOrder toSortOrder;
     private Integer byteSize;
     
     public CoerceExpression() {
@@ -49,15 +48,23 @@ public class CoerceExpression extends BaseSingleExpression {
         return new CoerceExpression(expression, toType);
     }
     
-    //Package protected for tests
-    CoerceExpression(Expression expression, PDataType toType) {
-        this(expression, toType, null, null);
+    public static Expression create(Expression expression, PDataType toType, SortOrder toSortOrder, Integer byteSize) throws SQLException {
+        if (toType == expression.getDataType() && toSortOrder == expression.getSortOrder()) {
+            return expression;
+        }
+        return new CoerceExpression(expression, toType, toSortOrder, byteSize);
     }
     
-    CoerceExpression(Expression expression, PDataType toType, ColumnModifier toMod, Integer byteSize) {
+    //Package protected for tests
+    CoerceExpression(Expression expression, PDataType toType) {
+        this(expression, toType, SortOrder.getDefault(), null);
+    }
+    
+    CoerceExpression(Expression expression, PDataType toType, SortOrder toSortOrder, Integer byteSize) {
         super(expression);
+        Preconditions.checkNotNull(toSortOrder);
         this.toType = toType;
-        this.toMod = toMod;
+        this.toSortOrder = toSortOrder;
         this.byteSize = byteSize;
     }
 
@@ -76,7 +83,7 @@ public class CoerceExpression extends BaseSingleExpression {
         final int prime = 31;
         int result = 1;
         result = prime * result + ((byteSize == null) ? 0 : byteSize.hashCode());
-        result = prime * result + ((toMod == null) ? 0 : toMod.hashCode());
+        result = prime * result + ((toSortOrder == null) ? 0 : toSortOrder.hashCode());
         result = prime * result + ((toType == null) ? 0 : toType.hashCode());
         return result;
     }
@@ -90,7 +97,7 @@ public class CoerceExpression extends BaseSingleExpression {
         if (byteSize == null) {
             if (other.byteSize != null) return false;
         } else if (!byteSize.equals(other.byteSize)) return false;
-        if (toMod != other.toMod) return false;
+        if (toSortOrder != other.toSortOrder) return false;
         if (toType != other.toType) return false;
         return true;
     }
@@ -99,7 +106,7 @@ public class CoerceExpression extends BaseSingleExpression {
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
         toType = PDataType.values()[WritableUtils.readVInt(input)];
-        toMod = ColumnModifier.fromSystemValue(WritableUtils.readVInt(input));
+        toSortOrder = SortOrder.fromSystemValue(WritableUtils.readVInt(input));
         int byteSize = WritableUtils.readVInt(input);
         this.byteSize = byteSize == -1 ? null : byteSize;
     }
@@ -108,14 +115,14 @@ public class CoerceExpression extends BaseSingleExpression {
     public void write(DataOutput output) throws IOException {
         super.write(output);
         WritableUtils.writeVInt(output, toType.ordinal());
-        WritableUtils.writeVInt(output, ColumnModifier.toSystemValue(toMod));
+        WritableUtils.writeVInt(output, toSortOrder.getSystemValue());
         WritableUtils.writeVInt(output, byteSize == null ? -1 : byteSize);
     }
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (getChild().evaluate(tuple, ptr)) {
-            getDataType().coerceBytes(ptr, getChild().getDataType(), getChild().getColumnModifier(), getColumnModifier());
+            getDataType().coerceBytes(ptr, getChild().getDataType(), getChild().getSortOrder(), getSortOrder());
             return true;
         }
         return false;
@@ -127,8 +134,8 @@ public class CoerceExpression extends BaseSingleExpression {
     }
     
     @Override
-    public ColumnModifier getColumnModifier() {
-            return toMod;
+    public SortOrder getSortOrder() {
+        return toSortOrder;
     }    
 
     @Override

@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,7 +19,6 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
-import static org.apache.phoenix.util.TestUtil.STABLE_SCHEMA_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -42,10 +39,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
-import com.google.common.collect.Maps;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.iterate.DefaultParallelIteratorRegionSplitter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -58,10 +51,14 @@ import org.apache.phoenix.query.StatsManager;
 import org.apache.phoenix.query.StatsManagerImpl;
 import org.apache.phoenix.query.StatsManagerImpl.TimeKeeper;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import com.google.common.collect.Maps;
 
 
 /**
@@ -89,10 +86,12 @@ public class DefaultParallelIteratorsRegionSplitterTest extends BaseClientManage
     public static void doSetup() throws Exception {
         int targetQueryConcurrency = 3;
         int maxQueryConcurrency = 5;
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(4);
         props.put(QueryServices.MAX_QUERY_CONCURRENCY_ATTRIB, Integer.toString(maxQueryConcurrency));
         props.put(QueryServices.TARGET_QUERY_CONCURRENCY_ATTRIB, Integer.toString(targetQueryConcurrency));
         props.put(QueryServices.MAX_INTRA_REGION_PARALLELIZATION_ATTRIB, Integer.toString(Integer.MAX_VALUE));
+        // Drop the HBase table metadata for this test
+        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         // Must update config before starting server
         startServer(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
@@ -117,7 +116,7 @@ public class DefaultParallelIteratorsRegionSplitterTest extends BaseClientManage
 
     private static TableRef getTableRef(Connection conn, long ts) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        TableRef table = new TableRef(null,pconn.getPMetaData().getTable(SchemaUtil.getTableName(STABLE_SCHEMA_NAME, STABLE_NAME)),ts, false);
+        TableRef table = new TableRef(null,pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), STABLE_NAME)),ts, false);
         return table;
     }
     
@@ -126,7 +125,7 @@ public class DefaultParallelIteratorsRegionSplitterTest extends BaseClientManage
         TableRef tableRef = getTableRef(conn, ts);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         final List<HRegionLocation> regions =  pconn.getQueryServices().getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
-        StatementContext context = new StatementContext(new PhoenixStatement(pconn), null, Collections.emptyList(), scan);
+        StatementContext context = new StatementContext(new PhoenixStatement(pconn), null, scan);
         DefaultParallelIteratorRegionSplitter splitter = new DefaultParallelIteratorRegionSplitter(context, tableRef, HintNode.EMPTY_HINT_NODE) {
             @Override
             protected List<HRegionLocation> getAllRegions() throws SQLException {

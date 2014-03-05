@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,12 +17,21 @@
  */
 package org.apache.phoenix.schema;
 
-import java.util.Map;
-
 import org.apache.phoenix.query.MetaDataMutated;
 
 
 public interface PMetaData extends MetaDataMutated {
-    public PTable getTable(String name) throws TableNotFoundException;
-    public Map<String, PTable> getTables();
+    public static interface Cache extends Iterable<PTable> {
+        public Cache clone();
+        public PTable get(PTableKey key);
+        public PTable put(PTableKey key, PTable value);
+        public PTable remove(PTableKey key);
+        public int size();
+    }
+    public static interface Pruner {
+        public boolean prune(PTable table);
+    }
+    public Cache getTables();
+    public PTable getTable(PTableKey key) throws TableNotFoundException;
+    public PMetaData pruneTables(Pruner pruner);
 }

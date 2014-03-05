@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +23,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -45,9 +42,9 @@ public class CreateIndexCompiler {
 
     public MutationPlan compile(final CreateIndexStatement create) throws SQLException {
         final PhoenixConnection connection = statement.getConnection();
-        final ColumnResolver resolver = FromCompiler.getResolver(create, connection);
+        final ColumnResolver resolver = FromCompiler.getResolverForMutation(create, connection);
         Scan scan = new Scan();
-        final StatementContext context = new StatementContext(statement, resolver, statement.getParameters(), scan);
+        final StatementContext context = new StatementContext(statement, resolver, scan);
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         List<ParseNode> splitNodes = create.getSplitNodes();
         final byte[][] splits = new byte[splitNodes.size()][];
@@ -82,6 +79,11 @@ public class CreateIndexCompiler {
             @Override
             public ExplainPlan getExplainPlan() throws SQLException {
                 return new ExplainPlan(Collections.singletonList("CREATE INDEX"));
+            }
+
+            @Override
+            public StatementContext getContext() {
+                return context;
             }
         };
     }

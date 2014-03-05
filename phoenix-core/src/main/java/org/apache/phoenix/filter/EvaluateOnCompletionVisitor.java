@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,6 +25,8 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
+import org.apache.phoenix.expression.function.CoalesceFunction;
+import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.visitor.TraverseAllExpressionVisitor;
 
 
@@ -44,6 +44,7 @@ import org.apache.phoenix.expression.visitor.TraverseAllExpressionVisitor;
  * key value column of interest, but the expression may evaluate to true
  * just based on the row key columns.
  * 
+ * TODO: this really should become a method on Expression
  * @since 0.1
  */
 public class EvaluateOnCompletionVisitor extends TraverseAllExpressionVisitor<Void> {
@@ -79,5 +80,10 @@ public class EvaluateOnCompletionVisitor extends TraverseAllExpressionVisitor<Vo
         evaluateOnCompletion = true;
         return null;
     }
-
+    
+    @Override
+    public Iterator<Expression> visitEnter(ScalarFunction node) {
+        evaluateOnCompletion |= node instanceof CoalesceFunction;
+        return null;
+    }
 }

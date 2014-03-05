@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,14 +25,11 @@ import java.util.Map;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
-import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Writables;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
-import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.tuple.BaseTuple;
 
 
 /**
@@ -66,7 +61,8 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
         @Override
         public String toString() {
             if(keyValue != null) {
-                return keyValue.toString() + " value = " + Bytes.toStringBinary(keyValue.getValue());
+                return keyValue.toString() + " value = " + Bytes.toStringBinary(
+                		keyValue.getValueArray(), keyValue.getValueOffset(), keyValue.getValueLength());
             } else {
                 return super.toString();
             }
@@ -76,7 +72,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
     protected abstract Object setColumnKey(byte[] cf, int cfOffset, int cfLength, byte[] cq, int cqOffset, int cqLength);
     protected abstract Object newColumnKey(byte[] cf, int cfOffset, int cfLength, byte[] cq, int cqOffset, int cqLength);
     
-    private final class IncrementalResultTuple implements Tuple {
+    private final class IncrementalResultTuple extends BaseTuple {
         private int refCount;
         private final ImmutableBytesWritable keyPtr = new ImmutableBytesWritable(UNITIALIZED_KEY_BUFFER);
         private final Map<Object,KeyValueRef> foundColumns = new HashMap<Object,KeyValueRef>(5);
@@ -102,8 +98,8 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
             // Always set key, in case we never find a key value column of interest,
             // and our expression uses row key columns.
             setKey(value);
-            byte[] buf = value.getBuffer();
-            Object ptr = setColumnKey(buf, value.getFamilyOffset(), value.getFamilyLength(), buf, value.getQualifierOffset(), value.getQualifierLength());
+            Object ptr = setColumnKey(value.getFamilyArray(), value.getFamilyOffset(), value.getFamilyLength(), 
+            		value.getQualifierArray(), value.getQualifierOffset(), value.getQualifierLength());
             KeyValueRef ref = foundColumns.get(ptr);
             if (ref == null) {
                 // Return INCLUDE here. Although this filter doesn't need this KV
@@ -131,7 +127,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
         }
         
         public void setKey(KeyValue value) {
-            keyPtr.set(value.getBuffer(), value.getRowOffset(), value.getRowLength());
+            keyPtr.set(value.getRowArray(), value.getRowOffset(), value.getRowLength());
         }
         
         @Override
@@ -178,7 +174,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
             KeyValue kv = getValue(family, qualifier);
             if (kv == null)
                 return false;
-            ptr.set(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength());
+            ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
             return true;
         }
     }

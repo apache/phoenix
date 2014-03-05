@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -30,7 +28,6 @@ import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 
-
 /**
  * 
  * Implementation of ConnectionQueryServices for tests running against
@@ -57,9 +54,9 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     public boolean isDistributedCluster() {
         Configuration conf = util.getConfiguration();
         boolean isDistributedCluster = false;
-        isDistributedCluster = Boolean.parseBoolean(System.getProperty(util.IS_DISTRIBUTED_CLUSTER, "false"));
+        isDistributedCluster = Boolean.parseBoolean(System.getProperty(IntegrationTestingUtility.IS_DISTRIBUTED_CLUSTER, "false"));
         if (!isDistributedCluster) {
-          isDistributedCluster = conf.getBoolean(util.IS_DISTRIBUTED_CLUSTER, false);
+          isDistributedCluster = conf.getBoolean(IntegrationTestingUtility.IS_DISTRIBUTED_CLUSTER, false);
         }
         return isDistributedCluster;
     }
@@ -103,7 +100,12 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     public void close() throws SQLException {
         SQLException sqlE = null;
         try {
-            super.close();
+            try {
+                // Attempt to fix apparent memory leak...
+                clearCache();
+            } finally {
+                super.close();
+            }
         } catch (SQLException e)  {
             sqlE = e;
         } finally {

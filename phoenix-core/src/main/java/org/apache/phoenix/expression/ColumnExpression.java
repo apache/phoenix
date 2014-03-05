@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,7 +24,7 @@ import java.io.IOException;
 import org.apache.hadoop.io.WritableUtils;
 
 import com.google.common.base.Objects;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 
@@ -43,7 +41,7 @@ abstract public class ColumnExpression extends BaseTerminalExpression {
     private boolean isNullable;
     private Integer maxLength;
     private Integer scale;
-    private ColumnModifier columnModifier;
+    private SortOrder sortOrder;
 
     public ColumnExpression() {
     }
@@ -80,7 +78,7 @@ abstract public class ColumnExpression extends BaseTerminalExpression {
         }
         this.maxLength = datum.getMaxLength();
         this.scale = datum.getScale();
-        this.columnModifier = datum.getColumnModifier();
+        this.sortOrder = datum.getSortOrder();
     }
 
     @Override
@@ -94,8 +92,8 @@ abstract public class ColumnExpression extends BaseTerminalExpression {
     }
     
     @Override
-    public ColumnModifier getColumnModifier() {
-    	return columnModifier;
+    public SortOrder getSortOrder() {
+    	return sortOrder;
     }
 
     @Override
@@ -131,7 +129,7 @@ abstract public class ColumnExpression extends BaseTerminalExpression {
         if (type.isFixedWidth() && type.getByteSize() == null) {
             byteSize = WritableUtils.readVInt(input);
         }
-        columnModifier = ColumnModifier.fromSystemValue(WritableUtils.readVInt(input));
+        sortOrder = SortOrder.fromSystemValue(WritableUtils.readVInt(input));
     }
 
     @Override
@@ -149,6 +147,6 @@ abstract public class ColumnExpression extends BaseTerminalExpression {
         if (type.isFixedWidth() && type.getByteSize() == null) {
             WritableUtils.writeVInt(output, byteSize);
         }
-        WritableUtils.writeVInt(output, ColumnModifier.toSystemValue(columnModifier));
+        WritableUtils.writeVInt(output, sortOrder.getSystemValue());
     }
 }

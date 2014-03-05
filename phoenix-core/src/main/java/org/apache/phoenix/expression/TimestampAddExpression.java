@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,7 +25,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ColumnModifier;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.DateUtil;
@@ -62,15 +60,15 @@ public class TimestampAddExpression extends AddExpression {
             }
             BigDecimal value;
             PDataType type = children.get(i).getDataType();
-            ColumnModifier columnModifier = children.get(i).getColumnModifier();
+            SortOrder sortOrder = children.get(i).getSortOrder();
             if(type == PDataType.TIMESTAMP || type == PDataType.UNSIGNED_TIMESTAMP) {
-                value = (BigDecimal)(PDataType.DECIMAL.toObject(ptr, type, columnModifier));
+                value = (BigDecimal)(PDataType.DECIMAL.toObject(ptr, type, sortOrder));
             } else if (type.isCoercibleTo(PDataType.DECIMAL)) {
-                value = (((BigDecimal)PDataType.DECIMAL.toObject(ptr, columnModifier)).multiply(QueryConstants.BD_MILLIS_IN_DAY)).setScale(6, RoundingMode.HALF_UP);
+                value = (((BigDecimal)PDataType.DECIMAL.toObject(ptr, sortOrder)).multiply(QueryConstants.BD_MILLIS_IN_DAY)).setScale(6, RoundingMode.HALF_UP);
             } else if (type.isCoercibleTo(PDataType.DOUBLE)) {
-                value = ((BigDecimal.valueOf(type.getCodec().decodeDouble(ptr, columnModifier))).multiply(QueryConstants.BD_MILLIS_IN_DAY)).setScale(6, RoundingMode.HALF_UP);
+                value = ((BigDecimal.valueOf(type.getCodec().decodeDouble(ptr, sortOrder))).multiply(QueryConstants.BD_MILLIS_IN_DAY)).setScale(6, RoundingMode.HALF_UP);
             } else {
-                value = BigDecimal.valueOf(type.getCodec().decodeLong(ptr, columnModifier));
+                value = BigDecimal.valueOf(type.getCodec().decodeLong(ptr, sortOrder));
             } 
             finalResult = finalResult.add(value);
         }
