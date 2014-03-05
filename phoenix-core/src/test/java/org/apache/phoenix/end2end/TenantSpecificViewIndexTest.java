@@ -25,4 +25,8 @@ public class TenantSpecificViewIndexTest extends BaseTenantSpecificViewIndexTest
         testUpdatableView(null);
     }
 
+    @Test
+    public void testUpdatableViewsWithSameNameDifferentTenants() throws Exception {
+        testUpdatableViewsWithSameNameDifferentTenants(null);
+    }
 }
