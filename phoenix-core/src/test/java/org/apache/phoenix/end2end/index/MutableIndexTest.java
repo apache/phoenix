@@ -38,6 +38,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
@@ -784,6 +785,7 @@ public class MutableIndexTest extends BaseMutableIndexTest {
         }
     }
 
+    @Ignore
     @Test
     public void testIndexWithDecimalCol() throws Exception {
         Properties props = new Properties(TEST_PROPERTIES);
