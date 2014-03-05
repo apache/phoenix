@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.util;
 
+import org.apache.phoenix.schema.PDataType;
+
 /**
  * ColumnInfo used to store Column Name and its associated PDataType
  */
@@ -36,5 +38,9 @@ public class ColumnInfo {
 
 	public Integer getSqlType() {
 		return sqlType;
+	}
+	
+	public String toString() {
+		return columnName+" "+PDataType.fromTypeId(sqlType).getSqlTypeName();
 	}
 }	
