@@ -182,4 +182,39 @@ public class ViewTest extends BaseViewTest {
         conn.createStatement().execute("ALTER VIEW v2 DROP COLUMN v3");
         
     }
+    
+    @Test
+    public void testReadOnlyViewWithCaseSensitiveTableNames() throws Exception {
+        Connection earlierCon = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE \"case_SENSITIVE_table\" (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW \"v\" (v2 VARCHAR) AS SELECT * FROM \"case_SENSITIVE_table\" WHERE k > 5";
+        conn.createStatement().execute(ddl);
+        try {
+            conn.createStatement().execute("UPSERT INTO \"v\" VALUES(1)");
+            fail();
+        } catch (ReadOnlyTableException e) {
+            
+        }
+        for (int i = 0; i < 10; i++) {
+            conn.createStatement().execute("UPSERT INTO \"case_SENSITIVE_table\" VALUES(" + i + ")");
+        }
+        conn.commit();
+        
+        int count = 0;
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM \"v\"");
+        while (rs.next()) {
+            count++;
+            assertEquals(count + 5, rs.getInt(1));
+        }
+        assertEquals(4, count);
+        count = 0;
+        rs = earlierCon.createStatement().executeQuery("SELECT k FROM \"v\"");
+        while (rs.next()) {
+            count++;
+            assertEquals(count + 5, rs.getInt(1));
+        }
+        assertEquals(4, count);
+    }
 }

@@ -9,5 +9,9 @@ public class TenantSpecificViewIndexSaltedTest extends BaseTenantSpecificViewInd
     public void testUpdatableSaltedView() throws Exception {
         testUpdatableView(SALT_BUCKETS);
     }
-
+    
+    @Test
+    public void testUpdatableViewsWithSameNameDifferentTenants() throws Exception {
+        testUpdatableViewsWithSameNameDifferentTenants(SALT_BUCKETS);
+    }
 }

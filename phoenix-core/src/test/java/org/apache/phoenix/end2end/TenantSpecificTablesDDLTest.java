@@ -346,6 +346,11 @@ public class TenantSpecificTablesDDLTest extends BaseTenantSpecificTablesTest {
     
     @Test
     public void testTableMetadataScan() throws Exception {
+        // create a tenant table with same name for a different tenant to make sure we are not picking it up in metadata scans for TENANT_ID
+        String secondTenantId = "tenant2";
+        String secondTenatConnectionURL = PHOENIX_JDBC_TENANT_SPECIFIC_URL.replace(TENANT_ID,  secondTenantId);
+        createTestTable(secondTenatConnectionURL, TENANT_TABLE_DDL, null, nextTimestamp(), false);
+        
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -370,10 +375,14 @@ public class TenantSpecificTablesDDLTest extends BaseTenantSpecificTablesTest {
                 assertNotEquals(TENANT_TABLE_NAME, rs.getString("TABLE_NAME"));
             }
             
-            // null means across all tenant_ids
+            // null catalog means across all tenant_ids
             rs = meta.getSuperTables(null, null, StringUtil.escapeLike(TENANT_TABLE_NAME));
             assertTrue(rs.next());
             assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
+            assertEquals(TENANT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+            assertEquals(PARENT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
+            assertTrue(rs.next());
+            assertEquals(secondTenantId, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
             assertEquals(TENANT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
             assertEquals(PARENT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
             assertFalse(rs.next());
@@ -395,9 +404,18 @@ public class TenantSpecificTablesDDLTest extends BaseTenantSpecificTablesTest {
             rs = conn.getMetaData().getCatalogs();
             assertTrue(rs.next());
             assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
+            assertTrue(rs.next());
+            assertEquals(secondTenantId, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
             assertFalse(rs.next());
-        }
-        finally {
+        } finally {
+            props.clear();
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+            Connection secondTenantCon = DriverManager.getConnection(secondTenatConnectionURL, props);
+            try {
+                secondTenantCon.createStatement().executeUpdate("drop view " + TENANT_TABLE_NAME);
+            } finally {
+                try {secondTenantCon.close();} catch (Exception ignored) {}
+            }
             conn.close();
         }
         
