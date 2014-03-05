@@ -785,7 +785,7 @@ public class MutableIndexTest extends BaseMutableIndexTest {
         }
     }
 
-    @Ignore
+    @Ignore("PHOENIX-62")
     @Test
     public void testIndexWithDecimalCol() throws Exception {
         Properties props = new Properties(TEST_PROPERTIES);
