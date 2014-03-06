@@ -1510,7 +1510,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         public SuffixFilter(final byte[] suffix) {
             this.suffix = suffix;
         }
-
+        
+        @Override
+        public ReturnCode filterKeyValue(Cell ignored) throws IOException {
+          return ReturnCode.INCLUDE;
+        }
+        
         @Override
         public boolean filterRowKey(byte[] buffer, int offset, int length) {
             if (buffer == null || this.suffix == null) return true;

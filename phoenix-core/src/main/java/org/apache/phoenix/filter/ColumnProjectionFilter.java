@@ -29,6 +29,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
@@ -164,5 +165,10 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
     @Override
     public String toString() {
         return "";
+    }
+    
+    @Override
+    public ReturnCode filterKeyValue(Cell ignored) throws IOException {
+      return ReturnCode.INCLUDE;
     }
 }
