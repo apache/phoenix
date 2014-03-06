@@ -30,10 +30,11 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.client.ClientKeyValue;
-import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.hbase.index.util.ClientKeyValue;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
@@ -66,7 +67,7 @@ public class MetaDataUtil {
         // A server and client with the same major and minor version number must be compatible.
         // So it's important that we roll the PHOENIX_MAJOR_VERSION or PHOENIX_MINOR_VERSION
         // when we make an incompatible change.
-        return MetaDataUtil.encodeMaxMinorVersion(pMajor) >= version && MetaDataUtil.encodeMinMinorVersion(pMajor) <= version;
+        return VersionUtil.encodeMaxMinorVersion(pMajor) >= version && VersionUtil.encodeMinMinorVersion(pMajor) <= version;
     }
 
     // Given the encoded integer representing the phoenix version in the encoded version value.
@@ -103,61 +104,9 @@ public class MetaDataUtil {
     }
 
     public static long encodeHBaseAndPhoenixVersions(String hbaseVersion) {
-        return (((long) encodeVersion(hbaseVersion)) << (Byte.SIZE * 5)) |
-                (((long) encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION, MetaDataProtocol.PHOENIX_MINOR_VERSION,
+        return (((long) VersionUtil.encodeVersion(hbaseVersion)) << (Byte.SIZE * 5)) |
+                (((long) VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION, MetaDataProtocol.PHOENIX_MINOR_VERSION,
                         MetaDataProtocol.PHOENIX_PATCH_NUMBER)) << (Byte.SIZE * 1));
-    }
-
-    // Encode a version string in the format of "major.minor.patch" into an integer.
-    public static int encodeVersion(String version) {
-        String[] versionParts = splitHBaseVersionString(version);
-        return encodeVersion(versionParts[0], versionParts.length > 1 ? versionParts[1] : null, versionParts.length > 2 ? versionParts[2] : null);
-    }
-
-    public static String[] splitHBaseVersionString(String version) {
-        return version.split("[-\\.]");
-    }
-
-    // Encode the major as 2nd byte in the int, minor as the first byte and patch as the last byte.
-    public static int encodeVersion(String major, String minor, String patch) {
-        return encodeVersion(major == null ? 0 : Integer.parseInt(major), minor == null ? 0 : Integer.parseInt(minor), 
-                        patch == null ? 0 : Integer.parseInt(patch));
-    }
-
-    public static int encodeVersion(int major, int minor, int patch) {
-        int version = 0;
-        version |= (major << Byte.SIZE * 2);
-        version |= (minor << Byte.SIZE);
-        version |= patch;
-        return version;
-    }
-
-    public static int encodeMaxPatchVersion(int major, int minor) {
-        int version = 0;
-        version |= (major << Byte.SIZE * 2);
-        version |= (minor << Byte.SIZE);
-        version |= 0xFF;
-        return version;
-    }
-
-    public static int encodeMinPatchVersion(int major, int minor) {
-        int version = 0;
-        version |= (major << Byte.SIZE * 2);
-        version |= (minor << Byte.SIZE);
-        return version;
-    }
-
-    public static int encodeMaxMinorVersion(int major) {
-        int version = 0;
-        version |= (major << Byte.SIZE * 2);
-        version |= 0xFFFF;
-        return version;
-    }
-
-    public static int encodeMinMinorVersion(int major) {
-        int version = 0;
-        version |= (major << Byte.SIZE * 2);
-        return version;
     }
 
     public static void getTenantIdAndSchemaAndTableName(List<Mutation> tableMetadata, byte[][] rowKeyMetaData) {
@@ -198,7 +147,7 @@ public class MetaDataUtil {
     
     public static PTableType getTableType(List<Mutation> tableMetaData, KeyValueBuilder builder,
       ImmutableBytesPtr value) {
-        if (getMutationKeyValue(getPutOnlyTableHeaderRow(tableMetaData),
+        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
             PhoenixDatabaseMetaData.TABLE_TYPE_BYTES, builder, value)) {
             return PTableType.fromSerializedValue(value.get()[value.getOffset()]);
         }
@@ -213,14 +162,6 @@ public class MetaDataUtil {
         return tableMetaData.get(0);
     }
 
-    public static byte[] getMutationKVByteValue(Mutation headerRow, byte[] key,
-        KeyValueBuilder builder, ImmutableBytesWritable ptr) {
-        if (getMutationKeyValue(headerRow, key, builder, ptr)) {
-            return ByteUtil.copyKeyBytesIfNecessary(ptr);
-        }
-        return ByteUtil.EMPTY_BYTE_ARRAY;
-    }
-
   /**
    * Get the mutation who's qualifier matches the passed key
    * <p>
@@ -230,10 +171,10 @@ public class MetaDataUtil {
    * @param headerRow mutation to check
    * @param key to check
    * @param builder that created the {@link KeyValue KeyValues} in the {@link Mutation}
-   * @param ptr to update with the value of the mutation
-   * @return the value of the matching {@link KeyValue}
+   * @param ptr to point to the KeyValue's value if found
+   * @return true if the KeyValue was found and false otherwise
    */
-  public static boolean getMutationKeyValue(Mutation headerRow, byte[] key,
+  public static boolean getMutationValue(Mutation headerRow, byte[] key,
       KeyValueBuilder builder, ImmutableBytesWritable ptr) {
         List<Cell> kvs = headerRow.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
         if (kvs != null) {
@@ -284,14 +225,14 @@ public class MetaDataUtil {
     }
     
     public static boolean isMultiTenant(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
-        if (getMutationKeyValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, builder, ptr)) {
+        if (getMutationValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, builder, ptr)) {
             return Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(ptr));
         }
         return false;
     }
     
     public static boolean isSalted(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
-        return MetaDataUtil.getMutationKeyValue(m, PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES, builder, ptr);
+        return MetaDataUtil.getMutationValue(m, PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES, builder, ptr);
     }
     
     public static byte[] getViewIndexPhysicalName(byte[] physicalTableName) {

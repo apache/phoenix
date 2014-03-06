@@ -30,13 +30,10 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
-
-import com.google.common.collect.Lists;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.IndexMetaDataCache;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.TenantCache;
-import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -46,9 +43,12 @@ import org.apache.phoenix.hbase.index.covered.TableState;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ServerUtil;
+
+import com.google.common.collect.Lists;
 
 /**
  * Phoenix-based {@link IndexCodec}. Manages all the logic of how to cleanup an index (
@@ -60,7 +60,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
     public static final String INDEX_UUID = "IdxUUID";
 
     private RegionCoprocessorEnvironment env;
-    private KeyValueBuilder builder;
+    private KeyValueBuilder kvBuilder;
 
     @Override
     public void initialize(RegionCoprocessorEnvironment env) {
@@ -70,7 +70,9 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
         // server
         conf.setIfUnset(IndexWriter.INDEX_FAILURE_POLICY_CONF_KEY,
             PhoenixIndexFailurePolicy.class.getName());
-        this.builder = KeyValueBuilder.get(env.getHBaseVersion());
+        // We cannot use the ClientKeyValueBuilder because when these hit the memstore
+        // the memstore assmes we have a backing buffer.
+        this.kvBuilder = KeyValueBuilder.get(env.getHBaseVersion());
     }
 
     List<IndexMaintainer> getIndexMaintainers(Map<String, byte[]> attributes) throws IOException{
@@ -84,7 +86,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
         byte[] md = attributes.get(INDEX_MD);
         List<IndexMaintainer> indexMaintainers;
         if (md != null) {
-            indexMaintainers = IndexMaintainer.deserialize(md, builder);
+            indexMaintainers = IndexMaintainer.deserialize(md);
         } else {
             byte[] tenantIdBytes = attributes.get(PhoenixRuntime.TENANT_ID_ATTRIB);
             ImmutableBytesWritable tenantId =
@@ -129,7 +131,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             // get the values from the scanner so we can actually use them
             ValueGetter valueGetter = IndexManagementUtil.createGetterFromScanner(scanner, dataRowKey);
             ptr.set(dataRowKey);
-            Put put = maintainer.buildUpdateMutation(valueGetter, ptr, state.getCurrentTimestamp());
+            Put put = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, state.getCurrentTimestamp());
             indexUpdate.setTable(maintainer.getIndexTableName());
             indexUpdate.setUpdate(put);
             //make sure we close the scanner when we are done
@@ -158,8 +160,8 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             ValueGetter valueGetter = IndexManagementUtil.createGetterFromScanner(scanner, dataRowKey);
             ptr.set(dataRowKey);
             Delete delete =
-                maintainer.buildDeleteMutation(valueGetter, ptr, state.getPendingUpdate(),
-                  state.getCurrentTimestamp());
+                maintainer.buildDeleteMutation(kvBuilder, valueGetter, ptr,
+                  state.getPendingUpdate(), state.getCurrentTimestamp());
             scanner.close();
             indexUpdate.setUpdate(delete);
             indexUpdates.add(indexUpdate);

@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import org.junit.Test;
 
 public class TenantSpecificViewIndexTest extends BaseTenantSpecificViewIndexTest {
+	
     @Test
     public void testUpdatableView() throws Exception {
         testUpdatableView(null);

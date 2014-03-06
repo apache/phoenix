@@ -100,6 +100,8 @@ public class BaseTenantSpecificViewIndexTest extends BaseHBaseManagedTimeTest {
     
     private void createAndVerifyIndex(Connection conn, Integer saltBuckets, String tenantId, String valuePrefix) throws SQLException {
         conn.createStatement().execute("CREATE INDEX i ON v(v2)");
+        conn.createStatement().execute("UPSERT INTO v(k2,v1,v2) VALUES (-1, 'blah', 'superblah')"); // sanity check that we can upsert after index is there
+        conn.commit();
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT k1, k2, v2 FROM v WHERE v2='" + valuePrefix + "v2-1'");
         assertEquals(saltBuckets == null ? 
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER I ['" + tenantId + "',-32768,'" + valuePrefix + "v2-1']" :

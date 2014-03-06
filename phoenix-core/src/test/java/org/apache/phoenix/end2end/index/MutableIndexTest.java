@@ -38,6 +38,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
@@ -784,6 +785,7 @@ public class MutableIndexTest extends BaseMutableIndexTest {
         }
     }
 
+    @Ignore("PHOENIX-62")
     @Test
     public void testIndexWithDecimalCol() throws Exception {
         Properties props = new Properties(TEST_PROPERTIES);
@@ -815,6 +817,40 @@ public class MutableIndexTest extends BaseMutableIndexTest {
             assertEquals(new BigDecimal("3.3"), rs.getBigDecimal(1));
             assertEquals(new BigDecimal("4.3"), rs.getBigDecimal(2));
             assertEquals(new BigDecimal("5.3"), rs.getBigDecimal(3));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Ignore("PHOENIX-63")
+    @Test
+    public void testNullValueIndexKey() throws Exception {
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            String ddl = "CREATE TABLE DEMO(R VARCHAR PRIMARY KEY, A DOUBLE, C VARCHAR)";
+            conn.createStatement().execute(ddl);
+            ddl = "CREATE INDEX IDX_DEMO ON DEMO (A) INCLUDE (C)";
+            conn.createStatement().execute(ddl);
+    
+            PreparedStatement stmt = conn.prepareStatement("upsert into DEMO values(?, ?, ?)");
+            stmt.setString(1, "r1");
+            stmt.setString(2, null);
+            stmt.setString(3, "c1");
+            stmt.executeUpdate();
+            conn.commit();
+            
+            String query = "select * from DEMO"; 
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER IDX_DEMO", QueryUtil.getExplainPlan(rs));
+            
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("r1", rs.getString(1));
+            assertNull(rs.getString(2));
+            assertEquals("c1", rs.getString(3));
             assertFalse(rs.next());
         } finally {
             conn.close();

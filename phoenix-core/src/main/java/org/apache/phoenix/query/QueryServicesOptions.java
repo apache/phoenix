@@ -117,6 +117,7 @@ public class QueryServicesOptions {
     public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS =  60000 * 30; // 30 mins   
     public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE =  1024L*1024L*20L; // 20 Mb
     public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE =  1024L*1024L*10L; // 10 Mb
+    public static final int DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES = 1000;
     
     private final Configuration config;
     

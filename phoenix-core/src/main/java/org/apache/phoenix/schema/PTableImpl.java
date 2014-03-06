@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.schema;
 
-import static org.apache.phoenix.client.KeyValueBuilder.addQuietly;
-import static org.apache.phoenix.client.KeyValueBuilder.deleteQuietly;
 import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE;
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
 
@@ -40,7 +38,6 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;

@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.query;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
 
 import java.sql.SQLException;
 import java.util.Collections;
@@ -38,8 +38,6 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.hadoop.hbase.util.VersionInfo;
-import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
@@ -47,6 +45,8 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
@@ -67,6 +67,7 @@ import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -89,9 +90,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public ConnectionlessQueryServicesImpl(QueryServices queryServices) {
         super(queryServices);
         metaData = newEmptyMetaData();
-        // find the HBase version and use that to determine the KeyValueBuilder that should be used
-        String hbaseVersion = VersionInfo.getVersion();
-        this.kvBuilder = KeyValueBuilder.get(hbaseVersion);
+        // Use KeyValueBuilder that builds real KeyValues, as our test utils require this
+        this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
     }
 
     private PMetaData newEmptyMetaData() {
@@ -260,8 +260,17 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata, String parentTableName) throws SQLException {
         byte[][] rowKeyMetadata = new byte[3][];
         SchemaUtil.getVarChars(tableMetadata.get(0).getRow(), rowKeyMetadata);
+<<<<<<< HEAD
         Cell newKV = tableMetadata.get(0).getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
         PIndexState newState =  PIndexState.fromSerializedValue(newKV.getValueArray()[newKV.getValueOffset()]);
+=======
+        Mutation m = MetaDataUtil.getTableHeaderRow(tableMetadata);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        if (!MetaDataUtil.getMutationValue(m, INDEX_STATE_BYTES, kvBuilder, ptr)) {
+            throw new IllegalStateException();
+        }
+        PIndexState newState =  PIndexState.fromSerializedValue(ptr.get()[ptr.getOffset()]);
+>>>>>>> origin/master
         byte[] tenantIdBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
         String schemaName = Bytes.toString(rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX]);
         String indexName = Bytes.toString(rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX]);

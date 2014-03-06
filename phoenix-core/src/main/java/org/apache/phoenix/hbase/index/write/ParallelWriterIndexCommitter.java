@@ -33,8 +33,6 @@ import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-
-import com.google.common.collect.Multimap;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
 import org.apache.phoenix.hbase.index.parallel.QuickFailingTaskRunner;
@@ -45,6 +43,9 @@ import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
 import org.apache.phoenix.hbase.index.table.CachingHTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+
+import com.google.common.collect.Multimap;
 
 /**
  * Write index updates to the index tables in parallel. We attempt to early exit from the writes if
@@ -67,7 +68,16 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
   private HTableFactory factory;
   private Stoppable stopped;
   private QuickFailingTaskRunner pool;
+  private KeyValueBuilder kvBuilder;
 
+  public ParallelWriterIndexCommitter() {
+  }
+
+  // For testing
+  public ParallelWriterIndexCommitter(String hbaseVersion) {
+      kvBuilder = KeyValueBuilder.get(hbaseVersion);
+  }
+  
   @Override
   public void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name) {
     Configuration conf = env.getConfiguration();
@@ -78,6 +88,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
             DEFAULT_CONCURRENT_INDEX_WRITER_THREADS).
           setCoreTimeout(INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env),
       env.getRegionServerServices(), parent, CachingHTableFactory.getCacheSize(conf));
+    this.kvBuilder = KeyValueBuilder.get(env.getHBaseVersion());
   }
 
   /**
@@ -111,7 +122,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
     for (Entry<HTableInterfaceReference, Collection<Mutation>> entry : entries) {
       // get the mutations for each table. We leak the implementation here a little bit to save
       // doing a complete copy over of all the index update for each table.
-      final List<Mutation> mutations = (List<Mutation>) entry.getValue();
+      final List<Mutation> mutations = kvBuilder.cloneIfNecessary((List<Mutation>) entry.getValue());
       final HTableInterfaceReference tableReference = entry.getKey();
       /*
        * Write a batch of index updates to an index table. This operation stops (is cancelable) via

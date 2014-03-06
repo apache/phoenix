@@ -27,7 +27,6 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -143,11 +142,10 @@ public class IndexUtil {
     }
 
     public static List<Mutation> generateIndexData(final PTable table, PTable index,
-            List<Mutation> dataMutations, ImmutableBytesWritable ptr, KeyValueBuilder builder)
+            List<Mutation> dataMutations, ImmutableBytesWritable ptr, final KeyValueBuilder kvBuilder)
             throws SQLException {
         try {
             IndexMaintainer maintainer = index.getIndexMaintainer(table);
-            maintainer.setKvBuilder(builder);
             List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
            for (final Mutation dataMutation : dataMutations) {
                 long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
@@ -174,20 +172,22 @@ public class IndexUtil {
                             for (Cell kv : kvs) {
                                 if (Bytes.compareTo(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), family, 0, family.length) == 0 &&
                                     Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), qualifier, 0, qualifier.length) == 0) {
-                                    return new ImmutableBytesPtr(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
+                                  ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+                                  kvBuilder.getValueAsPtr(kv, ptr);
+                                  return ptr;
                                 }
                             }
                             return null;
                         }
                         
                     };
-                    indexMutations.add(maintainer.buildUpdateMutation(valueGetter, ptr, ts));
+                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts));
                 } else {
                     if (!maintainer.getIndexedColumns().isEmpty()) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_DELETE_IF_IMMUTABLE_INDEX).setSchemaName(table.getSchemaName().getString())
                         .setTableName(table.getTableName().getString()).build().buildException();
                     }
-                    indexMutations.add(maintainer.buildDeleteMutation(ptr, ts));
+                    indexMutations.add(maintainer.buildDeleteMutation(kvBuilder, ptr, ts));
                 }
             }
             return indexMutations;

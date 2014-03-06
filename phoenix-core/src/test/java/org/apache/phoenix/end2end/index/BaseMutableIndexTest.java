@@ -49,7 +49,7 @@ public class BaseMutableIndexTest extends BaseIndexTest {
                 "   b.char_col2 CHAR(5), " +
                 "   b.int_col2 INTEGER, " +
                 "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10), " +
+                "   b.decimal_col2 DECIMAL, " +
                 "   b.date_col DATE " + 
                 "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk))";
             Properties props = new Properties(TEST_PROPERTIES);

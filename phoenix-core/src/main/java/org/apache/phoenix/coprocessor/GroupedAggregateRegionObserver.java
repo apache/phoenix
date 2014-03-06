@@ -20,7 +20,9 @@ package org.apache.phoenix.coprocessor;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryServices.GROUPBY_ESTIMATED_DISTINCT_VALUES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_GROUPBY_SPILLABLE;
 
 import java.io.ByteArrayInputStream;
@@ -48,11 +50,6 @@ import org.apache.hadoop.hbase.regionserver.MultiVersionConsistencyControl;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.collect.Maps;
-import com.google.common.io.Closeables;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.cache.aggcache.SpillableGroupByCache;
@@ -71,6 +68,11 @@ import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TupleUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.Maps;
+import com.google.common.io.Closeables;
 
 /**
  * Region observer that aggregates grouped rows (i.e. SQL query with GROUP BY clause)
@@ -86,7 +88,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
     public static final String KEY_ORDERED_GROUP_BY_EXPRESSIONS = "OrderedGroupByExpressions";
 
     public static final String ESTIMATED_DISTINCT_VALUES = "EstDistinctValues";
-    public static final int DEFAULT_ESTIMATED_DISTINCT_VALUES = 10000;
     public static final int MIN_DISTINCT_VALUES = 100;
 
     /**
@@ -345,7 +346,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             logger.debug("Grouped aggregation over unordered rows with scan " + scan
                     + ", group by " + expressions + ", aggregators " + aggregators);
         }
-        int estDistVals = DEFAULT_ESTIMATED_DISTINCT_VALUES;
+        RegionCoprocessorEnvironment env = c.getEnvironment();
+        Configuration conf = env.getConfiguration();
+        int estDistVals = conf.getInt(GROUPBY_ESTIMATED_DISTINCT_VALUES_ATTRIB, DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES);
         byte[] estDistValsBytes = scan.getAttribute(ESTIMATED_DISTINCT_VALUES);
         if (estDistValsBytes != null) {
             // Allocate 1.5x estimation
@@ -353,8 +356,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                             (int) (Bytes.toInt(estDistValsBytes) * 1.5f));
         }
 
-        RegionCoprocessorEnvironment env = c.getEnvironment();
-        Configuration conf = env.getConfiguration();
         final boolean spillableEnabled =
                 conf.getBoolean(GROUPBY_SPILLABLE_ATTRIB, DEFAULT_GROUPBY_SPILLABLE);
 

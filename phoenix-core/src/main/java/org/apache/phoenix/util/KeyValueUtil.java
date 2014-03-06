@@ -17,16 +17,18 @@
  */
 package org.apache.phoenix.util;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValue.KVComparator;
 import org.apache.hadoop.hbase.KeyValue.Type;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 
 /**
  * 
@@ -39,15 +41,6 @@ import org.apache.hadoop.hbase.util.Bytes;
  */
 public class KeyValueUtil {
     private KeyValueUtil() {
-    }
-
-    public static KeyValue newKeyValue(Result r, byte[] cf, byte[] cq, long ts, byte[] value, int valueOffset, int valueLength) {
-        byte[] bytes = ResultUtil.getRawBytes(r);
-        return new KeyValue(bytes, ResultUtil.getKeyOffset(r), ResultUtil.getKeyLength(r),
-                cf, 0, cf.length,
-                cq, 0, cq.length,
-                ts, Type.Put,
-                value, valueOffset, valueLength);
     }
 
     public static KeyValue newKeyValue(byte[] key, byte[] cf, byte[] cq, long ts, byte[] value, int valueOffset, int valueLength) {
@@ -88,22 +81,28 @@ public class KeyValueUtil {
         return newKeyValue(key,cf,cq,ts,value,0,value.length);
     }
 
-    public static KeyValue newKeyValue(Result r, byte[] cf, byte[] cq, long ts, byte[] value) {
-        return newKeyValue(r,cf,cq,ts,value,0,value.length);
-    }
-
     /**
      * Binary search for latest column value without allocating memory in the process
+     * @param kvBuilder TODO
      * @param kvs
      * @param family
      * @param qualifier
      */
+<<<<<<< HEAD
     public static Cell getColumnLatest(List<Cell>kvs, byte[] family, byte[] qualifier) {
         if (kvs.size() == 0) {
         	return null;
         }
         Cell row = kvs.get(0);
         Comparator<Cell> comp = new SearchComparator(row.getRowArray(), row.getRowOffset(), row.getRowLength(), family, qualifier);
+=======
+    public static Cell getColumnLatest(KeyValueBuilder kvBuilder, List<Cell>kvs, byte[] family, byte[] qualifier) {
+        if (kvs.size() == 0) {
+        	return null;
+        }
+        KeyValue kvForRow = kvs.get(0);
+        Comparator<KeyValue> comp = new SearchComparator(kvBuilder, kvForRow, family, qualifier);
+>>>>>>> origin/master
         // pos === ( -(insertion point) - 1)
         int pos = Collections.binarySearch(kvs, null, comp);
         // never will exact match
@@ -127,6 +126,43 @@ public class KeyValueUtil {
         return kv;
     }
 
+
+    /**
+     * Binary search for latest column value without allocating memory in the process
+     * @param kvBuilder TODO
+     * @param kvs
+     * @param family
+     * @param qualifier
+     */
+    public static KeyValue getColumnLatest(KeyValueBuilder kvBuilder, KeyValue[] kvs, byte[] family, byte[] qualifier) {
+        if (kvs.length == 0) {
+            return null;
+        }
+        KeyValue kvForRow = kvs[0];
+        Comparator<KeyValue> comp = new SearchComparator(kvBuilder, kvForRow, family, qualifier);
+        // pos === ( -(insertion point) - 1)
+        int pos = Arrays.binarySearch(kvs, null, comp);
+        // never will exact match
+        if (pos < 0) {
+          pos = (pos+1) * -1;
+          // pos is now insertion point
+        }
+        if (pos == kvs.length) {
+          return null; // doesn't exist
+        }
+    
+        KeyValue kv = kvs[pos];
+        if (Bytes.compareTo(kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength(),
+                family, 0, family.length) != 0) {
+            return null;
+        }
+        if (Bytes.compareTo(kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength(),
+                qualifier, 0, qualifier.length) != 0) {
+            return null;
+        }
+        return kv;
+    }
+
     /*
      * Special comparator, *only* works for binary search.
      * Current JDKs only uses the search term on the right side,
@@ -134,18 +170,16 @@ public class KeyValueUtil {
      * to inline the search term in the comparator
      */
 	private static class SearchComparator implements Comparator<Cell> {
-		private final byte[] row;
+	  private final KeyValueBuilder kvBuilder;
+		private final Cell r;
 		private final byte[] family;
 		private final byte[] qualifier;
-		private final int rowOff;
-		private final int rowLen;
 
-		public SearchComparator(byte[] r, int rOff, int rLen, byte[] f, byte[] q) {
-			row = r;
+		public SearchComparator(KeyValueBuilder kvBuilder, Cell r, byte[] f, byte[] q) {
+		  this.kvBuilder = kvBuilder;
+			this.r = r;
 			family = f;
 			qualifier = q;
-			rowOff = rOff;
-			rowLen = rLen;
 		}
 
 		@Override
@@ -154,25 +188,30 @@ public class KeyValueUtil {
 			final byte[] buf = l.getRowArray();
 			final int rOff = l.getRowOffset();
 			final short rLen = l.getRowLength();
+      KVComparator comparator = kvBuilder.getKeyValueComparator();
 			// row
-			int val = Bytes.compareTo(buf, rOff, rLen, row, rowOff, rowLen);
+			int val = comparator.compareRows(l.getRowArray(), l.getRowOffset(), l.getRowLength(),
+			  r.getRowArray(), r.getRowOffset(), r.getRowLength());
 			if (val != 0) {
 				return val;
 			}
 			// family
 			final int fOff = l.getFamilyOffset();
 			final byte fLen = l.getFamilyLength();
-			val = Bytes.compareTo(l.getFamilyArray(), fOff, fLen, family, 0, family.length);
+      // family
+			val = kvBuilder.compareFamily(l.getFamilyArray(), fOff, fLen, family, 0, family.length);
 			if (val != 0) {
 				return val;
 			}
 			// qualifier
-			val = Bytes.compareTo(l.getQualifierArray(), l.getQualifierOffset(),
-					l.getQualifierLength(), qualifier, 0, qualifier.length);
+      val = kvBuilder.compareQualifier(l.getQualifierArray(), l.getQualifierOffset(),
+              l.getQualifierLength(), qualifier, 0, qualifier.length);
 			if (val != 0) {
 				return val;
 			}
-			// want latest TS and type, so we get the first
+			// We want the latest TS and type, so we get the first one.
+			// This assumes they KV are passed in ordered from latest to earliest,
+			// as that's the order the server sends them.
 			return 1;
 		}
 	}

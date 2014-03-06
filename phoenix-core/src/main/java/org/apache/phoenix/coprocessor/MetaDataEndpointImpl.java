@@ -85,7 +85,6 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.cache.GlobalCache;
-import org.apache.phoenix.client.GenericKeyValueBuilder;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
@@ -995,8 +994,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
                     EnvironmentEdgeManager.currentTimeMillis(), null);
         }
+
         Cell typeKeyValue =
-                KeyValueUtil.getColumnLatest(results, PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                KeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, results, PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.TABLE_TYPE_BYTES);
         assert (typeKeyValue != null && typeKeyValue.getValueLength() == 1);
         if (tableType != PTableType.fromSerializedValue(typeKeyValue.getValueArray()[typeKeyValue

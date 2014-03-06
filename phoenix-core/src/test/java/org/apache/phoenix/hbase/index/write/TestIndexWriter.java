@@ -44,20 +44,17 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.junit.Rule;
-import org.junit.Test;
-import org.mockito.Mockito;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
-
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.hbase.index.StubAbortable;
 import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.write.IndexWriter;
-import org.apache.phoenix.hbase.index.write.KillServerOnFailurePolicy;
-import org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter;
+import org.junit.Rule;
+import org.junit.Test;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 public class TestIndexWriter {
   private static final Log LOG = LogFactory.getLog(TestIndexWriter.class);
@@ -119,7 +116,7 @@ public class TestIndexWriter {
     tables.put(new ImmutableBytesPtr(tableName), table);
 
     // setup the writer and failure policy
-    ParallelWriterIndexCommitter committer = new ParallelWriterIndexCommitter();
+    ParallelWriterIndexCommitter committer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
     committer.setup(factory, exec, abort, stop, 2);
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
     policy.setup(stop, abort);
@@ -192,7 +189,7 @@ public class TestIndexWriter {
     tables.put(new ImmutableBytesPtr(tableName), table);
     tables.put(new ImmutableBytesPtr(tableName2), table2);
 
-    ParallelWriterIndexCommitter committer = new ParallelWriterIndexCommitter();
+    ParallelWriterIndexCommitter committer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
     committer.setup(factory, exec, abort, stop, 2);
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
     policy.setup(stop, abort);
@@ -259,7 +256,7 @@ public class TestIndexWriter {
     indexUpdates.add(new Pair<Mutation, byte[]>(m, tableName));
 
     // setup the writer
-    ParallelWriterIndexCommitter committer = new ParallelWriterIndexCommitter();
+    ParallelWriterIndexCommitter committer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
     committer.setup(factory, exec, abort, stop, 2);
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
     policy.setup(stop, abort);

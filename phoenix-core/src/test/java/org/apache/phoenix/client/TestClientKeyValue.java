@@ -32,15 +32,12 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.util.ClientKeyValue;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
-/**
- * TODO: once the only test is not ignored, make this class concrete again
- */
-public abstract class TestClientKeyValue {
+public class TestClientKeyValue {
   private final static HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
   private static byte[] ROW = Bytes.toBytes("testRow");
   private static byte[] FAMILY = Bytes.toBytes("testFamily");
@@ -67,7 +64,6 @@ public abstract class TestClientKeyValue {
    * @throws Exception
    */
   @Test
-  @Ignore("Only supported with HBase 0.94.14")
   public void testClientKeyValue() throws Exception {
     byte[] TABLE = Bytes.toBytes("testClientKeyValue");
     HTable table = TEST_UTIL.createTable(TABLE, new byte[][] { FAMILY });

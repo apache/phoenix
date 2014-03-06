@@ -53,7 +53,7 @@ public class MultiKeyValueTuple extends BaseTuple {
 
     @Override
     public Cell getValue(byte[] family, byte[] qualifier) {
-        return KeyValueUtil.getColumnLatest(values, family, qualifier);
+        return KeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, values, family, qualifier);
     }
 
     @Override
