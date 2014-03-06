@@ -80,6 +80,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String GROUPBY_SPILLABLE_ATTRIB  = "phoenix.groupby.spillable";
     public static final String GROUPBY_SPILL_FILES_ATTRIB = "phoenix.groupby.spillFiles";
     public static final String GROUPBY_MAX_CACHE_SIZE_ATTRIB = "phoenix.groupby.maxCacheSize";
+    public static final String GROUPBY_ESTIMATED_DISTINCT_VALUES_ATTRIB = "phoenix.groupby.estimatedDistinctValues";
 
     public static final String CALL_QUEUE_PRODUCER_ATTRIB_NAME = "CALL_QUEUE_PRODUCER";
     
