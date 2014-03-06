@@ -20,8 +20,9 @@ package org.apache.phoenix.parse;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.google.common.collect.ImmutableMap;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.collect.ImmutableMap;
 
 
 /**
@@ -81,6 +82,16 @@ public class HintNode {
         * Avoid using star-join optimization.
         */
        NO_STAR_JOIN,
+       /**
+        * Avoid using the no seek optimization. When there are many columns which are not selected coming in between 2
+        * selected columns and/or versions of columns, this should be used.
+        */
+      SEEK_TO_COLUMN,
+       /**
+        * Avoid seeks to select specified columns. When there are very less number of columns which are not selected in
+        * between 2 selected columns this will be give better performance.
+        */
+      NO_SEEK_TO_COLUMN,
     };
 
     private final Map<Hint,String> hints;

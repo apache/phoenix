@@ -18,20 +18,9 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.NavigableSet;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.TreeSet;
-import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
@@ -40,27 +29,16 @@ import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.compile.RowProjector;
-import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.*;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.job.JobManager.JobCallable;
-import org.apache.phoenix.parse.FilterableStatement;
-import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.parse.*;
+import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.query.*;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.SaltingUtil;
-import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SQLCloseables;
-import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -149,9 +127,17 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                     referencedCfCount++;
                 }
             }
-            boolean useOptimization = referencedCfCount == 1;
-            // when referencedCfCount is >1 we are not using the optimization as of now
-            // TODO support adding a HINT in query so that in case of cf count>1 also, this optimization can be applied.
+            boolean useOptimization;
+            if (statement.getHint().hasHint(Hint.SEEK_TO_COLUMN)) {
+                // Do not use the optimization
+                useOptimization = false;
+            } else if (statement.getHint().hasHint(Hint.NO_SEEK_TO_COLUMN)) {
+                // Strictly use the optimization
+                useOptimization = true;
+            } else {
+                // when referencedCfCount is >1 and no Hints, we are not using the optimization
+                useOptimization = referencedCfCount == 1;
+            }
             if (useOptimization) {
                 for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
                     ImmutableBytesPtr cf = new ImmutableBytesPtr(entry.getKey());
