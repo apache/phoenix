@@ -505,6 +505,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     private static final String OLD_PACKAGE = "com.salesforce.";
     private static final String NEW_PACKAGE = "org.apache.";
+    private static final String OLD_INDEXER_CLASS_NAME = "com.salesforce.hbase.index.Indexer";
     
     private void addCoprocessors(byte[] tableName, HTableDescriptor descriptor, PTableType tableType) throws SQLException {
         // The phoenix jar must be available on HBase classpath
@@ -531,13 +532,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Remove indexing coprocessor if on VIEW or INDEX, as we may have added this by mistake in 2.x versions
             if (tableType == PTableType.INDEX || tableType == PTableType.VIEW) {
                 descriptor.removeCoprocessor(Indexer.class.getName());
-                descriptor.removeCoprocessor(Indexer.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                descriptor.removeCoprocessor(OLD_INDEXER_CLASS_NAME);
             }
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes. Also,
             // don't install on the metadata table until we fix the TODO there.
             if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW) && !SchemaUtil.isMetaTable(tableName) && !descriptor.hasCoprocessor(Indexer.class.getName())) {
-                descriptor.removeCoprocessor(Indexer.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                descriptor.removeCoprocessor(OLD_INDEXER_CLASS_NAME);
                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                 opts.put(CoveredColumnsIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                 Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts);
