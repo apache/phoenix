@@ -197,7 +197,7 @@ public class MetaDataUtil {
     
     public static PTableType getTableType(List<Mutation> tableMetaData, KeyValueBuilder builder,
       ImmutableBytesPtr value) {
-        if (getMutationKeyValue(getPutOnlyTableHeaderRow(tableMetaData),
+        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
             PhoenixDatabaseMetaData.TABLE_TYPE_BYTES, builder, value)) {
             return PTableType.fromSerializedValue(value.get()[value.getOffset()]);
         }
@@ -212,14 +212,6 @@ public class MetaDataUtil {
         return tableMetaData.get(0);
     }
 
-    public static byte[] getMutationKVByteValue(Mutation headerRow, byte[] key,
-        KeyValueBuilder builder, ImmutableBytesWritable ptr) {
-        if (getMutationKeyValue(headerRow, key, builder, ptr)) {
-            return ByteUtil.copyKeyBytesIfNecessary(ptr);
-        }
-        return ByteUtil.EMPTY_BYTE_ARRAY;
-    }
-
   /**
    * Get the mutation who's qualifier matches the passed key
    * <p>
@@ -229,10 +221,10 @@ public class MetaDataUtil {
    * @param headerRow mutation to check
    * @param key to check
    * @param builder that created the {@link KeyValue KeyValues} in the {@link Mutation}
-   * @param ptr to update with the value of the mutation
-   * @return the value of the matching {@link KeyValue}
+   * @param ptr to point to the KeyValue's value if found
+   * @return true if the KeyValue was found and false otherwise
    */
-  public static boolean getMutationKeyValue(Mutation headerRow, byte[] key,
+  public static boolean getMutationValue(Mutation headerRow, byte[] key,
       KeyValueBuilder builder, ImmutableBytesWritable ptr) {
         List<KeyValue> kvs = headerRow.getFamilyMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
         if (kvs != null) {
@@ -282,14 +274,14 @@ public class MetaDataUtil {
     }
     
     public static boolean isMultiTenant(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
-        if (getMutationKeyValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, builder, ptr)) {
+        if (getMutationValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, builder, ptr)) {
             return Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(ptr));
         }
         return false;
     }
     
     public static boolean isSalted(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
-        return MetaDataUtil.getMutationKeyValue(m, PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES, builder, ptr);
+        return MetaDataUtil.getMutationValue(m, PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES, builder, ptr);
     }
     
     public static byte[] getViewIndexPhysicalName(byte[] physicalTableName) {

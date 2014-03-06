@@ -21,6 +21,7 @@ import java.io.IOException;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValue.KVComparator;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -61,8 +62,7 @@ public abstract class KeyValueBuilder {
         }
     }
 
-    // FIXME: Temporarily disabling usage of this pending more testing
-    private static final int CUSTOM_KEY_VALUE_MIN_VERSION = MetaDataUtil.encodeVersion("0.94.99");
+    private static final int CUSTOM_KEY_VALUE_MIN_VERSION = MetaDataUtil.encodeVersion("0.94.14");
 
     public static KeyValueBuilder get(String hbaseVersion) {
         int version = MetaDataUtil.encodeVersion(hbaseVersion);
@@ -115,9 +115,13 @@ public abstract class KeyValueBuilder {
    */
   public abstract int compareQualifier(KeyValue kv, byte[] key, int offset, int length);
 
+  public abstract int compareFamily(KeyValue kv, byte[] key, int offset, int length);
+  public abstract int compareRow(KeyValue kv, byte[] row, int offset, int length);
   /**
    * @param kv to read
    * @param ptr set with the value from the {@link KeyValue}
    */
   public abstract void getValueAsPtr(KeyValue kv, ImmutableBytesWritable ptr);
+  
+  public abstract KVComparator getKeyValueComparator();
 }

@@ -21,6 +21,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.client.GenericKeyValueBuilder;
 import org.apache.phoenix.util.KeyValueUtil;
 
 import com.google.common.collect.ImmutableList;
@@ -53,7 +54,7 @@ public class MultiKeyValueTuple extends BaseTuple {
 
     @Override
     public KeyValue getValue(byte[] family, byte[] qualifier) {
-        return KeyValueUtil.getColumnLatest(values, family, qualifier);
+        return KeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, values, family, qualifier);
     }
 
     @Override

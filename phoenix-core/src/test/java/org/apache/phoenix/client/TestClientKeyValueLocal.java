@@ -19,25 +19,22 @@ package org.apache.phoenix.client;
 
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.TestKeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.TestKeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
-import org.junit.Ignore;
 import org.junit.Test;
-
-import org.apache.phoenix.client.ClientKeyValue;
 
 /**
  * Ensure that we can accss a {@link ClientKeyValue} as expected. For instance, write it to bytes
@@ -205,7 +202,6 @@ public class TestClientKeyValueLocal {
    * @throws Exception
    */
   @Test
-  @Ignore("Only supported with HBase 0.94.14")
   public void testUsableWithPut() throws Exception {
     final byte[] a = Bytes.toBytes("aaa");
     byte[] family1 = Bytes.toBytes("abc");
@@ -231,7 +227,6 @@ public class TestClientKeyValueLocal {
    * @throws Exception
    */
   @Test
-  @Ignore("Only supported with HBase 0.94.14")
   public void testUsableWithDelete() throws Exception {
     final byte[] a = Bytes.toBytes("aaa");
     byte[] family1 = Bytes.toBytes("abc");

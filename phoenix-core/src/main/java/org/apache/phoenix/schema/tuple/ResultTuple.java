@@ -21,7 +21,8 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.util.ResultUtil;
+import org.apache.phoenix.client.GenericKeyValueBuilder;
+import org.apache.phoenix.util.KeyValueUtil;
 
 
 public class ResultTuple extends BaseTuple {
@@ -44,7 +45,7 @@ public class ResultTuple extends BaseTuple {
     
     @Override
     public void getKey(ImmutableBytesWritable ptr) {
-        ResultUtil.getKey(result, ptr);
+        ptr.set(result.getRow());
     }
 
     @Override
@@ -54,7 +55,7 @@ public class ResultTuple extends BaseTuple {
 
     @Override
     public KeyValue getValue(byte[] family, byte[] qualifier) {
-        return result.getColumnLatest(family, qualifier);
+        return KeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, result.raw(), family, qualifier);
     }
 
     @Override

@@ -1167,14 +1167,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
         if (result.getMutationCode() == MutationCode.COLUMN_NOT_FOUND) { // Success
             // Flush the table if transitioning DISABLE_WAL from TRUE to FALSE
-            if (Boolean.FALSE.equals(PDataType.BOOLEAN.toObject(
-                    MetaDataUtil.getMutationKVByteValue(m,PhoenixDatabaseMetaData.DISABLE_WAL_BYTES, kvBuilder, ptr)))) {
+            if (  MetaDataUtil.getMutationValue(m,PhoenixDatabaseMetaData.DISABLE_WAL_BYTES, kvBuilder, ptr)
+               && Boolean.FALSE.equals(PDataType.BOOLEAN.toObject(ptr))) {
                 flushTable(table.getPhysicalName().getBytes());
             }
             
             if (tableType == PTableType.TABLE) {
                 // If we're changing MULTI_TENANT to true or false, create or drop the view index table
-                if (MetaDataUtil.getMutationKeyValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, kvBuilder, ptr)){
+                if (MetaDataUtil.getMutationValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, kvBuilder, ptr)){
                     long timestamp = MetaDataUtil.getClientTimeStamp(m);
                     if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()))) {
                         this.ensureViewIndexTableCreated(table, timestamp);

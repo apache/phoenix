@@ -17,17 +17,16 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class TenantSpecificViewIndexTest extends BaseTenantSpecificViewIndexTest {
 	
-    @Test @Ignore("PHOENIX-110")
+    @Test
     public void testUpdatableView() throws Exception {
         testUpdatableView(null);
     }
 
-    @Test @Ignore("PHOENIX-110")
+    @Test
     public void testUpdatableViewsWithSameNameDifferentTenants() throws Exception {
         testUpdatableViewsWithSameNameDifferentTenants(null);
     }

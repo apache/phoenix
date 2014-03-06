@@ -20,6 +20,7 @@ package org.apache.phoenix.client;
 import static org.apache.phoenix.hbase.index.util.ImmutableBytesPtr.copyBytesIfNecessary;
 
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValue.KVComparator;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
@@ -27,55 +28,69 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 
 /**
- * {@link KeyValueBuilder} that does simple byte[] copies to build the underlying key-value. This is
- * exactly the same behavior as currently used in {@link Delete} and {@link Put}.
+ * {@link KeyValueBuilder} that does simple byte[] copies to build the underlying key-value. This is exactly the same
+ * behavior as currently used in {@link Delete} and {@link Put}.
  */
 public class GenericKeyValueBuilder extends KeyValueBuilder {
 
-  public static final KeyValueBuilder INSTANCE = new GenericKeyValueBuilder();
+    public static final KeyValueBuilder INSTANCE = new GenericKeyValueBuilder();
 
-  private GenericKeyValueBuilder() {
-    // private ctor for singleton
-  }
+    private GenericKeyValueBuilder() {
+        // private ctor for singleton
+    }
 
-  @Override
-  public KeyValue buildPut(ImmutableBytesWritable row, ImmutableBytesWritable family,
-      ImmutableBytesWritable qualifier, long ts, ImmutableBytesWritable value) {
-    return build(row, family, qualifier, ts, Type.Put, value);
-  }
+    @Override
+    public KeyValue buildPut(ImmutableBytesWritable row, ImmutableBytesWritable family,
+            ImmutableBytesWritable qualifier, long ts, ImmutableBytesWritable value) {
+        return build(row, family, qualifier, ts, Type.Put, value);
+    }
 
-  @Override
-  public KeyValue buildDeleteFamily(ImmutableBytesWritable row, ImmutableBytesWritable family,
-      ImmutableBytesWritable qualifier, long ts) {
-    return build(row, family, qualifier, ts, Type.DeleteFamily, null);
-  }
-
-  @Override
-  public KeyValue buildDeleteColumns(ImmutableBytesWritable row, ImmutableBytesWritable family,
-      ImmutableBytesWritable qualifier, long ts) {
-    return build(row, family, qualifier, ts, Type.DeleteColumn, null);
-  }
-
-  @Override
-  public KeyValue buildDeleteColumn(ImmutableBytesWritable row, ImmutableBytesWritable family,
+    @Override
+    public KeyValue buildDeleteFamily(ImmutableBytesWritable row, ImmutableBytesWritable family,
             ImmutableBytesWritable qualifier, long ts) {
-    return build(row, family, qualifier, ts, Type.Delete, null);
-  }
+        return build(row, family, qualifier, ts, Type.DeleteFamily, null);
+    }
 
-  private KeyValue build(ImmutableBytesWritable row, ImmutableBytesWritable family,
-      ImmutableBytesWritable qualifier, long ts, KeyValue.Type type, ImmutableBytesWritable value) {
-    return new KeyValue(copyBytesIfNecessary(row), copyBytesIfNecessary(family),
-        copyBytesIfNecessary(qualifier), ts, type, value == null? null: copyBytesIfNecessary(value));
-  }
+    @Override
+    public KeyValue buildDeleteColumns(ImmutableBytesWritable row, ImmutableBytesWritable family,
+            ImmutableBytesWritable qualifier, long ts) {
+        return build(row, family, qualifier, ts, Type.DeleteColumn, null);
+    }
 
-  @Override
-  public int compareQualifier(KeyValue kv, byte[] key, int offset, int length) {
-    return Bytes.compareTo(kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength(), key,
-      offset, length);
-  }
+    @Override
+    public KeyValue buildDeleteColumn(ImmutableBytesWritable row, ImmutableBytesWritable family,
+            ImmutableBytesWritable qualifier, long ts) {
+        return build(row, family, qualifier, ts, Type.Delete, null);
+    }
 
-  @Override
-  public void getValueAsPtr(KeyValue kv, ImmutableBytesWritable writable) {
-    writable.set(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength());
-  }
+    private KeyValue build(ImmutableBytesWritable row, ImmutableBytesWritable family, ImmutableBytesWritable qualifier,
+            long ts, KeyValue.Type type, ImmutableBytesWritable value) {
+        return new KeyValue(copyBytesIfNecessary(row), copyBytesIfNecessary(family), copyBytesIfNecessary(qualifier),
+                ts, type, value == null ? null : copyBytesIfNecessary(value));
+    }
+
+    @Override
+    public int compareQualifier(KeyValue kv, byte[] key, int offset, int length) {
+        return Bytes.compareTo(kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength(), key, offset, length);
+    }
+
+    @Override
+    public int compareFamily(KeyValue kv, byte[] key, int offset, int length) {
+        return Bytes.compareTo(kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength(), key, offset, length);
+    }
+
+    @Override
+    public void getValueAsPtr(KeyValue kv, ImmutableBytesWritable writable) {
+        writable.set(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength());
+    }
+
+    @Override
+    public KVComparator getKeyValueComparator() {
+        return KeyValue.COMPARATOR;
+    }
+
+    @Override
+    public int compareRow(KeyValue kv, byte[] rrow, int roffset, int rlength) {
+        return Bytes.compareTo(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength(), rrow, roffset, rlength);
+    }
 }

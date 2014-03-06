@@ -71,7 +71,7 @@ public class MetaDataUtilTest {
 
     // read back out the value
     ImmutableBytesPtr ptr = new ImmutableBytesPtr();
-    assertTrue(MetaDataUtil.getMutationKeyValue(put, qualifier, builder, ptr));
+    assertTrue(MetaDataUtil.getMutationValue(put, qualifier, builder, ptr));
     assertEquals("Value returned doesn't match stored value for " + builder.getClass().getName()
         + "!", 0,
       ByteUtil.BYTES_PTR_COMPARATOR.compare(ptr, wrap(value)));
@@ -84,13 +84,13 @@ public class MetaDataUtilTest {
     KeyValueBuilder.addQuietly(put, builder, kv);
 
     // read back out the value
-    assertTrue(MetaDataUtil.getMutationKeyValue(put, qualifier, builder, ptr));
+    assertTrue(MetaDataUtil.getMutationValue(put, qualifier, builder, ptr));
     assertEquals("Value returned doesn't match stored value for " + builder.getClass().getName()
         + "!", 0,
       ByteUtil.BYTES_PTR_COMPARATOR.compare(ptr, wrap(value)));
 
     // ensure that we don't get matches for qualifiers that don't match
-    assertFalse(MetaDataUtil.getMutationKeyValue(put, Bytes.toBytes("not a match"), builder, ptr));
+    assertFalse(MetaDataUtil.getMutationValue(put, Bytes.toBytes("not a match"), builder, ptr));
   }
 
   private static ImmutableBytesPtr wrap(byte[] bytes) {
