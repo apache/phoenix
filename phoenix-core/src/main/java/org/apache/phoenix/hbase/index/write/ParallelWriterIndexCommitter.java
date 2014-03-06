@@ -70,6 +70,14 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
   private QuickFailingTaskRunner pool;
   private KeyValueBuilder kvBuilder;
 
+  public ParallelWriterIndexCommitter() {
+  }
+
+  // For testing
+  public ParallelWriterIndexCommitter(String hbaseVersion) {
+      kvBuilder = KeyValueBuilder.get(hbaseVersion);
+  }
+  
   @Override
   public void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name) {
     Configuration conf = env.getConfiguration();

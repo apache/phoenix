@@ -33,6 +33,11 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.hbase.index.StubAbortable;
+import org.apache.phoenix.hbase.index.TableName;
+import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -41,12 +46,6 @@ import org.mockito.stubbing.Answer;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
-
-import org.apache.phoenix.hbase.index.StubAbortable;
-import org.apache.phoenix.hbase.index.TableName;
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter;
 
 public class TestParalleIndexWriter {
 
@@ -60,7 +59,7 @@ public class TestParalleIndexWriter {
     ExecutorService exec = Executors.newFixedThreadPool(1);
     FakeTableFactory factory = new FakeTableFactory(
         Collections.<ImmutableBytesPtr, HTableInterface> emptyMap());
-    ParallelWriterIndexCommitter writer = new ParallelWriterIndexCommitter();
+    ParallelWriterIndexCommitter writer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
     Abortable mockAbort = Mockito.mock(Abortable.class);
     Stoppable mockStop = Mockito.mock(Stoppable.class);
     // create a simple writer
@@ -107,7 +106,7 @@ public class TestParalleIndexWriter {
     tables.put(tableName, table);
 
     // setup the writer and failure policy
-    ParallelWriterIndexCommitter writer = new ParallelWriterIndexCommitter();
+    ParallelWriterIndexCommitter writer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
     writer.setup(factory, exec, abort, stop, 1);
     writer.write(indexUpdates);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
