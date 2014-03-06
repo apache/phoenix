@@ -34,8 +34,6 @@ import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.IndexMetaDataCache;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.TenantCache;
-import org.apache.phoenix.client.GenericKeyValueBuilder;
-import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -45,6 +43,7 @@ import org.apache.phoenix.hbase.index.covered.TableState;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ServerUtil;
@@ -73,7 +72,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             PhoenixIndexFailurePolicy.class.getName());
         // We cannot use the ClientKeyValueBuilder because when these hit the memstore
         // the memstore assmes we have a backing buffer.
-        this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
+        this.kvBuilder = KeyValueBuilder.get(env.getHBaseVersion());
     }
 
     List<IndexMaintainer> getIndexMaintainers(Map<String, byte[]> attributes) throws IOException{

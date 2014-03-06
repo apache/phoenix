@@ -15,23 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.client;
+package org.apache.phoenix.hbase.index.util;
+
+import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.KVComparator;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 
+import com.google.common.collect.Lists;
 import com.google.common.primitives.Longs;
 
 /**
  * A {@link KeyValueBuilder} that builds {@link ClientKeyValue}, eliminating the extra byte copies inherent in the
  * standard {@link KeyValue} implementation.
  * <p>
- * This {@link KeyValueBuilder} is only supported in HBase 0.94.14+ (
- * {@link PhoenixDatabaseMetaData#CLIENT_KEY_VALUE_BUILDER_THRESHOLD}), with the addition of HBASE-9834.
+ * This {@link KeyValueBuilder} is only supported in HBase 0.94.14+ with the addition of HBASE-9834.
  */
 public class ClientKeyValueBuilder extends KeyValueBuilder {
 
@@ -336,5 +340,49 @@ public class ClientKeyValueBuilder extends KeyValueBuilder {
     public int compareFamily(KeyValue kv, byte[] rbuf, int roffset, int rlength) {
         byte[] lcf = kv.getFamily();
         return Bytes.compareTo(lcf, 0, lcf.length, rbuf, roffset, rlength);
+    }
+
+    /**
+     * Copy the mutations to that they have a real KeyValue as the memstore
+     * requires this.
+     */
+    @Override
+    public List<Mutation> cloneIfNecessary(List<Mutation> mutations) {
+        boolean cloneNecessary = false;
+        for (Mutation mutation : mutations) {
+            if (mutation instanceof Put) {
+                cloneNecessary = true;
+                break;
+            }
+        }
+        if (!cloneNecessary) {
+            return mutations;
+        }
+        List<Mutation> newMutations = Lists.newArrayListWithExpectedSize(mutations.size());
+        for (Mutation mutation : mutations) {
+            if (mutation instanceof Put) {
+                Put put = (Put)mutation;
+                @SuppressWarnings("deprecation")
+                Put newPut = new Put(put.getRow(),put.getTimeStamp(),put.getRowLock());
+                Map<byte[],List<KeyValue>> newFamilyMap = newPut.getFamilyMap();
+                for (Map.Entry<byte[], List<KeyValue>> entry : put.getFamilyMap().entrySet()) {
+                    List<KeyValue> values = entry.getValue();
+                    List<KeyValue> newValues = Lists.newArrayListWithExpectedSize(values.size());
+                    for (KeyValue value : values) {
+                        newValues.add(new KeyValue(value.getRow(),
+                                value.getFamily(),
+                                value.getQualifier(),
+                                value.getTimestamp(),
+                                Type.codeToType(value.getType()),
+                                value.getValue()));
+                    }
+                    newFamilyMap.put(entry.getKey(), newValues);
+                }
+                newMutations.add(newPut);
+            } else {
+                newMutations.add(mutation);
+            }
+        }
+        return newMutations;
     }
 }

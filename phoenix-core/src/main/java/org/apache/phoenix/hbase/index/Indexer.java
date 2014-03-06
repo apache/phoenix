@@ -58,19 +58,20 @@ import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Pair;
 
 import com.google.common.collect.Multimap;
+
 import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
 import org.apache.phoenix.hbase.index.builder.IndexBuilder;
 import org.apache.phoenix.hbase.index.builder.IndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
 import org.apache.phoenix.hbase.index.write.IndexFailurePolicy;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.apache.phoenix.hbase.index.write.recovery.TrackingParallelWriterIndexCommitter;
-import org.apache.phoenix.util.MetaDataUtil;
 
 /**
  * Do all the work of managing index updates from a single coprocessor. All Puts/Delets are passed
@@ -140,11 +141,11 @@ public class Indexer extends BaseRegionObserver {
 
   public static final String RecoveryFailurePolicyKeyForTesting = INDEX_RECOVERY_FAILURE_POLICY_KEY;
 
-    public static final int INDEXING_SUPPORTED_MAJOR_VERSION = MetaDataUtil
+    public static final int INDEXING_SUPPORTED_MAJOR_VERSION = VersionUtil
             .encodeMaxPatchVersion(0, 94);
-    public static final int INDEXING_SUPPORTED__MIN_MAJOR_VERSION = MetaDataUtil
+    public static final int INDEXING_SUPPORTED__MIN_MAJOR_VERSION = VersionUtil
             .encodeVersion("0.94.0");
-    private static final int INDEX_WAL_COMPRESSION_MINIMUM_SUPPORTED_VERSION = MetaDataUtil
+    private static final int INDEX_WAL_COMPRESSION_MINIMUM_SUPPORTED_VERSION = VersionUtil
             .encodeVersion("0.94.9");
 
   @Override
@@ -666,7 +667,7 @@ public class Indexer extends BaseRegionObserver {
      * @return <tt>null</tt> if the version is supported, the error message to display otherwise
      */
     public static String validateVersion(String hbaseVersion, Configuration conf) {
-        int encodedVersion = MetaDataUtil.encodeVersion(hbaseVersion);
+        int encodedVersion = VersionUtil.encodeVersion(hbaseVersion);
         // above 0.94 everything should be supported
         if (encodedVersion > INDEXING_SUPPORTED_MAJOR_VERSION) {
             return null;

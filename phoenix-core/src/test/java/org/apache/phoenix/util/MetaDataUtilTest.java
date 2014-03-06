@@ -24,10 +24,11 @@ import static org.junit.Assert.assertTrue;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.client.ClientKeyValueBuilder;
-import org.apache.phoenix.client.GenericKeyValueBuilder;
-import org.apache.phoenix.client.KeyValueBuilder;
+import org.apache.phoenix.hbase.index.util.ClientKeyValueBuilder;
+import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.junit.Test;
 
@@ -36,22 +37,22 @@ public class MetaDataUtilTest {
 
     @Test
     public void testEncode() {
-        assertEquals(MetaDataUtil.encodeVersion("0.94.5"),MetaDataUtil.encodeVersion("0.94.5-mapR"));
-        assertTrue(MetaDataUtil.encodeVersion("0.94.6")>MetaDataUtil.encodeVersion("0.94.5-mapR"));
-        assertTrue(MetaDataUtil.encodeVersion("0.94.6")>MetaDataUtil.encodeVersion("0.94.5"));
-        assertTrue(MetaDataUtil.encodeVersion("0.94.1-mapR")>MetaDataUtil.encodeVersion("0.94"));
+        assertEquals(VersionUtil.encodeVersion("0.94.5"),VersionUtil.encodeVersion("0.94.5-mapR"));
+        assertTrue(VersionUtil.encodeVersion("0.94.6")>VersionUtil.encodeVersion("0.94.5-mapR"));
+        assertTrue(VersionUtil.encodeVersion("0.94.6")>VersionUtil.encodeVersion("0.94.5"));
+        assertTrue(VersionUtil.encodeVersion("0.94.1-mapR")>VersionUtil.encodeVersion("0.94"));
     }
     
     @Test
     public void testCompatibility() {
-        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(1,2,1), 1));
-        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(1,2,10), 1));
-        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(1,2,0), 1));
-        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(1,2,255), 1));
-        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(2,2,0), 2));
-        assertTrue(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(2,10,36), 2));
-        assertFalse(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(3,1,10), 4));
-        assertFalse(MetaDataUtil.areClientAndServerCompatible(MetaDataUtil.encodeVersion(3,1,10), 2));
+        assertTrue(MetaDataUtil.areClientAndServerCompatible(VersionUtil.encodeVersion(1,2,1), 1));
+        assertTrue(MetaDataUtil.areClientAndServerCompatible(VersionUtil.encodeVersion(1,2,10), 1));
+        assertTrue(MetaDataUtil.areClientAndServerCompatible(VersionUtil.encodeVersion(1,2,0), 1));
+        assertTrue(MetaDataUtil.areClientAndServerCompatible(VersionUtil.encodeVersion(1,2,255), 1));
+        assertTrue(MetaDataUtil.areClientAndServerCompatible(VersionUtil.encodeVersion(2,2,0), 2));
+        assertTrue(MetaDataUtil.areClientAndServerCompatible(VersionUtil.encodeVersion(2,10,36), 2));
+        assertFalse(MetaDataUtil.areClientAndServerCompatible(VersionUtil.encodeVersion(3,1,10), 4));
+        assertFalse(MetaDataUtil.areClientAndServerCompatible(VersionUtil.encodeVersion(3,1,10), 2));
     }
 
   /**

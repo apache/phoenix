@@ -15,14 +15,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.client;
+package org.apache.phoenix.hbase.index.util;
 
 import static org.apache.phoenix.hbase.index.util.ImmutableBytesPtr.copyBytesIfNecessary;
+
+import java.util.List;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.KVComparator;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -92,5 +95,10 @@ public class GenericKeyValueBuilder extends KeyValueBuilder {
     @Override
     public int compareRow(KeyValue kv, byte[] rrow, int roffset, int rlength) {
         return Bytes.compareTo(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength(), rrow, roffset, rlength);
+    }
+
+    @Override
+    public List<Mutation> cloneIfNecessary(List<Mutation> mutations) {
+        return mutations;
     }
 }
