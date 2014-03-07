@@ -286,7 +286,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, int cacheSize, long timestamp)
+    public long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, long cacheSize, long timestamp)
             throws SQLException {
         SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName);
         if (sequenceMap.get(key) != null) {

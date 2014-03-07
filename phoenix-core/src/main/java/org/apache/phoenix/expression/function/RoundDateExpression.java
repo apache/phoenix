@@ -28,19 +28,18 @@ import java.util.List;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-
-import com.google.common.collect.Lists;
-
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType.PDataCodec;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
+
+import com.google.common.collect.Lists;
 
 /**
  * Function used to bucketize date/time values by rounding them to
@@ -180,15 +179,15 @@ public class RoundDateExpression extends ScalarFunction {
     }
     
     @Override
+    public Integer getMaxLength() {
+        return children.get(0).getMaxLength();
+    }
+    
+    @Override
     public PDataType getDataType() {
         return children.get(0).getDataType();
     }
     
-    @Override
-    public Integer getByteSize() {
-        return children.get(0).getByteSize();
-    }
-
     @Override
     public boolean isNullable() {
         return children.get(0).isNullable() || divBy == 0;

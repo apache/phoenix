@@ -23,13 +23,12 @@ import java.io.UnsupportedEncodingException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.StringUtil;
 
@@ -57,7 +56,7 @@ public class SubstrFunction extends PrefixFunction {
     private boolean isOffsetConstant;
     private boolean isLengthConstant;
     private boolean isFixedWidth;
-    private Integer byteSize;
+    private Integer maxLength;
 
     public SubstrFunction() {
     }
@@ -74,16 +73,18 @@ public class SubstrFunction extends PrefixFunction {
         isFixedWidth = getStrExpression().getDataType().isFixedWidth() && ((hasLengthExpression && isLengthConstant) || (!hasLengthExpression && isOffsetConstant));
         if (hasLengthExpression && isLengthConstant) {
             Integer maxLength = ((Number)((LiteralExpression)getLengthExpression()).getValue()).intValue();
-            this.byteSize = maxLength >= 0 ? maxLength : 0;
+            this.maxLength = maxLength >= 0 ? maxLength : 0;
         } else if (isOffsetConstant) {
             Number offsetNumber = (Number)((LiteralExpression)getOffsetExpression()).getValue();
             if (offsetNumber != null) {
                 int offset = offsetNumber.intValue();
-                if (getStrExpression().getDataType().isFixedWidth()) {
+                PDataType type = getStrExpression().getDataType();
+                if (type.isFixedWidth()) {
                     if (offset >= 0) {
-                        byteSize = getStrExpression().getByteSize() - offset + (offset == 0 ? 0 : 1);
+                        Integer maxLength = getStrExpression().getMaxLength();
+                        this.maxLength = maxLength - offset + (offset == 0 ? 0 : 1);
                     } else {
-                        byteSize = -offset;
+                        this.maxLength = -offset;
                     }
                 }
             }
@@ -152,14 +153,8 @@ public class SubstrFunction extends PrefixFunction {
     }
 
     @Override
-    public Integer getByteSize() {
-        return byteSize;
-    }
-    
-    // TODO: we shouldn't need both getByteSize() and getMaxLength()
-    @Override
     public Integer getMaxLength() {
-        return byteSize;
+        return maxLength;
     }
     
     @Override

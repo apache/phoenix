@@ -22,15 +22,14 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 @BuiltInFunction(name = InvertFunction.NAME, args = { @Argument() })
@@ -66,11 +65,6 @@ public class InvertFunction extends ScalarFunction {
     @Override
     public Integer getMaxLength() {
         return getChildExpression().getMaxLength();
-    }
-
-    @Override
-    public Integer getByteSize() {
-        return getChildExpression().getByteSize();
     }
 
     @Override
@@ -115,7 +109,7 @@ public class InvertFunction extends ScalarFunction {
             }
         };
     }
-    
+
     @Override
     public OrderPreserving preservesOrder() {
         return OrderPreserving.YES;

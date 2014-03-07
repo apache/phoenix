@@ -30,11 +30,6 @@ public interface PDatum {
     PDataType getDataType();
 
     /**
-     * @return maximum byte length of the column
-     */
-    Integer getByteSize();
-
-    /**
      * @return the actual length of the column. For decimal, it would be its precision. For char or
      * varchar, it would be the maximum length as specified during schema definition.
      */

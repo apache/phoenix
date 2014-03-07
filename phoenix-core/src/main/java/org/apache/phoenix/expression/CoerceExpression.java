@@ -36,7 +36,7 @@ import com.google.common.base.Preconditions;
 public class CoerceExpression extends BaseSingleExpression {
     private PDataType toType;
     private SortOrder toSortOrder;
-    private Integer byteSize;
+    private Integer maxLength;
     
     public CoerceExpression() {
     }
@@ -48,11 +48,11 @@ public class CoerceExpression extends BaseSingleExpression {
         return new CoerceExpression(expression, toType);
     }
     
-    public static Expression create(Expression expression, PDataType toType, SortOrder toSortOrder, Integer byteSize) throws SQLException {
+    public static Expression create(Expression expression, PDataType toType, SortOrder toSortOrder, Integer maxLength) throws SQLException {
         if (toType == expression.getDataType() && toSortOrder == expression.getSortOrder()) {
             return expression;
         }
-        return new CoerceExpression(expression, toType, toSortOrder, byteSize);
+        return new CoerceExpression(expression, toType, toSortOrder, maxLength);
     }
     
     //Package protected for tests
@@ -60,29 +60,24 @@ public class CoerceExpression extends BaseSingleExpression {
         this(expression, toType, SortOrder.getDefault(), null);
     }
     
-    CoerceExpression(Expression expression, PDataType toType, SortOrder toSortOrder, Integer byteSize) {
+    CoerceExpression(Expression expression, PDataType toType, SortOrder toSortOrder, Integer maxLength) {
         super(expression);
         Preconditions.checkNotNull(toSortOrder);
         this.toType = toType;
         this.toSortOrder = toSortOrder;
-        this.byteSize = byteSize;
+        this.maxLength = maxLength;
     }
 
     @Override
-    public Integer getByteSize() {
-        return byteSize;
-    }
-    
-    @Override
     public Integer getMaxLength() {
-        return byteSize;
+        return maxLength;
     }
     
     @Override
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + ((byteSize == null) ? 0 : byteSize.hashCode());
+        result = prime * result + ((maxLength == null) ? 0 : maxLength.hashCode());
         result = prime * result + ((toSortOrder == null) ? 0 : toSortOrder.hashCode());
         result = prime * result + ((toType == null) ? 0 : toType.hashCode());
         return result;
@@ -94,9 +89,9 @@ public class CoerceExpression extends BaseSingleExpression {
         if (obj == null) return false;
         if (getClass() != obj.getClass()) return false;
         CoerceExpression other = (CoerceExpression)obj;
-        if (byteSize == null) {
-            if (other.byteSize != null) return false;
-        } else if (!byteSize.equals(other.byteSize)) return false;
+        if (maxLength == null) {
+            if (other.maxLength != null) return false;
+        } else if (!maxLength.equals(other.maxLength)) return false;
         if (toSortOrder != other.toSortOrder) return false;
         if (toType != other.toType) return false;
         return true;
@@ -108,7 +103,7 @@ public class CoerceExpression extends BaseSingleExpression {
         toType = PDataType.values()[WritableUtils.readVInt(input)];
         toSortOrder = SortOrder.fromSystemValue(WritableUtils.readVInt(input));
         int byteSize = WritableUtils.readVInt(input);
-        this.byteSize = byteSize == -1 ? null : byteSize;
+        this.maxLength = byteSize == -1 ? null : byteSize;
     }
 
     @Override
@@ -116,7 +111,7 @@ public class CoerceExpression extends BaseSingleExpression {
         super.write(output);
         WritableUtils.writeVInt(output, toType.ordinal());
         WritableUtils.writeVInt(output, toSortOrder.getSystemValue());
-        WritableUtils.writeVInt(output, byteSize == null ? -1 : byteSize);
+        WritableUtils.writeVInt(output, maxLength == null ? -1 : maxLength);
     }
 
     @Override

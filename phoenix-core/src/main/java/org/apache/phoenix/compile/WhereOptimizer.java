@@ -727,7 +727,7 @@ public class WhereOptimizer {
             // and the key length doesn't match the column length, the expression can
             // never be true.
             // An zero length byte literal is null which can never be compared against as true
-            Integer childNodeFixedLength = node.getChildren().get(0).getByteSize();
+            Integer childNodeFixedLength = node.getChildren().get(0).getMaxLength();
             if (childNodeFixedLength != null && key.length > childNodeFixedLength) {
                 return DEGENERATE_KEY_PARTS;
             }
@@ -735,7 +735,7 @@ public class WhereOptimizer {
             PColumn column = childSlot.getKeyPart().getColumn();
             PDataType type = column.getDataType();
             KeyRange keyRange = type.getKeyRange(key, true, ByteUtil.nextKey(key), false);
-            Integer columnFixedLength = column.getByteSize();
+            Integer columnFixedLength = column.getMaxLength();
             if (columnFixedLength != null) {
                 keyRange = keyRange.fill(columnFixedLength);
             }
@@ -794,7 +794,7 @@ public class WhereOptimizer {
             boolean isFixedWidth = type.isFixedWidth();
             if (isFixedWidth) { // if column can't be null
                 return node.isNegate() ? null : 
-                    newKeyParts(childSlot, node, type.getKeyRange(new byte[column.getByteSize()], true,
+                    newKeyParts(childSlot, node, type.getKeyRange(new byte[SchemaUtil.getFixedByteSize(column)], true,
                                                                   KeyRange.UNBOUND, true));
             } else {
                 KeyRange keyRange = node.isNegate() ? KeyRange.IS_NOT_NULL_RANGE : KeyRange.IS_NULL_RANGE;
@@ -944,7 +944,7 @@ public class WhereOptimizer {
                 // If the column is fixed width, fill is up to it's byte size
                 PDataType type = getColumn().getDataType();
                 if (type.isFixedWidth()) {
-                    Integer length = getColumn().getByteSize();
+                    Integer length = getColumn().getMaxLength();
                     if (length != null) {
                         key = ByteUtil.fillKey(key, length);
                     }
@@ -1075,8 +1075,8 @@ public class WhereOptimizer {
                                     // use to compute the next key when we evaluate the RHS row value constructor
                                     // below.  We could create a new childPart with a delegate column that returns
                                     // null for getByteSize().
-                                    if (lhs.getByteSize() != null && key.length != lhs.getByteSize()) {
-                                        key = Arrays.copyOf(key, lhs.getByteSize());
+                                    if (lhs.getDataType().isFixedWidth() && lhs.getMaxLength() != null && key.length != lhs.getMaxLength()) {
+                                        key = Arrays.copyOf(key, lhs.getMaxLength());
                                     }
                                     ptr.set(key);
                                     return true;
@@ -1091,11 +1091,6 @@ public class WhereOptimizer {
                                 public boolean isNullable() {
                                     return childPart.getColumn().isNullable();
                                 }
-
-                                @Override
-                                public Integer getByteSize() {
-                                    return lhs.getByteSize();
-                               }
 
                                 @Override
                                 public Integer getMaxLength() {

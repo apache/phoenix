@@ -28,7 +28,6 @@ import java.util.List;
 
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
-
 import org.apache.phoenix.util.ByteUtil;
 
 
@@ -65,7 +64,8 @@ public class RowKeyValueAccessor implements Writable   {
             int offset = 0;
             if (datum.getDataType().isFixedWidth()) {
                 do {
-                    offset += datum.getByteSize();
+                    Integer maxLength = datum.getMaxLength();
+                    offset += maxLength == null ? datum.getDataType().getByteSize() : maxLength;
                     datum = iterator.next();
                     pos++;
                 } while (pos < index && datum.getDataType().isFixedWidth());

@@ -1379,7 +1379,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, int cacheSize, long timestamp) 
+    public long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, long cacheSize, long timestamp) 
             throws SQLException {
         SequenceKey sequenceKey = new SequenceKey(tenantId, schemaName, sequenceName);
         Sequence newSequences = new Sequence(sequenceKey);
@@ -1802,6 +1802,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
     
+    private static final Integer DEFAULT_PRECISION = PDataType.MAX_PRECISION;
+    private static final Integer DEFAULT_SCALE = PDataType.DEFAULT_SCALE;
+    
     private void upgradeMetaDataTo3_0(String url, Properties props) throws SQLException {
         if (upgradeWhiteList == null) {
             return;
@@ -1886,28 +1889,46 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                     /* 
                      * Convert from old to new format:
+                     * - sql date types to unsigend date types
+                     * - don't persist maxLength and scale for non decimal numbers
+                     * - don't persist default precision for decimal
                      */
-                    // Convert sqlDataType if data/time type
-                    Integer dataType = (Integer)rs.getObject(DATA_TYPE);
-                    if (dataType != null) {
-                        switch (PDataType.fromTypeId(dataType)) {
+                    Integer maxLength = (Integer)rs.getObject(COLUMN_SIZE);
+                    Integer scale = (Integer)rs.getObject(DECIMAL_DIGITS);
+                    Integer dataTypeNum = (Integer)rs.getObject(DATA_TYPE);
+                    if (dataTypeNum != null) {
+                        PDataType dataType = PDataType.fromTypeId(dataTypeNum);
+                        switch (dataType) {
+                            case DECIMAL:
+                                if (DEFAULT_PRECISION.equals(maxLength) && DEFAULT_SCALE.equals(scale)) {
+                                    maxLength = null;
+                                    scale = null;
+                                }
+                                break;
                             case DATE:
-                                dataType = PDataType.UNSIGNED_DATE.getSqlType();
+                                dataTypeNum = PDataType.UNSIGNED_DATE.getSqlType();
                                 break;
                             case TIME:
-                                dataType = PDataType.UNSIGNED_TIME.getSqlType();
+                                dataTypeNum = PDataType.UNSIGNED_TIME.getSqlType();
                                 break;
                             case TIMESTAMP:
-                                dataType = PDataType.UNSIGNED_TIMESTAMP.getSqlType();
+                                dataTypeNum = PDataType.UNSIGNED_TIMESTAMP.getSqlType();
                                 break;
                             case BINARY:
                                 // From way-back-when, we introduced VARBINARY after BINARY
                                 rs.getInt(COLUMN_SIZE);
                                 if (rs.wasNull()) {
-                                    dataType = PDataType.VARBINARY.getSqlType();
+                                    dataTypeNum = PDataType.VARBINARY.getSqlType();
                                 }
                                 break;
                             default:
+                                // Don't store precision and scale for int, long, etc, as
+                                // there's no value (we actually lose information and need
+                                // more special cases b/c we don't know that it wasn't set).
+                                if (dataType.isCoercibleTo(PDataType.LONG)) {
+                                    maxLength = null;
+                                    scale = null;
+                                }
                                 break;
                         }
                     }
@@ -1922,7 +1943,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     stmt.setString(5,familyName);
                     stmt.setObject(6, rs.getObject(TABLE_SEQ_NUM));
                     stmt.setString(7, rs.getString(TABLE_TYPE));
-                    stmt.setObject(8, dataType);
+                    stmt.setObject(8, dataTypeNum);
                     stmt.setString(9, pkName);
                     stmt.setObject(10, rs.getObject(COLUMN_COUNT));
                     stmt.setObject(11, rs.getObject(SALT_BUCKETS));
@@ -1930,8 +1951,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     stmt.setString(13, rs.getString(INDEX_STATE));
                     stmt.setObject(14, rs.getObject(IMMUTABLE_ROWS));
                     stmt.setString(15, defaultColumnFamily); // previous DEFAULT_COLUMN_FAMILY_NAME
-                    stmt.setObject(16, rs.getObject(COLUMN_SIZE));
-                    stmt.setObject(17, rs.getObject(DECIMAL_DIGITS));
+                    stmt.setObject(16, maxLength);
+                    stmt.setObject(17, scale);
                     stmt.setObject(18, rs.getObject(NULLABLE));
                     stmt.setObject(19, rs.getObject(ORDINAL_POSITION));
                     stmt.setObject(20, rs.getObject("COLUMN_MODIFIER")); // old column name

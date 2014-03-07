@@ -41,13 +41,8 @@ public abstract class DivideExpression extends ArithmeticExpression {
         super(children);
         for (int i=0; i<children.size(); i++) {
             Expression childExpr = children.get(i);
-            if (i == 0) {
-                maxLength = childExpr.getMaxLength();
-                scale = childExpr.getScale();
-            } else {
-                maxLength = getPrecision(maxLength, childExpr.getMaxLength(), scale, childExpr.getScale());
-                scale = getScale(maxLength, childExpr.getMaxLength(), scale, childExpr.getScale());
-            }
+            maxLength = getPrecision(maxLength, scale, childExpr);
+            scale = getScale(maxLength, scale, childExpr);
         }
     }
 
@@ -66,20 +61,38 @@ public abstract class DivideExpression extends ArithmeticExpression {
         return " / ";
     }
     
-    private static Integer getPrecision(Integer lp, Integer rp, Integer ls, Integer rs) {
+    private static Integer getPrecision(Integer lp, Integer ls, Expression childExpr) {
+        if (childExpr.getDataType() == null) {
+            return null;
+        }
+        Integer rp = childExpr.getMaxLength();
+        if (rp == null) {
+            rp = childExpr.getDataType().getMaxLength(null);
+        }
+        if (lp == null) {
+            return rp;
+        }
+        if (rp == null) {
+            return lp;
+        }
+        Integer rs = childExpr.getScale();
     	if (ls == null || rs == null) {
     		return PDataType.MAX_PRECISION;
     	}
-        int val = getScale(lp, rp, ls, rs) + lp - ls + rp;
+        int val = getScale(lp, ls, childExpr) + lp - ls + rp;
         return Math.min(PDataType.MAX_PRECISION, val);
     }
 
-    private static Integer getScale(Integer lp, Integer rp, Integer ls, Integer rs) {
+    private static Integer getScale(Integer lp, Integer ls, Expression childExpr) {
     	// If we are adding a decimal with scale and precision to a decimal
     	// with no precision nor scale, the scale system does not apply.
-    	if (ls == null || rs == null) {
-    		return null;
-    	}
+        Integer rs = childExpr.getScale();
+        if (ls == null) {
+            return rs;
+        }
+        if (rs == null) {
+            return ls;
+        }
         int val = Math.max(PDataType.MAX_PRECISION - lp + ls - rs, 0);
         return Math.min(PDataType.MAX_PRECISION, val);
     }

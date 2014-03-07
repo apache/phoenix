@@ -22,7 +22,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
@@ -101,22 +100,16 @@ public class RowKeyColumnExpression  extends ColumnExpression {
         int maxOffset = ptr.getOffset() + ptr.getLength();
         if (offset < maxOffset) {
             byte[] buffer = ptr.get();
-            int fixedByteSize = -1;
+            int byteSize = -1;
             // FIXME: fixedByteSize <= maxByteSize ? fixedByteSize : 0 required because HBase passes bogus keys to filter to position scan (HBASE-6562)
             if (fromType.isFixedWidth()) {
-                fixedByteSize = getByteSize();
-                fixedByteSize = fixedByteSize <= maxOffset ? fixedByteSize : 0;
+                Integer maxLength = getMaxLength();
+                byteSize = maxLength == null ? fromType.getByteSize() : maxLength;
+                byteSize = byteSize <= maxOffset ? byteSize : 0;
             }
-            int length = fixedByteSize >= 0 ? fixedByteSize  : accessor.getLength(buffer, offset, maxOffset);
+            int length = byteSize >= 0 ? byteSize  : accessor.getLength(buffer, offset, maxOffset);
             // In the middle of the key, an empty variable length byte array represents null
             if (length > 0) {
-                /*
-                if (type == fromType) {
-                    ptr.set(buffer,offset,length);
-                } else {
-                    ptr.set(type.toBytes(type.toObject(buffer, offset, length, fromType)));
-                }
-                */
                 ptr.set(buffer,offset,length);
                 type.coerceBytes(ptr, fromType, getSortOrder(), getSortOrder());
             } else {

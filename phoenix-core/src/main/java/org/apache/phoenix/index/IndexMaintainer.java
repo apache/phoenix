@@ -91,6 +91,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         IndexMaintainer maintainer = new IndexMaintainer(dataTable, index);
         int indexPosOffset = (index.getBucketNum() == null ? 0 : 1) + (maintainer.isMultiTenant ? 1 : 0) + (maintainer.viewIndexId == null ? 0 : 1);
         RowKeyMetaData rowKeyMetaData = maintainer.getRowKeyMetaData();
+        int indexColByteSize = 0;
         for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
             PColumn indexColumn = index.getPKColumns().get(i);
             int indexPos = i - indexPosOffset;
@@ -100,8 +101,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 int dataPkPos = dataTable.getPKColumns().indexOf(column) - (dataTable.getBucketNum() == null ? 0 : 1) - (maintainer.isMultiTenant ? 1 : 0);
                 rowKeyMetaData.setIndexPkPosition(dataPkPos, indexPos);
             } else {
+                indexColByteSize += column.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(column) : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
                 maintainer.getIndexedColumnTypes().add(column.getDataType());
-                maintainer.getIndexedColumnSizes().add(column.getByteSize());
                 maintainer.getIndexedColumns().add(new ColumnReference(column.getFamilyName().getBytes(), column.getName().getBytes()));
             }
             if (indexColumn.getSortOrder() == SortOrder.DESC) {
@@ -115,6 +116,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 maintainer.getCoverededColumns().add(new ColumnReference(column.getFamilyName().getBytes(), column.getName().getBytes()));
             }
         }
+        maintainer.estimatedIndexRowKeyBytes = maintainer.estimateIndexRowKeyByteSize(indexColByteSize);
         maintainer.initCachedState();
         return maintainer;
     }
@@ -200,7 +202,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private Set<ColumnReference> coveredColumns;
     private Set<ColumnReference> allColumns;
     private List<PDataType> indexedColumnTypes;
-    private List<Integer> indexedColumnByteSizes;
     private RowKeyMetaData rowKeyMetaData;
     private byte[] indexTableName;
     private int nIndexSaltBuckets;
@@ -258,7 +259,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.indexTableName = indexTableName;
         this.indexedColumns = Sets.newLinkedHashSetWithExpectedSize(nIndexPKColumns-nDataPKColumns);
         this.indexedColumnTypes = Lists.<PDataType>newArrayListWithExpectedSize(nIndexPKColumns-nDataPKColumns);
-        this.indexedColumnByteSizes = Lists.<Integer>newArrayListWithExpectedSize(nIndexPKColumns-nDataPKColumns);
         this.coveredColumns = Sets.newLinkedHashSetWithExpectedSize(nIndexColumns-nIndexPKColumns);
         this.allColumns = Sets.newLinkedHashSetWithExpectedSize(nDataPKColumns + nIndexColumns);
         this.allColumns.addAll(indexedColumns);
@@ -464,7 +464,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     /**
      * Used for immutable indexes that only index PK column values. In that case, we can handle a data row deletion,
      * since we can build the corresponding index row key.
-     * @param kvBuilder TODO
      */
     public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ImmutableBytesWritable dataRowKeyPtr, long ts) throws IOException {
         return buildDeleteMutation(kvBuilder, null, dataRowKeyPtr, Collections.<KeyValue>emptyList(), ts);
@@ -523,10 +522,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return rowKeyMetaData;
     }
     
-    private List<Integer> getIndexedColumnSizes() {
-        return indexedColumnByteSizes;
-    }
-
     private List<PDataType> getIndexedColumnTypes() {
         return indexedColumnTypes;
     }
@@ -555,11 +550,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             PDataType type = PDataType.values()[WritableUtils.readVInt(input)];
             indexedColumnTypes.add(type);
         }
-        indexedColumnByteSizes = Lists.newArrayListWithExpectedSize(nIndexedColumns);
-        for (int i = 0; i < nIndexedColumns; i++) {
-            int byteSize = WritableUtils.readVInt(input);
-            indexedColumnByteSizes.add(byteSize == 0 ? null : Integer.valueOf(byteSize));
-        }
         int nCoveredColumns = WritableUtils.readVInt(input);
         coveredColumns = Sets.newLinkedHashSetWithExpectedSize(nCoveredColumns);
         for (int i = 0; i < nCoveredColumns; i++) {
@@ -577,6 +567,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // Encode indexWALDisabled in nDataCFs
         indexWALDisabled = nDataCFs < 0;
         this.nDataCFs = Math.abs(nDataCFs) - 1;
+        this.estimatedIndexRowKeyBytes = WritableUtils.readVInt(input);
         
         initCachedState();
     }
@@ -598,10 +589,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             PDataType type = indexedColumnTypes.get(i);
             WritableUtils.writeVInt(output, type.ordinal());
         }
-        for (int i = 0; i < indexedColumnByteSizes.size(); i++) {
-            Integer byteSize = indexedColumnByteSizes.get(i);
-            WritableUtils.writeVInt(output, byteSize == null ? 0 : byteSize);
-        }
         WritableUtils.writeVInt(output, coveredColumns.size());
         for (ColumnReference ref : coveredColumns) {
             Bytes.writeByteArray(output, ref.getFamily());
@@ -615,10 +602,12 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         rowKeyMetaData.write(output);
         // Encode indexWALDisabled in nDataCFs
         WritableUtils.writeVInt(output, (nDataCFs + 1) * (indexWALDisabled ? -1 : 1));
+        WritableUtils.writeVInt(output, estimatedIndexRowKeyBytes);
     }
 
     public int getEstimatedByteSize() {
         int size = WritableUtils.getVIntSize(nIndexSaltBuckets);
+        size += WritableUtils.getVIntSize(estimatedIndexRowKeyBytes);
         size += WritableUtils.getVIntSize(indexedColumns.size());
         size += viewIndexId == null ? 0 : viewIndexId.length;
         for (ColumnReference ref : indexedColumns) {
@@ -628,7 +617,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             size += ref.getQualifier().length;
         }
         size += indexedColumnTypes.size();
-        size += indexedColumnByteSizes.size();
         size += WritableUtils.getVIntSize(coveredColumns.size());
         for (ColumnReference ref : coveredColumns) {
             size += WritableUtils.getVIntSize(ref.getFamily().length);
@@ -644,11 +632,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return size;
     }
     
-    private int estimateIndexRowKeyByteSize() {
-        int estimatedIndexRowKeyBytes = dataRowKeySchema.getEstimatedValueLength() + (nIndexSaltBuckets == 0 ?  0 : SaltingUtil.NUM_SALTING_BYTES);
-        for (Integer byteSize : indexedColumnByteSizes) {
-            estimatedIndexRowKeyBytes += (byteSize == null ? ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE : byteSize);
-        }
+    private int estimateIndexRowKeyByteSize(int indexColByteSize) {
+        int estimatedIndexRowKeyBytes = indexColByteSize + dataRowKeySchema.getEstimatedValueLength() + (nIndexSaltBuckets == 0 || this.isDataTableSalted ? 0 : SaltingUtil.NUM_SALTING_BYTES);
         return estimatedIndexRowKeyBytes;
    }
     
@@ -665,7 +650,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             indexQualifiers.add(new ImmutableBytesPtr(IndexUtil.getIndexColumnName(
                 ref.getFamily(), ref.getQualifier())));
         }
-        estimatedIndexRowKeyBytes = estimateIndexRowKeyByteSize();
 
         this.allColumns = Sets.newLinkedHashSetWithExpectedSize(indexedColumns.size() + coveredColumns.size());
         allColumns.addAll(indexedColumns);
@@ -741,7 +725,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       }
         
         protected int getByteSize() {
-            return BitSet.getByteSize(getIndexPkColumnCount()) * 3;
+            return BitSet.getByteSize(getIndexPkColumnCount()) * 3 + BitSet.getByteSize(dataRowKeySchema.getMaxFields());
         }
         
         protected abstract int getIndexPkPosition(int dataPkPosition);

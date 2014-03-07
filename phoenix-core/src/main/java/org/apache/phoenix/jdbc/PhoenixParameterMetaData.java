@@ -24,9 +24,9 @@ import java.sql.SQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.parse.BindParseNode;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 
 
@@ -64,11 +64,6 @@ public class PhoenixParameterMetaData implements ParameterMetaData {
         @Override
         public SortOrder getSortOrder() {
             return SortOrder.getDefault();
-        }
-        
-        @Override
-        public Integer getByteSize() {
-            return null;
         }
     };
     public static final PhoenixParameterMetaData EMPTY_PARAMETER_META_DATA = new PhoenixParameterMetaData(0);

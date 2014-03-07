@@ -25,6 +25,12 @@ import java.util.Collection;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
+import org.apache.phoenix.schema.SortOrder;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -32,12 +38,6 @@ import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.RowKeySchema;
-import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 
 
 /**
@@ -481,13 +481,9 @@ public class SkipScanFilterIntersectTest {
                         public PDataType getDataType() {
                             return width <= 0 ? PDataType.VARCHAR : PDataType.CHAR;
                         }
-                        @Override
-                        public Integer getByteSize() {
-                            return width <= 0 ? null : width;
-                        }
-                        @Override
+                       @Override
                         public Integer getMaxLength() {
-                            return getByteSize();
+                            return width <= 0 ? null : width;
                         }
                         @Override
                         public Integer getScale() {

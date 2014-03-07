@@ -435,13 +435,13 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             // to return NULL.
             int index = LikeExpression.indexOfWildcard(pattern);
             // Can't possibly be as long as the constant, then FALSE
-            Integer lhsByteSize = lhs.getByteSize();
-            if (lhsByteSize != null && lhsByteSize < index) {
+            Integer lhsMaxLength = lhs.getMaxLength();
+            if (lhsMaxLength != null && lhsMaxLength < index) {
                 return LiteralExpression.newConstant(false, rhs.isDeterministic());
             }
             if (index == -1) {
                 String rhsLiteral = LikeExpression.unescapeLike(pattern);
-                if (lhsByteSize != null && lhsByteSize != rhsLiteral.length()) {
+                if (lhsMaxLength != null && lhsMaxLength != rhsLiteral.length()) {
                     return LiteralExpression.newConstant(false, rhs.isDeterministic());
                 }
                 CompareOp op = node.isNegate() ? CompareOp.NOT_EQUAL : CompareOp.EQUAL;
@@ -556,16 +556,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             return PDataType.DECIMAL;
         }
         @Override
-        public Integer getByteSize() {
-            return null;
-        }
-        @Override
         public Integer getMaxLength() {
             return null;
         }
         @Override
         public Integer getScale() {
-            return PDataType.DEFAULT_SCALE;
+            return null;
         }
         @Override
         public SortOrder getSortOrder() {
@@ -683,10 +679,6 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                             return type;
                         }
                         @Override
-                        public Integer getByteSize() {
-                            return type.getByteSize();
-                        }
-                        @Override
                         public Integer getMaxLength() {
                             return expression.getMaxLength();
                         }
@@ -710,10 +702,6 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                         @Override
                         public PDataType getDataType() {
                             return PDataType.DECIMAL;
-                        }
-                        @Override
-                        public Integer getByteSize() {
-                            return null;
                         }
                         @Override
                         public Integer getMaxLength() {
@@ -858,10 +846,6 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                         @Override
                         public PDataType getDataType() {
                             return PDataType.DECIMAL;
-                        }
-                        @Override
-                        public Integer getByteSize() {
-                            return null;
                         }
                         @Override
                         public Integer getMaxLength() {

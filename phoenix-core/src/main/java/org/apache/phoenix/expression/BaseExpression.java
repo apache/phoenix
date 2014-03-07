@@ -76,7 +76,7 @@ public abstract class BaseExpression implements Expression {
                 } else if ((rhsType == PDataType.TIMESTAMP || rhsType == PDataType.UNSIGNED_TIMESTAMP)  && (lhsType != PDataType.TIMESTAMP && lhsType != PDataType.UNSIGNED_TIMESTAMP)) {
                     e = FloorDateExpression.create(rhs, TimeUnit.MILLISECOND);
                 }
-                e = CoerceExpression.create(e, lhsType, lhs.getSortOrder(), lhs.getByteSize());
+                e = CoerceExpression.create(e, lhsType, lhs.getSortOrder(), lhs.getMaxLength());
                 return e;
             }
             
@@ -95,7 +95,7 @@ public abstract class BaseExpression implements Expression {
                 } else if ((rhsType == PDataType.TIMESTAMP || rhsType == PDataType.UNSIGNED_TIMESTAMP)  && (lhsType != PDataType.TIMESTAMP && lhsType != PDataType.UNSIGNED_TIMESTAMP)) {
                     e = CeilTimestampExpression.create(rhs);
                 }
-                e = CoerceExpression.create(e, lhsType, lhs.getSortOrder(), lhs.getByteSize());
+                e = CoerceExpression.create(e, lhsType, lhs.getSortOrder(), lhs.getMaxLength());
                 return e;
             }
             
@@ -106,7 +106,7 @@ public abstract class BaseExpression implements Expression {
             @Override
             public Expression wrap(Expression lhs, Expression rhs) throws SQLException {
                 PDataType lhsType = lhs.getDataType();
-                Expression e = CoerceExpression.create(rhs, lhsType, lhs.getSortOrder(), lhs.getByteSize());
+                Expression e = CoerceExpression.create(rhs, lhsType, lhs.getSortOrder(), lhs.getMaxLength());
                 return e;
             }
             
@@ -191,11 +191,6 @@ public abstract class BaseExpression implements Expression {
     @Override
     public boolean isNullable() {
         return false;
-    }
-
-    @Override
-    public Integer getByteSize() {
-        return getDataType().isFixedWidth() ? getDataType().getByteSize() : null;
     }
 
     @Override

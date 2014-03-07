@@ -458,7 +458,8 @@ public enum PDataType {
 
         @Override
         public Integer getScale(Object o) {
-            return ZERO;
+            return null;
+            //return ZERO;
         }
 
         @Override
@@ -589,7 +590,8 @@ public enum PDataType {
 
         @Override
         public Integer getScale(Object o) {
-            return ZERO;
+            return null;
+            //return ZERO;
         }
 
         @Override
@@ -638,7 +640,8 @@ public enum PDataType {
 
       @Override
       public Integer getScale(Object o) {
-          return ZERO;
+          return null;
+          //return ZERO;
       }
       
       @Override
@@ -765,7 +768,8 @@ public enum PDataType {
       
       @Override
       public Integer getScale(Object o) {
-          return ZERO;
+          return null;
+          //return ZERO;
       }
       
       @Override
@@ -887,7 +891,7 @@ public enum PDataType {
             }
             Float v = (Float) o;
             BigDecimal bd = BigDecimal.valueOf(v);
-            return bd.scale();
+            return bd.scale() == 0 ? null : bd.scale();
         }
         
         @Override
@@ -1059,7 +1063,7 @@ public enum PDataType {
             }
             Double v = (Double) o;
             BigDecimal bd = BigDecimal.valueOf(v);
-            return bd.scale();
+            return bd.scale() == 0 ? null : bd.scale();
         }
         
         @Override
@@ -1262,7 +1266,7 @@ public enum PDataType {
         @Override
         public Integer getMaxLength(Object o) {
             if (o == null) {
-                return null;
+                return MAX_PRECISION;
             }
             BigDecimal v = (BigDecimal) o;
             return v.precision();
@@ -1274,7 +1278,8 @@ public enum PDataType {
                 return null;
             }
             BigDecimal v = (BigDecimal) o;
-            return v.scale();
+            int scale = v.scale();
+            return scale == 0 ? null : scale;
         }
 
         @Override
@@ -2534,7 +2539,8 @@ public enum PDataType {
       
       @Override
       public Integer getScale(Object o) {
-          return ZERO;
+          return null;
+          //return ZERO;
       }
       
       @Override
@@ -2665,7 +2671,8 @@ public enum PDataType {
       
       @Override
       public Integer getScale(Object o) {
-          return ZERO;
+          return null;
+          //return ZERO;
       }
       
       @Override
@@ -2781,7 +2788,7 @@ public enum PDataType {
             }
             Float v = (Float) o;
             BigDecimal bd = BigDecimal.valueOf(v);
-            return bd.scale();
+            return bd.scale() == 0 ? null : bd.scale();
         }
         
         @Override
@@ -2987,7 +2994,7 @@ public enum PDataType {
             }
             Double v = (Double) o;
             BigDecimal bd = BigDecimal.valueOf(v);
-            return bd.scale();
+            return bd.scale() == 0 ? null : bd.scale();
         }
         
         @Override

@@ -162,7 +162,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
             // into account the comparison operator.
             if (rhsExprDataType != lhsExprDataType 
                     || rhsExpr.getSortOrder() != lhsExpr.getSortOrder()
-                    || (rhsExpr.getMaxLength() != null && lhsExpr.getMaxLength() != null && rhsExpr.getMaxLength() < lhsExpr.getMaxLength())) {
+                    || (rhsExprDataType.isFixedWidth() && rhsExpr.getMaxLength() != null && lhsExprDataType.isFixedWidth() && lhsExpr.getMaxLength() != null && rhsExpr.getMaxLength() < lhsExpr.getMaxLength())) {
                 // TODO: if lengths are unequal and fixed width?
                 if (rhsExprDataType.isCoercibleTo(lhsExprDataType, rhsValue)) { // will convert 2.0 -> 2
                     children = Arrays.asList(children.get(0), LiteralExpression.newConstant(rhsValue, lhsExprDataType, 

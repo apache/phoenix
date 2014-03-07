@@ -67,7 +67,6 @@ public class LiteralExpression extends BaseTerminalExpression {
     private PDataType type;
     private boolean isDeterministic;
     private byte[] byteValue;
-    private Integer byteSize;
     private Integer maxLength;
     private Integer scale;
     private SortOrder sortOrder;
@@ -119,11 +118,11 @@ public class LiteralExpression extends BaseTerminalExpression {
     }
     
     public static LiteralExpression newConstant(Object value, PDataType type, SortOrder sortOrder) throws SQLException {
-        return newConstant(value, type, null, null, sortOrder, true);
+        return newConstant(value, type, type == null || !type.isFixedWidth() ? null : type.getMaxLength(value), null, sortOrder, true);
     }
     
     public static LiteralExpression newConstant(Object value, PDataType type, SortOrder sortOrder, boolean isDeterministic) throws SQLException {
-        return newConstant(value, type, null, null, sortOrder, isDeterministic);
+        return newConstant(value, type, type == null || !type.isFixedWidth() ? null : type.getMaxLength(value), null, sortOrder, isDeterministic);
     }
     
     public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale) throws SQLException {
@@ -182,7 +181,7 @@ public class LiteralExpression extends BaseTerminalExpression {
     }
 
     private LiteralExpression(Object value, PDataType type, byte[] byteValue, boolean isDeterministic) {
-        this(value, type, byteValue, type == null? null : type.getMaxLength(value), type == null? null : type.getScale(value), SortOrder.getDefault(), isDeterministic);
+        this(value, type, byteValue, type == null || !type.isFixedWidth() ? null : type.getMaxLength(value), null, SortOrder.getDefault(), isDeterministic);
     }
 
     private LiteralExpression(Object value, PDataType type, byte[] byteValue,
@@ -191,9 +190,8 @@ public class LiteralExpression extends BaseTerminalExpression {
         this.value = value;
         this.type = type;
         this.byteValue = byteValue;
-        this.byteSize = byteValue.length;
         this.maxLength = maxLength;
-        this.scale = scale;
+        this.scale = scale != null ? scale : type == null ? null : type.getScale(value);
         this.sortOrder = sortOrder;
         this.isDeterministic = isDeterministic;
     }
@@ -247,8 +245,6 @@ public class LiteralExpression extends BaseTerminalExpression {
         } else {
             this.value = this.type.toObject(byteValue, 0, byteValue.length, this.type, sortOrder);
         }
-        // Only to prevent continual reallocations of Integer
-        this.byteSize = this.byteValue.length;
     }
 
     @Override
@@ -269,11 +265,6 @@ public class LiteralExpression extends BaseTerminalExpression {
     @Override
     public PDataType getDataType() {
         return type;
-    }
-
-    @Override
-    public Integer getByteSize() {
-        return byteSize;
     }
 
     @Override

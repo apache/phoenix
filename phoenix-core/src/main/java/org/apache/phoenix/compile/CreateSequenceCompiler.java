@@ -59,11 +59,6 @@ public class CreateSequenceCompiler {
         }
 
         @Override
-        public Integer getByteSize() {
-            return PDataType.LONG.getByteSize();
-        }
-
-        @Override
         public Integer getMaxLength() {
             return null;
         }
@@ -89,11 +84,6 @@ public class CreateSequenceCompiler {
         @Override
         public PDataType getDataType() {
             return PDataType.INTEGER;
-        }
-
-        @Override
-        public Integer getByteSize() {
-            return PDataType.INTEGER.getByteSize();
         }
 
         @Override
@@ -167,17 +157,17 @@ public class CreateSequenceCompiler {
         }
         final long incrementBy = (Long)PDataType.LONG.toObject(ptr, incrementByExpr.getDataType());
         
-        int cacheSizeValue = connection.getQueryServices().getProps().getInt(QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_SEQUENCE_CACHE_SIZE);
+        long cacheSizeValue = connection.getQueryServices().getProps().getLong(QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_SEQUENCE_CACHE_SIZE);
         if (cacheNode != null) {
             Expression cacheSizeExpr = cacheNode.accept(expressionCompiler);
             cacheSizeExpr.evaluate(null, ptr);
-            if (ptr.getLength() != 0 && (!cacheSizeExpr.getDataType().isCoercibleTo(PDataType.INTEGER) || (cacheSizeValue = (Integer)PDataType.INTEGER.toObject(ptr)) < 0)) {
+            if (ptr.getLength() != 0 && (!cacheSizeExpr.getDataType().isCoercibleTo(PDataType.LONG) || (cacheSizeValue = (Long)PDataType.LONG.toObject(ptr, cacheSizeExpr.getDataType())) < 0)) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CACHE_MUST_BE_NON_NEGATIVE_CONSTANT)
                 .setSchemaName(sequence.getSequenceName().getSchemaName())
                 .setTableName(sequence.getSequenceName().getTableName()).build().buildException();
             }
         }
-        final int cacheSize = Math.max(1, cacheSizeValue);
+        final long cacheSize = Math.max(1L, cacheSizeValue);
         
 
         final MetaDataClient client = new MetaDataClient(connection);        

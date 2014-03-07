@@ -181,8 +181,8 @@ public abstract class ValueSchema implements Writable {
             this.count = count;
             this.isNullable = isNullable;
             if (this.type.isFixedWidth() && this.type.getByteSize() == null) {
-                if (datum.getByteSize() != null) {
-                    this.byteSize = datum.getByteSize();
+                if (datum.getMaxLength() != null) {
+                    this.byteSize = datum.getMaxLength();
                 }
             }
         }

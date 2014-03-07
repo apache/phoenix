@@ -275,7 +275,7 @@ public class Sequence {
     
     private static final class SequenceValue {
         public final long incrementBy;
-        public final int cacheSize;
+        public final long cacheSize;
         public final long timestamp;
         
         public long currentValue;
@@ -310,7 +310,7 @@ public class Sequence {
             timestamp = currentValueKV.getTimestamp();
             nextValue = PDataType.LONG.getCodec().decodeLong(currentValueKV.getBuffer(), currentValueKV.getValueOffset(), SortOrder.getDefault());
             incrementBy = PDataType.LONG.getCodec().decodeLong(incrementByKV.getBuffer(), incrementByKV.getValueOffset(), SortOrder.getDefault());
-            cacheSize = PDataType.INTEGER.getCodec().decodeInt(cacheSizeKV.getBuffer(), cacheSizeKV.getValueOffset(), SortOrder.getDefault());
+            cacheSize = PDataType.LONG.getCodec().decodeLong(cacheSizeKV.getBuffer(), cacheSizeKV.getValueOffset(), SortOrder.getDefault());
             currentValue = nextValue - incrementBy * cacheSize;
         }
     }
@@ -342,7 +342,7 @@ public class Sequence {
             .build().buildException();
     }
 
-    public Append createSequence(long startWith, long incrementBy, int cacheSize, long timestamp) {
+    public Append createSequence(long startWith, long incrementBy, long cacheSize, long timestamp) {
         byte[] key = SchemaUtil.getSequenceKey(this.key.getTenantId(), this.key.getSchemaName(), this.key.getSequenceName());
         Append append = new Append(key);
         append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, new byte[] {(byte)SequenceRegionObserver.Op.CREATE_SEQUENCE.ordinal()});
@@ -356,7 +356,7 @@ public class Sequence {
                 KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, timestamp, startWithBuf),
                 KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.START_WITH_BYTES, timestamp, startWithBuf),
                 KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.INCREMENT_BY_BYTES, timestamp, PDataType.LONG.toBytes(incrementBy)),
-                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CACHE_SIZE_BYTES, timestamp, PDataType.INTEGER.toBytes(cacheSize))
+                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CACHE_SIZE_BYTES, timestamp, PDataType.LONG.toBytes(cacheSize))
                 ));
         return append;
     }
