@@ -80,12 +80,6 @@ import com.google.common.io.Closeables;
 public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
     private static final Logger logger = LoggerFactory
             .getLogger(GroupedAggregateRegionObserver.class);
-
-    public static final String AGGREGATORS = "Aggs";
-    public static final String UNORDERED_GROUP_BY_EXPRESSIONS = "UnorderedGroupByExpressions";
-    public static final String KEY_ORDERED_GROUP_BY_EXPRESSIONS = "OrderedGroupByExpressions";
-
-    public static final String ESTIMATED_DISTINCT_VALUES = "EstDistinctValues";
     public static final int MIN_DISTINCT_VALUES = 100;
 
     /**
@@ -100,10 +94,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
     protected RegionScanner doPostScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
             Scan scan, RegionScanner s) throws IOException {
         boolean keyOrdered = false;
-        byte[] expressionBytes = scan.getAttribute(UNORDERED_GROUP_BY_EXPRESSIONS);
+        byte[] expressionBytes = scan.getAttribute(BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS);
 
         if (expressionBytes == null) {
-            expressionBytes = scan.getAttribute(KEY_ORDERED_GROUP_BY_EXPRESSIONS);
+            expressionBytes = scan.getAttribute(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS);
             if (expressionBytes == null) {
                 return s;
             }
@@ -113,7 +107,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
 
         ServerAggregators aggregators =
                 ServerAggregators.deserialize(scan
-                        .getAttribute(GroupedAggregateRegionObserver.AGGREGATORS), c
+                        .getAttribute(BaseScannerRegionObserver.AGGREGATORS), c
                         .getEnvironment().getConfiguration());
 
         final ScanProjector p = ScanProjector.deserializeProjectorFromScan(scan);
@@ -342,7 +336,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         RegionCoprocessorEnvironment env = c.getEnvironment();
         Configuration conf = env.getConfiguration();
         int estDistVals = conf.getInt(GROUPBY_ESTIMATED_DISTINCT_VALUES_ATTRIB, DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES);
-        byte[] estDistValsBytes = scan.getAttribute(ESTIMATED_DISTINCT_VALUES);
+        byte[] estDistValsBytes = scan.getAttribute(BaseScannerRegionObserver.ESTIMATED_DISTINCT_VALUES);
         if (estDistValsBytes != null) {
             // Allocate 1.5x estimation
             estDistVals = Math.min(MIN_DISTINCT_VALUES, 

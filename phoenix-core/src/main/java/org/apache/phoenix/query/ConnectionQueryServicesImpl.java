@@ -157,9 +157,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
     private static final String OLD_DEFAULT_COLUMN_FAMILY = "_0";
     private static final byte[] OLD_DEFAULT_COLUMN_FAMILY_BYTES = Bytes.toBytes(OLD_DEFAULT_COLUMN_FAMILY);
-    private static final byte[] SYSTEM_TABLE_NAME_BYTES = SchemaUtil.getTableNameAsBytes("SYSTEM", "TABLE");
+    private static final byte[] OLD_SYSTEM_TABLE_NAME_BYTES = SchemaUtil.getTableNameAsBytes("SYSTEM", "TABLE");
     // Don't use SYSTEM as the schema name, otherwise we'll treat it as a system table
-    private static final String SYSTEM_TABLE_AS_VIEW_NAME = SchemaUtil.getTableName("META", "\"TABLE\"");
+    private static final String OLD_SYSTEM_TABLE_AS_VIEW_NAME = SchemaUtil.getTableName("META", "\"TABLE\"");
     
     public static final String UPGRADE_TO_3_0 = "UpgradeTo30";
     public static final String UPGRADE_TO_2_2 = "UpgradeTo22";
@@ -510,20 +510,31 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private void addCoprocessors(byte[] tableName, HTableDescriptor descriptor, PTableType tableType) throws SQLException {
         // The phoenix jar must be available on HBase classpath
         try {
+            // Hack to detect that we're installing view on old SYSTEM.TABLE for conversion.
+            // In this case, we do not want to uninstall the old coprocessors.
+            boolean isOldSysTable = Bytes.compareTo(OLD_SYSTEM_TABLE_NAME_BYTES,tableName) == 0;
             if (!descriptor.hasCoprocessor(ScanRegionObserver.class.getName())) {
-                descriptor.removeCoprocessor(ScanRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                if (!isOldSysTable) {
+                    descriptor.removeCoprocessor(ScanRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                }
                 descriptor.addCoprocessor(ScanRegionObserver.class.getName(), null, 1, null);
             }
             if (!descriptor.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
-                descriptor.removeCoprocessor(UngroupedAggregateRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                if (!isOldSysTable) {
+                    descriptor.removeCoprocessor(UngroupedAggregateRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                }
                 descriptor.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, 1, null);
             }
             if (!descriptor.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
-                descriptor.removeCoprocessor(GroupedAggregateRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                if (!isOldSysTable) {
+                    descriptor.removeCoprocessor(GroupedAggregateRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                }
                 descriptor.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, 1, null);
             }
             if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
-                descriptor.removeCoprocessor(ServerCachingEndpointImpl.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                if (!isOldSysTable) {
+                    descriptor.removeCoprocessor(ServerCachingEndpointImpl.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                }
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, 1, null);
             }
             
@@ -531,14 +542,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             descriptor.removeCoprocessor("com.salesforce.phoenix.join.HashJoiningRegionObserver");
             // Remove indexing coprocessor if on VIEW or INDEX, as we may have added this by mistake in 2.x versions
             if (tableType == PTableType.INDEX || tableType == PTableType.VIEW) {
-                descriptor.removeCoprocessor(Indexer.class.getName());
-                descriptor.removeCoprocessor(OLD_INDEXER_CLASS_NAME);
+                if (!isOldSysTable) {
+                    descriptor.removeCoprocessor(Indexer.class.getName());
+                    descriptor.removeCoprocessor(OLD_INDEXER_CLASS_NAME);
+                }
             }
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes. Also,
             // don't install on the metadata table until we fix the TODO there.
             if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW) && !SchemaUtil.isMetaTable(tableName) && !descriptor.hasCoprocessor(Indexer.class.getName())) {
-                descriptor.removeCoprocessor(OLD_INDEXER_CLASS_NAME);
+                if (!isOldSysTable) {
+                    descriptor.removeCoprocessor(OLD_INDEXER_CLASS_NAME);
+                }
                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                 opts.put(CoveredColumnsIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                 Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts);
@@ -1757,7 +1772,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     private static void addViewForSystemTable(Connection conn) throws SQLException {
-        conn.createStatement().execute("CREATE VIEW IF NOT EXISTS " + SYSTEM_TABLE_AS_VIEW_NAME + "(\n" +
+        conn.createStatement().execute("CREATE VIEW IF NOT EXISTS " + OLD_SYSTEM_TABLE_AS_VIEW_NAME + "(\n" +
                 "TABLE_SCHEM VARCHAR NULL,\n" + 
                 "TABLE_NAME VARCHAR NOT NULL,\n" + 
                 "COLUMN_NAME VARCHAR NULL,\n" + 
@@ -1846,7 +1861,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     KEY_SEQ + "," +
                     LINK_TYPE + ")\n" + 
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-            StringBuilder buf = new StringBuilder("SELECT * FROM " + SYSTEM_TABLE_AS_VIEW_NAME + "\n");
+            StringBuilder buf = new StringBuilder("SELECT * FROM " + OLD_SYSTEM_TABLE_AS_VIEW_NAME + "\n");
             boolean createdView = false;
             try {
                 addWhereClauseForUpgrade3_0(upgradeWhiteList, buf);
@@ -1977,13 +1992,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (createdView) {
                     Long scn = JDBCUtil.getCurrentSCN(url, props);
                     if (scn == null) {
-                        conn.createStatement().execute("DROP VIEW IF EXISTS " + SYSTEM_TABLE_AS_VIEW_NAME);                        
+                        conn.createStatement().execute("DROP VIEW IF EXISTS " + OLD_SYSTEM_TABLE_AS_VIEW_NAME);                        
                     } else {
                         Properties newProps = new Properties(props);
                         newProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn + 1));
                         Connection newConn = DriverManager.getConnection(url, newProps);
                         try {
-                            newConn.createStatement().execute("DROP VIEW IF EXISTS " + SYSTEM_TABLE_AS_VIEW_NAME);                        
+                            newConn.createStatement().execute("DROP VIEW IF EXISTS " + OLD_SYSTEM_TABLE_AS_VIEW_NAME);                        
                         } finally {
                             newConn.close();
                         }
@@ -2026,7 +2041,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             scan.setFilter(filter);
             HTableInterface table = null;
             try {
-                table = getTable(SYSTEM_TABLE_NAME_BYTES);
+                table = getTable(OLD_SYSTEM_TABLE_NAME_BYTES);
                 ResultScanner scanner = table.getScanner(scan);
                 Result result = null;
                 while ((result = scanner.next()) != null) {

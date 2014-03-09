@@ -38,7 +38,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
@@ -453,8 +453,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         List<Object> binds = Collections.emptyList();
         for (String query : queries) {
             Scan scan = compileQuery(query, binds);
-            assertTrue(query, scan.getAttribute(GroupedAggregateRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS) != null);
-            assertTrue(query, scan.getAttribute(GroupedAggregateRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS) == null);
+            assertTrue(query, scan.getAttribute(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS) != null);
+            assertTrue(query, scan.getAttribute(BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS) == null);
         }
     }
 
@@ -636,8 +636,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         List<Object> binds = Collections.emptyList();
         for (String query : queries) {
             Scan scan = compileQuery(query, binds);
-            assertTrue(query, scan.getAttribute(GroupedAggregateRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS) == null);
-            assertTrue(query, scan.getAttribute(GroupedAggregateRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS) != null);
+            assertTrue(query, scan.getAttribute(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS) == null);
+            assertTrue(query, scan.getAttribute(BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS) != null);
         }
     }
     
@@ -674,7 +674,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             for (int i = 0; i < queries.length; i++) {
                 query = queries[i];
                 Scan scan = compileQuery(query, binds);
-                ServerAggregators aggregators = ServerAggregators.deserialize(scan.getAttribute(GroupedAggregateRegionObserver.AGGREGATORS), null);
+                ServerAggregators aggregators = ServerAggregators.deserialize(scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), null);
                 Aggregator aggregator = aggregators.getAggregators()[0];
                 assertTrue(aggregator instanceof CountAggregator);
             }

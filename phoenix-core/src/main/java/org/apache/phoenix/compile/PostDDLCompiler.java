@@ -27,7 +27,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -113,7 +113,7 @@ public class PostDDLCompiler {
                     long totalMutationCount = 0;
                     for (final TableRef tableRef : tableRefs) {
                         Scan scan = new Scan();
-                        scan.setAttribute(UngroupedAggregateRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
+                        scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
                         SelectStatement select = SelectStatement.COUNT_ONE;
                         // We need to use this tableRef
                         ColumnResolver resolver = new ColumnResolver() {
@@ -137,13 +137,13 @@ public class PostDDLCompiler {
                         StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, scan);
                         ScanUtil.setTimeRange(scan, timestamp);
                         if (emptyCF != null) {
-                            scan.setAttribute(UngroupedAggregateRegionObserver.EMPTY_CF, emptyCF);
+                            scan.setAttribute(BaseScannerRegionObserver.EMPTY_CF, emptyCF);
                         }
                         ServerCache cache = null;
                         try {
                             if (deleteList != null) {
                                 if (deleteList.isEmpty()) {
-                                    scan.setAttribute(UngroupedAggregateRegionObserver.DELETE_AGG, QueryConstants.TRUE);
+                                    scan.setAttribute(BaseScannerRegionObserver.DELETE_AGG, QueryConstants.TRUE);
                                     // In the case of a row deletion, add index metadata so mutable secondary indexing works
                                     /* TODO: we currently manually run a scan to delete the index data here
                                     ImmutableBytesWritable ptr = context.getTempPtr();
@@ -164,8 +164,8 @@ public class PostDDLCompiler {
                                     if (emptyCF == null) {
                                         scan.addColumn(column.getFamilyName().getBytes(), column.getName().getBytes());
                                     }
-                                    scan.setAttribute(UngroupedAggregateRegionObserver.DELETE_CF, column.getFamilyName().getBytes());
-                                    scan.setAttribute(UngroupedAggregateRegionObserver.DELETE_CQ, column.getName().getBytes());
+                                    scan.setAttribute(BaseScannerRegionObserver.DELETE_CF, column.getFamilyName().getBytes());
+                                    scan.setAttribute(BaseScannerRegionObserver.DELETE_CQ, column.getName().getBytes());
                                 }
                             }
                             List<byte[]> columnFamilies = Lists.newArrayListWithExpectedSize(tableRef.getTable().getColumnFamilies().size());
