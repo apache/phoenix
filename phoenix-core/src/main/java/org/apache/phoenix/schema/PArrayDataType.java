@@ -75,9 +75,11 @@ public class PArrayDataType {
 		return createArrayBytes(byteStream, oStream, (PhoenixArray)object, noOfElements, baseType, 0);
 	}
 	
-    private byte[] rewriteArrayBytes(byte[] bytes, Integer desiredMaxLength, Integer maxLength, PDataType baseType) {
-        if (bytes == null || bytes.length == 0) { return null; }
-        ByteBuffer buffer = ByteBuffer.wrap(bytes, 0, bytes.length);
+    private void rewriteArrayBytes(ImmutableBytesWritable ptr, Integer desiredMaxLength, Integer maxLength, PDataType baseType) {
+        if (ptr.getLength() == 0) {
+            return;
+        }
+        ByteBuffer buffer = ByteBuffer.wrap(ptr.get(), ptr.getOffset(), ptr.getLength());
         int initPos = buffer.position();
         buffer.position((buffer.limit() - (Bytes.SIZEOF_BYTE + Bytes.SIZEOF_INT)));
         int noOfElemPos = buffer.position();
@@ -101,7 +103,7 @@ public class PArrayDataType {
         }
         newBuffer.putInt(temp);
         newBuffer.put(ARRAY_SERIALIZATION_VERSION);
-        return newBuffer.array();
+        ptr.set(newBuffer.array());
     }
 
     public static int serializeNulls(DataOutputStream oStream, int nulls) throws IOException {
@@ -220,24 +222,34 @@ public class PArrayDataType {
 		}
     }
 	
-	public boolean isSizeCompatible(PDataType srcType, Object value,
-			byte[] b, Integer maxLength, Integer desiredMaxLength,
-			Integer scale, Integer desiredScale) {
+	public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value,
+			PDataType srcType, Integer maxLength, Integer scale,
+			Integer desiredMaxLength, Integer desiredScale) {
 		PhoenixArray pArr = (PhoenixArray) value;
 		Object[] arr = (Object[]) pArr.array;
 		PDataType baseType = PDataType.fromTypeId(srcType.getSqlType()
 				- Types.ARRAY);
 		for (int i = 0 ; i < arr.length; i++) {
-			if (!baseType.isSizeCompatible(baseType, arr[i], b, srcType.getMaxLength(arr[i]),
-					desiredMaxLength, scale, desiredScale)) {
+			if (!baseType.isSizeCompatible(ptr, arr[i], baseType, srcType.getMaxLength(arr[i]),
+					scale, desiredMaxLength, desiredScale)) {
 				return false;
 			}
 		}
 		return true;
 	}
 	
-	public byte[] coerceBytes(byte[] b, Object value, PDataType actualType, Integer maxLength, Integer scale,
-            Integer desiredMaxLength, Integer desiredScale) {
+	public void coerceBytes(ImmutableBytesWritable ptr, Object value, PDataType actualType, Integer maxLength, Integer scale,
+            Integer desiredMaxLength, Integer desiredScale, PDataType desiredType) {
+	    if (ptr.getLength() == 0 || value == null) {
+	        return;
+	    }
+	    
+	    // TODO: handle bit inversion
+	    // TODO: handle coerce between different types
+	    // TODO: validate that maxLength and desiredMaxLength come through as expected
+	    // TODO: handle when value == null correct, as you may need to re-write due to coercian to different type
+	    // or bit inversion
+	    //FIXME: don't write number of elements in the case of fixed width arrays as it will mess up sort order
 	    PhoenixArray pArr = (PhoenixArray) value;
         Object[] arr = (Object[]) pArr.array;
         PDataType baseType = PDataType.fromTypeId(actualType.getSqlType()
@@ -250,9 +262,10 @@ public class PArrayDataType {
                     break;
                 }
             }
-            if (createNewArray) { return rewriteArrayBytes(b, desiredMaxLength, desiredMaxLength, baseType); }
+            if (createNewArray) { 
+                rewriteArrayBytes(ptr, desiredMaxLength, desiredMaxLength, baseType); 
+            }
         }
-        return b;
 	}
 
 

@@ -151,7 +151,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
 
                 long value = PDataType.LONG.getCodec().decodeLong(currentValueKV.getValueArray(), currentValueKV.getValueOffset(), SortOrder.getDefault());
                 long incrementBy = PDataType.LONG.getCodec().decodeLong(incrementByKV.getValueArray(), incrementByKV.getValueOffset(), SortOrder.getDefault());
-                int cacheSize = PDataType.INTEGER.getCodec().decodeInt(cacheSizeKV.getValueArray(), cacheSizeKV.getValueOffset(), SortOrder.getDefault());
+                int cacheSize = PDataType.LONG.getCodec().decodeInt(cacheSizeKV.getValueArray(), cacheSizeKV.getValueOffset(), SortOrder.getDefault());
 
                 value += incrementBy * cacheSize;
                 byte[] valueBuffer = new byte[PDataType.LONG.getByteSize()];

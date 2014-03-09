@@ -120,13 +120,6 @@ public class PColumnImpl implements PColumn {
     }
 
     @Override
-    public Integer getByteSize() {
-        Integer dataTypeMaxLength = dataType.getByteSize();
-        return dataTypeMaxLength == null ? dataType.estimateByteSizeFromLength(maxLength)
-                : dataTypeMaxLength;
-    }
-
-    @Override
     public boolean isNullable() {
         return nullable;
     }

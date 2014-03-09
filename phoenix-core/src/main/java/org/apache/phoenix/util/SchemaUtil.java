@@ -76,11 +76,6 @@ public class SchemaUtil {
         }
     
         @Override
-        public Integer getByteSize() {
-            return null;
-        }
-    
-        @Override
         public Integer getMaxLength() {
             return null;
         }
@@ -120,8 +115,9 @@ public class SchemaUtil {
         List<PColumn> columns = table.getPKColumns();
         while (i < columns.size()) {
             PColumn keyColumn = columns.get(i++);
-            Integer byteSize = keyColumn.getByteSize();
-            maxKeyLength += (byteSize == null) ? VAR_LENGTH_ESTIMATE : byteSize;
+            PDataType type = keyColumn.getDataType();
+            Integer maxLength = keyColumn.getMaxLength();
+            maxKeyLength += !type.isFixedWidth() ? VAR_LENGTH_ESTIMATE : maxLength == null ? type.getByteSize() : maxLength;
         }
         return maxKeyLength;
     }
@@ -390,7 +386,7 @@ public class SchemaUtil {
         while (pos < pkColumns.size()) {
             PColumn column = iterator.next();
             if (column.getDataType().isFixedWidth()) { // Fixed width
-                int length = column.getByteSize();
+                int length = SchemaUtil.getFixedByteSize(column);
                 if (maxOffset - offset < length) {
                     // The split truncates the field. Fill in the rest of the part and any fields that
                     // are missing after this field.
@@ -429,7 +425,7 @@ public class SchemaUtil {
         while (iterator.hasNext()) {
             PColumn column = iterator.next();
             if (column.getDataType().isFixedWidth()) {
-                length += column.getByteSize();
+                length += SchemaUtil.getFixedByteSize(column);
             } else {
                 length += 1; // SEPARATOR byte.
             }
@@ -536,6 +532,12 @@ public class SchemaUtil {
         return maxKeyLength;
     }
 
+    public static int getFixedByteSize(PDatum e) {
+        assert(e.getDataType().isFixedWidth());
+        Integer maxLength = e.getMaxLength();
+        return maxLength == null ? e.getDataType().getByteSize() : maxLength;
+    }
+    
     public static short getMaxKeySeq(PTable table) {
         int offset = 0;
         if (table.getBucketNum() != null) {

@@ -112,7 +112,7 @@ public class QueryServicesOptions {
     // Max size of 1st level main memory cache in bytes --> upper bound
     public static final long DEFAULT_GROUPBY_MAX_CACHE_MAX = 1024L*1024L*100L;  // 100 Mb
     
-    public static final int DEFAULT_SEQUENCE_CACHE_SIZE = 100;  // reserve 100 sequences at a time
+    public static final long DEFAULT_SEQUENCE_CACHE_SIZE = 100;  // reserve 100 sequences at a time
     public static final int DEFAULT_INDEX_MAX_FILESIZE_PERC = 50; // % of data table max file size for index table
     public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS =  60000 * 30; // 30 mins   
     public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE =  1024L*1024L*20L; // 20 Mb

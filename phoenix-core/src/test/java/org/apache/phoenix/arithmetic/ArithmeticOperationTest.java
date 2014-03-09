@@ -17,17 +17,24 @@
  */
 package org.apache.phoenix.arithmetic;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.math.BigDecimal;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.junit.Test;
-
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
-import org.apache.phoenix.expression.*;
+import org.apache.phoenix.expression.DecimalAddExpression;
+import org.apache.phoenix.expression.DecimalDivideExpression;
+import org.apache.phoenix.expression.DecimalMultiplyExpression;
+import org.apache.phoenix.expression.DecimalSubtractExpression;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.PDataType;
+import org.junit.Test;
 
 
 public class ArithmeticOperationTest {
@@ -71,7 +78,6 @@ public class ArithmeticOperationTest {
             evaluated = e.evaluate(null, ptr);
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
-            assertTrue(ex.getMessage(), ex.getMessage().contains("ERROR 206 (22003): The value is outside the range for the data type. DECIMAL(38,0)"));
         }
 
         // Pass since we roll out imposing precisioin and scale.
@@ -95,7 +101,6 @@ public class ArithmeticOperationTest {
             evaluated = e.evaluate(null, ptr);
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
-            assertTrue(ex.getMessage(), ex.getMessage().contains("ERROR 206 (22003): The value is outside the range for the data type. DECIMAL(38,2)"));
         }
         
         // Decimal with no precision and scale.
@@ -107,6 +112,25 @@ public class ArithmeticOperationTest {
         evaluated = e.evaluate(null, ptr);
         assertTrue(evaluated);
         assertEqualValue(PDataType.DECIMAL, new BigDecimal("10000.2111"), ptr);
+    }
+
+    @Test
+    public void testIntPlusDecimal() throws Exception {
+        LiteralExpression op1, op2;
+        List<Expression> children;
+        ImmutableBytesWritable ptr;
+        DecimalAddExpression e;
+        boolean evaluated;
+
+        op1 = LiteralExpression.newConstant(new BigDecimal("1234.111"), PDataType.DECIMAL);
+        assertEquals(Integer.valueOf(3),op1.getScale());
+        op2 = LiteralExpression.newConstant(1, PDataType.INTEGER);
+        children = Arrays.<Expression>asList(op1, op2);
+        e = new DecimalAddExpression(children);
+        ptr = new ImmutableBytesWritable();
+        evaluated = e.evaluate(null, ptr);
+        assertTrue(evaluated);
+        assertEqualValue(PDataType.DECIMAL, new BigDecimal("1235.111"), ptr);
     }
 
     // Subtraction
@@ -148,7 +172,6 @@ public class ArithmeticOperationTest {
             evaluated = e.evaluate(null, ptr);
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
-            assertTrue(ex.getMessage(), ex.getMessage().contains("ERROR 206 (22003): The value is outside the range for the data type. DECIMAL(38,0)"));
         }
 
         // Pass since we roll up precision and scale imposing.
@@ -172,7 +195,6 @@ public class ArithmeticOperationTest {
             evaluated = e.evaluate(null, ptr);
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
-            assertTrue(ex.getMessage(), ex.getMessage().contains("ERROR 206 (22003): The value is outside the range for the data type. DECIMAL(38,2)"));
         }
         
         // Decimal with no precision and scale.
@@ -216,7 +238,6 @@ public class ArithmeticOperationTest {
             evaluated = e.evaluate(null, ptr);
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
-            assertTrue(ex.getMessage(), ex.getMessage().contains("ERROR 206 (22003): The value is outside the range for the data type. DECIMAL(38,0)"));
         }
 
         // Values exceeds scale.
@@ -229,11 +250,11 @@ public class ArithmeticOperationTest {
             evaluated = e.evaluate(null, ptr);
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
-            assertTrue(ex.getMessage(), ex.getMessage().contains("ERROR 206 (22003): The value is outside the range for the data type. DECIMAL(38,2)"));
         }
         
         // Decimal with no precision and scale.
         op1 = LiteralExpression.newConstant(new BigDecimal("1111.1"), PDataType.DECIMAL);
+        assertEquals(Integer.valueOf(1),op1.getScale());
         op2 = LiteralExpression.newConstant(new BigDecimal("1.1111"), PDataType.DECIMAL, 5, 4);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalMultiplyExpression(children);
@@ -276,12 +297,12 @@ public class ArithmeticOperationTest {
             evaluated = e.evaluate(null, ptr);
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
-            assertTrue(ex.getMessage(), ex.getMessage().contains("ERROR 206 (22003): The value is outside the range for the data type. DECIMAL(38,0)"));
         }
         
         // Decimal with no precision and scale.
         op1 = LiteralExpression.newConstant(new BigDecimal("10"), PDataType.DECIMAL);
         op2 = LiteralExpression.newConstant(new BigDecimal("3"), PDataType.DECIMAL, 5, 4);
+        assertEquals(Integer.valueOf(4),op2.getScale());
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalDivideExpression(children);
         ptr = new ImmutableBytesWritable();

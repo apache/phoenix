@@ -66,7 +66,7 @@ public class ArrayIndexFunction extends ScalarFunction {
 
 		// Given a ptr to the entire array, set ptr to point to a particular element within that array
 		// given the type of an array element (see comments in PDataTypeForArray)
-		PArrayDataType.positionAtArrayElement(ptr, index-1, getDataType(), getByteSize());
+		PArrayDataType.positionAtArrayElement(ptr, index-1, getDataType(), getMaxLength());
 		return true;
 		
 	}
@@ -75,11 +75,6 @@ public class ArrayIndexFunction extends ScalarFunction {
 	public PDataType getDataType() {
 		return PDataType.fromTypeId(children.get(0).getDataType().getSqlType()
 				- Types.ARRAY);
-	}
-	
-	@Override
-	public Integer getByteSize() {
-	    return this.children.get(0).getMaxLength();
 	}
 	
 	@Override

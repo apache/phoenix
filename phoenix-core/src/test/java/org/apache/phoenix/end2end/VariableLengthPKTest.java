@@ -35,17 +35,18 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.text.Format;
 import java.text.ParseException;
 import java.util.Properties;
 
-import org.junit.Test;
-
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.Test;
 
 
 public class VariableLengthPKTest extends BaseClientManagedTimeTest {
@@ -1045,8 +1046,8 @@ public class VariableLengthPKTest extends BaseClientManagedTimeTest {
         try {
             stmt.execute();
             fail();
-        } catch (ConstraintViolationException e) {
-            assertTrue(e.getMessage().contains(" may not exceed 2 bytes"));
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -1084,8 +1085,8 @@ public class VariableLengthPKTest extends BaseClientManagedTimeTest {
         try {
             stmt.execute();
             fail();
-        } catch (ConstraintViolationException e) {
-            assertTrue(e.getMessage().contains(" may not exceed 3 bytes"));
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
         } finally {
             conn.close();
         }

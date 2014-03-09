@@ -39,15 +39,13 @@ public abstract class MultiplyExpression extends ArithmeticExpression {
 
     public MultiplyExpression(List<Expression> children) {
         super(children);
-        for (int i=0; i<children.size(); i++) {
+        Expression firstChild = children.get(0);
+        maxLength = getPrecision(firstChild);
+        scale = getScale(firstChild);
+        for (int i=1; i<children.size(); i++) {
             Expression childExpr = children.get(i);
-            if (i == 0) {
-                maxLength = childExpr.getMaxLength();
-                scale = childExpr.getScale();
-            } else {
-                maxLength = getPrecision(maxLength, childExpr.getMaxLength(), scale, childExpr.getScale());
-                scale = getScale(maxLength, childExpr.getMaxLength(), scale, childExpr.getScale());
-            }
+            maxLength = getPrecision(maxLength, getPrecision(childExpr), scale, getScale(childExpr));
+            scale = getScale(maxLength, getPrecision(childExpr), scale, getScale(childExpr));
         }
     }
 
@@ -67,19 +65,19 @@ public abstract class MultiplyExpression extends ArithmeticExpression {
     }
     
     private static Integer getPrecision(Integer lp, Integer rp, Integer ls, Integer rs) {
-    	if (ls == null || rs == null) {
-    		return PDataType.MAX_PRECISION;
-    	}
+        if (ls == null || rs == null) {
+            return PDataType.MAX_PRECISION;
+        }
         int val = lp + rp;
         return Math.min(PDataType.MAX_PRECISION, val);
     }
 
     private static Integer getScale(Integer lp, Integer rp, Integer ls, Integer rs) {
-    	// If we are adding a decimal with scale and precision to a decimal
-    	// with no precision nor scale, the scale system does not apply.
-    	if (ls == null || rs == null) {
-    		return null;
-    	}
+        // If we are adding a decimal with scale and precision to a decimal
+        // with no precision nor scale, the scale system does not apply.
+        if (ls == null || rs == null) {
+            return null;
+        }
         int val = ls + rs;
         return Math.min(PDataType.MAX_PRECISION, val);
     }

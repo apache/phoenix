@@ -444,11 +444,11 @@ public class PTableImpl implements PTable {
                 if (byteValue.length == 0 && !column.isNullable()) { 
                     throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not be null");
                 }
-                Integer	byteSize = column.getByteSize();
-                if (byteSize != null && type.isFixedWidth() && byteValue.length <= byteSize) {
-                    byteValue = StringUtil.padChar(byteValue, byteSize);
-                } else if (byteSize != null && byteValue.length > byteSize) {
-                    throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not exceed " + byteSize + " bytes (" + SchemaUtil.toString(type, byteValue) + ")");
+                Integer	maxLength = column.getMaxLength();
+                if (maxLength != null && type.isFixedWidth() && byteValue.length <= maxLength) {
+                    byteValue = StringUtil.padChar(byteValue, maxLength);
+                } else if (maxLength != null && byteValue.length > maxLength) {
+                    throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + SchemaUtil.toString(type, byteValue) + ")");
                 }
                 os.write(byteValue, 0, byteValue.length);
             }
@@ -620,13 +620,14 @@ public class PTableImpl implements PTable {
                 deleteQuietly(unsetValues, kvBuilder, kvBuilder.buildDeleteColumns(keyPtr, column
                         .getFamilyName().getBytesPtr(), column.getName().getBytesPtr(), ts));
             } else {
-            	Integer	byteSize = column.getByteSize();
-				if (byteSize != null && type.isFixedWidth()
-						&& byteValue.length <= byteSize) { 
-                    byteValue = StringUtil.padChar(byteValue, byteSize);
-                } else if (byteSize != null && byteValue.length > byteSize) {
-                    throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not exceed " + byteSize + " bytes (" + type.toObject(byteValue) + ")");
-                }
+            	Integer	maxLength = column.getMaxLength();
+            	if (type.isFixedWidth() && maxLength != null) {
+    				if (byteValue.length <= maxLength) { 
+                        byteValue = StringUtil.padChar(byteValue, maxLength);
+                    } else if (byteValue.length > maxLength) {
+                        throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + type.toObject(byteValue) + ")");
+                    }
+            	}
                 removeIfPresent(unsetValues, family, qualifier);
                 addQuietly(setValues, kvBuilder, kvBuilder.buildPut(keyPtr, column.getFamilyName()
                         .getBytesPtr(),

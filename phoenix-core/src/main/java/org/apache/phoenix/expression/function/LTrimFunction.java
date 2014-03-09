@@ -21,12 +21,11 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -46,15 +45,10 @@ import org.apache.phoenix.util.StringUtil;
 public class LTrimFunction extends ScalarFunction {
     public static final String NAME = "LTRIM";
 
-    private Integer byteSize;
-
     public LTrimFunction() { }
 
     public LTrimFunction(List<Expression> children) throws SQLException {
         super(children);
-        if (getStringExpression().getDataType().isFixedWidth()) {
-            byteSize = getStringExpression().getByteSize();
-        }
     }
 
     private Expression getStringExpression() {
@@ -94,8 +88,8 @@ public class LTrimFunction extends ScalarFunction {
     }
     
     @Override
-    public Integer getByteSize() {
-        return byteSize;
+    public Integer getMaxLength() {
+        return getStringExpression().getMaxLength();
     }
 
     @Override

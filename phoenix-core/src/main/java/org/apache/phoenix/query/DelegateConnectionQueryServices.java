@@ -172,8 +172,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
 
     @Override
     public long createSequence(String tenantId, String schemaName, String sequenceName, long startWith,
-            long incrementBy, int batchSize, long timestamp) throws SQLException {
-        return getDelegate().createSequence(tenantId, schemaName, sequenceName, startWith, incrementBy, batchSize, timestamp);
+            long incrementBy, long cacheSize, long timestamp) throws SQLException {
+        return getDelegate().createSequence(tenantId, schemaName, sequenceName, startWith, incrementBy, cacheSize, timestamp);
     }
 
     @Override

@@ -33,10 +33,16 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ClientKeyValue;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.util.MinVersionTestRunner;
+import org.apache.phoenix.util.MinVersionTestRunner.MinVersion;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
+@RunWith(MinVersionTestRunner.class)
+@MinVersion(KeyValueBuilder.CLIENT_KEY_VALUE_MIN_VERSION)
 public class TestClientKeyValue {
   private final static HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
   private static byte[] ROW = Bytes.toBytes("testRow");

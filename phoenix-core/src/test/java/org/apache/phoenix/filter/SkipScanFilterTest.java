@@ -28,6 +28,13 @@ import junit.framework.TestCase;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ByteUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -35,13 +42,6 @@ import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
-import org.apache.phoenix.util.ByteUtil;
 
 //reset()
 //filterAllRemaining() -> true indicates scan is over, false, keep going on.
@@ -74,13 +74,8 @@ public class SkipScanFilterTest extends TestCase {
                 }
 
                 @Override
-                public Integer getByteSize() {
-                    return width <= 0 ? null : width;
-                }
-
-                @Override
                 public Integer getMaxLength() {
-                    return getByteSize();
+                    return width <= 0 ? null : width;
                 }
 
                 @Override

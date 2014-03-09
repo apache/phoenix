@@ -257,10 +257,6 @@ public class SkipRangeParallelIteratorRegionSplitterTest extends BaseClientManag
                     return PDataType.CHAR;
                 }
                 @Override
-                public Integer getByteSize() {
-                    return width;
-                }
-                @Override
                 public Integer getMaxLength() {
                     return width;
                 }

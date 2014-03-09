@@ -30,8 +30,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.junit.Test;
 
 import com.google.common.primitives.Doubles;
@@ -102,8 +104,8 @@ public class ArithmeticQueryTest extends BaseHBaseManagedTimeTest {
                 stmt.execute();
                 conn.commit();
                 fail("Should have caught bad values.");
-            } catch (Exception e) {
-                assertTrue(e.getMessage(), e.getMessage().contains("ERROR 206 (22003): The value is outside the range for the data type. value=12345678901234567890123456789012 columnName=COL1"));
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             try {
                 query = "UPSERT INTO testDecimalArithmetic(pk, col1, col2, col3) VALUES(?,?,?,?)";
@@ -116,8 +118,8 @@ public class ArithmeticQueryTest extends BaseHBaseManagedTimeTest {
                 stmt.execute();
                 conn.commit();
                 fail("Should have caught bad values.");
-            } catch (Exception e) {
-                assertTrue(e.getMessage(), e.getMessage().contains("ERROR 206 (22003): The value is outside the range for the data type. value=123456 columnName=COL2"));
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
         } finally {
             conn.close();
@@ -182,8 +184,8 @@ public class ArithmeticQueryTest extends BaseHBaseManagedTimeTest {
                 stmt.execute();
                 conn.commit();
                 fail("Should have caught bad upsert.");
-            } catch (Exception e) {
-                assertTrue(e.getMessage(), e.getMessage().contains("ERROR 206 (22003): The value is outside the range for the data type. columnName=COL3"));
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             
             // Evaluate on server side.
@@ -437,8 +439,8 @@ public class ArithmeticQueryTest extends BaseHBaseManagedTimeTest {
             	assertTrue(rs.next());
             	result = rs.getBigDecimal(1);
             	fail("Should have caught error.");
-            } catch (Exception e) {
-            	assertTrue(e.getMessage(), e.getMessage().contains("ERROR 206 (22003): The value is outside the range for the data type. DECIMAL(38,0)"));
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             
             try {
@@ -448,8 +450,8 @@ public class ArithmeticQueryTest extends BaseHBaseManagedTimeTest {
             	assertTrue(rs.next());
             	result = rs.getBigDecimal(1);
             	fail("Should have caught error.");
-            } catch (Exception e) {
-            	assertTrue(e.getMessage(), e.getMessage().contains("ERROR 206 (22003): The value is outside the range for the data type. DECIMAL(38,0)"));
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             
             query = "SELECT col4 * col5 FROM testDecimalArithmetic WHERE pk='testValueOne'";

@@ -25,6 +25,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -33,6 +35,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.text.Format;
+import java.text.ParseException;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -283,6 +287,37 @@ public class UpsertValuesTest extends BaseClientManagedTimeTest {
              closeStmtAndConn(stmt, conn);
         }
         
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("select t from UpsertTimestamp LIMIT 1");
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(ts1, rs.getTimestamp(1));
+            assertFalse(rs.next());
+        } finally {
+             closeStmtAndConn(stmt, conn);
+        }
+
+        BigDecimal msInDay = BigDecimal.valueOf(1*24*60*60*1000);
+        BigDecimal nanosInDay = BigDecimal.valueOf(1*24*60*60*1000).multiply(BigDecimal.valueOf(1000000));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("select 500.0/(1*24*60*60*1000) c1, 10.0/(1*24*60*60*1000*1000000) c2  from UpsertTimestamp LIMIT 1");
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            BigDecimal c1 = rs.getBigDecimal(1);
+            BigDecimal rc1 = c1.multiply(msInDay).setScale(0,RoundingMode.HALF_UP);
+            BigDecimal c2 = rs.getBigDecimal(2);
+            BigDecimal rc2 = c2.multiply(nanosInDay).setScale(0,RoundingMode.HALF_UP);
+            assertTrue(BigDecimal.valueOf(500).compareTo(rc1) == 0);
+            assertTrue(BigDecimal.valueOf(10).compareTo(rc2) == 0);
+            assertFalse(rs.next());
+        } finally {
+             closeStmtAndConn(stmt, conn);
+        }
+
         Timestamp ts2 = new Timestamp(ts1.getTime() + 500);
         ts2.setNanos(ts2.getNanos() + extraNanos + 10); //setting the extra nanos as well as what spilled over from timestamp millis.
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
@@ -446,6 +481,59 @@ public class UpsertValuesTest extends BaseClientManagedTimeTest {
         } finally {
              closeStmtAndConn(pstmt, conn);
         }
-        
     }
+    
+    private static Format DATE_FORMAT = DateUtil.getDateParser(DateUtil.DEFAULT_DATE_FORMAT);
+    
+    private static Date toDate(String dateString) {
+        try {
+            return (Date)DATE_FORMAT.parseObject(dateString);
+        } catch (ParseException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    
+    @Test
+    public void testUpsertDateIntoDescUnsignedDate() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("create table UpsertTimestamp (k varchar, v unsigned_date not null, constraint pk primary key (k,v desc))");
+            stmt.execute();
+        } finally {
+            closeStmtAndConn(stmt, conn);
+        }
+        
+        String dateStr = "2013-01-01 04:00:00";
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("upsert into UpsertTimestamp(k,v) values ('a', to_date(?))");
+            stmt.setString(1, dateStr);
+            stmt.executeUpdate();
+            conn.commit();
+        } finally {
+             closeStmtAndConn(stmt, conn);
+        }
+        
+        Date date = toDate(dateStr);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("select * from UpsertTimestamp");
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals(date, rs.getDate(2));
+            assertFalse(rs.next());
+        } finally {
+             closeStmtAndConn(stmt, conn);
+        }
+    }
+        
+    
 }

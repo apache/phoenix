@@ -31,11 +31,6 @@ import org.apache.phoenix.util.SizedUtil;
 public abstract class PBaseColumn implements PColumn {
 
     @Override
-    public final Integer getByteSize() {
-        return getDataType().getByteSize();
-    }
-
-    @Override
     public final Integer getMaxLength() {
         return null;
     }

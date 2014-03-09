@@ -67,7 +67,6 @@ public class LiteralExpression extends BaseTerminalExpression {
     private PDataType type;
     private boolean isDeterministic;
     private byte[] byteValue;
-    private Integer byteSize;
     private Integer maxLength;
     private Integer scale;
     private SortOrder sortOrder;
@@ -168,6 +167,9 @@ public class LiteralExpression extends BaseTerminalExpression {
             if (b.length == 0) {
                 return TYPED_NULL_EXPRESSIONS[type.ordinal()];
             }
+            if (maxLength == null) {
+                maxLength = type == null || !type.isFixedWidth() ? null : type.getMaxLength(value);
+            }
             return new LiteralExpression(value, type, b, maxLength, scale, sortOrder, isDeterministic);
         } catch (IllegalDataException e) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA).setRootCause(e).build().buildException();
@@ -182,7 +184,7 @@ public class LiteralExpression extends BaseTerminalExpression {
     }
 
     private LiteralExpression(Object value, PDataType type, byte[] byteValue, boolean isDeterministic) {
-        this(value, type, byteValue, type == null? null : type.getMaxLength(value), type == null? null : type.getScale(value), SortOrder.getDefault(), isDeterministic);
+        this(value, type, byteValue, type == null || !type.isFixedWidth() ? null : type.getMaxLength(value), null, SortOrder.getDefault(), isDeterministic);
     }
 
     private LiteralExpression(Object value, PDataType type, byte[] byteValue,
@@ -191,9 +193,8 @@ public class LiteralExpression extends BaseTerminalExpression {
         this.value = value;
         this.type = type;
         this.byteValue = byteValue;
-        this.byteSize = byteValue.length;
         this.maxLength = maxLength;
-        this.scale = scale;
+        this.scale = scale != null ? scale : type == null ? null : type.getScale(value);
         this.sortOrder = sortOrder;
         this.isDeterministic = isDeterministic;
     }
@@ -247,8 +248,6 @@ public class LiteralExpression extends BaseTerminalExpression {
         } else {
             this.value = this.type.toObject(byteValue, 0, byteValue.length, this.type, sortOrder);
         }
-        // Only to prevent continual reallocations of Integer
-        this.byteSize = this.byteValue.length;
     }
 
     @Override
@@ -269,11 +268,6 @@ public class LiteralExpression extends BaseTerminalExpression {
     @Override
     public PDataType getDataType() {
         return type;
-    }
-
-    @Override
-    public Integer getByteSize() {
-        return byteSize;
     }
 
     @Override

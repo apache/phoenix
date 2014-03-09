@@ -23,7 +23,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.query.KeyRange;
@@ -91,8 +90,8 @@ abstract public class PrefixFunction extends ScalarFunction {
                 default:
                     return childPart.getKeyRange(op, rhs);
                 }
-                Integer length = getColumn().getByteSize();
-                return length == null ? range : range.fill(length);
+                Integer length = getColumn().getMaxLength();
+                return length == null || !type.isFixedWidth() ? range : range.fill(length);
             }
         };
     }

@@ -35,9 +35,8 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.Test;
-
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Test;
 
 
 public class PDataTypeTest {
@@ -1219,7 +1218,6 @@ public class PDataTypeTest {
 
         // Testing coercing long to other values.
         assertTrue(PDataType.LONG.isCoercibleTo(PDataType.DOUBLE));
-        assertTrue(PDataType.LONG.isCoercibleTo(PDataType.FLOAT));
         assertFalse(PDataType.LONG.isCoercibleTo(PDataType.INTEGER));
         assertFalse(PDataType.LONG.isCoercibleTo(PDataType.INTEGER, Long.MAX_VALUE));
         assertFalse(PDataType.LONG.isCoercibleTo(PDataType.INTEGER, Integer.MAX_VALUE + 10L));
@@ -1378,7 +1376,6 @@ public class PDataTypeTest {
 
         // Testing coercing unsigned_long to other values.
         assertTrue(PDataType.UNSIGNED_LONG.isCoercibleTo(PDataType.DOUBLE));
-        assertTrue(PDataType.UNSIGNED_LONG.isCoercibleTo(PDataType.FLOAT));
         assertFalse(PDataType.UNSIGNED_LONG.isCoercibleTo(PDataType.INTEGER));
         assertTrue(PDataType.UNSIGNED_LONG.isCoercibleTo(PDataType.INTEGER, 10L));
         assertTrue(PDataType.UNSIGNED_LONG.isCoercibleTo(PDataType.INTEGER, 0L));
@@ -1399,7 +1396,6 @@ public class PDataTypeTest {
         assertTrue(PDataType.UNSIGNED_LONG.isCoercibleTo(PDataType.UNSIGNED_TINYINT, 0L));
         assertFalse(PDataType.UNSIGNED_LONG.isCoercibleTo(PDataType.UNSIGNED_TINYINT, 1000L));
         assertTrue(PDataType.UNSIGNED_LONG.isCoercibleTo(PDataType.UNSIGNED_DOUBLE));
-        assertTrue(PDataType.UNSIGNED_LONG.isCoercibleTo(PDataType.UNSIGNED_FLOAT));
         
         // Testing coercing unsigned_smallint to other values.
         assertTrue(PDataType.UNSIGNED_SMALLINT.isCoercibleTo(PDataType.DOUBLE));
@@ -1509,6 +1505,12 @@ public class PDataTypeTest {
             testReadDecimalPrecisionAndScaleFromRawBytes(bds[i]);
             testReadDecimalPrecisionAndScaleFromRawBytes(bds[i].negate());
         }
+        
+        assertTrue(new BigDecimal("5").remainder(BigDecimal.ONE).equals(BigDecimal.ZERO));
+        assertTrue(new BigDecimal("5.0").remainder(BigDecimal.ONE).compareTo(BigDecimal.ZERO)==0);
+        assertTrue(new BigDecimal("5.00").remainder(BigDecimal.ONE).compareTo(BigDecimal.ZERO)==0);
+        assertFalse(new BigDecimal("5.01").remainder(BigDecimal.ONE).equals(BigDecimal.ZERO));
+        assertFalse(new BigDecimal("-5.1").remainder(BigDecimal.ONE).equals(BigDecimal.ZERO));
     }
     
     @Test

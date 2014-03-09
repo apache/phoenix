@@ -23,6 +23,12 @@ import java.util.Collection;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ByteUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -30,12 +36,6 @@ import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
-import org.apache.phoenix.util.ByteUtil;
 
 
 /**
@@ -485,10 +485,6 @@ public class ScanRangesTest {
                         return PDataType.CHAR;
                     }
                     @Override
-                    public Integer getByteSize() {
-                        return width;
-                    }
-                    @Override
                     public Integer getMaxLength() {
                         return width;
                     }
@@ -510,10 +506,6 @@ public class ScanRangesTest {
                     @Override
                     public PDataType getDataType() {
                         return PDataType.VARCHAR;
-                    }
-                    @Override
-                    public Integer getByteSize() {
-                        return width;
                     }
                     @Override
                     public Integer getMaxLength() {

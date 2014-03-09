@@ -21,10 +21,9 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.NumberUtil;
 
@@ -60,7 +59,7 @@ public class DecimalMultiplyExpression extends MultiplyExpression {
                 result = result.multiply(bd);
             }
         }
-        if (getMaxLength() != null && getScale() != null) {
+        if (getMaxLength() != null || getScale() != null) {
             result = NumberUtil.setDecimalWidthAndScale(result, getMaxLength(), getScale());
         }
         if (result == null) {

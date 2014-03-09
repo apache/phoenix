@@ -792,10 +792,6 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
             return PDataType.VARCHAR;
         }
         @Override
-        public Integer getByteSize() {
-            return null;
-        }
-        @Override
         public Integer getMaxLength() {
             return null;
         }

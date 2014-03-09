@@ -227,23 +227,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 Expression expression = selectExpressions.get(i);
                                 if (expression.evaluate(result, ptr)) {
                                     PColumn column = projectedColumns.get(i);
-                                    byte[] bytes = ptr.copyBytes();
-                                    Object value = expression.getDataType().toObject(bytes, column.getSortOrder());
-                                    // If SortOrder from expression in SELECT doesn't match the
-                                    // column being projected into then invert the bits.
-                                    if (expression.getSortOrder() != column.getSortOrder()) {
-                                        SortOrder.invert(bytes, 0, bytes, 0, bytes.length);
-                                    }
+                                    Object value = expression.getDataType().toObject(ptr, column.getSortOrder());
                                     // We are guaranteed that the two column will have the same type.
-                                    if (!column.getDataType().isSizeCompatible(column.getDataType(),
-                                            value, bytes,
-                                            expression.getMaxLength(), column.getMaxLength(), 
-                                            expression.getScale(), column.getScale())) {
+                                    if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(),
+                                            expression.getMaxLength(),  expression.getScale(), 
+                                            column.getMaxLength(), column.getScale())) {
                                         throw new ValueTypeIncompatibleException(column.getDataType(),
                                                 column.getMaxLength(), column.getScale());
                                     }
-                                    bytes = column.getDataType().coerceBytes(bytes, value, expression.getDataType(),
-                                            expression.getMaxLength(), expression.getScale(), column.getMaxLength(), column.getScale());
+                                    column.getDataType().coerceBytes(ptr, value, expression.getDataType(),
+                                            expression.getMaxLength(), expression.getScale(), expression.getSortOrder(), 
+                                            column.getMaxLength(), column.getScale(), column.getSortOrder());
+                                    byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
                                     row.setValue(column, bytes);
                                 }
                             }

@@ -24,6 +24,7 @@ import static org.junit.Assert.assertTrue;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.hbase.index.util.ClientKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -61,7 +62,8 @@ public class MetaDataUtilTest {
    */
   @Test
   public void testGetMutationKeyValue() throws Exception {
-    KeyValueBuilder builder = GenericKeyValueBuilder.INSTANCE;
+    String version = VersionInfo.getVersion();
+    KeyValueBuilder builder = KeyValueBuilder.get(version);
     byte[] row = Bytes.toBytes("row");
     byte[] family = PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
     byte[] qualifier = Bytes.toBytes("qual");
@@ -78,20 +80,22 @@ public class MetaDataUtilTest {
       ByteUtil.BYTES_PTR_COMPARATOR.compare(ptr, wrap(value)));
 
     // try again, this time with the clientkeyvalue builder
-    builder = ClientKeyValueBuilder.INSTANCE;
-    value = Bytes.toBytes("client-value");
-    kv = builder.buildPut(wrap(row), wrap(family), wrap(qualifier), wrap(value));
-    put = new Put(row);
-    KeyValueBuilder.addQuietly(put, builder, kv);
-
-    // read back out the value
-    assertTrue(MetaDataUtil.getMutationValue(put, qualifier, builder, ptr));
-    assertEquals("Value returned doesn't match stored value for " + builder.getClass().getName()
-        + "!", 0,
-      ByteUtil.BYTES_PTR_COMPARATOR.compare(ptr, wrap(value)));
-
-    // ensure that we don't get matches for qualifiers that don't match
-    assertFalse(MetaDataUtil.getMutationValue(put, Bytes.toBytes("not a match"), builder, ptr));
+    if (builder != GenericKeyValueBuilder.INSTANCE) {
+        builder = GenericKeyValueBuilder.INSTANCE;
+        value = Bytes.toBytes("client-value");
+        kv = builder.buildPut(wrap(row), wrap(family), wrap(qualifier), wrap(value));
+        put = new Put(row);
+        KeyValueBuilder.addQuietly(put, builder, kv);
+    
+        // read back out the value
+        assertTrue(MetaDataUtil.getMutationValue(put, qualifier, builder, ptr));
+        assertEquals("Value returned doesn't match stored value for " + builder.getClass().getName()
+            + "!", 0,
+          ByteUtil.BYTES_PTR_COMPARATOR.compare(ptr, wrap(value)));
+    
+        // ensure that we don't get matches for qualifiers that don't match
+        assertFalse(MetaDataUtil.getMutationValue(put, Bytes.toBytes("not a match"), builder, ptr));
+    }
   }
 
   private static ImmutableBytesPtr wrap(byte[] bytes) {

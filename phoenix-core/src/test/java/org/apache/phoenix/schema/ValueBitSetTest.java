@@ -20,13 +20,11 @@ package org.apache.phoenix.schema;
 import static org.junit.Assert.assertEquals;
 
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.Test;
-
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
+import org.junit.Test;
 
 
 public class ValueBitSetTest {
-    private static final int FIXED_WIDTH_CHAR_SIZE = 10;
     private KeyValueSchema generateSchema(int nFields, int nRepeating, final int nNotNull) {
         KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(nNotNull);
         for (int i = 0; i < nFields; i++) {
@@ -40,10 +38,6 @@ public class ValueBitSetTest {
                     @Override
                     public PDataType getDataType() {
                         return PDataType.values()[fieldIndex % PDataType.values().length];
-                    }
-                    @Override
-                    public Integer getByteSize() {
-                        return !getDataType().isFixedWidth() ? null : getDataType().getByteSize() == null ? FIXED_WIDTH_CHAR_SIZE : getDataType().getByteSize();
                     }
                     @Override
                     public Integer getMaxLength() {

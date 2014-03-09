@@ -686,14 +686,14 @@ public class MetaDataClient {
         return new MutationState(1, connection);
     }
     
-    public MutationState createSequence(CreateSequenceStatement statement, long startWith, long incrementBy, int cacheSize) throws SQLException {
+    public MutationState createSequence(CreateSequenceStatement statement, long startWith, long incrementBy, long cacheSize) throws SQLException {
         Long scn = connection.getSCN();
         long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
         String tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getString();
         return createSequence(tenantId, statement.getSequenceName().getSchemaName(), statement.getSequenceName().getTableName(), statement.ifNotExists(), startWith, incrementBy, cacheSize, timestamp);
     }
     
-    private MutationState createSequence(String tenantId, String schemaName, String sequenceName, boolean ifNotExists, long startWith, long incrementBy, int cacheSize, long timestamp) throws SQLException {
+    private MutationState createSequence(String tenantId, String schemaName, String sequenceName, boolean ifNotExists, long startWith, long incrementBy, long cacheSize, long timestamp) throws SQLException {
         try {
             connection.getQueryServices().createSequence(tenantId, schemaName, sequenceName, startWith, incrementBy, cacheSize, timestamp);
         } catch (SequenceAlreadyExistsException e) {

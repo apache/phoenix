@@ -26,7 +26,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
@@ -125,6 +124,12 @@ public class CaseExpression extends BaseCompoundExpression {
         return returnType;
     }
 
+//    @Override TODO: do we need this?
+//    public Integer getMaxLength() {
+//        return children.get(0).getMaxLength();
+//    }
+
+    
     @Override
     public void reset() {
         foundIndex = false;

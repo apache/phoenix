@@ -36,6 +36,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 public class RowValueConstructorExpression extends BaseCompoundExpression {
@@ -113,9 +114,7 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
             return 1;
         } else {
             // Write at least one null byte in the case of the child being null with a childType of null
-            Integer byteSize = e.getByteSize();
-            int bytesToWrite = byteSize == null ? 1 : Math.max(1, byteSize);
-            return bytesToWrite;
+            return childType == null || !childType.isFixedWidth() ? 1 : SchemaUtil.getFixedByteSize(e);
         }
     }
     
