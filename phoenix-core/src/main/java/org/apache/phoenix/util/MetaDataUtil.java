@@ -31,7 +31,6 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.hbase.index.util.ClientKeyValue;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
@@ -166,7 +165,7 @@ public class MetaDataUtil {
    * Get the mutation who's qualifier matches the passed key
    * <p>
    * We need to pass in an {@link ImmutableBytesPtr} to pass the result back to make life easier
-   * when dealing with a regular {@link KeyValue} vs. a {@link ClientKeyValue} as the latter doesn't
+   * when dealing with a regular {@link KeyValue} vs. a custom KeyValue as the latter may not
    * support things like {@link KeyValue#getBuffer()}
    * @param headerRow mutation to check
    * @param key to check

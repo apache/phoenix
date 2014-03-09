@@ -25,7 +25,6 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
-import org.apache.phoenix.hbase.index.util.ClientKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -57,7 +56,7 @@ public class MetaDataUtilTest {
     }
 
   /**
-   * Ensure it supports both the {@link GenericKeyValueBuilder} and {@link ClientKeyValueBuilder}
+   * Ensure it supports {@link GenericKeyValueBuilder}
    * @throws Exception on failure
    */
   @Test
