@@ -17,11 +17,9 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.sql.Types;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
@@ -51,7 +49,7 @@ public class ArrayLengthFunction extends ScalarFunction {
 		}
 		PDataType baseType = PDataType.fromTypeId(children.get(0).getDataType()
 				.getSqlType()
-				- Types.ARRAY);
+				- PDataType.ARRAY_TYPE_BASE);
 		int length = PArrayDataType.getArrayLength(ptr, baseType);
 		byte[] lengthBuf = new byte[PDataType.INTEGER.getByteSize()];
 		PDataType.INTEGER.getCodec().encodeInt(length, lengthBuf, 0);

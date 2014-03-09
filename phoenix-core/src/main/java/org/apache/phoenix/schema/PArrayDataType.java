@@ -20,7 +20,6 @@ package org.apache.phoenix.schema;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.sql.Types;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -53,7 +52,7 @@ public class PArrayDataType {
 		}
 		Pair<Integer, Integer> nullsVsNullRepeationCounter = new Pair<Integer, Integer>();
         int size = estimateByteSize(object, nullsVsNullRepeationCounter,
-                PDataType.fromTypeId((baseType.getSqlType() + Types.ARRAY)));
+                PDataType.fromTypeId((baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE)));
         int noOfElements = ((PhoenixArray)object).numElements;
         if(noOfElements == 0) {
         	return ByteUtil.EMPTY_BYTE_ARRAY;
@@ -165,7 +164,7 @@ public class PArrayDataType {
         if (array == null || array.baseType == null) {
             return 0;
         }
-        return estimateByteSize(object, null, PDataType.fromTypeId((array.baseType.getSqlType() + Types.ARRAY)));
+        return estimateByteSize(object, null, PDataType.fromTypeId((array.baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE)));
 	}
 
 	// Estimates the size of the given array and also calculates the number of nulls and its repetition factor
@@ -180,7 +179,7 @@ public class PArrayDataType {
             int totalNulls = 0;
             for (int i = 0; i < noOfElements; i++) {
                 totalVarSize += array.estimateByteSize(i);
-                if (!PDataType.fromTypeId((baseType.getSqlType() - Types.ARRAY)).isFixedWidth()) {
+                if (!PDataType.fromTypeId((baseType.getSqlType() - PDataType.ARRAY_TYPE_BASE)).isFixedWidth()) {
                     if (array.isNull(i)) {
                         nulls++;
                     } else {
@@ -215,9 +214,9 @@ public class PArrayDataType {
 			return false;
 		} else {
 			PDataType targetElementType = PDataType.fromTypeId(targetType.getSqlType()
-					- Types.ARRAY);
+					- PDataType.ARRAY_TYPE_BASE);
 			PDataType expectedTargetElementType = PDataType.fromTypeId(expectedTargetType
-					.getSqlType() - Types.ARRAY);
+					.getSqlType() - PDataType.ARRAY_TYPE_BASE);
 			return expectedTargetElementType.isCoercibleTo(targetElementType);
 		}
     }
@@ -228,7 +227,7 @@ public class PArrayDataType {
 		PhoenixArray pArr = (PhoenixArray) value;
 		Object[] arr = (Object[]) pArr.array;
 		PDataType baseType = PDataType.fromTypeId(srcType.getSqlType()
-				- Types.ARRAY);
+				- PDataType.ARRAY_TYPE_BASE);
 		for (int i = 0 ; i < arr.length; i++) {
 			if (!baseType.isSizeCompatible(ptr, arr[i], baseType, srcType.getMaxLength(arr[i]),
 					scale, desiredMaxLength, desiredScale)) {
@@ -253,7 +252,7 @@ public class PArrayDataType {
 	    PhoenixArray pArr = (PhoenixArray) value;
         Object[] arr = (Object[]) pArr.array;
         PDataType baseType = PDataType.fromTypeId(actualType.getSqlType()
-                - Types.ARRAY);
+                - PDataType.ARRAY_TYPE_BASE);
         if (baseType.isFixedWidth()) {
             boolean createNewArray = false;
             for (int i = 0; i < arr.length; i++) {

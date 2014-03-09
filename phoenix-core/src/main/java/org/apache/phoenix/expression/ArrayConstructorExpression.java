@@ -13,7 +13,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.sql.Types;
 import java.util.Arrays;
 import java.util.List;
 
@@ -59,7 +58,7 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.fromTypeId(baseType.getSqlType() + Types.ARRAY);
+        return PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE);
     }
 
     @Override
