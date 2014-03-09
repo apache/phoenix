@@ -83,6 +83,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.util.ByteUtil;
 
 
 /**
@@ -117,9 +118,9 @@ public interface QueryConstants {
     public final static PName AGG_COLUMN_NAME = SINGLE_COLUMN_NAME;
     public final static PName AGG_COLUMN_FAMILY_NAME = SINGLE_COLUMN_FAMILY_NAME;
     
-    public static final byte[] ARRAY_VALUE_COLUMN_FAMILY = Bytes.toBytes("_a");
-    // TODO: use empty byte array so as not to accidentally conflict with any other columns
-    public static final byte[] ARRAY_VALUE_COLUMN_QUALIFIER = ARRAY_VALUE_COLUMN_FAMILY;
+    public static final byte[] ARRAY_VALUE_COLUMN_FAMILY = Bytes.toBytes("a");
+    // Use empty byte array for column qualifier so as not to accidentally conflict with any other columns
+    public static final byte[] ARRAY_VALUE_COLUMN_QUALIFIER = ByteUtil.EMPTY_BYTE_ARRAY;
 
     public static final byte[] TRUE = new byte[] {1};
 

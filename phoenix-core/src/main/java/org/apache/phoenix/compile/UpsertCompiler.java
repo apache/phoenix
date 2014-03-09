@@ -676,7 +676,7 @@ public class UpsertCompiler {
                     constantExpression.evaluate(tuple, ptr);
                     Object value = null;
                     if (constantExpression.getDataType() != null) {
-                        value = constantExpression.getDataType().toObject(ptr, constantExpression.getSortOrder());
+                        value = constantExpression.getDataType().toObject(ptr, constantExpression.getSortOrder(), constantExpression.getMaxLength(), constantExpression.getScale());
                         if (!constantExpression.getDataType().isCoercibleTo(column.getDataType(), value)) { 
                             throw TypeMismatchException.newException(
                                 constantExpression.getDataType(), column.getDataType(), "expression: "

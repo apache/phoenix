@@ -115,8 +115,8 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
                 PArrayDataType.writeEndSeperatorForVarLengthArray(oStream);
                 noOfElements = PArrayDataType.serailizeOffsetArrayIntoStream(oStream, byteStream, noOfElements,
                         offsetPos[offsetPos.length - 1], offsetPos);
+                PArrayDataType.serializeHeaderInfoIntoStream(oStream, noOfElements);
             }
-            PArrayDataType.serializeHeaderInfoIntoStream(oStream, noOfElements);
             ptr.set(byteStream.getBuffer(), 0, byteStream.size());
             return true;
         } catch (IOException e) {

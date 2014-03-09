@@ -29,6 +29,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -163,6 +164,8 @@ public class LiteralExpression extends BaseTerminalExpression {
                 } else if (value != null) {
                     maxLength = ((String)value).length();
                 }
+            } else if (type.isArrayType()) {
+                maxLength = ((PhoenixArray)value).getMaxLength();
             }
             if (b.length == 0) {
                 return TYPED_NULL_EXPRESSIONS[type.ordinal()];
