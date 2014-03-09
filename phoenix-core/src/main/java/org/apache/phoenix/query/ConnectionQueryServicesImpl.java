@@ -889,6 +889,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             throw new SQLException(t);
         }
     }
+    
+    // Our property values are translated using toString, so we need to "string-ify" this.
+    private static final String TRUE_BYTES_AS_STRING = Bytes.toString(PDataType.TRUE_BYTES);
 
     private void ensureViewIndexTableCreated(byte[] physicalTableName, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits, long timestamp) throws SQLException {
         Long maxFileSize = (Long)tableProps.get(HTableDescriptor.MAX_FILESIZE);
@@ -907,7 +910,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         long indexMaxFileSize = maxFileSize * indexMaxFileSizePerc / 100;
         tableProps.put(HTableDescriptor.MAX_FILESIZE, indexMaxFileSize);
-        tableProps.put(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME, PDataType.TRUE_BYTES);
+        tableProps.put(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME, TRUE_BYTES_AS_STRING);
         // Only use splits if table is salted, otherwise it may not be applicable
         HTableDescriptor desc = ensureTableCreated(physicalIndexName, PTableType.TABLE, tableProps, families, splits, false);
         if (desc != null) {

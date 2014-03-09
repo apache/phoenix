@@ -35,13 +35,19 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.phoenix.hbase.index.util.ClientKeyValue;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.util.MinVersionTestRunner;
+import org.apache.phoenix.util.MinVersionTestRunner.MinVersion;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
 /**
  * Ensure that we can accss a {@link ClientKeyValue} as expected. For instance, write it to bytes
  * and then read it back into a {@link KeyValue} as expected or compare columns to other
  * {@link KeyValue}s.
  */
+@RunWith(MinVersionTestRunner.class)
+@MinVersion(KeyValueBuilder.CLIENT_KEY_VALUE_MIN_VERSION)
 public class TestClientKeyValueLocal {
 
   @Test

@@ -40,13 +40,17 @@ public class NumberUtil {
         return bigDecimal.stripTrailingZeros().round(PDataType.DEFAULT_MATH_CONTEXT);
     }
 
-    public static BigDecimal setDecimalWidthAndScale(BigDecimal decimal, int precision, int scale) {
+    public static BigDecimal setDecimalWidthAndScale(BigDecimal decimal, Integer precisionOrNull, Integer scaleOrNull) {
+        int precision = precisionOrNull == null ? PDataType.MAX_PRECISION : precisionOrNull;
+        int scale = scaleOrNull == null ? 0 : scaleOrNull;
         // If we could not fit all the digits before decimal point into the new desired precision and
         // scale, return null and the caller method should handle the error.
         if (((precision - scale) < (decimal.precision() - decimal.scale()))){
             return null;
         }
-        decimal = decimal.setScale(scale, BigDecimal.ROUND_DOWN);
+        if (scaleOrNull != null) {
+            decimal = decimal.setScale(scale, BigDecimal.ROUND_DOWN); // FIXME: should this be ROUND_UP?
+        }
         return decimal;
     }
 }

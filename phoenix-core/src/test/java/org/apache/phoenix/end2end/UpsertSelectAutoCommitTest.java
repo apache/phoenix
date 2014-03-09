@@ -71,7 +71,7 @@ public class UpsertSelectAutoCommitTest extends BaseHBaseManagedTimeTest {
         assertFalse(rs.next());
         
         conn.createStatement().execute("CREATE TABLE atable2 (ORGANIZATION_ID CHAR(15) NOT NULL, ENTITY_ID CHAR(15) NOT NULL, A_STRING VARCHAR\n" +
-        "CONSTRAINT pk PRIMARY KEY (organization_id, entity_id))");
+        "CONSTRAINT pk PRIMARY KEY (organization_id, entity_id DESC))");
         
         conn.createStatement().execute("UPSERT INTO atable2 SELECT * FROM ATABLE");
         query = "SELECT entity_id, a_string FROM ATABLE2";

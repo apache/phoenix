@@ -30,40 +30,21 @@ abstract public class BaseAddSubtractExpression extends ArithmeticExpression {
         super(children);
     }
 
-    protected static Integer getPrecision(Integer lp, Integer ls, Expression childExpr) {
-        if (childExpr.getDataType() == null) {
-            return null;
-        }
-        Integer rp = childExpr.getMaxLength();
-        Integer rs = childExpr.getScale();
-        if (rp == null) {
-            rp = childExpr.getDataType().getMaxLength(null);
-        }
-    	if (lp == null) {
-    		return rp;
-    	}
-    	if (rp == null) {
-    	    return lp;
-    	}
+    protected static Integer getPrecision(Integer lp, Integer rp, Integer ls, Integer rs) {
         if (ls == null || rs == null) {
             return PDataType.MAX_PRECISION;
         }
-        int val = getScale(lp, ls, childExpr) + Math.max(lp - ls, rp - rs) + 1;
+        int val = getScale(lp, rp, ls, rs) + Math.max(lp - ls, rp - rs) + 1;
         return Math.min(PDataType.MAX_PRECISION, val);
     }
 
-    protected static Integer getScale(Integer lp, Integer ls, Expression childExpr) {
-        Integer rs = childExpr.getScale();
-    	// If we are adding a decimal with scale and precision to a decimal
-    	// with no precision nor scale, the scale system does not apply.
-        if (ls == null) {
-            return rs;
-        }
-        if (rs == null) {
-            return ls;
+    protected static Integer getScale(Integer lp, Integer rp, Integer ls, Integer rs) {
+        // If we are adding a decimal with scale and precision to a decimal
+        // with no precision nor scale, the scale system does not apply.
+        if (ls == null || rs == null) {
+            return null;
         }
         int val = Math.max(ls, rs);
         return Math.min(PDataType.MAX_PRECISION, val);
     }
-
 }

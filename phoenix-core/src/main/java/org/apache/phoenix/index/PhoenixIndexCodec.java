@@ -41,6 +41,7 @@ import org.apache.phoenix.hbase.index.covered.IndexCodec;
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
 import org.apache.phoenix.hbase.index.covered.TableState;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
+import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -70,9 +71,9 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
         // server
         conf.setIfUnset(IndexWriter.INDEX_FAILURE_POLICY_CONF_KEY,
             PhoenixIndexFailurePolicy.class.getName());
-        // We cannot use the ClientKeyValueBuilder because when these hit the memstore
-        // the memstore assmes we have a backing buffer.
-        this.kvBuilder = KeyValueBuilder.get(env.getHBaseVersion());
+        // Use the GenericKeyValueBuilder, as it's been shown in perf testing that ClientKeyValue doesn't help
+        // TODO: Jesse to investigate more
+        this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
     }
 
     List<IndexMaintainer> getIndexMaintainers(Map<String, byte[]> attributes) throws IOException{

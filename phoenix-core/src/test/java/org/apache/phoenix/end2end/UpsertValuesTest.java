@@ -25,6 +25,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -285,6 +287,37 @@ public class UpsertValuesTest extends BaseClientManagedTimeTest {
              closeStmtAndConn(stmt, conn);
         }
         
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("select t from UpsertTimestamp LIMIT 1");
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(ts1, rs.getTimestamp(1));
+            assertFalse(rs.next());
+        } finally {
+             closeStmtAndConn(stmt, conn);
+        }
+
+        BigDecimal msInDay = BigDecimal.valueOf(1*24*60*60*1000);
+        BigDecimal nanosInDay = BigDecimal.valueOf(1*24*60*60*1000).multiply(BigDecimal.valueOf(1000000));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("select 500.0/(1*24*60*60*1000) c1, 10.0/(1*24*60*60*1000*1000000) c2  from UpsertTimestamp LIMIT 1");
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            BigDecimal c1 = rs.getBigDecimal(1);
+            BigDecimal rc1 = c1.multiply(msInDay).setScale(0,RoundingMode.HALF_UP);
+            BigDecimal c2 = rs.getBigDecimal(2);
+            BigDecimal rc2 = c2.multiply(nanosInDay).setScale(0,RoundingMode.HALF_UP);
+            assertTrue(BigDecimal.valueOf(500).compareTo(rc1) == 0);
+            assertTrue(BigDecimal.valueOf(10).compareTo(rc2) == 0);
+            assertFalse(rs.next());
+        } finally {
+             closeStmtAndConn(stmt, conn);
+        }
+
         Timestamp ts2 = new Timestamp(ts1.getTime() + 500);
         ts2.setNanos(ts2.getNanos() + extraNanos + 10); //setting the extra nanos as well as what spilled over from timestamp millis.
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
@@ -461,7 +494,7 @@ public class UpsertValuesTest extends BaseClientManagedTimeTest {
     }
     
     @Test
-    public void testUpsertDateIntoUnsignedDate() throws Exception {
+    public void testUpsertDateIntoDescUnsignedDate() throws Exception {
         long ts = nextTimestamp();
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
@@ -469,7 +502,7 @@ public class UpsertValuesTest extends BaseClientManagedTimeTest {
         PreparedStatement stmt = null;
         try {
             conn = DriverManager.getConnection(getUrl(), props);
-            stmt = conn.prepareStatement("create table UpsertTimestamp (k varchar, v unsigned_date not null, constraint pk primary key (k,v))");
+            stmt = conn.prepareStatement("create table UpsertTimestamp (k varchar, v unsigned_date not null, constraint pk primary key (k,v desc))");
             stmt.execute();
         } finally {
             closeStmtAndConn(stmt, conn);

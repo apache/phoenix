@@ -32,6 +32,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
  * Build {@link KeyValue} in an efficient way
  */
 public abstract class KeyValueBuilder {
+    public static final String CLIENT_KEY_VALUE_MIN_VERSION = "0.94.14";
+    private static final int CUSTOM_KEY_VALUE_MIN_VERSION = VersionUtil.encodeVersion("0.94.14");
 
     /**
      * Helper method for a {@link KeyValueBuilder} that catches an IOException from a {@link Put}
@@ -62,8 +64,6 @@ public abstract class KeyValueBuilder {
                     + kv + "!");
         }
     }
-
-    private static final int CUSTOM_KEY_VALUE_MIN_VERSION = VersionUtil.encodeVersion("0.94.14");
 
     public static KeyValueBuilder get(String hbaseVersion) {
         int version = VersionUtil.encodeVersion(hbaseVersion);

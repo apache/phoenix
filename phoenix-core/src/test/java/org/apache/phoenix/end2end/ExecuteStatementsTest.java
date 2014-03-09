@@ -42,10 +42,10 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Test;
-
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.Test;
 
 
 public class ExecuteStatementsTest extends BaseHBaseManagedTimeTest {
@@ -256,7 +256,7 @@ public class ExecuteStatementsTest extends BaseHBaseManagedTimeTest {
                 statement.executeUpdate();
                 fail("Should fail when bigger than expected character is inserted");
             } catch (SQLException ex) {
-                assertTrue(ex.getMessage().contains("The value is outside the range for the data type. columnName=A_STRING"));
+                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), ex.getErrorCode());
             }
             
             // upsert non-rowkey value greater than its limit
@@ -271,7 +271,7 @@ public class ExecuteStatementsTest extends BaseHBaseManagedTimeTest {
                 fail("Should fail when bigger than expected character is inserted");
             }
             catch (SQLException ex) {
-                assertTrue(ex.getMessage().contains("The value is outside the range for the data type. columnName=B_STRING"));
+                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), ex.getErrorCode());
             }
                         
             //where selecting from a CHAR(x) and upserting into a CHAR(y) where x<=y.

@@ -118,11 +118,11 @@ public class LiteralExpression extends BaseTerminalExpression {
     }
     
     public static LiteralExpression newConstant(Object value, PDataType type, SortOrder sortOrder) throws SQLException {
-        return newConstant(value, type, type == null || !type.isFixedWidth() ? null : type.getMaxLength(value), null, sortOrder, true);
+        return newConstant(value, type, null, null, sortOrder, true);
     }
     
     public static LiteralExpression newConstant(Object value, PDataType type, SortOrder sortOrder, boolean isDeterministic) throws SQLException {
-        return newConstant(value, type, type == null || !type.isFixedWidth() ? null : type.getMaxLength(value), null, sortOrder, isDeterministic);
+        return newConstant(value, type, null, null, sortOrder, isDeterministic);
     }
     
     public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale) throws SQLException {
@@ -166,6 +166,9 @@ public class LiteralExpression extends BaseTerminalExpression {
             }
             if (b.length == 0) {
                 return TYPED_NULL_EXPRESSIONS[type.ordinal()];
+            }
+            if (maxLength == null) {
+                maxLength = type == null || !type.isFixedWidth() ? null : type.getMaxLength(value);
             }
             return new LiteralExpression(value, type, b, maxLength, scale, sortOrder, isDeterministic);
         } catch (IllegalDataException e) {

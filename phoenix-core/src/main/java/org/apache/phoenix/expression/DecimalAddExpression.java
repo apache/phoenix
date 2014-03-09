@@ -37,10 +37,13 @@ public class DecimalAddExpression extends AddExpression {
 
     public DecimalAddExpression(List<Expression> children) {
         super(children);
-        for (int i=0; i<children.size(); i++) {
+        Expression firstChild = children.get(0);
+        maxLength = getPrecision(firstChild);
+        scale = getScale(firstChild);
+        for (int i=1; i<children.size(); i++) {
             Expression childExpr = children.get(i);
-            maxLength = getPrecision(maxLength, scale, childExpr);
-            scale = getScale(maxLength, scale, childExpr);
+            maxLength = getPrecision(maxLength, getPrecision(childExpr), scale, getScale(childExpr));
+            scale = getScale(maxLength, getPrecision(childExpr), scale, getScale(childExpr));
         }
     }
 
@@ -66,7 +69,7 @@ public class DecimalAddExpression extends AddExpression {
                 result = result.add(bd);
             }
         }
-        if (maxLength != null && scale != null) {
+        if (maxLength != null || scale != null) {
             result = NumberUtil.setDecimalWidthAndScale(result, maxLength, scale);
         }
         if (result == null) {

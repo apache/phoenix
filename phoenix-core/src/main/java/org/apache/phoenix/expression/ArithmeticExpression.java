@@ -19,6 +19,8 @@ package org.apache.phoenix.expression;
 
 import java.util.List;
 
+import org.apache.phoenix.schema.PDataType;
+
 public abstract class ArithmeticExpression extends BaseCompoundExpression {
 
     public ArithmeticExpression() {
@@ -37,6 +39,35 @@ public abstract class ArithmeticExpression extends BaseCompoundExpression {
         buf.append(children.get(children.size()-1));
         buf.append(')');
         return buf.toString();
+    }
+    
+    protected Integer getScale(Expression e) {
+        Integer scale = e.getScale();
+        if (scale != null) {
+            return scale;
+        }
+        PDataType dataType = e.getDataType();
+        if (dataType != null) {
+            scale = dataType.getScale(null);
+            if (scale != null) {
+                return scale;
+            }
+        }
+        return null;
+    }
+    protected int getPrecision(Expression e) {
+        Integer precision = e.getMaxLength();
+        if (precision != null) {
+            return precision;
+        }
+        PDataType dataType = e.getDataType();
+        if (dataType != null) {
+            precision = dataType.getMaxLength(null);
+            if (precision != null) {
+                return precision;
+            }
+        }
+        return PDataType.MAX_PRECISION;
     }
     
     abstract protected String getOperatorString();

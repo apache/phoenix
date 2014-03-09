@@ -21,8 +21,10 @@ package org.apache.phoenix.schema;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.junit.Test;
@@ -38,6 +40,17 @@ public class SortOrderTest {
 	    for (CompareOp op : CompareOp.values()) {
 	    	assertSame(op, SortOrder.ASC.transform(op));
 	    }
+	}
+	
+	@Test
+	public void booleanLogic() {
+	    assertTrue(PDataType.BOOLEAN.toObject(PDataType.TRUE_BYTES, SortOrder.ASC) == PDataType.BOOLEAN.toObject(PDataType.FALSE_BYTES, SortOrder.DESC));
+        assertTrue(PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(true), SortOrder.ASC) == PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(false), SortOrder.DESC));
+        assertTrue(PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(true,SortOrder.ASC)) == PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(false,SortOrder.DESC)));
+
+        assertFalse(PDataType.BOOLEAN.toObject(PDataType.FALSE_BYTES, SortOrder.ASC) == PDataType.BOOLEAN.toObject(PDataType.FALSE_BYTES, SortOrder.DESC));
+        assertFalse(PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(false), SortOrder.ASC) == PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(false), SortOrder.DESC));
+        assertFalse(PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(false,SortOrder.ASC)) == PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(false,SortOrder.DESC)));
 	}
 
 	@Test

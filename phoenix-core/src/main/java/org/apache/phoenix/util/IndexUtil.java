@@ -67,7 +67,7 @@ public class IndexUtil {
     // row key was already done, so here we just need to covert from one built-in type to
     // another.
     public static PDataType getIndexColumnDataType(boolean isNullable, PDataType dataType) {
-        if (dataType == null || !isNullable || !dataType.isFixedWidth() || dataType == PDataType.BINARY) {
+        if (dataType == null || !isNullable || !dataType.isFixedWidth()) {
             return dataType;
         }
         // for INT, BIGINT
@@ -77,6 +77,11 @@ public class IndexUtil {
         // for CHAR
         if (dataType.isCoercibleTo(PDataType.VARCHAR)) {
             return PDataType.VARCHAR;
+        }
+        // for BOOLEAN, since it has no null representation
+        // TODO: we should have a null for BOOLEAN
+        if (dataType == PDataType.BOOLEAN) {
+            return PDataType.VARBINARY;
         }
         throw new IllegalArgumentException("Unsupported non nullable index type " + dataType);
     }
