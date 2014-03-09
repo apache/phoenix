@@ -190,7 +190,7 @@ public class PDataTypeForArraysTest {
 				PDataType.CHAR, strArr);
 		byte[] bytes = PDataType.CHAR_ARRAY.toBytes(arr);
 		PhoenixArray resultArr = (PhoenixArray) PDataType.CHAR_ARRAY.toObject(
-				bytes, 0, bytes.length);
+				bytes, 0, bytes.length, PDataType.CHAR_ARRAY, null, 1, null);
 		assertEquals(arr, resultArr);
 	}
 
