@@ -213,4 +213,9 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
         buf.append(children.get(children.size()-1) + ")");
         return buf.toString();
     }
+    
+    @Override
+    public boolean requiresFinalEvaluation() {
+        return true;
+    }
 }

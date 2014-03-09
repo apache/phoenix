@@ -138,4 +138,14 @@ public class RowKeyColumnExpression  extends ColumnExpression {
     public final <T> T accept(ExpressionVisitor<T> visitor) {
         return visitor.visit(this);
     }
+    
+    /**
+     * Since we may never have encountered a key value column of interest, but the
+     * expression may evaluate to true just based on the row key columns, we need
+     * to do a final evaluation.
+     */
+    @Override
+    public boolean requiresFinalEvaluation() {
+        return true;
+    }
 }

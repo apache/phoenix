@@ -21,7 +21,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.Writable;
-
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -68,13 +67,25 @@ public interface Expression extends PDatum, Writable {
     void reset();
     
     /**
-     * @return true if the expression can be evaluated without
-     * requiring a row Tuple and false otherwise.
+     * @return true if the expression can be evaluated on the client
+     * side with out server state. If a sequence is involved, you
+     * still need a Tuple from a {@link org.apache.phoenix.iterate.SequenceResultIterator},
+     * but otherwise the Tuple may be null.
      */
     boolean isStateless();
+    
     /**
      * @return true if the expression returns the same output every
      * time given the same input.
      */
     boolean isDeterministic();
+    
+    /**
+     * Determines if an evaluate is required after partial evaluation
+     * is run. For example, in the case of an IS NULL expression, we
+     * only know we can return TRUE after all KeyValues have been seen
+     * while an expression is used in the context of a filter.
+     * @return
+     */
+    boolean requiresFinalEvaluation();
 }

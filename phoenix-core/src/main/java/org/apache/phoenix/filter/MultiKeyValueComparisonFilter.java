@@ -27,6 +27,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
+import org.apache.phoenix.expression.visitor.TraverseAllExpressionVisitor;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 
 
@@ -177,7 +178,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
     }
     
     protected void init() {
-        EvaluateOnCompletionVisitor visitor = new EvaluateOnCompletionVisitor() {
+        TraverseAllExpressionVisitor<Void> visitor = new TraverseAllExpressionVisitor<Void>() {
             @Override
             public Void visit(KeyValueColumnExpression expression) {
                 inputTuple.addColumn(expression.getColumnFamily(), expression.getColumnName());
@@ -185,7 +186,6 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
             }
         };
         expression.accept(visitor);
-        this.evaluateOnCompletion = visitor.evaluateOnCompletion();
         expression.reset();
     }
     
@@ -221,7 +221,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
 
     @Override
     public boolean filterRow() {
-        if (this.matchedColumn == null && !inputTuple.isImmutable() && evaluateOnCompletion()) {
+        if (this.matchedColumn == null && !inputTuple.isImmutable() && expression.requiresFinalEvaluation()) {
             inputTuple.setImmutable();
             this.matchedColumn = this.evaluate(inputTuple);
         }

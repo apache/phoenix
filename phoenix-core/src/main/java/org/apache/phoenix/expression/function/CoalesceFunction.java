@@ -98,4 +98,9 @@ public class CoalesceFunction extends ScalarFunction {
     public String getName() {
         return NAME;
     }
+    
+    @Override
+    public boolean requiresFinalEvaluation() {
+        return true;
+    }
 }

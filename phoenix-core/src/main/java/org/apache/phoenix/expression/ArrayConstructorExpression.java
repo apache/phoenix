@@ -145,5 +145,9 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
         super.write(output);
         WritableUtils.writeVInt(output, baseType.ordinal());
     }
-
+    
+    @Override
+    public boolean requiresFinalEvaluation() {
+        return true;
+    }
 }
