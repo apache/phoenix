@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.tuple;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -55,7 +56,9 @@ public class ResultTuple extends BaseTuple {
 
     @Override
     public KeyValue getValue(byte[] family, byte[] qualifier) {
-        return KeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, result.raw(), family, qualifier);
+        Cell cell = KeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, 
+          result.rawCells(), family, qualifier);
+        return org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(cell);
     }
 
     @Override
@@ -68,13 +71,14 @@ public class ResultTuple extends BaseTuple {
       }
       sb.append("{");
       boolean moreThanOne = false;
-      for(KeyValue kv : this.result.list()) {
+      for(Cell kv : this.result.listCells()) {
         if(moreThanOne) {
           sb.append(", \n");
         } else {
           moreThanOne = true;
         }
-        sb.append(kv.toString()+"/value="+Bytes.toString(kv.getValue()));
+        sb.append(kv.toString()+"/value="+Bytes.toString(kv.getValueArray(), 
+          kv.getValueOffset(), kv.getValueLength()));
       }
       sb.append("}\n");
       return sb.toString();
@@ -87,7 +91,8 @@ public class ResultTuple extends BaseTuple {
 
     @Override
     public KeyValue getValue(int index) {
-        return result.raw()[index];
+        return  org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(
+          result.rawCells()[index]);
     }
 
     @Override
@@ -96,7 +101,7 @@ public class ResultTuple extends BaseTuple {
         KeyValue kv = getValue(family, qualifier);
         if (kv == null)
             return false;
-        ptr.set(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength());
+        ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
         return true;
     }
 }

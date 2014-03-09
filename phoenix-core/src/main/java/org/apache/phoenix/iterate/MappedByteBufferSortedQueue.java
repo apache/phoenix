@@ -34,12 +34,12 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.MinMaxPriorityQueue;
 import org.apache.phoenix.iterate.OrderedResultIterator.ResultEntry;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ResultUtil;
+
+import com.google.common.collect.MinMaxPriorityQueue;
 
 public class MappedByteBufferSortedQueue extends AbstractQueue<ResultEntry> {
     private Comparator<ResultEntry> comparator;

@@ -20,6 +20,7 @@ package org.apache.phoenix.hbase.index.util;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.KVComparator;
 import org.apache.hadoop.hbase.KeyValue.Type;
@@ -70,13 +71,13 @@ public class ClientKeyValueBuilder extends KeyValueBuilder {
     }
 
     @Override
-    public int compareQualifier(KeyValue kv, byte[] key, int offset, int length) {
-        byte[] qual = kv.getQualifier();
-        return Bytes.compareTo(qual, 0, qual.length, key, offset, length);
+    public int compareQualifier(Cell kv, byte[] key, int offset, int length) {
+        return Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), 
+          kv.getQualifierLength(), key, offset, length);
     }
 
     @Override
-    public void getValueAsPtr(KeyValue kv, ImmutableBytesWritable ptr) {
+    public void getValueAsPtr(Cell kv, ImmutableBytesWritable ptr) {
         ClientKeyValue ckv = (ClientKeyValue)kv;
         ImmutableBytesWritable value = ckv.getRawValue();
         ptr.set(value.get(), value.getOffset(), value.getLength());
@@ -92,15 +93,24 @@ public class ClientKeyValueBuilder extends KeyValueBuilder {
         private ClientKeyValueComparator() { // Singleton
         }
         
-        public int compareTypes(final KeyValue left, final KeyValue right) {
-            return left.getType() - right.getType();
+        public int compareTypes(final Cell left, final Cell right) {
+            return left.getTypeByte() - right.getTypeByte();
         }
 
-        public int compareMemstoreTimestamps(final KeyValue left, final KeyValue right) {
+        public int compareMemstoreTimestamps(final Cell left, final Cell right) {
             // Descending order
-            return Longs.compare(right.getMemstoreTS(), left.getMemstoreTS());
+            return Longs.compare(right.getMvccVersion(), left.getMvccVersion());
         }
 
+        public int compareTimestamps(final long ltimestamp, final long rtimestamp) {
+          if (ltimestamp < rtimestamp) {
+            return 1;
+          } else if (ltimestamp > rtimestamp) {
+            return -1;
+          }
+          return 0;
+        }
+        
         @Override
         public int compareTimestamps(final KeyValue left, final KeyValue right) {
             // Descending order
@@ -109,13 +119,17 @@ public class ClientKeyValueBuilder extends KeyValueBuilder {
 
 
         @Override
-        public int compare(final KeyValue left, final KeyValue right) {
-            int c = compareRows(left, right);
+        public int compare(final Cell left, final Cell right) {
+            int c = compareRows(left.getRowArray(), left.getRowOffset(), left.getRowLength(),
+              right.getRowArray(), right.getRowOffset(), right.getRowLength());
             if (c != 0) return c;
-            c = Bytes.compareTo(left.getFamily(), right.getFamily());
+            c = Bytes.compareTo(left.getFamilyArray(), left.getFamilyOffset(), left.getFamilyLength(),
+              right.getFamilyArray(), right.getFamilyOffset(), right.getFamilyLength());
             if (c != 0) return c;
-            c = Bytes.compareTo(left.getQualifier(), right.getQualifier());
-            c = compareTimestamps(left, right);
+            c = Bytes.compareTo(left.getQualifierArray(), left.getQualifierOffset(),
+              left.getQualifierLength(), right.getQualifierArray(), right.getQualifierOffset(),
+              right.getQualifierLength());
+            c = compareTimestamps(left.getTimestamp(), right.getTimestamp());
             if (c != 0) return c;
             c = compareTypes(left, right);
             if (c != 0) return c;            
@@ -130,7 +144,8 @@ public class ClientKeyValueBuilder extends KeyValueBuilder {
          */
         @Override
         public int compareRows(final KeyValue left, final KeyValue right) {
-            return Bytes.compareTo(left.getRow(), right.getRow());
+            return Bytes.compareTo(left.getRowArray(), left.getRowOffset(), left.getRowLength(),
+              right.getRowArray(), right.getRowOffset(), right.getRowLength());
         }
 
         /**
@@ -141,36 +156,10 @@ public class ClientKeyValueBuilder extends KeyValueBuilder {
          * @return Result comparing rows.
          */
         @Override
-        public int compareRows(final KeyValue left, final short lrowlength,
-            final KeyValue right, final short rrowlength) {
-            return Bytes.compareTo(left.getRow(), 0, lrowlength, right.getRow(), 0, rrowlength);
-        }
-
-        /**
-         * @param left
-         * @param row - row key (arbitrary byte array)
-         * @return RawComparator
-         */
-        @Override
-        public int compareRows(final KeyValue left, final byte [] row) {
-            return Bytes.compareTo(left.getRow(), row);
-        }
-
-        @Override
-        public int compareColumns(final KeyValue left, 
-                final byte [] right, final int roffset, final int rlength, final int rfamilyLength) {
-          // Compare family portion first.
-          byte[] lcf = left.getFamily();
-          int diff = Bytes.compareTo(lcf, 0, lcf.length,
-            right, roffset, rfamilyLength);
-          if (diff != 0) {
-            return diff;
-          }
-          // Compare qualifier portion
-          byte[] lcq = left.getQualifier();
-          return Bytes.compareTo(lcq, 0, lcq.length,
-            right, roffset + rfamilyLength, rlength - rfamilyLength);
-
+        public int compareRows(byte [] left, int loffset, int llength,
+            byte [] right, int roffset, int rlength) {
+            return Bytes.compareTo(left, loffset, llength, 
+              right, roffset, rlength);
         }
 
         /**
@@ -184,23 +173,17 @@ public class ClientKeyValueBuilder extends KeyValueBuilder {
             if (compareRows(left, right) != 0) {
                 return false;
             }
-            if (Bytes.compareTo(left.getFamily(), right.getFamily()) != 0) {
+            if (Bytes.compareTo(left.getFamilyArray(), left.getFamilyOffset(), 
+              left.getFamilyLength(), right.getFamilyArray(), right.getFamilyOffset(), 
+              right.getFamilyLength()) != 0) {
                 return false;
             }
-            if (Bytes.compareTo(left.getQualifier(), right.getQualifier()) != 0) {
+            if (Bytes.compareTo(left.getQualifierArray(), left.getQualifierOffset(),
+              left.getQualifierLength(), right.getQualifierArray(), right.getQualifierOffset(), 
+              right.getQualifierLength()) != 0) {
                 return false;
             }
             return true;
-        }
-
-        /**
-         * @param left
-         * @param right
-         * @return True if rows match.
-         */
-        @Override
-        public boolean matchingRows(final KeyValue left, final byte [] right) {
-          return Bytes.equals(left.getRow(), right);
         }
 
         /**
@@ -214,116 +197,13 @@ public class ClientKeyValueBuilder extends KeyValueBuilder {
             return compareRows(left, right) == 0;
         }
 
-        /**
-         * @param left
-         * @param lrowlength
-         * @param right
-         * @param rrowlength
-         * @return True if rows match.
-         */
-        @Override
-        public boolean matchingRows(final KeyValue left, final short lrowlength,
-            final KeyValue right, final short rrowlength) {
-            return compareRows(left, lrowlength, right, rrowlength) == 0;
-        }
-
         @Override
         protected Object clone() throws CloneNotSupportedException {
           return this; // Makes no sense to clone this
         }
-
-        /**
-         * @return Comparator that ignores timestamps; useful counting versions.
-         */
-        @Override
-        public KVComparator getComparatorIgnoringTimestamps() {
-            return IGNORE_TIMESTAMP_COMPARATOR;
-        }
-
-        /**
-         * @return Comparator that ignores key type; useful checking deletes
-         */
-        @Override
-        public KVComparator getComparatorIgnoringType() {
-            return IGNORE_TYPE_COMPARATOR;
-        }
-    }
-    
-    /**
-     * 
-     * Singleton ClientKeyValue version of KVComparator that ignores differences in the Type
-     *
-     */
-    private static class IgnoreTypeClientKeyValueComparator extends ClientKeyValueComparator {
-        private IgnoreTypeClientKeyValueComparator() { // Singleton
-        }
-        
-        @Override
-        public int compareTypes(final KeyValue left, final KeyValue right) {
-            return 0;
-        }
-        
-        @Override
-        public KVComparator getComparatorIgnoringTimestamps() {
-            return IGNORE_TIMESTAMP_AND_TYPE_COMPARATOR;
-        }
-    }
-
-
-    /**
-     * 
-     * Singleton ClientKeyValue version of KVComparator that ignores differences in the Timestamp
-     *
-     */
-    private static class IgnoreTimestampClientKeyValueComparator extends ClientKeyValueComparator {
-        private IgnoreTimestampClientKeyValueComparator() { // Singleton
-        }
-        
-        @Override
-        public int compareMemstoreTimestamps(final KeyValue left, final KeyValue right) {
-            return 0;
-        }
-
-        @Override
-        public int compareTimestamps(final KeyValue left, final KeyValue right) {
-            return 0;
-        }
-        
-        @Override
-        public KVComparator getComparatorIgnoringType() {
-            return IGNORE_TYPE_COMPARATOR;
-        }
-    }
-    
-    /**
-     * 
-     * Singleton ClientKeyValue version of KVComparator that ignores differences in the Timestamp and Type
-     *
-     */
-    private static final class IgnoreTimestampAndTypeClientKeyValueComparator extends IgnoreTimestampClientKeyValueComparator {
-        private IgnoreTimestampAndTypeClientKeyValueComparator() { // Singleton
-        }
-        
-        @Override
-        public int compareTypes(final KeyValue left, final KeyValue right) {
-            return 0;
-        }
-
-        @Override
-        public KVComparator getComparatorIgnoringTimestamps() {
-            return this;
-        }
-
-        @Override
-        public KVComparator getComparatorIgnoringType() {
-            return this;
-        }
     }
 
     private static final KVComparator COMPARATOR = new ClientKeyValueComparator();
-    private static final KVComparator IGNORE_TYPE_COMPARATOR = new IgnoreTypeClientKeyValueComparator();
-    private static final KVComparator IGNORE_TIMESTAMP_COMPARATOR = new IgnoreTimestampClientKeyValueComparator();
-    private static final KVComparator IGNORE_TIMESTAMP_AND_TYPE_COMPARATOR = new IgnoreTimestampAndTypeClientKeyValueComparator();
     
     @Override
     public KVComparator getKeyValueComparator() {
@@ -331,15 +211,15 @@ public class ClientKeyValueBuilder extends KeyValueBuilder {
     }
 
     @Override
-    public int compareRow(KeyValue kv, byte[] rrow, int roffset, int rlength) {
-        byte[] lrow = kv.getRow();
-        return Bytes.compareTo(lrow, 0, lrow.length, rrow, roffset, rlength);
+    public int compareRow(Cell kv, byte[] rrow, int roffset, int rlength) {
+        return Bytes.compareTo(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(), 
+          rrow, roffset, rlength);
     }
 
     @Override
-    public int compareFamily(KeyValue kv, byte[] rbuf, int roffset, int rlength) {
-        byte[] lcf = kv.getFamily();
-        return Bytes.compareTo(lcf, 0, lcf.length, rbuf, roffset, rlength);
+    public int compareFamily(Cell kv, byte[] rbuf, int roffset, int rlength) {
+        return Bytes.compareTo(kv.getFamilyArray(), kv.getFamilyOffset(), 
+          kv.getFamilyLength(), rbuf, roffset, rlength);
     }
 
     /**
@@ -362,19 +242,17 @@ public class ClientKeyValueBuilder extends KeyValueBuilder {
         for (Mutation mutation : mutations) {
             if (mutation instanceof Put) {
                 Put put = (Put)mutation;
-                @SuppressWarnings("deprecation")
-                Put newPut = new Put(put.getRow(),put.getTimeStamp(),put.getRowLock());
-                Map<byte[],List<KeyValue>> newFamilyMap = newPut.getFamilyMap();
-                for (Map.Entry<byte[], List<KeyValue>> entry : put.getFamilyMap().entrySet()) {
-                    List<KeyValue> values = entry.getValue();
-                    List<KeyValue> newValues = Lists.newArrayListWithExpectedSize(values.size());
-                    for (KeyValue value : values) {
-                        newValues.add(new KeyValue(value.getRow(),
-                                value.getFamily(),
-                                value.getQualifier(),
-                                value.getTimestamp(),
-                                Type.codeToType(value.getType()),
-                                value.getValue()));
+                Put newPut = new Put(put.getRow(),put.getTimeStamp());
+                Map<byte[],List<Cell>> newFamilyMap = newPut.getFamilyCellMap();
+                for (Map.Entry<byte[], List<Cell>> entry : put.getFamilyCellMap().entrySet()) {
+                    List<Cell> values = entry.getValue();
+                    List<Cell> newValues = Lists.newArrayListWithExpectedSize(values.size());
+                    for (Cell value : values) {
+                        newValues.add(new KeyValue(value.getRowArray(), value.getRowOffset(),
+                          value.getRowLength(), value.getFamilyArray(), value.getFamilyOffset(),
+                          value.getFamilyLength(), value.getQualifierArray(), value.getQualifierOffset(),
+                          value.getQualifierLength(),value.getTimestamp(), Type.codeToType(value.getTypeByte()),
+                          value.getValueArray(), value.getValueOffset(), value.getValueLength()));
                     }
                     newFamilyMap.put(entry.getKey(), newValues);
                 }

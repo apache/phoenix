@@ -20,6 +20,7 @@ package org.apache.phoenix.hbase.index.util;
 import java.io.IOException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.KVComparator;
@@ -114,15 +115,15 @@ public abstract class KeyValueBuilder {
    * @param length length of the key from the offset to check
    * @return the byte difference between the passed keyvalue's qualifier and the passed key
    */
-  public abstract int compareQualifier(KeyValue kv, byte[] key, int offset, int length);
+  public abstract int compareQualifier(Cell kv, byte[] key, int offset, int length);
 
-  public abstract int compareFamily(KeyValue kv, byte[] key, int offset, int length);
-  public abstract int compareRow(KeyValue kv, byte[] row, int offset, int length);
+  public abstract int compareFamily(Cell kv, byte[] key, int offset, int length);
+  public abstract int compareRow(Cell kv, byte[] row, int offset, int length);
   /**
    * @param kv to read
    * @param ptr set with the value from the {@link KeyValue}
    */
-  public abstract void getValueAsPtr(KeyValue kv, ImmutableBytesWritable ptr);
+  public abstract void getValueAsPtr(Cell kv, ImmutableBytesWritable ptr);
   
   public abstract KVComparator getKeyValueComparator();
   

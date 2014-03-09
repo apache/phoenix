@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -260,17 +259,12 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata, String parentTableName) throws SQLException {
         byte[][] rowKeyMetadata = new byte[3][];
         SchemaUtil.getVarChars(tableMetadata.get(0).getRow(), rowKeyMetadata);
-<<<<<<< HEAD
-        Cell newKV = tableMetadata.get(0).getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
-        PIndexState newState =  PIndexState.fromSerializedValue(newKV.getValueArray()[newKV.getValueOffset()]);
-=======
         Mutation m = MetaDataUtil.getTableHeaderRow(tableMetadata);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         if (!MetaDataUtil.getMutationValue(m, INDEX_STATE_BYTES, kvBuilder, ptr)) {
             throw new IllegalStateException();
         }
         PIndexState newState =  PIndexState.fromSerializedValue(ptr.get()[ptr.getOffset()]);
->>>>>>> origin/master
         byte[] tenantIdBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
         String schemaName = Bytes.toString(rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX]);
         String indexName = Bytes.toString(rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX]);

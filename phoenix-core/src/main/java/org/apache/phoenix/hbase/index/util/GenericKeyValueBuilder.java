@@ -21,6 +21,7 @@ import static org.apache.phoenix.hbase.index.util.ImmutableBytesPtr.copyBytesIfN
 
 import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.KVComparator;
 import org.apache.hadoop.hbase.KeyValue.Type;
@@ -73,18 +74,18 @@ public class GenericKeyValueBuilder extends KeyValueBuilder {
     }
 
     @Override
-    public int compareQualifier(KeyValue kv, byte[] key, int offset, int length) {
-        return Bytes.compareTo(kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength(), key, offset, length);
+    public int compareQualifier(Cell kv, byte[] key, int offset, int length) {
+        return Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), key, offset, length);
     }
 
     @Override
-    public int compareFamily(KeyValue kv, byte[] key, int offset, int length) {
-        return Bytes.compareTo(kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength(), key, offset, length);
+    public int compareFamily(Cell kv, byte[] key, int offset, int length) {
+        return Bytes.compareTo(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), key, offset, length);
     }
 
     @Override
-    public void getValueAsPtr(KeyValue kv, ImmutableBytesWritable writable) {
-        writable.set(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength());
+    public void getValueAsPtr(Cell kv, ImmutableBytesWritable writable) {
+        writable.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
     }
 
     @Override
@@ -93,8 +94,8 @@ public class GenericKeyValueBuilder extends KeyValueBuilder {
     }
 
     @Override
-    public int compareRow(KeyValue kv, byte[] rrow, int roffset, int rlength) {
-        return Bytes.compareTo(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength(), rrow, roffset, rlength);
+    public int compareRow(Cell kv, byte[] rrow, int roffset, int rlength) {
+        return Bytes.compareTo(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(), rrow, roffset, rlength);
     }
 
     @Override
