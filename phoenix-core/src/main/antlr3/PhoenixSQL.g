@@ -607,8 +607,8 @@ selectable returns [AliasedNode ret]
 // Parse a group by statement
 group_by returns [List<ParseNode> ret]
 @init{ret = new ArrayList<ParseNode>();}
-    :   expr=expression { ret.add(expr); }
-        (COMMA expr = expression {ret.add(expr); })*
+    :   expr=condition { ret.add(expr); }
+        (COMMA expr = condition {ret.add(expr); })*
     ;
 
 // Parse an order by statement

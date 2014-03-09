@@ -1357,6 +1357,8 @@ public enum PDataType {
                 BigDecimal nanosPart = BigDecimal.valueOf((nanoPart % QueryConstants.MILLIS_TO_NANOS_CONVERTOR)/QueryConstants.MILLIS_TO_NANOS_CONVERTOR);
                 BigDecimal value = BigDecimal.valueOf(millisPart).add(nanosPart);
                 return value;
+            case BOOLEAN:
+                return (Boolean)BOOLEAN.toObject(b, o, l, actualType, sortOrder) ? BigDecimal.ONE : BigDecimal.ZERO;
             default:
                 return throwConstraintViolationException(actualType,this);
             }
@@ -1401,6 +1403,8 @@ public enum PDataType {
                 BigDecimal nanosPart = BigDecimal.valueOf((ts.getNanos() % QueryConstants.MILLIS_TO_NANOS_CONVERTOR)/QueryConstants.MILLIS_TO_NANOS_CONVERTOR);
                 BigDecimal value = BigDecimal.valueOf(millisPart).add(nanosPart);
                 return value;
+            case BOOLEAN:
+                return ((Boolean)object) ? BigDecimal.ONE : BigDecimal.ZERO;
             default:
                 return throwConstraintViolationException(actualType,this);
             }
@@ -1426,7 +1430,7 @@ public enum PDataType {
 
         @Override
         public boolean isCastableTo(PDataType targetType) {
-            return super.isCastableTo(targetType) || targetType.isCoercibleTo(TIMESTAMP);
+            return super.isCastableTo(targetType) || targetType.isCoercibleTo(TIMESTAMP) || targetType == BOOLEAN;
         }
 
         @Override
@@ -2896,18 +2900,36 @@ public enum PDataType {
         }
 
         @Override
-        public Object toObject(byte[] bytes, int offset, int length, PDataType targetType, SortOrder sortOrder, Integer maxLength, Integer scale) {
-            if (length > 1) {
-                throw new IllegalDataException("BOOLEAN may only be a single byte");
+        public Boolean toObject(byte[] bytes, int offset, int length, PDataType actualType, SortOrder sortOrder, Integer maxLength, Integer scale) {
+            Preconditions.checkNotNull(sortOrder);          
+            if (length == 0) {
+                return null;
             }
-            return length == 0 ? null : ((bytes[offset] == FALSE_BYTE ^ sortOrder == SortOrder.DESC) ? Boolean.FALSE : Boolean.TRUE);
+            switch (actualType) {
+                case BOOLEAN:
+                    if (length > 1) {
+                        throw new IllegalDataException("BOOLEAN may only be a single byte");
+                    }
+                    return ((bytes[offset] == FALSE_BYTE ^ sortOrder == SortOrder.DESC) ? Boolean.FALSE : Boolean.TRUE);
+                case DECIMAL:
+                    // false translated to the ZERO_BYTE
+                    return ((bytes[offset] == ZERO_BYTE ^ sortOrder == SortOrder.DESC) ? Boolean.FALSE : Boolean.TRUE);
+            }
+            throwConstraintViolationException(actualType,this);
+            return null;
         }
 
         @Override
         public boolean isCoercibleTo(PDataType targetType) {
-            return targetType == this || targetType == PDataType.BINARY;
+            return super.isCoercibleTo(targetType) || targetType == BINARY;
         }
         
+        @Override
+        public boolean isCastableTo(PDataType targetType) {
+            // Allow cast to BOOLEAN so it can be used in an index or group by
+            return super.isCastableTo(targetType) || targetType == DECIMAL;
+        }
+
         @Override
         public boolean isFixedWidth() {
             return true;
@@ -3019,13 +3041,6 @@ public enum PDataType {
         @Override
         public boolean isCoercibleTo(PDataType targetType) {
             return this == targetType || targetType == BINARY;
-        }
-
-        @Override
-        public boolean isCastableTo(PDataType targetType) {
-            // Allow explicit cast to/from VARBINARY as it gives us a way to put
-            // a BOOLEAN in an index.
-            return super.isCastableTo(targetType) || targetType == PDataType.BOOLEAN;
         }
 
         @Override

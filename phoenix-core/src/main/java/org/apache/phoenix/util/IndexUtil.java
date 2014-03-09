@@ -70,18 +70,13 @@ public class IndexUtil {
         if (dataType == null || !isNullable || !dataType.isFixedWidth()) {
             return dataType;
         }
-        // for INT, BIGINT
-        if (dataType.isCoercibleTo(PDataType.TIMESTAMP) || dataType.isCoercibleTo(PDataType.DECIMAL)) {
+        // for fixed length numeric types and boolean
+        if (dataType.isCastableTo(PDataType.DECIMAL)) {
             return PDataType.DECIMAL;
         }
         // for CHAR
         if (dataType.isCoercibleTo(PDataType.VARCHAR)) {
             return PDataType.VARCHAR;
-        }
-        // for BOOLEAN, since it has no null representation
-        // TODO: we should have a null for BOOLEAN
-        if (dataType == PDataType.BOOLEAN) {
-            return PDataType.VARBINARY;
         }
         throw new IllegalArgumentException("Unsupported non nullable index type " + dataType);
     }

@@ -24,10 +24,6 @@ import java.util.Comparator;
 import java.util.List;
 
 import org.apache.http.annotation.Immutable;
-
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
-
 import org.apache.phoenix.compile.TrackOrderPreservingExpressionCompiler.Entry;
 import org.apache.phoenix.compile.TrackOrderPreservingExpressionCompiler.Ordering;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -42,6 +38,9 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PDataType;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 
 
 /**
@@ -269,10 +268,13 @@ public class GroupByCompiler {
         if (!expression.isNullable() || !type.isFixedWidth()) {
             return type;
         }
-        if (type.isCoercibleTo(PDataType.DECIMAL)) {
+        if (type.isCastableTo(PDataType.DECIMAL)) {
             return PDataType.DECIMAL;
         }
-        // Should never happen
+        if (type.isCastableTo(PDataType.VARCHAR)) {
+            return PDataType.VARCHAR;
+        }
+        // This might happen if someone tries to group by an array
         throw new IllegalStateException("Multiple occurrences of type " + type + " may not occur in a GROUP BY clause");
     }
     

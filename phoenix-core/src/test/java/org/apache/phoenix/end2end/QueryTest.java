@@ -167,7 +167,7 @@ public class QueryTest extends BaseClientManagedTimeTest {
             for (int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
                 results.add(rs.getObject(i+1));
             }
-            assertTrue("Expected to find " + results + " in results: " + results, expectedResultsSet.contains(results));
+            assertTrue("Expected to find " + results + " in results: " + expectedResults, expectedResultsSet.contains(results));
             count++;
         }
         assertEquals(count, expectedResults.size());
@@ -566,6 +566,45 @@ public class QueryTest extends BaseClientManagedTimeTest {
             assertTrue (rs.next());
             assertEquals(6, rs.getInt(1));
             assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testGroupByCondition() throws Exception {
+        // FIXME: with filter of AND a_integer IN (5,6) was getting 9 rows back
+        // FIXME: with filter of AND (a_integer IN (5,6) OR a_integer IS NULL) was getting 5 rows back
+        String query = "SELECT count(*) FROM aTable WHERE organization_id=? GROUP BY a_integer=6";
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            ResultSet rs = statement.executeQuery();
+            assertValueEqualsResultSet(rs, Arrays.<Object>asList(1L,8L));
+        } finally {
+            conn.close();
+        }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement("UPSERT into aTable(organization_id,entity_id,a_integer) values(?,?,null)");
+            statement.setString(1, tenantId);
+            statement.setString(2, ROW3);
+            statement.executeUpdate();
+            conn.commit();
+        } finally {
+            conn.close();
+        }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            ResultSet rs = statement.executeQuery();
+            assertValueEqualsResultSet(rs, Arrays.<Object>asList(1L,1L,7L));
         } finally {
             conn.close();
         }

@@ -78,37 +78,6 @@ public class PArrayDataType {
 		return createArrayBytes(byteStream, oStream, (PhoenixArray)object, noOfElements, baseType, 0);
 	}
 	
-    private void rewriteArrayBytes(ImmutableBytesWritable ptr, Integer desiredMaxLength, Integer maxLength, PDataType baseType) {
-        if (ptr.getLength() == 0) {
-            return;
-        }
-        ByteBuffer buffer = ByteBuffer.wrap(ptr.get(), ptr.getOffset(), ptr.getLength());
-        int initPos = buffer.position();
-        buffer.position((buffer.limit() - (Bytes.SIZEOF_BYTE + Bytes.SIZEOF_INT)));
-        int noOfElemPos = buffer.position();
-        int noOfElements = buffer.getInt();
-        int temp = noOfElements;
-        if (noOfElements < 0) {
-            noOfElements = (-noOfElements);
-        }
-        buffer.position(initPos);
-        ByteBuffer newBuffer = ByteBuffer.allocate(Bytes.SIZEOF_BYTE + Bytes.SIZEOF_INT
-                + (noOfElements * desiredMaxLength));
-        for (int i = 0; i < noOfElements; i++) {
-            byte[] val =  new byte[(noOfElemPos - initPos)/noOfElements];
-            int length = val.length;
-            buffer.get(val);
-            newBuffer.put(val);
-            while(length <  desiredMaxLength) {
-                length++;
-                newBuffer.put(StringUtil.SPACE_UTF8);
-            }
-        }
-        newBuffer.putInt(temp);
-        newBuffer.put(ARRAY_SERIALIZATION_VERSION);
-        ptr.set(newBuffer.array());
-    }
-
     public static int serializeNulls(DataOutputStream oStream, int nulls) throws IOException {
         // We need to handle 3 different cases here
         // 1) Arrays with repeating nulls in the middle which is less than 255
