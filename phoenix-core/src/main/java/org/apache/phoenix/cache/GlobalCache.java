@@ -118,7 +118,7 @@ public class GlobalCache extends TenantCacheImpl {
     }
     
     private GlobalCache(Configuration config) {
-        super(new GlobalMemoryManager(Runtime.getRuntime().totalMemory() * 
+        super(new GlobalMemoryManager(Runtime.getRuntime().maxMemory() * 
                                           config.getInt(MAX_MEMORY_PERC_ATTRIB, QueryServicesOptions.DEFAULT_MAX_MEMORY_PERC) / 100,
                                       config.getInt(MAX_MEMORY_WAIT_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_MEMORY_WAIT_MS)),
               config.getInt(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS));
