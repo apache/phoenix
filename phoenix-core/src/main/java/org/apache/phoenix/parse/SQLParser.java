@@ -27,7 +27,6 @@ import org.antlr.runtime.ANTLRReaderStream;
 import org.antlr.runtime.CharStream;
 import org.antlr.runtime.CommonTokenStream;
 import org.antlr.runtime.RecognitionException;
-
 import org.apache.phoenix.exception.PhoenixParserException;
 
 /**
@@ -45,7 +44,7 @@ public class SQLParser {
     public static ParseNode parseCondition(String expression) throws SQLException {
         if (expression == null) return null;
         SQLParser parser = new SQLParser(expression);
-        return parser.parseCondition();
+        return parser.parseExpression();
     }
     
     public SQLParser(String query) {
@@ -144,9 +143,9 @@ public class SQLParser {
      * Used only in tests
      * @throws SQLException 
      */
-    public ParseNode parseCondition() throws SQLException {
+    public ParseNode parseExpression() throws SQLException {
         try {
-            ParseNode node = parser.condition();
+            ParseNode node = parser.expression();
             return node;
         } catch (RecognitionException e) {
             throw PhoenixParserException.newException(e, parser.getTokenNames());
