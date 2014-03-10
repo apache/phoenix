@@ -1133,6 +1133,30 @@ public class ArrayTest extends BaseClientManagedTimeTest {
 
     }
     
+    @Test
+    public void testArrayRefToLiteral() throws Exception {
+        Connection conn;
+        long ts = nextTimestamp();
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement stmt = conn.prepareStatement("select ?[2] from system.\"catalog\" limit 1");
+            Array array = conn.createArrayOf("CHAR", new String[] {"a","b","c"});
+            stmt.setArray(1, array);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertFalse(rs.next());
+        } catch (SQLException e) {
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+
+    }
+    
     static void createTableWithArray(String url, byte[][] bs, Object object,
 			long ts) throws SQLException {
 		String ddlStmt = "create table "

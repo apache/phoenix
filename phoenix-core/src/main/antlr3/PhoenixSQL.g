@@ -734,17 +734,17 @@ divide_expression returns [ParseNode ret]
     ;
 
 negate_expression returns [ParseNode ret]
-    :   m=MINUS? e=term { $ret = m==null ? e : factory.negate(e); }
+    :   m=MINUS? e=array_expression { $ret = m==null ? e : factory.negate(e); }
     ;
 
 // The lowest level function, which includes literals, binds, but also parenthesized expressions, functions, and case statements.
-term returns [ParseNode ret]
-    :   e=literal_or_bind { $ret = e; }
-    |   e=non_literal_term (LSQUARE s=value_expression RSQUARE)?  { if (s == null) { $ret = e; } else { $ret = factory.arrayElemRef(Arrays.<ParseNode>asList(e,s)); } } 
+array_expression returns [ParseNode ret]
+    :   e=term (LSQUARE s=value_expression RSQUARE)?  { if (s == null) { $ret = e; } else { $ret = factory.arrayElemRef(Arrays.<ParseNode>asList(e,s)); } } 
 	;
 	    
-non_literal_term returns [ParseNode ret]
-    :   field=identifier { $ret = factory.column(null,field,field); }
+term returns [ParseNode ret]
+    :   e=literal_or_bind { $ret = e; }
+    |   field=identifier { $ret = factory.column(null,field,field); }
     |   ex=ARRAY LSQUARE v=one_or_more_expressions RSQUARE {$ret = factory.upsertStmtArrayNode(v);}
     |   tableName=table_name DOT field=identifier { $ret = factory.column(tableName, field, field); }
     |   field=identifier LPAREN l=zero_or_more_expressions RPAREN wg=(WITHIN GROUP LPAREN ORDER BY l2=one_or_more_expressions (a=ASC | DESC) RPAREN)?
