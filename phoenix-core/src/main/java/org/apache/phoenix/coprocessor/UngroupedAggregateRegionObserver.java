@@ -89,7 +89,6 @@ import com.google.common.collect.Sets;
  * @since 0.1
  */
 public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver {
-	private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
 
     // TODO: move all constants into a single class
     public static final String UNGROUPED_AGG = "UngroupedAgg";
@@ -99,6 +98,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     public static final String DELETE_CQ = "DeleteCQ";
     public static final String DELETE_CF = "DeleteCF";
     public static final String EMPTY_CF = "EmptyCF";
+    private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
     
     @Override
@@ -122,12 +122,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
     
     public static void serializeIntoScan(Scan scan) {
-        scan.setAttribute(UNGROUPED_AGG, QueryConstants.TRUE);
+        scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
     }
 
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
-        byte[] isUngroupedAgg = scan.getAttribute(UNGROUPED_AGG);
+        byte[] isUngroupedAgg = scan.getAttribute(BaseScannerRegionObserver.UNGROUPED_AGG);
         if (isUngroupedAgg == null) {
             return s;
         }
@@ -143,7 +143,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
         PTable projectedTable = null;
         List<Expression> selectExpressions = null;
-        byte[] upsertSelectTable = scan.getAttribute(UPSERT_SELECT_TABLE);
+        byte[] upsertSelectTable = scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE);
         boolean isUpsert = false;
         boolean isDelete = false;
         byte[] deleteCQ = null;
@@ -154,17 +154,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (upsertSelectTable != null) {
             isUpsert = true;
             projectedTable = deserializeTable(upsertSelectTable);
-            selectExpressions = deserializeExpressions(scan.getAttribute(UPSERT_SELECT_EXPRS));
+            selectExpressions = deserializeExpressions(scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS));
             values = new byte[projectedTable.getPKColumns().size()][];
             ptr = new ImmutableBytesWritable();
         } else {
-            byte[] isDeleteAgg = scan.getAttribute(DELETE_AGG);
+            byte[] isDeleteAgg = scan.getAttribute(BaseScannerRegionObserver.DELETE_AGG);
             isDelete = isDeleteAgg != null && Bytes.compareTo(PDataType.TRUE_BYTES, isDeleteAgg) == 0;
             if (!isDelete) {
-                deleteCF = scan.getAttribute(DELETE_CF);
-                deleteCQ = scan.getAttribute(DELETE_CQ);
+                deleteCF = scan.getAttribute(BaseScannerRegionObserver.DELETE_CF);
+                deleteCQ = scan.getAttribute(BaseScannerRegionObserver.DELETE_CQ);
             }
-            emptyCF = scan.getAttribute(EMPTY_CF);
+            emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_CF);
         }
         
         int batchSize = 0;
@@ -177,7 +177,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             batchSize = c.getEnvironment().getConfiguration().getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
         }
         Aggregators aggregators = ServerAggregators.deserialize(
-                scan.getAttribute(GroupedAggregateRegionObserver.AGGREGATORS), c.getEnvironment().getConfiguration());
+                scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), c.getEnvironment().getConfiguration());
         Aggregator[] rowAggregators = aggregators.getAggregators();
         boolean hasMore;
         boolean hasAny = false;

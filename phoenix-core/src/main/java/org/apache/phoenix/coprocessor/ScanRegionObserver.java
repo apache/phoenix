@@ -74,8 +74,6 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class ScanRegionObserver extends BaseScannerRegionObserver {
-    public static final String NON_AGGREGATE_QUERY = "NonAggregateQuery";
-    private static final String TOPN = "TopN";
     private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     private KeyValueSchema kvSchema = null;
     private ValueBitSet kvSchemaBitSet;
@@ -90,7 +88,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             for (OrderByExpression orderingCol : orderByExpressions) {
                 orderingCol.write(output);
             }
-            scan.setAttribute(TOPN, stream.toByteArray());
+            scan.setAttribute(BaseScannerRegionObserver.TOPN, stream.toByteArray());
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -103,7 +101,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
     }
     
     public static OrderedResultIterator deserializeFromScan(Scan scan, RegionScanner s) {
-        byte[] topN = scan.getAttribute(TOPN);
+        byte[] topN = scan.getAttribute(BaseScannerRegionObserver.TOPN);
         if (topN == null) {
             return null;
         }
@@ -135,7 +133,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
     
     private Expression[] deserializeArrayPostionalExpressionInfoFromScan(Scan scan, RegionScanner s,
             List<KeyValueColumnExpression> arrayKVRefs) {
-        byte[] specificArrayIdx = scan.getAttribute(QueryConstants.SPECIFIC_ARRAY_INDEX);
+        byte[] specificArrayIdx = scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX);
         if (specificArrayIdx == null) {
             return null;
         }
@@ -173,7 +171,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
 
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws Throwable {
-        byte[] isScanQuery = scan.getAttribute(NON_AGGREGATE_QUERY);
+        byte[] isScanQuery = scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY);
 
         if (isScanQuery == null || Bytes.compareTo(PDataType.FALSE_BYTES, isScanQuery) == 0) {
             return s;

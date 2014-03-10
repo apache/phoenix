@@ -34,7 +34,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.BaseTerminalExpression;
@@ -420,7 +420,7 @@ public class ProjectionCompiler {
                 throw new RuntimeException(e);
             }
         }
-        context.getScan().setAttribute(QueryConstants.SPECIFIC_ARRAY_INDEX, stream.toByteArray());
+        context.getScan().setAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX, stream.toByteArray());
     }
 
     private static class SelectClauseVisitor extends ExpressionCompiler {
@@ -484,7 +484,7 @@ public class ProjectionCompiler {
             Collections.sort(aggFuncs, SingleAggregateFunction.SCHEMA_COMPARATOR);
     
             int minNullableIndex = getMinNullableIndex(aggFuncs,groupBy.isEmpty());
-            context.getScan().setAttribute(GroupedAggregateRegionObserver.AGGREGATORS, ServerAggregators.serialize(aggFuncs, minNullableIndex));
+            context.getScan().setAttribute(BaseScannerRegionObserver.AGGREGATORS, ServerAggregators.serialize(aggFuncs, minNullableIndex));
             ClientAggregators clientAggregators = new ClientAggregators(aggFuncs, minNullableIndex);
             context.getAggregationManager().setAggregators(clientAggregators);
         }

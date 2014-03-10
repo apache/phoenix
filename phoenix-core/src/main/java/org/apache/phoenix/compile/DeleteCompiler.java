@@ -33,7 +33,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
@@ -268,7 +268,7 @@ public class DeleteCompiler {
         } else if (runOnServer) {
             // TODO: better abstraction
             Scan scan = context.getScan();
-            scan.setAttribute(UngroupedAggregateRegionObserver.DELETE_AGG, QueryConstants.TRUE);
+            scan.setAttribute(BaseScannerRegionObserver.DELETE_AGG, QueryConstants.TRUE);
 
             // Build an ungrouped aggregate query: select COUNT(*) from <table> where <where>
             // The coprocessor will delete each row returned from the scan

@@ -31,7 +31,6 @@
       <outputDirectory>/</outputDirectory>
       <!-- Just include the extra things that phoenix needs -->
       <includes>
-        <include>net.sf.opencsv:opencsv</include>
         <include>org.antlr:antlr*</include>
       </includes>
     </dependencySet>

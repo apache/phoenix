@@ -138,4 +138,16 @@ public class RowKeyColumnExpression  extends ColumnExpression {
     public final <T> T accept(ExpressionVisitor<T> visitor) {
         return visitor.visit(this);
     }
+    
+    /**
+     * Since we may never have encountered a key value column of interest, but the
+     * expression may evaluate to true just based on the row key columns, we need
+     * to do a final evaluation. An example of when this would be required is:
+     *     SELECT a FROM t WHERE a = 5 OR b = 2
+     * in the case where a is a PK column, b is a KV column and no b KV is found.
+     */
+    @Override
+    public boolean requiresFinalEvaluation() {
+        return true;
+    }
 }

@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.sql.Types;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -74,7 +73,7 @@ public class ArrayIndexFunction extends ScalarFunction {
 	@Override
 	public PDataType getDataType() {
 		return PDataType.fromTypeId(children.get(0).getDataType().getSqlType()
-				- Types.ARRAY);
+				- PDataType.ARRAY_TYPE_BASE);
 	}
 	
 	@Override

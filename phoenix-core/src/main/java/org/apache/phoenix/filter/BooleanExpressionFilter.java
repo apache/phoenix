@@ -43,7 +43,6 @@ import org.apache.phoenix.util.ServerUtil;
 abstract public class BooleanExpressionFilter extends FilterBase implements Writable {
 
     protected Expression expression;
-    protected boolean evaluateOnCompletion;
     private ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
     
     public BooleanExpressionFilter() {
@@ -55,14 +54,6 @@ abstract public class BooleanExpressionFilter extends FilterBase implements Writ
 
     public Expression getExpression() {
         return expression;
-    }
-    
-    protected void setEvaluateOnCompletion(boolean evaluateOnCompletion) {
-        this.evaluateOnCompletion = evaluateOnCompletion;
-    }
-    
-    protected boolean evaluateOnCompletion() {
-        return evaluateOnCompletion;
     }
     
     @Override

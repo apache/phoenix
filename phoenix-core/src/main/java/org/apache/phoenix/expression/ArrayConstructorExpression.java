@@ -13,7 +13,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.sql.Types;
 import java.util.Arrays;
 import java.util.List;
 
@@ -59,7 +58,7 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.fromTypeId(baseType.getSqlType() + Types.ARRAY);
+        return PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE);
     }
 
     @Override
@@ -116,8 +115,8 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
                 PArrayDataType.writeEndSeperatorForVarLengthArray(oStream);
                 noOfElements = PArrayDataType.serailizeOffsetArrayIntoStream(oStream, byteStream, noOfElements,
                         offsetPos[offsetPos.length - 1], offsetPos);
+                PArrayDataType.serializeHeaderInfoIntoStream(oStream, noOfElements);
             }
-            PArrayDataType.serializeHeaderInfoIntoStream(oStream, noOfElements);
             ptr.set(byteStream.getBuffer(), 0, byteStream.size());
             return true;
         } catch (IOException e) {
@@ -145,5 +144,9 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
         super.write(output);
         WritableUtils.writeVInt(output, baseType.ordinal());
     }
-
+    
+    @Override
+    public boolean requiresFinalEvaluation() {
+        return true;
+    }
 }

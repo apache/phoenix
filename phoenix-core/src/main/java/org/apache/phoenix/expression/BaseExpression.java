@@ -247,4 +247,10 @@ public abstract class BaseExpression implements Expression {
     public boolean isStateless() {
         return false;
     }
+    
+    @Override
+    public boolean requiresFinalEvaluation() {
+        return false;
+    }
+
 }

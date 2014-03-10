@@ -31,6 +31,6 @@ public class ValueTypeIncompatibleException extends IllegalDataException {
     }
 
     private static String getTypeDisplayString(PDataType type, Integer precision, Integer scale) {
-        return type.toString() + "(" + precision + "," + scale + ")";
+        return type.toString() + "(" + precision + (scale == null ? "" : ("," + scale + ")"));
     }
 }

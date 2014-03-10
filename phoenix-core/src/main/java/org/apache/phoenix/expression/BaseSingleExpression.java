@@ -104,4 +104,9 @@ public abstract class BaseSingleExpression extends BaseExpression {
     public Expression getChild() {
         return children.get(0);
     }
+    
+    @Override
+    public boolean requiresFinalEvaluation() {
+        return children.get(0).requiresFinalEvaluation();
+    }
 }

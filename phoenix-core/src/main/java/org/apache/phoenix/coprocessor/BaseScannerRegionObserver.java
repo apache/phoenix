@@ -20,14 +20,30 @@ package org.apache.phoenix.coprocessor;
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.*;
+import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-
 import org.apache.phoenix.util.ServerUtil;
 
 
 abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     
+    public static final String AGGREGATORS = "_Aggs";
+    public static final String UNORDERED_GROUP_BY_EXPRESSIONS = "_UnorderedGroupByExpressions";
+    public static final String KEY_ORDERED_GROUP_BY_EXPRESSIONS = "_OrderedGroupByExpressions";
+    public static final String ESTIMATED_DISTINCT_VALUES = "_EstDistinctValues";
+    public static final String NON_AGGREGATE_QUERY = "_NonAggregateQuery";
+    public static final String TOPN = "_TopN";
+    public static final String UNGROUPED_AGG = "_UngroupedAgg";
+    public static final String DELETE_AGG = "_DeleteAgg";
+    public static final String UPSERT_SELECT_TABLE = "_UpsertSelectTable";
+    public static final String UPSERT_SELECT_EXPRS = "_UpsertSelectExprs";
+    public static final String DELETE_CQ = "_DeleteCQ";
+    public static final String DELETE_CF = "_DeleteCF";
+    public static final String EMPTY_CF = "_EmptyCF";
+    public static final String SPECIFIC_ARRAY_INDEX = "_SpecificArrayIndex";
+
     /**
      * Used by logger to identify coprocessor
      */

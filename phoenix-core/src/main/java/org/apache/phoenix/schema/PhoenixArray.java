@@ -33,21 +33,85 @@ public class PhoenixArray implements Array,SQLCloseable {
 	Object array;
 	int numElements;
 	Integer maxLength;
+	
 	public PhoenixArray() {
 		// empty constructor
+	}
+	
+	public Integer getMaxLength() {
+	    return maxLength;
+	}
+
+	private static Object[] coerceToNewLength(PDataType baseType, Object[] elements, int maxLength) {
+        Object[] resizedElements = new Object[elements.length];
+        for (int i = 0; i < elements.length; i++) {
+            int length = baseType.getMaxLength(elements[i]);
+            if (length == maxLength) {
+                resizedElements[i] = elements[i];
+            } else {
+                resizedElements[i] = baseType.pad(elements[i],maxLength);
+            }
+        }
+        return resizedElements;
+	}
+	private static Object[] coerceToEqualLength(PDataType baseType, Object[] elements) {
+	    if (elements == null || elements.length == 0) {
+	        return elements;
+	    }
+	    Object element = elements[0];
+	    int maxLength = baseType.getMaxLength(element);
+	    boolean resizeElements = false;
+	    for (int i = 1; i < elements.length; i++) {
+	        int length = baseType.getMaxLength(elements[i]);
+	        if (length > maxLength) {
+	            maxLength = length;
+	            resizeElements = true;
+	        } else if (length < maxLength) {
+	            resizeElements = true;
+	        }
+	    }
+	    if (!resizeElements) {
+	        return elements;
+	    }
+	    return coerceToNewLength(baseType, elements, maxLength);
 	}
 	
 	public PhoenixArray(PDataType baseType, Object[] elements) {
 		// As we are dealing with primitive types and only the Boxed objects
 		this.baseType = baseType;
-		this.array = convertObjectArrayToPrimitiveArray(elements);
+		if (baseType.isFixedWidth()) {
+		    if (baseType.getByteSize() == null) {
+    		    elements = coerceToEqualLength(baseType, elements);
+    		    if (elements != null && elements.length > 0) {
+    		        this.maxLength = baseType.getMaxLength(elements[0]);
+    		    }
+		    } else {
+		        maxLength = baseType.getByteSize();
+		    }
+		}
+        this.array = convertObjectArrayToPrimitiveArray(elements);
 		this.numElements = elements.length;
 	}
 	
-	public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-		return elements;
-	}
+	public PhoenixArray(PhoenixArray pArr, Integer desiredMaxLength) {
+	    this.baseType = pArr.baseType;
+	    Object[] elements = (Object[])pArr.array;
+        if (baseType.isFixedWidth()) {
+            if (baseType.getByteSize() == null) {
+                elements = coerceToNewLength(baseType, (Object[])pArr.array, desiredMaxLength);
+                maxLength = desiredMaxLength;
+            } else {
+                maxLength = baseType.getByteSize();
+            }
+        }
+        this.array = convertObjectArrayToPrimitiveArray(elements);
+        this.numElements = elements.length;
+    }
 
+    public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
+	    return elements; 
+	}
+	
 	@Override
 	public void free() throws SQLException {
 	}

@@ -21,7 +21,6 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -73,7 +72,7 @@ public class ExpressionProjector implements ColumnProjector {
             if (ptr.getLength() == 0) {
                 return null;
             }        
-            return type.toObject(ptr, expression.getDataType(), expression.getSortOrder());
+            return type.toObject(ptr, expression.getDataType(), expression.getSortOrder(), expression.getMaxLength(), expression.getScale());
         } catch (RuntimeException e) {
             // FIXME: Expression.evaluate does not throw SQLException
             // so this will unwrap throws from that.

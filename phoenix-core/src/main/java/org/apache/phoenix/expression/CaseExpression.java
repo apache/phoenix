@@ -234,4 +234,8 @@ public class CaseExpression extends BaseCompoundExpression {
         return buf.toString();
     }
     
+    @Override
+    public boolean requiresFinalEvaluation() {
+        return super.requiresFinalEvaluation() || this.hasElse();
+    }
 }

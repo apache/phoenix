@@ -83,6 +83,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.util.ByteUtil;
 
 
 /**
@@ -117,9 +118,9 @@ public interface QueryConstants {
     public final static PName AGG_COLUMN_NAME = SINGLE_COLUMN_NAME;
     public final static PName AGG_COLUMN_FAMILY_NAME = SINGLE_COLUMN_FAMILY_NAME;
     
-    public static final byte[] ARRAY_VALUE_COLUMN_FAMILY = Bytes.toBytes("_a");
-    // TODO: use empty byte array so as not to accidentally conflict with any other columns
-    public static final byte[] ARRAY_VALUE_COLUMN_QUALIFIER = ARRAY_VALUE_COLUMN_FAMILY;
+    public static final byte[] ARRAY_VALUE_COLUMN_FAMILY = Bytes.toBytes("a");
+    // Use empty byte array for column qualifier so as not to accidentally conflict with any other columns
+    public static final byte[] ARRAY_VALUE_COLUMN_QUALIFIER = ByteUtil.EMPTY_BYTE_ARRAY;
 
     public static final byte[] TRUE = new byte[] {1};
 
@@ -149,8 +150,6 @@ public interface QueryConstants {
     public static final double MILLIS_TO_NANOS_CONVERTOR = Math.pow(10, 6);
     public static final BigDecimal BD_MILLIS_NANOS_CONVERSION = BigDecimal.valueOf(MILLIS_TO_NANOS_CONVERTOR);
     public static final BigDecimal BD_MILLIS_IN_DAY = BigDecimal.valueOf(QueryConstants.MILLIS_IN_DAY);
-    public static final String SPECIFIC_ARRAY_INDEX = "SpecificArrayIndex";
-
     public static final String CREATE_TABLE_METADATA =
             // Do not use IF NOT EXISTS as we sometimes catch the TableAlreadyExists
             // exception and add columns to the SYSTEM.TABLE dynamically.

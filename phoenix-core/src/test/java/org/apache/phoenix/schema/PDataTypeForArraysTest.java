@@ -190,7 +190,7 @@ public class PDataTypeForArraysTest {
 				PDataType.CHAR, strArr);
 		byte[] bytes = PDataType.CHAR_ARRAY.toBytes(arr);
 		PhoenixArray resultArr = (PhoenixArray) PDataType.CHAR_ARRAY.toObject(
-				bytes, 0, bytes.length);
+				bytes, 0, bytes.length, PDataType.CHAR_ARRAY, null, 1, null);
 		assertEquals(arr, resultArr);
 	}
 
@@ -339,7 +339,7 @@ public class PDataTypeForArraysTest {
 				PDataType.VARCHAR, strArr);
 		byte[] bytes = PDataType.VARCHAR_ARRAY.toBytes(arr);
 		ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-		int result = PArrayDataType.getArrayLength(ptr, PDataType.VARCHAR);
+		int result = PArrayDataType.getArrayLength(ptr, PDataType.VARCHAR, null);
 		assertEquals(5, result);
 	}
 
@@ -663,7 +663,7 @@ public class PDataTypeForArraysTest {
 		PDataType.LONG_ARRAY.toObject(arr, PDataType.LONG_ARRAY);
 		byte[] bytes = PDataType.LONG_ARRAY.toBytes(arr);
 		ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-		int length = PArrayDataType.getArrayLength(ptr, PDataType.LONG);
+		int length = PArrayDataType.getArrayLength(ptr, PDataType.LONG, null);
 		assertEquals(4, length);
 	}
 

@@ -20,7 +20,6 @@ package org.apache.phoenix.compile;
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
-import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -1139,7 +1138,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             }
             Object value = PArrayDataType.instantiatePhoenixArray(arrayElemDataType, elements);
             return LiteralExpression.newConstant(value,
-                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + Types.ARRAY), isDeterministic);
+                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), isDeterministic);
         }
         
         ArrayConstructorExpression arrayExpression = new ArrayConstructorExpression(children, arrayElemDataType);

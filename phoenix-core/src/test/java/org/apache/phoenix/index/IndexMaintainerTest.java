@@ -246,5 +246,45 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
         testIndexRowKeyBuilding("k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2", "v2 DESC, k2 DESC, v1", new Object [] {"a",1,2.2,"bb"}, "v3, v4", "", "SALT_BUCKETS=4");
     }
  
-
+    @Test
+    public void tesIndexWithBigInt() throws Exception {
+        testIndexRowKeyBuilding(
+                "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BIGINT, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
+                "v1 DESC, k2 DESC", new Object[] { "a", 1, 2.2, "bb" });
+    }
+    
+    @Test
+    public void tesIndexWithAscBoolean() throws Exception {
+        testIndexRowKeyBuilding(
+                "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
+                "v1, k2 DESC", new Object[] { "a", 1, true, "bb" });
+    }
+    
+    @Test
+    public void tesIndexWithAscNullBoolean() throws Exception {
+        testIndexRowKeyBuilding(
+                "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
+                "v1, k2 DESC", new Object[] { "a", 1, null, "bb" });
+    }
+    
+    @Test
+    public void tesIndexWithAscFalseBoolean() throws Exception {
+        testIndexRowKeyBuilding(
+                "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
+                "v1, k2 DESC", new Object[] { "a", 1, false, "bb" });
+    }
+    
+    @Test
+    public void tesIndexWithDescBoolean() throws Exception {
+        testIndexRowKeyBuilding(
+                "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
+                "v1 DESC, k2 DESC", new Object[] { "a", 1, true, "bb" });
+    }
+    
+    @Test
+    public void tesIndexWithDescFalseBoolean() throws Exception {
+        testIndexRowKeyBuilding(
+                "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
+                "v1 DESC, k2 DESC", new Object[] { "a", 1, false, "bb" });
+    }
 }

@@ -24,13 +24,10 @@ import java.util.Comparator;
 import java.util.List;
 
 import org.apache.http.annotation.Immutable;
-
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 import org.apache.phoenix.compile.TrackOrderPreservingExpressionCompiler.Entry;
 import org.apache.phoenix.compile.TrackOrderPreservingExpressionCompiler.Ordering;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
-import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -41,6 +38,9 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PDataType;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 
 
 /**
@@ -111,14 +111,14 @@ public class GroupByCompiler {
         }
 
         public boolean isOrderPreserving() {
-            return !GroupedAggregateRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS.equals(scanAttribName);
+            return !BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS.equals(scanAttribName);
         }
         
         public void explain(List<String> planSteps) {
             if (scanAttribName != null) {
-                if (UngroupedAggregateRegionObserver.UNGROUPED_AGG.equals(scanAttribName)) {
+                if (BaseScannerRegionObserver.UNGROUPED_AGG.equals(scanAttribName)) {
                     planSteps.add("    SERVER AGGREGATE INTO SINGLE ROW");
-                } else if (GroupedAggregateRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS.equals(scanAttribName)) {
+                } else if (BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS.equals(scanAttribName)) {
                     planSteps.add("    SERVER AGGREGATE INTO DISTINCT ROWS BY " + getExpressions());                    
                 } else {
                     planSteps.add("    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY " + getExpressions());                    
@@ -144,7 +144,7 @@ public class GroupByCompiler {
          */
         if (groupByNodes.isEmpty()) {
             if (statement.isAggregate()) {
-                return new GroupBy.GroupByBuilder().setScanAttribName(UngroupedAggregateRegionObserver.UNGROUPED_AGG).build();
+                return new GroupBy.GroupByBuilder().setScanAttribName(BaseScannerRegionObserver.UNGROUPED_AGG).build();
             }
             if (!statement.isDistinct()) {
                 return GroupBy.EMPTY_GROUP_BY;
@@ -186,7 +186,7 @@ public class GroupByCompiler {
         // there are no "gaps" in the PK columns positions used (i.e. we start with the first PK
         // column and use each subsequent one in PK order).
         if (isRowKeyOrderedGrouping) {
-            groupExprAttribName = GroupedAggregateRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS;
+            groupExprAttribName = BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS;
             for (Entry groupByEntry : groupByEntries) {
                 expressions.add(groupByEntry.getExpression());
             }
@@ -195,7 +195,7 @@ public class GroupByCompiler {
              * Otherwise, our coprocessor needs to collect all distinct groups within a region, sort them, and
              * hold on to them until the scan completes.
              */
-            groupExprAttribName = GroupedAggregateRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS;
+            groupExprAttribName = BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS;
             /*
              * Put fixed length nullables at the end, so that we can represent null by the absence of the trailing
              * value in the group by key. If there is more than one, we'll need to convert the ones not at the end
@@ -268,10 +268,13 @@ public class GroupByCompiler {
         if (!expression.isNullable() || !type.isFixedWidth()) {
             return type;
         }
-        if (type.isCoercibleTo(PDataType.DECIMAL)) {
+        if (type.isCastableTo(PDataType.DECIMAL)) {
             return PDataType.DECIMAL;
         }
-        // Should never happen
+        if (type.isCastableTo(PDataType.VARCHAR)) {
+            return PDataType.VARCHAR;
+        }
+        // This might happen if someone tries to group by an array
         throw new IllegalStateException("Multiple occurrences of type " + type + " may not occur in a GROUP BY clause");
     }
     
