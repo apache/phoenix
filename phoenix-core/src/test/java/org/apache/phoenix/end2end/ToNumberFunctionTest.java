@@ -31,9 +31,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.util.Locale;
 import java.util.Properties;
 
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.phoenix.schema.PDataType;
@@ -47,6 +50,9 @@ import org.apache.phoenix.util.PhoenixRuntime;
  * @since 0.1
  */
 public class ToNumberFunctionTest extends BaseClientManagedTimeTest {
+
+    // This test changes to locale to en_US, and saves the previous locale here
+    private static Locale saveLocale;
     
     public static final String TO_NUMBER_TABLE_NAME = "TO_NUMBER_TABLE";
     
@@ -68,7 +74,18 @@ public class ToNumberFunctionTest extends BaseClientManagedTimeTest {
     private Timestamp row1Timestamp;
     private Timestamp row2Timestamp;
     private Timestamp row3Timestamp;
-    
+
+    @BeforeClass
+    public static void setUpBeforeClass() {
+        saveLocale = Locale.getDefault();
+        Locale.setDefault(Locale.US);
+    }
+
+    @AfterClass
+    public static void tearDownAfterClass() {
+        Locale.setDefault(saveLocale);
+    }
+
     @Before
     public void initTable() throws Exception {
         long ts = nextTimestamp();

@@ -322,7 +322,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testToNumberFilterWithPatternParam() throws Exception {
-        String toNumberClause = "to_number('$1.23333E2', '\u00A40.00000E0')";
+        String toNumberClause = "to_number('!1.23333E2', '!0.00000E0')";
         BigDecimal expectedDecimal = NumberUtil.normalize(new BigDecimal("123.333"));
         helpTestToNumberFilter(toNumberClause, expectedDecimal);
     }
