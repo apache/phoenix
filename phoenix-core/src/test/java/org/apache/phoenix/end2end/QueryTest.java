@@ -2766,7 +2766,7 @@ public class QueryTest extends BaseClientManagedTimeTest {
     
     @Test
     public void testCastOperatorInSelect() throws Exception {
-        String query = "SELECT CAST(a_integer AS DECIMAL)/2 FROM aTable WHERE ?=organization_id and 5=a_integer";
+        String query = "SELECT CAST(a_integer AS decimal)/2 FROM aTable WHERE ?=organization_id and 5=a_integer";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);

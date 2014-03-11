@@ -26,6 +26,7 @@ import org.apache.phoenix.expression.function.RoundDecimalExpression;
 import org.apache.phoenix.expression.function.RoundTimestampExpression;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.util.SchemaUtil;
 
 /**
  * 
@@ -41,7 +42,7 @@ public class CastParseNode extends UnaryParseNode {
 	
 	CastParseNode(ParseNode expr, String dataType) {
 		super(expr);
-		dt = PDataType.fromSqlTypeName(dataType);
+		dt = PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(dataType));
 	}
 	
 	CastParseNode(ParseNode expr, PDataType dataType) {
