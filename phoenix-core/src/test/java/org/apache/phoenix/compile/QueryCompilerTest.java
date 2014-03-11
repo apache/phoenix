@@ -976,14 +976,14 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testCastingIntegerToDecimalInSelect() throws Exception {
-        String query = "SELECT CAST a_integer AS DECIMAL/2 FROM aTable WHERE 5=a_integer";
+        String query = "SELECT CAST (a_integer AS DECIMAL)/2 FROM aTable WHERE 5=a_integer";
         List<Object> binds = Collections.emptyList();
         compileQuery(query, binds);
     }
     
     @Test
     public void testCastingStringToDecimalInSelect() throws Exception {
-        String query = "SELECT CAST b_string AS DECIMAL/2 FROM aTable WHERE 5=a_integer";
+        String query = "SELECT CAST (b_string AS DECIMAL)/2 FROM aTable WHERE 5=a_integer";
         List<Object> binds = Collections.emptyList();
         try {
             compileQuery(query, binds);
@@ -995,7 +995,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testCastingStringToDecimalInWhere() throws Exception {
-        String query = "SELECT a_integer FROM aTable WHERE 2.5=CAST b_string AS DECIMAL/2 ";
+        String query = "SELECT a_integer FROM aTable WHERE 2.5=CAST (b_string AS DECIMAL)/2 ";
         List<Object> binds = Collections.emptyList();
         try {
             compileQuery(query, binds);
