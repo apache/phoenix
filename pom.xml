@@ -93,6 +93,8 @@
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.8</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>1.7</maven-build-helper-plugin.version>
+    <maven-surefire-plugin.version>2.16</maven-surefire-plugin.version>
+    <maven-failsafe-plugin.version>2.12</maven-failsafe-plugin.version>
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <maven.assembly.version>2.4</maven.assembly.version>
     <maven.rat.version>0.8</maven.rat.version>
@@ -176,6 +178,63 @@
             </excludes>
           </configuration>
         </plugin>
+        <!-- We put slow-running tests into src/it and run them during the
+            integration-test phase using the failsafe plugin. This way
+            developers can run unit tests conveniently from the IDE or via
+            "mvn package" from the command line without triggering time
+            consuming integration tests. -->
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>build-helper-maven-plugin</artifactId>
+          <version>${maven-build-helper-plugin.version}</version>
+          <executions>
+            <execution>
+              <id>add-test-source</id>
+              <phase>validate</phase>
+              <goals>
+                <goal>add-test-source</goal>
+              </goals>
+              <configuration>
+                <sources>
+                  <source>${basedir}/src/it/java</source>
+                </sources>
+              </configuration>
+            </execution>
+            <execution>
+              <id>add-test-resource</id>
+              <phase>validate</phase>
+              <goals>
+                <goal>add-test-resource</goal>
+              </goals>
+              <configuration>
+                <resources>
+                  <resource>
+                    <directory>${basedir}/src/it/resources</directory>
+                  </resource>
+                </resources>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <version>${maven-failsafe-plugin.version}</version>
+          <configuration>
+            <encoding>UTF-8</encoding>
+            <argLine>-enableassertions -Xmx3000m -Djava.security.egd=file:/dev/./urandom</argLine>
+            <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+            <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+          </configuration>
+          <executions>
+            <execution>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
       </plugins>
     </pluginManagement>
 
@@ -217,7 +276,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
-        <version>2.16</version>
+        <version>${maven-surefire-plugin.version}</version>
         <configuration>
           <argLine>-enableassertions -Xmx2250m
             -Djava.security.egd=file:/dev/./urandom</argLine>
