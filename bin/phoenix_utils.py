@@ -20,24 +20,22 @@
 ############################################################################
 
 import os
-import subprocess
 import sys
+import fnmatch
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-phoenix_jar_path = os.getenv('PHOENIX_LIB_DIR',
-                             os.path.join(current_dir, "..", "phoenix-core",
-                                          "target", "*"))
+def find(pattern, classPaths):
+    paths = classPaths.split(os.pathsep)
 
-# HBase configuration folder path (where hbase-site.xml reside) for
-# HBase/Phoenix client side property override
-hbase_config_path = os.getenv('HBASE_CONF_DIR', current_dir)
-hbase_library_path = os.getenv('HBASE_LIBRARY_DIR', current_dir)
+    # for each class path
+    for path in paths:
+        # remove * if it's at the end of path
+        if ((path is not None) and (len(path) > 0) and (path[-1] == '*')) :
+            path = path[:-1]
+    
+        for root, dirs, files in os.walk(path):
+            for name in files:
+                if fnmatch.fnmatch(name, pattern):
+                    return os.path.join(root, name)
+                
+    return ""
 
-print "Current ClassPath=%s:%s:%s" % (hbase_config_path, phoenix_jar_path,
-                                      hbase_library_path)
-
-java_cmd = "java -cp " + hbase_config_path + os.pathsep + phoenix_jar_path + os.pathsep + \
-    hbase_library_path + " org.apache.phoenix.end2end.End2EndTestDriver " + \
-    ' '.join(sys.argv[1:])
-
-subprocess.call(java_cmd, shell=True)
