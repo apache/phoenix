@@ -118,7 +118,7 @@ public class PhoenixPigConfiguration {
 		}
 		
 		// Generating UPSERT statement without column name information.
-		String upsertStmt = QueryUtil.constructUpsertStatement(null, getTableName(), columnMetadataList.size());
+		String upsertStmt = QueryUtil.constructGenericUpsertStatement(getTableName(), columnMetadataList.size());
 		LOG.info("Phoenix Upsert Statement: " + upsertStmt);
 		conf.set(UPSERT_STATEMENT, upsertStmt);
 	}

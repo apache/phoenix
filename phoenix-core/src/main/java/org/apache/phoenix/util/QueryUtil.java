@@ -21,63 +21,92 @@ package org.apache.phoenix.util;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
+
+import javax.annotation.Nullable;
+
+import com.google.common.base.Function;
+import com.google.common.base.Joiner;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 
 public class QueryUtil {
-	
+
     /**
      *  Column family name index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
      */
     public static final int COLUMN_FAMILY_POSITION = 24;
 
- 	/**
-	 *  Column name index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
-	 */
-	public static final int COLUMN_NAME_POSITION = 4;
-	/**
-	 * Data type index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
-	 */
-	public static final int DATA_TYPE_POSITION = 5;
+    /**
+     *  Column name index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
+     */
+    public static final int COLUMN_NAME_POSITION = 4;
+    /**
+     * Data type index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
+     */
+    public static final int DATA_TYPE_POSITION = 5;
 
-	/**
-	 * Generates the upsert statement based on number of ColumnInfo. If
-	 * ColumnInfo is unavailable, it produces a generic UPSERT query without
-	 * columns information using number of columns.
-	 * 
-	 * @return Upsert Statement
-	 */
-	public static String constructUpsertStatement(ColumnInfo[] columnTypes,
-			String tableName, int numColumns) {
-		if(numColumns <= 0) {
-			throw new RuntimeException("Number of columns in HBase table cannot be less than 1");
-		}
-		StringBuilder sb = new StringBuilder();
-		sb.append("UPSERT INTO ");
-		sb.append(tableName);
-		if (columnTypes != null) {
-			sb.append("(");
-			for (ColumnInfo columnType : columnTypes) {
-				if (columnType != null) {
-					sb.append(columnType.getColumnName());
-					sb.append(",");
-				}
-			}
-			// Remove the trailing comma
-			sb.setLength(sb.length() - 1);
-			sb.append(") ");
-		}
-		sb.append("\n");
-		sb.append("VALUES (");
-		for (short i = 0; i < numColumns - 1; i++) {
-			sb.append("?,");
-		}
-		sb.append("?)");
+    /**
+     * Generate an upsert statement based on a list of {@code ColumnInfo}s with parameter markers. The list of
+     * {@code ColumnInfo}s must contain at least one element.
+     *
+     * @param tableName name of the table for which the upsert statement is to be created
+     * @param columnInfos list of column to be included in the upsert statement
+     * @return the created {@code UPSERT} statement
+     */
+    public static String constructUpsertStatement(String tableName, List<ColumnInfo> columnInfos) {
 
-		return sb.toString();
-	}
+        if (columnInfos.isEmpty()) {
+            throw new IllegalArgumentException("At least one column must be provided for upserts");
+        }
 
-	public static String getUrl(String server) {
-		return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + server;
-	}
+        List<String> parameterList = Lists.newArrayList();
+        for (int i = 0; i < columnInfos.size(); i++) {
+            parameterList.add("?");
+        }
+        return String.format(
+                "UPSERT INTO %s (%s) VALUES (%s)",
+                tableName,
+                Joiner.on(", ").join(
+                        Iterables.transform(
+                                columnInfos,
+                                new Function<ColumnInfo, String>() {
+                                    @Nullable
+                                    @Override
+                                    public String apply(@Nullable ColumnInfo columnInfo) {
+                                        return columnInfo.getColumnName();
+                                    }
+                                })),
+                Joiner.on(", ").join(parameterList));
+
+    }
+
+    /**
+     * Generate a generic upsert statement based on a number of columns. The created upsert statement will not include
+     * any named columns, but will include parameter markers for the given number of columns. The number of columns
+     * must be greater than zero.
+     *
+     * @param tableName name of the table for which the upsert statement is to be created
+     * @param numColumns number of columns to be included in the upsert statement
+     * @return the created {@code UPSERT} statement
+     */
+    public static String constructGenericUpsertStatement(String tableName, int numColumns) {
+
+
+        if (numColumns == 0) {
+            throw new IllegalArgumentException("At least one column must be provided for upserts");
+        }
+
+        List<String> parameterList = Lists.newArrayListWithCapacity(numColumns);
+        for (int i = 0; i < numColumns; i++) {
+            parameterList.add("?");
+        }
+        return String.format("UPSERT INTO %s VALUES (%s)", tableName, Joiner.on(", ").join(parameterList));
+    }
+
+    public static String getUrl(String server) {
+        return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + server;
+    }
 
     public static String getExplainPlan(ResultSet rs) throws SQLException {
         StringBuilder buf = new StringBuilder();
