@@ -155,6 +155,7 @@ import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -1372,8 +1373,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION).build().buildException();
         }
         
-        Properties scnProps = new Properties(props);
+        Properties scnProps = PropertiesUtil.deepCopy(props);
         scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
+        scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
         PhoenixConnection metaConnection = new PhoenixConnection(this, url, scnProps, newEmptyMetaData());
         SQLException sqlE = null;
         try {
