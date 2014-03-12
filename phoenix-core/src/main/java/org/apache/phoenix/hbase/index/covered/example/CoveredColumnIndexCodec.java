@@ -31,12 +31,12 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-
-import com.google.common.collect.Lists;
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
 import org.apache.phoenix.hbase.index.covered.TableState;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
 import org.apache.phoenix.index.BaseIndexCodec;
+
+import com.google.common.collect.Lists;
 
 /**
  *
@@ -172,7 +172,8 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
    * @param state
    * @return the total length of all values found and the entries to add for the index
    */
-  private Pair<Integer, List<ColumnEntry>> getNextEntries(List<CoveredColumn> refs, Scanner kvs,
+  @SuppressWarnings("deprecation")
+private Pair<Integer, List<ColumnEntry>> getNextEntries(List<CoveredColumn> refs, Scanner kvs,
       byte[] currentRow) throws IOException {
     int totalValueLength = 0;
     List<ColumnEntry> entries = new ArrayList<ColumnEntry>(refs.size());
@@ -282,7 +283,8 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
    * @return a keyvalues that the index contains for a given row at a timestamp with the given value
    *         -- column pairs.
    */
-  public static List<KeyValue> getIndexKeyValueForTesting(byte[] pk, long timestamp,
+  @SuppressWarnings("deprecation")
+public static List<KeyValue> getIndexKeyValueForTesting(byte[] pk, long timestamp,
       List<Pair<byte[], CoveredColumn>> values) {
   
     int length = 0;

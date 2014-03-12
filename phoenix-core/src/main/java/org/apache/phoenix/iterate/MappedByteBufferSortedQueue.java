@@ -252,6 +252,7 @@ public class MappedByteBufferSortedQueue extends AbstractQueue<ResultEntry> {
             return size;
         }
 
+        @SuppressWarnings("deprecation")
         public boolean writeResult(ResultEntry entry) throws IOException {
             if (flushBuffer)
                 throw new IOException("Results already flushed");

@@ -128,7 +128,8 @@ public class MapReduceJob {
 		*  Finally, do connection.rollback( to preserve table state).
 		*/
 		
-		@Override
+		@SuppressWarnings("deprecation")
+        @Override
 		public void map(LongWritable key, Text line, Context context) throws IOException, InterruptedException{
 			
 			CSVParser parser = new CSVParser(new InputStreamReader(new ByteArrayInputStream(line.toString().getBytes())),CSVFormat.EXCEL);

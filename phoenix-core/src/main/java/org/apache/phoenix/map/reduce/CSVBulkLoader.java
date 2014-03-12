@@ -47,14 +47,15 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-
-import com.google.common.io.Closeables;
 import org.apache.phoenix.map.reduce.util.ConfigReader;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 
+import com.google.common.io.Closeables;
+
+@SuppressWarnings("deprecation")
 public class CSVBulkLoader {
 	private static final String UNDERSCORE = "_";
 	
@@ -106,7 +107,6 @@ public class CSVBulkLoader {
 	 * -help	Print all options (Optional)
 	 */
 
-	@SuppressWarnings("deprecation")
     	public static void main(String[] args) throws Exception{
 		
 		String inputFile = null;

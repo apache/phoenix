@@ -23,7 +23,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.KeyValue;
-
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
@@ -72,6 +71,7 @@ public class LazyValueGetter implements ValueGetter {
    * @param ref
    * @return the first value on the scanner for the given column
    */
+  @SuppressWarnings("deprecation")
   private ImmutableBytesPtr get(ColumnReference ref) throws IOException {
     KeyValue first = ref.getFirstKeyValueForRow(row);
     if (!scan.seek(first)) {

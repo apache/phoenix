@@ -17,9 +17,6 @@
  */
 package org.apache.phoenix.hbase.index.covered.filter;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -33,7 +30,6 @@ import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.filter.FilterBase;
-
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
@@ -181,6 +177,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
    */
   class DeleteFamilyHinter implements Hinter {
 
+    @SuppressWarnings("deprecation")
     @Override
     public KeyValue getHint(KeyValue peeked) {
       // check to see if we have another column to seek
@@ -205,6 +202,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
    */
   class DeleteColumnHinter implements Hinter {
 
+    @SuppressWarnings("deprecation")
     @Override
     public KeyValue getHint(KeyValue kv) {
       return KeyValue.createLastOnRow(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength(),

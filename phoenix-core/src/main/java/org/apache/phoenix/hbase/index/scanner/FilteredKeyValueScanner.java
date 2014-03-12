@@ -26,7 +26,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
-
 import org.apache.phoenix.hbase.index.covered.KeyValueStore;
 
 /**
@@ -75,6 +74,7 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
         return seekToNextUnfilteredKeyValue();
     }
 
+    @SuppressWarnings("deprecation")
     private boolean seekToNextUnfilteredKeyValue() throws IOException {
         while (true) {
             KeyValue peeked = delegate.peek();

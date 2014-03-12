@@ -1238,12 +1238,10 @@ public class MetaDataClient {
             Long scn = connection.getSCN();
             long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
             List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize(2);
-            @SuppressWarnings("deprecation") // FIXME: Remove when unintentionally deprecated method is fixed (HBASE-7870).
             Delete tableDelete = new Delete(key, clientTimeStamp);
             tableMetaData.add(tableDelete);
             if (parentTableName != null) {
                 byte[] linkKey = MetaDataUtil.getParentLinkKey(tenantIdStr, schemaName, parentTableName, tableName);
-                @SuppressWarnings("deprecation") // FIXME: Remove when unintentionally deprecated method is fixed (HBASE-7870).
                 Delete linkDelete = new Delete(linkKey, clientTimeStamp);
                 tableMetaData.add(linkDelete);
             }

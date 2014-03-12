@@ -62,7 +62,7 @@ public class IndexTestingUtils {
    * expected keyvalues.
    * @throws IOException
    */
-  @SuppressWarnings("javadoc")
+  @SuppressWarnings({ "javadoc", "deprecation" })
   public static void verifyIndexTableAtTimestamp(HTable index1, List<KeyValue> expected,
       long start, long end, byte[] startKey, byte[] endKey) throws IOException {
     LOG.debug("Scanning " + Bytes.toString(index1.getTableName()) + " between times (" + start

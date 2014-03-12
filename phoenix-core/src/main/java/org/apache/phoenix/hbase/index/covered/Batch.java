@@ -39,6 +39,7 @@ public class Batch {
     this.timestamp = ts;
   }
 
+  @SuppressWarnings("deprecation")
   public void add(KeyValue kv){
     if (pointDeleteCode != kv.getType()) {
       allPointDeletes = false;

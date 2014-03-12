@@ -346,6 +346,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return childQueryService;
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public void clearTableRegionCache(byte[] tableName) throws SQLException {
         connection.clearRegionCache(TableName.valueOf(tableName));
@@ -367,7 +368,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 List<HRegionLocation> locations = Lists.newArrayList();
                 byte[] currentKey = HConstants.EMPTY_START_ROW;
                 do {
-                  HRegionLocation regionLocation = connection.getRegionLocation(
+                  @SuppressWarnings("deprecation")
+                HRegionLocation regionLocation = connection.getRegionLocation(
                     TableName.valueOf(tableName), currentKey, reload);
                   locations.add(regionLocation);
                   currentKey = regionLocation.getRegionInfo().getEndKey();
@@ -901,6 +903,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * Invoke meta data coprocessor with one retry if the key was found to not be in the regions
      * (due to a table split)
      */
+    @SuppressWarnings("deprecation")
     private MetaDataMutationResult metaDataCoprocessorExec(byte[] tableKey,
             Batch.Call<MetaDataService, MetaDataResponse> callable) throws SQLException {
         try {
@@ -1616,6 +1619,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 1, Sequence.Action.RESERVE);
     }
 
+    @SuppressWarnings("deprecation")
     private void incrementSequenceValues(List<SequenceKey> keys, long timestamp, long[] values, SQLException[] exceptions, int factor, Sequence.Action action) throws SQLException {
         List<Sequence> sequences = Lists.newArrayListWithExpectedSize(keys.size());
         for (SequenceKey key : keys) {
@@ -1688,6 +1692,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public void returnSequences(List<SequenceKey> keys, long timestamp, SQLException[] exceptions) throws SQLException {
         List<Sequence> sequences = Lists.newArrayListWithExpectedSize(keys.size());
@@ -1761,6 +1766,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     // Take no locks, as this only gets run when there are no open connections
     // so there's no danger of contention.
+    @SuppressWarnings("deprecation")
     private void returnAllSequences(ConcurrentMap<SequenceKey,Sequence> sequenceMap) throws SQLException {
         List<Append> mutations = Lists.newArrayListWithExpectedSize(sequenceMap.size());
         for (Sequence sequence : sequenceMap.values()) {
@@ -2136,6 +2142,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @throws IOException
      * @throws SQLException
      */
+    @SuppressWarnings("deprecation")
     private WhiteList upgradeCoprocessorsTo3_0(HBaseAdmin admin, boolean forceUpgrade) throws IOException, SQLException {
         String files = config.get(QueryServices.AUTO_UPGRADE_WHITELIST_ATTRIB);
         WhiteList coprocUpgradeWhiteList = new WhiteList(files);

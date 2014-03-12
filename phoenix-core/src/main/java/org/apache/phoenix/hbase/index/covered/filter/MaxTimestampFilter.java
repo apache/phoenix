@@ -17,10 +17,6 @@
  */
 package org.apache.phoenix.hbase.index.covered.filter;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.filter.FilterBase;
@@ -52,6 +48,7 @@ public class MaxTimestampFilter extends FilterBase {
     }
     int offset =kv.getTimestampOffset();
     //set the timestamp in the buffer
+    @SuppressWarnings("deprecation")
     byte[] buffer = kv.getBuffer();
     byte[] ts = Bytes.toBytes(this.ts);
     System.arraycopy(ts, 0, buffer, offset, ts.length);

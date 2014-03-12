@@ -22,7 +22,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 
 public abstract class BaseRegionScanner implements RegionScanner {

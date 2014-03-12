@@ -46,6 +46,7 @@ public interface HTableFactory {
      * Default implementation.  Uses standard HBase HTables.
      */
     static class HTableFactoryImpl implements HTableFactory {
+        @SuppressWarnings("deprecation")
         @Override
         public HTableInterface getTable(byte[] tableName, HConnection connection, ExecutorService pool) throws IOException {
             return new HTable(tableName, connection, pool);

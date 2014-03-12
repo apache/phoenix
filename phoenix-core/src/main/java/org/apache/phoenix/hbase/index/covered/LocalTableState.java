@@ -34,7 +34,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.util.Pair;
-
 import org.apache.phoenix.hbase.index.covered.data.IndexMemStore;
 import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -145,7 +144,8 @@ public class LocalTableState implements TableState {
    * Even then, there is still fairly low contention as each new Put/Delete will have its own table
    * state.
    */
-  private synchronized void ensureLocalStateInitialized(
+  @SuppressWarnings("deprecation")
+private synchronized void ensureLocalStateInitialized(
       Collection<? extends ColumnReference> columns) throws IOException {
     // check to see if we haven't initialized any columns yet
     Collection<? extends ColumnReference> toCover = this.columnSet.findNonCoveredColumns(columns);

@@ -85,6 +85,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
         testIndexRowKeyBuilding(schemaName, tableName, dataColumns, pk, indexColumns, values, includeColumns, dataProps, indexProps, builder);
     }
 
+    @SuppressWarnings("deprecation")
     private void testIndexRowKeyBuilding(String schemaName, String tableName, String dataColumns,
             String pk, String indexColumns, Object[] values, String includeColumns,
             String dataProps, String indexProps, KeyValueBuilder builder) throws Exception {

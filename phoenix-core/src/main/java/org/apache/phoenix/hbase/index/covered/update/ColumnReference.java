@@ -20,7 +20,6 @@ package org.apache.phoenix.hbase.index.covered.update;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
@@ -80,6 +79,7 @@ public class ColumnReference implements Comparable<ColumnReference> {
         return this.qualifierPtr;
     }
 
+  @SuppressWarnings("deprecation")
   public boolean matches(KeyValue kv) {
     if (matchesFamily(kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength())) {
       return matchesQualifier(kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength());

@@ -438,6 +438,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         indexes.add(indexTable);
     }
 
+    @SuppressWarnings("deprecation")
     private void addColumnToTable(List<Cell> results, PName colName, PName famName,
         Cell[] colKeyValues, List<PColumn> columns) {
         int i = 0;

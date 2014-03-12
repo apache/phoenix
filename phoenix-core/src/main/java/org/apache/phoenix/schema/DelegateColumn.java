@@ -17,10 +17,6 @@
  */
 package org.apache.phoenix.schema;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
 import org.apache.phoenix.util.SizedUtil;
 
 public class DelegateColumn extends DelegateDatum implements PColumn {

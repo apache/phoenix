@@ -98,6 +98,7 @@ public class CoveredColumnIndexer extends CoveredColumnsIndexBuilder {
    * @param indexTable name of the index table.
    * @throws IOException
    */
+  @SuppressWarnings("deprecation")
   public static void createIndexTable(HBaseAdmin admin, String indexTable) throws IOException {
     createIndexTable(admin, new HTableDescriptor(indexTable));
   }

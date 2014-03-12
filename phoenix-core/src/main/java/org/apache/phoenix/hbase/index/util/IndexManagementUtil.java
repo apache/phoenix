@@ -29,13 +29,13 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
-
-import com.google.common.collect.Maps;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.builder.IndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.covered.data.LazyValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
+
+import com.google.common.collect.Maps;
 
 /**
  * Utility class to help manage indexes
@@ -100,6 +100,7 @@ public class IndexManagementUtil {
 
     }
 
+    @SuppressWarnings("deprecation")
     public static ValueGetter createGetterFromKeyValues(Collection<KeyValue> pendingUpdates) {
         final Map<ReferencingColumn, ImmutableBytesPtr> valueMap = Maps.newHashMapWithExpectedSize(pendingUpdates
                 .size());
@@ -168,6 +169,7 @@ public class IndexManagementUtil {
      * codec to determine if a given update should even be indexed. This assumes that for any index, there are going to
      * small number of columns, versus the number of kvs in any one batch.
      */
+    @SuppressWarnings("deprecation")
     public static boolean updateMatchesColumns(Collection<KeyValue> update, List<ColumnReference> columns) {
         // check to see if the kvs in the new update even match any of the columns requested
         // assuming that for any index, there are going to small number of columns, versus the number of
@@ -193,6 +195,7 @@ public class IndexManagementUtil {
      * This employs the same logic as {@link #updateMatchesColumns(Collection, List)}, but is flips the iteration logic
      * to search columns before kvs.
      */
+    @SuppressWarnings("deprecation")
     public static boolean columnMatchesUpdate(List<ColumnReference> columns, Collection<KeyValue> update) {
         boolean matches = false;
         outer: for (ColumnReference ref : columns) {

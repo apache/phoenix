@@ -36,9 +36,6 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -46,6 +43,8 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 
 public class ConnectionlessUpsertTest {
@@ -136,6 +135,7 @@ public class ConnectionlessUpsertTest {
         conn.rollback(); // to clear the list of mutations for the next
     }
     
+    @SuppressWarnings("deprecation")
     private static void assertRow1(Iterator<KeyValue> iterator, byte[] expectedRowKey1) {
         KeyValue kv;
         assertTrue(iterator.hasNext());
@@ -152,6 +152,7 @@ public class ConnectionlessUpsertTest {
         assertNull(PDataType.VARCHAR.toObject(kv.getValue()));
     }
 
+    @SuppressWarnings("deprecation")
     private static void assertRow2(Iterator<KeyValue> iterator, byte[] expectedRowKey2) {
         KeyValue kv;
         assertTrue(iterator.hasNext());
