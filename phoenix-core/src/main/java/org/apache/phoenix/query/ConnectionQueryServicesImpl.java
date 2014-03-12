@@ -133,13 +133,7 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.JDBCUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1267,8 +1261,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     @Override
     public void init(String url, Properties props) throws SQLException {
-        Properties scnProps = new Properties(props);
+        Properties scnProps = PropertiesUtil.deepCopy(props);
         scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
+        scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
         PhoenixConnection metaConnection = new PhoenixConnection(this, url, scnProps, newEmptyMetaData());
         SQLException sqlE = null;
         try {
