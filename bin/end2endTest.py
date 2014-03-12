@@ -21,7 +21,6 @@
 
 import os
 import subprocess
-import fnmatch
 import sys
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -37,7 +36,7 @@ hbase_library_path = os.getenv('HBASE_LIBRARY_DIR', current_dir)
 print "Current ClassPath=%s:%s:%s" % (hbase_config_path, phoenix_jar_path,
                                       hbase_library_path)
 
-java_cmd = "java -cp " + hbase_config_path + ':' + phoenix_jar_path + ':' + \
+java_cmd = "java -cp " + hbase_config_path + os.pathsep + phoenix_jar_path + os.pathsep + \
     hbase_library_path + " org.apache.phoenix.end2end.End2EndTestDriver " + \
     ' '.join(sys.argv[1:])
 

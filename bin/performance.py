@@ -21,17 +21,8 @@
 
 import os
 import subprocess
-import fnmatch
 import sys
-
-
-def find(pattern, path):
-    for root, dirs, files in os.walk(path):
-        for name in files:
-            if fnmatch.fnmatch(name, pattern):
-                return os.path.join(root, name)
-    return ""
-
+import phoenix_utils
 
 def queryex(statments, description, statment):
     print "Query # %s - %s" % (description, statment)
@@ -72,20 +63,20 @@ statements = ""
 current_dir = os.path.dirname(os.path.abspath(__file__))
 phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-assembly",
                                 "target")
-phoenix_client_jar = find("phoenix-*-client.jar", phoenix_jar_path)
+phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", phoenix_jar_path)
 phoenix_test_jar_path = os.path.join(current_dir, "..", "phoenix-core",
                                      "target")
-testjar = find("phoenix-*-tests.jar", phoenix_test_jar_path)
+testjar = phoenix_utils.find("phoenix-*-tests.jar", phoenix_test_jar_path)
 
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
 hbase_config_path = os.getenv('HBASE_CONF_DIR', current_dir)
 
-execute = ('java -cp "%s:%s" -Dlog4j.configuration=file:' +
+execute = ('java -cp "%s%s%s" -Dlog4j.configuration=file:' +
            os.path.join(current_dir, "log4j.properties") +
            ' org.apache.phoenix.util.PhoenixRuntime -t %s %s ') % \
-    (hbase_config_path, phoenix_client_jar, table, zookeeper)
+    (hbase_config_path, os.pathsep, phoenix_client_jar, table, zookeeper)
 
 # Create Table DDL
 createtable = "CREATE TABLE IF NOT EXISTS %s (HOST CHAR(2) NOT NULL,\

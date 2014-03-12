@@ -21,21 +21,13 @@
 
 import os
 import subprocess
-import fnmatch
 import sys
-
-
-def find(pattern, path):
-    for root, dirs, files in os.walk(path):
-        for name in files:
-            if fnmatch.fnmatch(name, pattern):
-                return os.path.join(root, name)
-    return ""
+import phoenix_utils
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-assembly",
                                 "target")
-phoenix_client_jar = find("phoenix-*-client.jar", phoenix_jar_path)
+phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", phoenix_jar_path)
 
 if len(sys.argv) < 2:
     print "Zookeeper not specified. \nUsage: sqlline.sh <zookeeper> \
@@ -48,7 +40,7 @@ sqlfile = ""
 if len(sys.argv) > 2:
     sqlfile = "--run=" + sys.argv[2]
 
-java_cmd = 'java -cp ".:' + phoenix_client_jar + \
+java_cmd = 'java -cp ".' + os.pathsep + phoenix_client_jar + \
     '" -Dlog4j.configuration=file:' + \
     os.path.join(current_dir, "log4j.properties") + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver \
