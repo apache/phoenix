@@ -105,10 +105,11 @@ public class PhoenixRuntime {
     private static final String HEADER_OPTION = "-h";
     private static final String STRICT_OPTION = "-s";
     private static final String CSV_OPTION = "-d";
+    private static final String ARRAY_ELEMENT_SEP_OPTION = "-a";
     private static final String HEADER_IN_LINE = "in-line";
     private static final String SQL_FILE_EXT = ".sql";
     private static final String CSV_FILE_EXT = ".csv";
-    
+
     private static void usageError() {
         System.err.println("Usage: psql [-t table-name] [-h comma-separated-column-names | in-line] [-d field-delimiter-char quote-char escape-char]<zookeeper>  <path-to-sql-or-csv-file>...\n" +
                 "  By default, the name of the CSV file is used to determine the Phoenix table into which the CSV data is loaded\n" +
@@ -120,6 +121,7 @@ public class PhoenixRuntime {
                 "  -s uses strict mode by throwing an exception if a column name doesn't match during CSV loading.\n" +
                 "  -d uses custom delimiters for CSV loader, need to specify single char for field delimiter, phrase delimiter, and escape char.\n" +
                 "     number is NOT usually a delimiter and shall be taken as 1 -> ctrl A, 2 -> ctrl B ... 9 -> ctrl I. \n" +
+                "  -a define the array element separator, defaults to ':'\n" +
                 "Examples:\n" +
                 "  psql localhost my_ddl.sql\n" +
                 "  psql localhost my_ddl.sql my_table.csv\n" +
@@ -146,6 +148,7 @@ public class PhoenixRuntime {
             String tableName = null;
             List<String> columns = null;
             boolean isStrict = false;
+            String arrayElementSeparator = CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR;
             List<String> customMetaCharacters = new ArrayList<String>();
 
             int i = 0;
@@ -179,6 +182,8 @@ public class PhoenixRuntime {
                             usageError();
                         }
                     }
+                } else if (ARRAY_ELEMENT_SEP_OPTION.equals(args[i])) {
+                    arrayElementSeparator = args[++i];
                 } else {
                     break;
                 }
@@ -200,7 +205,7 @@ public class PhoenixRuntime {
                         tableName = fileName.substring(fileName.lastIndexOf(File.separatorChar) + 1, fileName.length()-CSV_FILE_EXT.length());
                     }
                     CSVCommonsLoader csvLoader = 
-                    		new CSVCommonsLoader(conn, tableName, columns, isStrict, customMetaCharacters);
+                    		new CSVCommonsLoader(conn, tableName, columns, isStrict, customMetaCharacters, arrayElementSeparator);
                     csvLoader.upsert(fileName);
                 } else {
                     usageError();
