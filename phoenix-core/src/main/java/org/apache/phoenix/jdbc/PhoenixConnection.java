@@ -41,11 +41,7 @@ import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
 import java.text.Format;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
@@ -119,7 +115,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
         return props;
     }
-    
+
     public PhoenixConnection(PhoenixConnection connection) throws SQLException {
         this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache());
         this.isAutoCommit = connection.isAutoCommit;
