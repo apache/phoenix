@@ -29,9 +29,9 @@ import java.util.regex.Pattern;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.hadoop.hbase.ClassFinder;
+import org.apache.hadoop.hbase.ClassFinder.FileNameFilter;
 import org.apache.hadoop.hbase.ClassTestFinder;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
-import org.apache.hadoop.hbase.ClassFinder.FileNameFilter;
 import org.apache.hadoop.hbase.util.AbstractHBaseTool;
 import org.apache.hadoop.util.ToolRunner;
 import org.junit.internal.TextListener;
@@ -62,7 +62,7 @@ public class End2EndTestDriver extends AbstractHBaseTool {
 
         @Override
         public boolean isCandidateFile(String fileName, String absFilePath) {
-          return fileName.contains("Test");
+          return fileName.contains("IT");
         }
     };
 
