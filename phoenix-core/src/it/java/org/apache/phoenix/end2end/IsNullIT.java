@@ -18,14 +18,18 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.Properties;
 
-import org.junit.Test;
-
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.Test;
 
 
 public class IsNullIT extends BaseClientManagedTimeIT {
@@ -62,4 +66,59 @@ public class IsNullIT extends BaseClientManagedTimeIT {
         assertEquals(2,rs.getInt(1));
         assertFalse(rs.next());
     }
+    
+    @Test
+    public void testIsNullAsSingleKey() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn.createStatement().execute("CREATE TABLE T(k VARCHAR PRIMARY KEY)");
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn.createStatement().execute("UPSERT INTO T VALUES (null)");
+        conn.createStatement().execute("UPSERT INTO T VALUES ('a')");
+        conn.commit();
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) FROM T");
+        assertTrue(rs.next());
+        assertEquals(2,rs.getInt(1));
+        rs = conn.createStatement().executeQuery("SELECT count(*) FROM T WHERE k = 'a' or k is null");
+        assertTrue(rs.next());
+        assertEquals(2,rs.getInt(1));
+        conn.close();
+    }
+    
+    @Test
+    public void testIsNullInCompositeKey() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn.createStatement().execute("CREATE TABLE T(k1 VARCHAR, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))");
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn.createStatement().execute("UPSERT INTO T VALUES (null,'a')");
+        conn.createStatement().execute("UPSERT INTO T VALUES ('a','a')");
+        conn.commit();
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) FROM T");
+        assertTrue(rs.next());
+        assertEquals(2,rs.getInt(1));
+        rs = conn.createStatement().executeQuery("SELECT count(*) FROM T WHERE k1 = 'a' or k1 is null");
+        assertTrue(rs.next());
+        assertEquals(2,rs.getInt(1));
+        conn.close();
+    }
+    
 }
