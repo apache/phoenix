@@ -147,6 +147,39 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(C_VALUE, rs.getString(1));
             assertEquals(9, rs.getInt(2));
+
+            // Select all columns with order by on non PK column
+            query = "SELECT * FROM aTable ORDER BY A_INTEGER";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(ROW1, rs.getString(2));
+            assertEquals(A_VALUE, rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(ROW2, rs.getString(2));
+            assertEquals(A_VALUE, rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(ROW3, rs.getString(2));
+            assertEquals(A_VALUE, rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(ROW4, rs.getString(2));
+            assertEquals(A_VALUE, rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(ROW5, rs.getString(2));
+            assertEquals(B_VALUE, rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(ROW6, rs.getString(2));
+            assertEquals(B_VALUE, rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(ROW7, rs.getString(2));
+            assertEquals(B_VALUE, rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(ROW8, rs.getString(2));
+            assertEquals(B_VALUE, rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(ROW9, rs.getString(2));
+            assertEquals(C_VALUE, rs.getString(3));
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }
