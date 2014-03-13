@@ -32,12 +32,12 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ByteUtil;
 
 import com.google.common.base.Function;
 import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.Lists;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.util.ByteUtil;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
@@ -122,6 +122,10 @@ public class KeyRange implements Writable {
             byte[] upperRange, boolean upperInclusive) {
         if (lowerRange == null || upperRange == null) {
             return EMPTY_RANGE;
+        }
+        // Need to treat null differently for a point range
+        if (lowerRange.length == 0 && upperRange.length == 0 && lowerInclusive && upperInclusive) {
+            return IS_NULL_RANGE;
         }
         boolean unboundLower = false;
         boolean unboundUpper = false;
@@ -321,6 +325,14 @@ public class KeyRange implements Writable {
         byte[] newUpperRange;
         boolean newLowerInclusive;
         boolean newUpperInclusive;
+        // Special case for null, is it is never included another range
+        // except for null itself.
+        if (this == IS_NULL_RANGE) {
+            if (range == IS_NULL_RANGE) {
+                return IS_NULL_RANGE;
+            }
+            return EMPTY_RANGE;
+        }
         if (lowerUnbound()) {
             newLowerRange = range.lowerRange;
             newLowerInclusive = range.lowerInclusive;
