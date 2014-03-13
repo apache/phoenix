@@ -176,7 +176,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         } else {
             addBindParamMetaData(lhsNode, rhsNode, lhsExpr, rhsExpr);
         }
-        return ComparisonExpression.create(op, children, context.getTempPtr());
+        return wrapGroupByExpression(ComparisonExpression.create(op, children, context.getTempPtr()));
     }
 
     @Override
@@ -186,7 +186,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
 
     @Override
     public Expression visitLeave(AndParseNode node, List<Expression> children) throws SQLException {
-        return AndExpression.create(children);
+        return wrapGroupByExpression(AndExpression.create(children));
     }
 
     @Override
@@ -221,7 +221,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
 
     @Override
     public Expression visitLeave(OrParseNode node, List<Expression> children) throws SQLException {
-        return orExpression(children);
+        return wrapGroupByExpression(orExpression(children));
     }
 
     @Override
@@ -464,7 +464,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (node.isNegate()) {
             expression = new NotExpression(expression);
         }
-        return expression;
+        return wrapGroupByExpression(expression);
     }
 
 
@@ -483,7 +483,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (childNode instanceof BindParseNode) { // TODO: valid/possibe?
             context.getBindManager().addParamMetaData((BindParseNode)childNode, child);
         }
-        return NotExpression.create(child, context.getTempPtr());
+        return wrapGroupByExpression(NotExpression.create(child, context.getTempPtr()));
     }
 
     @Override
@@ -513,7 +513,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 expr =  CastParseNode.convertToRoundExpressionIfNeeded(fromDataType, targetDataType, children);
             }
         }
-        return CoerceExpression.create(expr, targetDataType); 
+        return wrapGroupByExpression(CoerceExpression.create(expr, targetDataType)); 
     }
     
    @Override
@@ -542,7 +542,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 context.getBindManager().addParamMetaData((BindParseNode)childNode, firstChild);
             }
         }
-        return InListExpression.create(inChildren, node.isNegate(), ptr);
+        return wrapGroupByExpression(InListExpression.create(inChildren, node.isNegate(), ptr));
     }
 
     private static final PDatum DECIMAL_DATUM = new PDatum() {
@@ -606,7 +606,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (childNode instanceof BindParseNode) { // TODO: valid/possibe?
             context.getBindManager().addParamMetaData((BindParseNode)childNode, child);
         }
-        return IsNullExpression.create(child, node.isNegate(), context.getTempPtr());
+        return wrapGroupByExpression(IsNullExpression.create(child, node.isNegate(), context.getTempPtr()));
     }
 
     private static interface ArithmeticExpressionFactory {
@@ -1068,7 +1068,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     public Expression visitLeave(RowValueConstructorParseNode node, List<Expression> l) throws SQLException {
         // Don't trim trailing nulls here, as we'd potentially be dropping bind
         // variables that aren't bound yet.
-        return new RowValueConstructorExpression(l, node.isStateless());
+        return wrapGroupByExpression(new RowValueConstructorExpression(l, node.isStateless()));
     }
 
 	@Override

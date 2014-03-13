@@ -158,19 +158,30 @@ public class QueryIT extends BaseClientManagedTimeIT {
         }
         assertValuesEqualsResultSet(rs, nestedExpectedResults); 
     }
-    
+
+    /**
+     * Asserts that we find the expected values in the result set. We don't know the order, since we don't always
+     * have an order by and we're going through indexes, but we assert that each expected result occurs once as
+     * expected (in any order).
+     */
     private void assertValuesEqualsResultSet(ResultSet rs, List<List<Object>> expectedResults) throws SQLException {
-        Set<List<Object>> expectedResultsSet = Sets.newHashSet(expectedResults);
+        int expectedCount = expectedResults.size();
         int count = 0;
-        while (rs.next()) {
-            List<Object> results = Lists.newArrayList();
+        List<List<Object>> actualResults = Lists.newArrayList();
+        List<Object> errorResult = null;
+        while (rs.next() && errorResult == null) {
+            List<Object> result = Lists.newArrayList();
             for (int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
-                results.add(rs.getObject(i+1));
+                result.add(rs.getObject(i+1));
             }
-            assertTrue("Expected to find " + results + " in results: " + expectedResults, expectedResultsSet.contains(results));
+            if (!expectedResults.contains(result)) {
+                errorResult = result;
+            }
+            actualResults.add(result);
             count++;
         }
-        assertEquals(count, expectedResults.size());
+        assertTrue("Could not find " + errorResult + " in expected results: " + expectedResults + " with actual results: " + actualResults, errorResult == null);
+        assertEquals(count, expectedCount);
     }
     
     private void assertOneOfValuesEqualsResultSet(ResultSet rs, List<List<Object>>... expectedResultsArray) throws SQLException {
@@ -571,26 +582,33 @@ public class QueryIT extends BaseClientManagedTimeIT {
         }
     }
     
+    @SuppressWarnings("unchecked")
     @Test
     public void testGroupByCondition() throws Exception {
-        // FIXME: with filter of AND a_integer IN (5,6) was getting 9 rows back
-        // FIXME: with filter of AND (a_integer IN (5,6) OR a_integer IS NULL) was getting 5 rows back
-        String query = "SELECT count(*) FROM aTable WHERE organization_id=? GROUP BY a_integer=6";
         Properties props = new Properties(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        PreparedStatement statement = conn.prepareStatement("SELECT count(*) FROM aTable WHERE organization_id=? GROUP BY a_integer=6");
+        statement.setString(1, tenantId);
+        ResultSet rs = statement.executeQuery();
+        assertValueEqualsResultSet(rs, Arrays.<Object>asList(1L,8L));
         try {
-            PreparedStatement statement = conn.prepareStatement(query);
+            statement = conn.prepareStatement("SELECT count(*),a_integer=6 FROM aTable WHERE organization_id=? and (a_integer IN (5,6) or a_integer is null) GROUP BY a_integer=6");
             statement.setString(1, tenantId);
-            ResultSet rs = statement.executeQuery();
-            assertValueEqualsResultSet(rs, Arrays.<Object>asList(1L,8L));
+            rs = statement.executeQuery();
+            List<List<Object>> expectedResults = Lists.newArrayList(
+                    Arrays.<Object>asList(1L,false),
+                    Arrays.<Object>asList(1L,true));
+            assertValuesEqualsResultSet(rs, expectedResults);
         } finally {
             conn.close();
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
+
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
         try {
-            PreparedStatement statement = conn.prepareStatement("UPSERT into aTable(organization_id,entity_id,a_integer) values(?,?,null)");
+            statement = conn.prepareStatement("UPSERT into aTable(organization_id,entity_id,a_integer) values(?,?,null)");
             statement.setString(1, tenantId);
             statement.setString(2, ROW3);
             statement.executeUpdate();
@@ -598,13 +616,29 @@ public class QueryIT extends BaseClientManagedTimeIT {
         } finally {
             conn.close();
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
         conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        statement = conn.prepareStatement("SELECT count(*) FROM aTable WHERE organization_id=? GROUP BY a_integer=6");
+        statement.setString(1, tenantId);
+        rs = statement.executeQuery();
+        assertValueEqualsResultSet(rs, Arrays.<Object>asList(1L,1L,7L));
+        statement = conn.prepareStatement("SELECT a_integer, entity_id FROM aTable WHERE organization_id=? and (a_integer IN (5,6) or a_integer is null)");
+        statement.setString(1, tenantId);
+        rs = statement.executeQuery();
+        List<List<Object>> expectedResults = Lists.newArrayList(
+                Arrays.<Object>asList(null,ROW3),
+                Arrays.<Object>asList(5,ROW5),
+                Arrays.<Object>asList(6,ROW6));
+        assertValuesEqualsResultSet(rs, expectedResults);
         try {
-            PreparedStatement statement = conn.prepareStatement(query);
+            statement = conn.prepareStatement("SELECT count(*),a_integer=6 FROM aTable WHERE organization_id=? and (a_integer IN (5,6) or a_integer is null) GROUP BY a_integer=6");
             statement.setString(1, tenantId);
-            ResultSet rs = statement.executeQuery();
-            assertValueEqualsResultSet(rs, Arrays.<Object>asList(1L,1L,7L));
+            rs = statement.executeQuery();
+            expectedResults = Lists.newArrayList(
+                    Arrays.<Object>asList(1L,null),
+                    Arrays.<Object>asList(1L,false),
+                    Arrays.<Object>asList(1L,true));
+            assertValuesEqualsResultSet(rs, expectedResults);
         } finally {
             conn.close();
         }
