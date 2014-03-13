@@ -29,7 +29,7 @@
     <version>4.1.0-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-assembly</artifactId>
-  <name>Phoenix Assebmly</name>
+  <name>Phoenix Assembly</name>
   <description>Assemble Phoenix artifacts</description>
   <packaging>pom</packaging>
 

@@ -93,15 +93,15 @@ public class PhoenixEmbeddedDriverTest {
             "jdbc:phoenix:v1,v2,v3:123::/hbase",
             "jdbc:phoenix:v1,v2,v3:123::/hbase;test=false",
         };
-        for (int i = 0; i < urls.length; i++) {
+        for (String url : urls) {
             try {
-                ConnectionInfo.create(urls[i]);
-                throw new AssertionError("Expected exception for \"" + urls[i] + "\"");
+                ConnectionInfo.create(url);
+                throw new AssertionError("Expected exception for \"" + url + "\"");
             } catch (SQLException e) {
                 try {
                     assertEquals(SQLExceptionCode.MALFORMED_CONNECTION_URL.getSQLState(), e.getSQLState());
                 } catch (AssertionError ae) {
-                    throw new AssertionError("For \"" + urls[i] + "\": " + ae.getMessage());
+                    throw new AssertionError("For \"" + url + "\": " + ae.getMessage());
                 }
             }
         }

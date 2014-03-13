@@ -68,6 +68,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Maps;
@@ -205,9 +206,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public void init(String url, Properties props) throws SQLException {
-        props = new Properties(props);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
-        PhoenixConnection metaConnection = new PhoenixConnection(this, url, props, newEmptyMetaData());
+        Properties scnProps = PropertiesUtil.deepCopy(props);
+        scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
+        scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
+        PhoenixConnection metaConnection = new PhoenixConnection(this, url, scnProps, newEmptyMetaData());
         SQLException sqlE = null;
         try {
             try {
