@@ -106,7 +106,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                 for (PColumnFamily family : table.getColumnFamilies()) {
                     scan.addFamily(family.getName().getBytes());
                 }
-        }
+        } // TODO adding all CFs here is not correct. It should be done only after ColumnProjectionOptimization.
         if (limit != null) {
             ScanUtil.andFilterAtEnd(scan, new PageFilter(limit));
         }
@@ -160,7 +160,21 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                         conditionOnlyCfs.add(whereCol.getFirst());
                     }
                 } else {
-                    scan.addColumn(whereCol.getFirst(), whereCol.getSecond());
+                    if (familyMap.containsKey(whereCol.getFirst())) {
+                        // where column's CF is present. If there are some specific columns added against this CF, we
+                        // need to ensure this where column also getting added in it.
+                        // If the select was like select cf1.*, then that itself will select the whole CF. So no need to
+                        // specifically add the where column. Adding that will remove the cf1.* stuff and only this
+                        // where condition column will get returned!
+                        NavigableSet<byte[]> cols = familyMap.get(whereCol.getFirst());
+                        // cols is null means the whole CF will get scanned.
+                        if (cols != null) {
+                            scan.addColumn(whereCol.getFirst(), whereCol.getSecond());
+                        }
+                    } else {
+                        // where column's CF itself is not present in family map. We need to add the column
+                        scan.addColumn(whereCol.getFirst(), whereCol.getSecond());
+                    }
                 }
             }
             if (useOptimization && !columnsTracker.isEmpty()) {
@@ -175,13 +189,6 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                 if (!(statement.isAggregate())) {
                     ScanUtil.andFilterAtEnd(scan, new ColumnProjectionFilter(SchemaUtil.getEmptyColumnFamily(table),
                             columnsTracker, conditionOnlyCfs));
-                }
-            }
-            if (table.getViewType() == ViewType.MAPPED) {
-                // Since we don't have the empty key value in MAPPED tables, we must select all CFs in HRS. But only the
-                // selected column values are returned back to client
-                for (PColumnFamily family : table.getColumnFamilies()) {
-                    scan.addFamily(family.getName().getBytes());
                 }
             }
         }
