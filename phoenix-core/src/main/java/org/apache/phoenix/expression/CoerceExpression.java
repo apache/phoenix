@@ -117,7 +117,8 @@ public class CoerceExpression extends BaseSingleExpression {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (getChild().evaluate(tuple, ptr)) {
-            getDataType().coerceBytes(ptr, getChild().getDataType(), getChild().getSortOrder(), getSortOrder());
+            getDataType().coerceBytes(ptr, getChild().getDataType(), getChild().getSortOrder(), getSortOrder(),
+                    getChild().getMaxLength());
             return true;
         }
         return false;

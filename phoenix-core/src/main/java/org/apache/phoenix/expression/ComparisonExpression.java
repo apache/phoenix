@@ -297,6 +297,9 @@ public class ComparisonExpression extends BaseCompoundExpression {
         if (!children.get(0).evaluate(tuple, ptr)) {
             return false;
         }
+        if (ptr.getLength() == 0) { // null comparison evals to null
+            return true;
+        }
         byte[] lhsBytes = ptr.get();
         int lhsOffset = ptr.getOffset();
         int lhsLength = ptr.getLength();
@@ -305,6 +308,9 @@ public class ComparisonExpression extends BaseCompoundExpression {
         
         if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
+        }
+        if (ptr.getLength() == 0) { // null comparison evals to null
+            return true;
         }
         
         byte[] rhsBytes = ptr.get();

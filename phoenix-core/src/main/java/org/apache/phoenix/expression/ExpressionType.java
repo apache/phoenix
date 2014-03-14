@@ -28,6 +28,7 @@ import org.apache.phoenix.expression.function.CeilTimestampExpression;
 import org.apache.phoenix.expression.function.CoalesceFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
+import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
@@ -151,7 +152,8 @@ public enum ExpressionType {
     ArrayIndexFunction(ArrayIndexFunction.class),
     ArrayLengthFunction(ArrayLengthFunction.class),
     ArrayConstructorExpression(ArrayConstructorExpression.class),
-    SQLViewTypeFunction(SQLViewTypeFunction.class);
+    SQLViewTypeFunction(SQLViewTypeFunction.class),
+    ExternalSqlTypeIdFunction(ExternalSqlTypeIdFunction.class);
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }

@@ -41,10 +41,17 @@ public class QueryUtil {
      *  Column name index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
      */
     public static final int COLUMN_NAME_POSITION = 4;
+
     /**
      * Data type index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
      */
     public static final int DATA_TYPE_POSITION = 5;
+
+    /**
+     * Index of the column containing the datatype name  within ResultSet resulting from {@link
+     * DatabaseMetaData#getColumns(String, String, String, String)}.
+     */
+    public static final int DATA_TYPE_NAME_POSITION = 6;
 
     /**
      * Generate an upsert statement based on a list of {@code ColumnInfo}s with parameter markers. The list of
