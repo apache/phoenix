@@ -39,11 +39,11 @@
       <outputDirectory>/</outputDirectory>
       <unpack>true</unpack>
       <includes>
-        <include>org.apache:phoenix-*</include>
+        <include>org.apache.phoenix:phoenix-*</include>
       </includes>
       <excludes>
-        <exclude>org.apache:phoenix-flume</exclude>
-        <exclude>org.apache:phoenix-pig</exclude>
+        <exclude>org.apache.phoenix:phoenix-flume</exclude>
+        <exclude>org.apache.phoenix:phoenix-pig</exclude>
       </excludes>
     </dependencySet>
   </dependencySets>

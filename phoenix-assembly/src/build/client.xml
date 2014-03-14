@@ -55,7 +55,7 @@
       <outputDirectory>/</outputDirectory>
       <unpack>true</unpack>
       <includes>
-        <include>org.apache:phoenix-*</include>
+        <include>org.apache.phoenix:phoenix-*</include>
       </includes>
     </dependencySet>
   </dependencySets>
