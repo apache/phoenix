@@ -112,10 +112,10 @@ public class PhoenixRuntime {
 
     private static void usageError() {
         System.err.println("Usage: psql [-t table-name] [-h comma-separated-column-names | in-line] [-d field-delimiter-char quote-char escape-char]<zookeeper>  <path-to-sql-or-csv-file>...\n" +
-                "  By default, the name of the CSV file is used to determine the Phoenix table into which the CSV data is loaded\n" +
+                "  By default, the name of the CSV file (case insensitive) is used to determine the Phoenix table into which the CSV data is loaded\n" +
                 "  and the ordinal value of the columns determines the mapping.\n" +
-                "  -t overrides the table into which the CSV data is loaded\n" +
-                "  -h overrides the column names to which the CSV data maps\n" +
+                "  -t overrides the table into which the CSV data is loaded and is case sensitive.\n" +
+                "  -h overrides the column names to which the CSV data maps and is case sensitive.\n" +
                 "     A special value of in-line indicating that the first line of the CSV file\n" +
                 "     determines the column to which the data maps.\n" +
                 "  -s uses strict mode by throwing an exception if a column name doesn't match during CSV loading.\n" +
@@ -125,9 +125,9 @@ public class PhoenixRuntime {
                 "Examples:\n" +
                 "  psql localhost my_ddl.sql\n" +
                 "  psql localhost my_ddl.sql my_table.csv\n" +
-                "  psql -t my_table my_cluster:1825 my_table2012-Q3.csv\n" +
-                "  psql -t my_table -h col1,col2,col3 my_cluster:1825 my_table2012-Q3.csv\n" +
-                "  psql -t my_table -h col1,col2,col3 -d 1 2 3 my_cluster:1825 my_table2012-Q3.csv\n"
+                "  psql -t MY_TABLE my_cluster:1825 my_table2012-Q3.csv\n" +
+                "  psql -t MY_TABLE -h COL1,COL2,COL3 my_cluster:1825 my_table2012-Q3.csv\n" +
+                "  psql -t MY_TABLE -h COL1,COL2,COL3 -d 1 2 3 my_cluster:1825 my_table2012-Q3.csv\n"
         );
         System.exit(-1);
     }
@@ -202,7 +202,7 @@ public class PhoenixRuntime {
                		PhoenixRuntime.executeStatements(conn, new FileReader(args[i]), Collections.emptyList());
                 } else if (fileName.endsWith(CSV_FILE_EXT)) {
                     if (tableName == null) {
-                        tableName = fileName.substring(fileName.lastIndexOf(File.separatorChar) + 1, fileName.length()-CSV_FILE_EXT.length());
+                        tableName = SchemaUtil.normalizeIdentifier(fileName.substring(fileName.lastIndexOf(File.separatorChar) + 1, fileName.length()-CSV_FILE_EXT.length()));
                     }
                     CSVCommonsLoader csvLoader = 
                     		new CSVCommonsLoader(conn, tableName, columns, isStrict, customMetaCharacters, arrayElementSeparator);
