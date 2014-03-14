@@ -296,7 +296,7 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
     @Test
     public void testUpsertSelectOnlyUpsertsTenantDataWithDifferentTenantTable() throws Exception {
         createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW ANOTHER_TENANT_TABLE ( " + 
-            "tenant_col VARCHAR) AS SELECT * FROM PARENT_TABLE WHERE tenant_type_id = 'def'", null, nextTimestamp(), false);
+            "tenant_col VARCHAR) AS SELECT * FROM " + PARENT_TABLE_NAME + " WHERE tenant_type_id = 'def'", null, nextTimestamp(), false);
         
         Connection conn = nextConnection(getUrl());
         try {
@@ -383,5 +383,20 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         finally {
             conn.close();
         }
+    }
+    
+    @Test
+    public void testUpsertValuesUsingViewWithNoWhereClause() throws Exception {
+        Connection conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
+        conn.setAutoCommit(true);
+        conn.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME_NO_TENANT_TYPE_ID + " (id) values (0)");
+        conn.close();
+        
+        conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
+        ResultSet rs = conn.createStatement().executeQuery("select id from " + TENANT_TABLE_NAME_NO_TENANT_TYPE_ID);
+        assertTrue(rs.next());
+        assertEquals(0, rs.getInt(1));
+        assertFalse(rs.next());
+        conn.close();
     }
 }
