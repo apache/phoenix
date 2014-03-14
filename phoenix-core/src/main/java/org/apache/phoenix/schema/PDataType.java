@@ -3289,6 +3289,11 @@ public enum PDataType {
            }
 		   return true;
 		}
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
+        }
 		
 	},
     BOOLEAN_ARRAY("BOOLEAN_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.BOOLEAN.getSqlType(), PhoenixArray.class, null) {
@@ -3355,6 +3360,11 @@ public enum PDataType {
            }
 		   return true;
 		}
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
+        }
 		
 	},
 	VARCHAR_ARRAY("VARCHAR_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.VARCHAR.getSqlType(), PhoenixArray.class, null) {
@@ -3432,6 +3442,11 @@ public enum PDataType {
                 SortOrder actualModifer, Integer desiredMaxLength, Integer desiredScale, SortOrder desiredModifier) {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength,
                     desiredScale, this);
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
         }
 		
 	},
@@ -3512,6 +3527,11 @@ public enum PDataType {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength,
                     desiredScale, this);
         }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
+        }
 	},
 	BINARY_ARRAY("BINARY_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.BINARY.getSqlType(), PhoenixArray.class, null) {
 		@Override
@@ -3591,7 +3611,11 @@ public enum PDataType {
                     desiredScale, this);
         }
 
-	},
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
+        }
+    },
 	CHAR_ARRAY("CHAR_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.CHAR.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
@@ -3669,6 +3693,11 @@ public enum PDataType {
 		        SortOrder actualModifer, Integer desiredMaxLength, Integer desiredScale, SortOrder desiredModifier) {
 		    pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale, this);
 		}
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
+        }
 		
 	},
 	LONG_ARRAY("LONG_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.LONG.getSqlType(), PhoenixArray.class, null) {
@@ -3732,6 +3761,11 @@ public enum PDataType {
                }
            }
            return true;
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
         }
 		
 	},
@@ -3797,6 +3831,11 @@ public enum PDataType {
            }
            return true;
         }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
+        }
 		
 	},
 	TINYINT_ARRAY("TINYINT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TINYINT.getSqlType(), PhoenixArray.class, null) {
@@ -3860,6 +3899,11 @@ public enum PDataType {
                }
            }
            return true;
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
         }
 		
 	},
@@ -3926,6 +3970,11 @@ public enum PDataType {
            }
            return true;
         }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
+        }
 		
 	},
 	DOUBLE_ARRAY("DOUBLE_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DOUBLE.getSqlType(), PhoenixArray.class, null) {
@@ -3990,6 +4039,11 @@ public enum PDataType {
                }
            }
            return true;
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
         }
 
 	},
@@ -4064,6 +4118,11 @@ public enum PDataType {
 			return pDataTypeForArray.isSizeCompatible(ptr, value, srcType,
 					maxLength, scale, desiredMaxLength, desiredScale);
 		}
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
+        }
 	
 	},
 	TIMESTAMP_ARRAY("TIMESTAMP_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TIMESTAMP.getSqlType(), PhoenixArray.class,
@@ -4128,6 +4187,11 @@ public enum PDataType {
                }
            }
            return true;
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
         }
 
 	},
@@ -4195,6 +4259,11 @@ public enum PDataType {
            return true;
         }
 
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
+        }
+
 	},
 	TIME_ARRAY("TIME_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TIME.getSqlType(), PhoenixArray.class, null) {
 		@Override
@@ -4257,6 +4326,11 @@ public enum PDataType {
                }
            }
            return true;
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
         }
 
 	},
@@ -4323,6 +4397,11 @@ public enum PDataType {
            return true;
         }
 
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
+        }
+
 	},
 	DATE_ARRAY("DATE_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DATE.getSqlType(), PhoenixArray.class, null) {
 		@Override
@@ -4385,6 +4464,11 @@ public enum PDataType {
                }
            }
            return true;
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
         }
 
 	},
@@ -4451,6 +4535,11 @@ public enum PDataType {
            return true;
         }
 
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
+        }
+
 	},
 	UNSIGNED_LONG_ARRAY("UNSIGNED_LONG_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_LONG.getSqlType(), PhoenixArray.class, null) {
 		@Override
@@ -4513,6 +4602,11 @@ public enum PDataType {
                }
            }
            return true;
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
         }
 	
 	},
@@ -4577,6 +4671,11 @@ public enum PDataType {
                }
            }
            return true;
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
         }
 
 	},
@@ -4644,6 +4743,11 @@ public enum PDataType {
            return true;
         }
 
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
+        }
+
 	},
 	UNSIGNED_TINYINT_ARRAY("UNSIGNED_TINYINT__ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TINYINT.getSqlType(), PhoenixArray.class,
 			null) {
@@ -4708,6 +4812,11 @@ public enum PDataType {
            }
            return true;
         }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
+        }
 	},
 	UNSIGNED_FLOAT_ARRAY("UNSIGNED_FLOAT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_FLOAT.getSqlType(), PhoenixArray.class, null) {
 		@Override
@@ -4770,6 +4879,11 @@ public enum PDataType {
                }
            }
            return true;
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
         }
 
 	},
@@ -4836,6 +4950,11 @@ public enum PDataType {
                }
            }
            return true;
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.ARRAY;
         }
 		
 	};

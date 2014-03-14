@@ -28,6 +28,7 @@ import java.math.BigInteger;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1558,7 +1559,32 @@ public class PDataTypeTest {
             
         }
     }
-    
+
+    @Test
+    public void testGetResultSetSqlType() {
+        assertEquals(Types.INTEGER, PDataType.INTEGER.getResultSetSqlType());
+        assertEquals(Types.INTEGER, PDataType.UNSIGNED_INT.getResultSetSqlType());
+        assertEquals(Types.BIGINT, PDataType.LONG.getResultSetSqlType());
+        assertEquals(Types.BIGINT, PDataType.UNSIGNED_LONG.getResultSetSqlType());
+        assertEquals(Types.SMALLINT, PDataType.SMALLINT.getResultSetSqlType());
+        assertEquals(Types.SMALLINT, PDataType.UNSIGNED_SMALLINT.getResultSetSqlType());
+        assertEquals(Types.TINYINT, PDataType.TINYINT.getResultSetSqlType());
+        assertEquals(Types.TINYINT, PDataType.UNSIGNED_TINYINT.getResultSetSqlType());
+        assertEquals(Types.FLOAT, PDataType.FLOAT.getResultSetSqlType());
+        assertEquals(Types.FLOAT, PDataType.UNSIGNED_FLOAT.getResultSetSqlType());
+        assertEquals(Types.DOUBLE, PDataType.DOUBLE.getResultSetSqlType());
+        assertEquals(Types.DOUBLE, PDataType.UNSIGNED_DOUBLE.getResultSetSqlType());
+
+        // Check that all array types are defined as java.sql.Types.ARRAY
+        for (PDataType dataType : PDataType.values()) {
+            if (dataType.isArrayType()) {
+                assertEquals("Wrong datatype for " + dataType,
+                        Types.ARRAY,
+                        dataType.getResultSetSqlType());
+            }
+        }
+    }
+
     private void testReadDecimalPrecisionAndScaleFromRawBytes(BigDecimal bd) {
         byte[] b = PDataType.DECIMAL.toBytes(bd);
         int[] v = PDataType.getDecimalPrecisionAndScale(b, 0, b.length);
