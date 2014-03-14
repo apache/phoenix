@@ -2238,5 +2238,75 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }
+
+    @Test
+    public void testJoinOnDynamicColumns() throws Exception {
+        String tableA = "tableA";
+        String tableB = "tableB";
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        try {
+            conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            String ddlA = "CREATE TABLE " + tableA + "   (pkA INTEGER NOT NULL, " + "    colA1 INTEGER, "
+                    + "        colA2 VARCHAR " + "CONSTRAINT PK PRIMARY KEY" + "(pkA)" + ")";
+
+            String ddlB = "CREATE TABLE " + tableB + "   (pkB INTEGER NOT NULL PRIMARY KEY, " + "    colB INTEGER)";
+            stmt = conn.prepareStatement(ddlA);
+            stmt.execute();
+            stmt.close();
+
+            stmt = conn.prepareStatement(ddlB);
+            stmt.execute();
+            stmt.close();
+
+            String upsertA = "UPSERT INTO TABLEA (pkA, colA1, colA2) VALUES(?, ?, ?)";
+            stmt = conn.prepareStatement(upsertA);
+            int i = 0;
+            for (i = 0; i < 5; i++) {
+                stmt.setInt(1, i);
+                stmt.setInt(2, i + 10);
+                stmt.setString(3, "00" + i);
+                stmt.executeUpdate();
+            }
+            conn.commit();
+            stmt.close();
+
+            // upsert select dynamic columns in tableB
+            conn.createStatement().execute("CREATE SEQUENCE SEQB");
+            String upsertBSelectA = "UPSERT INTO TABLEB (pkB, pkA INTEGER)"
+                    + "SELECT NEXT VALUE FOR SEQB, pkA FROM TABLEA";
+            stmt = conn.prepareStatement(upsertBSelectA);
+            stmt.executeUpdate();
+            stmt.close();
+            conn.commit();
+            conn.createStatement().execute("DROP SEQUENCE SEQB");
+
+            // perform a join between tableB and tableA by joining on the dynamic column that we upserted in
+            // tableB. This join should return all the rows from table A.
+            String joinSql = "SELECT A.pkA, A.COLA1, A.colA2 FROM TABLEB B(pkA INTEGER) JOIN TABLEA A ON a.pkA = b.pkA";
+            stmt = conn.prepareStatement(joinSql);
+            ResultSet rs = stmt.executeQuery();
+            i = 0;
+            while (rs.next()) {
+                // check that we get back all the rows that we upserted for tableA above.
+                assertEquals(rs.getInt(1), i);
+                assertEquals(rs.getInt(2), i + 10);
+                assertEquals(rs.getString(3), "00" + i);
+                i++;
+            }
+            assertEquals(5,i);
+        } finally {
+            if (stmt != null) {
+                stmt.close();
+            }
+            if (conn != null) {
+                conn.close();
+            }
+
+        }
+
+    }
+
 }
 
