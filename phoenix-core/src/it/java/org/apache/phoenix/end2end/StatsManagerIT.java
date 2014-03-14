@@ -132,7 +132,7 @@ public class StatsManagerIT extends BaseParallelIteratorsRegionSplitterIT {
         MinKeyChange minKeyChange = new MinKeyChange(stats, table);
         MaxKeyChange maxKeyChange = new MaxKeyChange(stats, table);
         
-        byte[] minKey = stats.getMinKey(table);
+        byte[] minKey = minKeyChange.value;
         assertTrue(minKey == null);
         assertTrue(waitForAsyncChange(minKeyChange,waitTime));
         assertArrayEquals(KMIN, stats.getMinKey(table));
