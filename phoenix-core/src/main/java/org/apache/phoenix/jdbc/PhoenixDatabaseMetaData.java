@@ -36,6 +36,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
@@ -203,6 +204,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] KEY_SEQ_BYTES = Bytes.toBytes(KEY_SEQ);
     public static final String SUPERTABLE_NAME = "SUPERTABLE_NAME";
     		
+    public static final String TYPE_ID = "TYPE_ID";
     
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;
@@ -339,7 +341,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 TABLE_SCHEM + "," +
                 TABLE_NAME + " ," +
                 COLUMN_NAME + "," +
-                DATA_TYPE + "," +
+                ExternalSqlTypeIdFunction.NAME + "(" + DATA_TYPE + ") AS " + DATA_TYPE + "," +
                 SqlTypeNameFunction.NAME + "(" + DATA_TYPE + ") AS " + TYPE_NAME + "," +
                 COLUMN_SIZE + "," +
                 BUFFER_LENGTH + "," +
@@ -359,7 +361,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 IS_AUTOINCREMENT + "," + 
                 ARRAY_SIZE + "," +
                 COLUMN_FAMILY + "," +
-                VIEW_CONSTANT + 
+                DATA_TYPE + " " + TYPE_ID + "," +// raw type id for potential internal consumption
+                VIEW_CONSTANT +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS);
         StringBuilder where = new StringBuilder();
         addTenantIdFilter(where, catalog);
@@ -511,8 +514,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 "null CARDINALITY,\n" +
                 "null PAGES,\n" +
                 "null FILTER_CONDITION,\n" +
-                DATA_TYPE + ",\n" + // Include data type info, though not in spec
+                // Include data type info, though not in spec
+                ExternalSqlTypeIdFunction.NAME + "(" + DATA_TYPE + ") AS " + DATA_TYPE + ",\n" +
                 SqlTypeNameFunction.NAME + "(" + DATA_TYPE + ") AS " + TYPE_NAME + ",\n" +
+                DATA_TYPE + " " + TYPE_ID + ",\n" + 
                 COLUMN_FAMILY + ",\n" +
                 COLUMN_SIZE + ",\n" +
                 ARRAY_SIZE +
@@ -656,9 +661,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 KEY_SEQ + "," +
                 PK_NAME + "," +
                 "CASE WHEN " + SORT_ORDER + " = " + (SortOrder.DESC.getSystemValue()) + " THEN 'D' ELSE 'A' END ASC_OR_DESC," +
-                DATA_TYPE + "," + // include type info, though not in spec
+                ExternalSqlTypeIdFunction.NAME + "(" + DATA_TYPE + ") AS " + DATA_TYPE + "," +
                 SqlTypeNameFunction.NAME + "(" + DATA_TYPE + ") AS " + TYPE_NAME + "," +
                 COLUMN_SIZE + "," +
+                DATA_TYPE + " " + TYPE_ID + "," + // raw type id
                 VIEW_CONSTANT + 
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                 " where ");
