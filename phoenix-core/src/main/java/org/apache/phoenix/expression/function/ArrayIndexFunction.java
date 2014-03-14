@@ -26,6 +26,7 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.ParseException;
 import org.apache.phoenix.schema.PArrayDataType;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 @BuiltInFunction(name = ArrayIndexFunction.NAME, args = {
@@ -80,9 +81,15 @@ public class ArrayIndexFunction extends ScalarFunction {
 	public Integer getMaxLength() {
 	    return this.children.get(0).getMaxLength();
 	}
-		@Override
-	public String getName() {
-		return NAME;
-	}
+
+    @Override
+    public String getName() {
+        return NAME;
+    }
+    
+    @Override
+    public SortOrder getSortOrder() {
+        return this.children.get(0).getSortOrder();
+    }
 
 }

@@ -778,7 +778,7 @@ term returns [ParseNode ret]
     			$ret = factory.rowValueConstructor(l);
     		}	 
     	}
-    |   CAST LPAREN e=expression AS dt=identifier RPAREN { $ret = factory.cast(e, dt); }
+    |   CAST LPAREN e=expression AS dt=identifier ar=(ARRAY | (LSQUARE RSQUARE))? RPAREN { $ret = ar==null ? factory.cast(e, dt) : factory.cast(e, dt, true); }
     |   (n=NEXT | CURRENT) VALUE FOR s=from_table_name { $ret = n==null ? factory.currentValueFor(s) : factory.nextValueFor(s);}    
     ;
 
