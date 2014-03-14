@@ -34,6 +34,7 @@ import org.apache.commons.csv.CSVRecord;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.csv.CsvUpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -294,9 +295,10 @@ public class CSVCommonsLoader {
                     (schemaAndTable.length == 1 ? escapedTableName
                             : schemaAndTable[1]), null);
             while (rs.next()) {
+                String sqlTypeName = rs.getString(QueryUtil.DATA_TYPE_NAME_POSITION);
                 columnNameToTypeMap.put(
                         rs.getString(QueryUtil.COLUMN_NAME_POSITION),
-                        rs.getInt(QueryUtil.DATA_TYPE_POSITION));
+                        PDataType.fromSqlTypeName(sqlTypeName).getSqlType());
             }
         } finally {
             if (rs != null) {
