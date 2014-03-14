@@ -524,7 +524,142 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             conn.close();
         }
     }
-    
+
+    @Test
+    public void testArrayWithDescOrder() throws Exception {
+        Connection conn;
+        PreparedStatement stmt;
+        ResultSet rs;
+        long ts = nextTimestamp();
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(
+                "CREATE TABLE t ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
+                        + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC)) \n");
+        conn.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?,?)");
+        stmt.setString(1, "a");
+        String[] s = new String[] { "abc", "def", "ghi", "jkll", null, null, "xxx" };
+        Array array = conn.createArrayOf("VARCHAR", s);
+        stmt.setArray(2, array);
+        s = new String[] { "abc", "def", "ghi", "jkll", null, null, null, "xxx" };
+        array = conn.createArrayOf("VARCHAR", s);
+        stmt.setArray(3, array);
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("SELECT b_string_array FROM t");
+        assertTrue(rs.next());
+        PhoenixArray strArr = (PhoenixArray)rs.getArray(1);
+        assertEquals(array, strArr);
+        conn.close();
+    }
+
+    @Test
+    public void testArraySelectSingleArrayElemWithCast() throws Exception {
+        Connection conn;
+        PreparedStatement stmt;
+        ResultSet rs;
+        long ts = nextTimestamp();
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE t ( k VARCHAR PRIMARY KEY, a bigint ARRAY[])");
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?)");
+        stmt.setString(1, "a");
+        Long[] s = new Long[] {1l, 2l};
+        Array array = conn.createArrayOf("BIGINT", s);
+        stmt.setArray(2, array);
+        stmt.execute();
+        conn.commit();
+        conn.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("SELECT k, CAST(a[2] AS DOUBLE) FROM t");
+        assertTrue(rs.next());
+        assertEquals("a",rs.getString(1));
+        Double d = new Double(2.0);
+        assertEquals(d, (Double)rs.getDouble(2));
+        conn.close();
+    }
+
+    @Test
+    public void testArrayWithCast() throws Exception {
+        Connection conn;
+        PreparedStatement stmt;
+        ResultSet rs;
+        long ts = nextTimestamp();
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE t ( k VARCHAR PRIMARY KEY, a bigint ARRAY[])");
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?)");
+        stmt.setString(1, "a");
+        Long[] s = new Long[] { 1l, 2l };
+        Array array = conn.createArrayOf("BIGINT", s);
+        stmt.setArray(2, array);
+        stmt.execute();
+        conn.commit();
+        conn.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("SELECT CAST(a AS DOUBLE []) FROM t");
+        assertTrue(rs.next());
+        Double[] d = new Double[] { 1.0, 2.0 };
+        array = conn.createArrayOf("DOUBLE", d);
+        PhoenixArray arr = (PhoenixArray)rs.getArray(1);
+        assertEquals(array, arr);
+        conn.close();
+    }
+
+    @Test
+    public void testArrayWithCastForVarLengthArr() throws Exception {
+        Connection conn;
+        PreparedStatement stmt;
+        ResultSet rs;
+        long ts = nextTimestamp();
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE t ( k VARCHAR PRIMARY KEY, a VARCHAR(5) ARRAY)");
+        conn.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?)");
+        stmt.setString(1, "a");
+        String[] s = new String[] { "1", "2" };
+        PhoenixArray array = (PhoenixArray)conn.createArrayOf("VARCHAR", s);
+        stmt.setArray(2, array);
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("SELECT CAST(a AS CHAR ARRAY) FROM t");
+        assertTrue(rs.next());
+        PhoenixArray arr = (PhoenixArray)rs.getArray(1);
+        String[] array2 = (String[])array.getArray();
+        String[] array3 = (String[])arr.getArray();
+        assertEquals(array2[0], array3[0]);
+        assertEquals(array2[1], array3[1]);
+        conn.close();
+    }
+
     @Test
     public void testFixedWidthCharArray() throws Exception {
         Connection conn;
@@ -563,7 +698,6 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         assertEquals("a",rs.getString(1));
         assertEquals("2",rs.getString(2));
         conn.close();
-        
     }
  
 	@Test

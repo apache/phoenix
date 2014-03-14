@@ -27,9 +27,6 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Pair;
-
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Maps;
 import org.apache.phoenix.exception.UnknownFunctionException;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -42,12 +39,15 @@ import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Maps;
 
 
 /**
@@ -413,13 +413,21 @@ public class ParseNodeFactory {
     public LiteralParseNode literal(Object value) {
         return new LiteralParseNode(value);
     }
-    
+
     public CastParseNode cast(ParseNode expression, String dataType) {
-    	return new CastParseNode(expression, dataType);
+        return new CastParseNode(expression, dataType, false);
     }
-    
+
     public CastParseNode cast(ParseNode expression, PDataType dataType) {
-    	return new CastParseNode(expression, dataType);
+        return new CastParseNode(expression, dataType, false);
+    }
+
+    public CastParseNode cast(ParseNode expression, PDataType dataType, boolean arr) {
+        return new CastParseNode(expression, dataType, arr);
+    }
+
+    public CastParseNode cast(ParseNode expression, String dataType, boolean arr) {
+        return new CastParseNode(expression, dataType, arr);
     }
     
     public ParseNode rowValueConstructor(List<ParseNode> l) {
