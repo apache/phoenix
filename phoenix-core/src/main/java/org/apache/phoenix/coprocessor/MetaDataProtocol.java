@@ -97,13 +97,18 @@ public abstract class MetaDataProtocol extends MetaDataService {
                 this.columnName = column.getName().getBytes();
                 this.familyName = column.getFamilyName().getBytes();    
             }
-            
         }
         
         public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table) {
            this(returnCode, currentTime, table, Collections.<byte[]> emptyList());
         }
         
+        // For testing, so that connectionless can set wasUpdated so ColumnResolver doesn't complain
+        public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table, boolean wasUpdated) {
+            this(returnCode, currentTime, table, Collections.<byte[]> emptyList());
+            this.wasUpdated = wasUpdated;
+         }
+         
         public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table, List<byte[]> tableNamesToDelete) {
             this.returnCode = returnCode;
             this.mutationTime = currentTime;

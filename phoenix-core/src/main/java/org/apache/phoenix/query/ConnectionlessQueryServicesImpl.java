@@ -177,7 +177,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         try {
             String fullTableName = SchemaUtil.getTableName(schemaBytes, tableBytes);
             PTable table = metaData.getTable(new PTableKey(tenantId, fullTableName));
-            return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, table);
+            return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, table, true);
         } catch (TableNotFoundException e) {
             return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0, null);
         }

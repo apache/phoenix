@@ -90,6 +90,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.DelegateDatum;
 import org.apache.phoenix.schema.PArrayDataType;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
@@ -98,6 +99,7 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 
@@ -107,14 +109,24 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     protected final StatementContext context;
     protected final GroupBy groupBy;
     private int nodeCount;
+    private final boolean resolveViewConstants;
     
     ExpressionCompiler(StatementContext context) {
-        this(context,GroupBy.EMPTY_GROUP_BY);
+        this(context,GroupBy.EMPTY_GROUP_BY, false);
+    }
+
+    ExpressionCompiler(StatementContext context, boolean resolveViewConstants) {
+        this(context,GroupBy.EMPTY_GROUP_BY, resolveViewConstants);
     }
 
     ExpressionCompiler(StatementContext context, GroupBy groupBy) {
+        this(context, groupBy, false);
+    }
+
+    ExpressionCompiler(StatementContext context, GroupBy groupBy, boolean resolveViewConstants) {
         this.context = context;
         this.groupBy = groupBy;
+        this.resolveViewConstants = resolveViewConstants;
     }
 
     public boolean isAggregate() {
@@ -328,9 +340,17 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     public Expression visit(ColumnParseNode node) throws SQLException {
         ColumnRef ref = resolveColumn(node);
         TableRef tableRef = ref.getTableRef();
-        if (tableRef.equals(context.getCurrentTable()) 
-                && !SchemaUtil.isPKColumn(ref.getColumn())) { // project only kv columns
-            context.getScan().addColumn(ref.getColumn().getFamilyName().getBytes(), ref.getColumn().getName().getBytes());
+        ImmutableBytesWritable ptr = context.getTempPtr();
+        PColumn column = ref.getColumn();
+        // If we have an UPDATABLE view, then we compile those view constants (i.e. columns in equality constraints
+        // in the view) to constants. This allows the optimize to optimize out reference to them in various scenarios.
+        // If the column is matched in a WHERE clause against a constant not equal to it's constant, then the entire
+        // query would become degenerate.
+        if (!resolveViewConstants && IndexUtil.getViewConstantValue(column, ptr)) {
+            return LiteralExpression.newConstant(column.getDataType().toObject(ptr), column.getDataType());
+        }
+        if (tableRef.equals(context.getCurrentTable()) && !SchemaUtil.isPKColumn(column)) { // project only kv columns
+            context.getScan().addColumn(column.getFamilyName().getBytes(), column.getName().getBytes());
         }
         Expression expression = ref.newColumnExpression();
         Expression wrappedExpression = wrapGroupByExpression(expression);

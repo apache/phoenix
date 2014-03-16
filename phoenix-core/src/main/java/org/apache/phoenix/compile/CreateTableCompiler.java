@@ -19,6 +19,7 @@ package org.apache.phoenix.compile;
 
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
+import java.util.BitSet;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -47,7 +48,6 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PMetaData;
@@ -83,12 +83,14 @@ public class CreateTableCompiler {
         // TODO: support any statement for a VIEW instead of just a WHERE clause
         ParseNode whereNode = create.getWhereClause();
         String viewStatementToBe = null;
-        byte[][] viewColumnConstantsToBe = MetaDataClient.EMPTY_VIEW_CONSTANTS;
+        byte[][] viewColumnConstantsToBe = null;
+        BitSet isViewColumnReferencedToBe = null;
         if (type == PTableType.VIEW) {
             TableRef tableRef = resolver.getTables().get(0);
-            viewColumnConstantsToBe = new byte[tableRef.getTable().getColumns().size()][];
-            // Used to track column references and their
-            ExpressionCompiler expressionCompiler = new ColumnTrackingExpressionCompiler(context, viewColumnConstantsToBe);
+            int nColumns = tableRef.getTable().getColumns().size();
+            isViewColumnReferencedToBe = new BitSet(nColumns);
+            // Used to track column references in a view
+            ExpressionCompiler expressionCompiler = new ColumnTrackingExpressionCompiler(context, isViewColumnReferencedToBe);
             parentToBe = tableRef.getTable();
             viewTypeToBe = parentToBe.getViewType() == ViewType.MAPPED ? ViewType.MAPPED : ViewType.UPDATABLE;
             if (whereNode == null) {
@@ -133,15 +135,22 @@ public class CreateTableCompiler {
                                 }
                             },
                             connection, tableRef.getTimeStamp());
+                    viewColumnConstantsToBe = new byte[nColumns][];
                     ViewWhereExpressionVisitor visitor = new ViewWhereExpressionVisitor(parentToBe, viewColumnConstantsToBe);
                     where.accept(visitor);
+                    // If view is not updatable, viewColumnConstants should be empty. We will still
+                    // inherit our parent viewConstants, but we have no additional ones.
                     viewTypeToBe = visitor.isUpdatable() ? ViewType.UPDATABLE : ViewType.READ_ONLY;
+                    if (viewTypeToBe != ViewType.UPDATABLE) {
+                        viewColumnConstantsToBe = null;
+                    }
                 }
             }
         }
         final ViewType viewType = viewTypeToBe;
         final String viewStatement = viewStatementToBe;
         final byte[][] viewColumnConstants = viewColumnConstantsToBe;
+        final BitSet isViewColumnReferenced = isViewColumnReferencedToBe;
         List<ParseNode> splitNodes = create.getSplitNodes();
         final byte[][] splits = new byte[splitNodes.size()][];
         ImmutableBytesWritable ptr = context.getTempPtr();
@@ -171,7 +180,7 @@ public class CreateTableCompiler {
             @Override
             public MutationState execute() throws SQLException {
                 try {
-                    return client.createTable(create, splits, parent, viewStatement, viewType, viewColumnConstants);
+                    return client.createTable(create, splits, parent, viewStatement, viewType, viewColumnConstants, isViewColumnReferenced);
                 } finally {
                     if (client.getConnection() != connection) {
                         client.getConnection().close();
@@ -197,21 +206,17 @@ public class CreateTableCompiler {
     }
     
     private static class ColumnTrackingExpressionCompiler extends ExpressionCompiler {
-        private final byte[][] columnValues;
+        private final BitSet isColumnReferenced;
         
-        public ColumnTrackingExpressionCompiler(StatementContext context, byte[][] columnValues) {
-            super(context);
-            this.columnValues = columnValues;
+        public ColumnTrackingExpressionCompiler(StatementContext context, BitSet isColumnReferenced) {
+            super(context, true);
+            this.isColumnReferenced = isColumnReferenced;
         }
         
         @Override
         protected ColumnRef resolveColumn(ColumnParseNode node) throws SQLException {
             ColumnRef ref = super.resolveColumn(node);
-            // Set columnValue at position to any non null value.
-            // We always strip the last byte so that we can recognize null
-            // as a value with a single byte.
-            // Will be overridden during ViewWhereExpressionVisitor 
-            columnValues[ref.getColumn().getPosition()] = QueryConstants.SEPARATOR_BYTE_ARRAY;
+            isColumnReferenced.set(ref.getColumn().getPosition());
             return ref;
         }
     }

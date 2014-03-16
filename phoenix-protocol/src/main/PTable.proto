@@ -43,6 +43,7 @@ message PColumn {
   required int32 sortOrder = 8;
   optional int32 arraySize = 9;
   optional bytes viewConstant = 10;
+  optional bool viewReferenced = 11;
 }
 
 message PTableStats {
