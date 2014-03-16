@@ -34,6 +34,7 @@ import org.apache.phoenix.parse.DivideParseNode;
 import org.apache.phoenix.parse.MultiplyParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -62,7 +63,12 @@ public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
     
     TrackOrderPreservingExpressionCompiler(StatementContext context, GroupBy groupBy, int expectedEntrySize, Ordering ordering) {
         super(context, groupBy);
-        positionOffset =  context.getResolver().getTables().get(0).getTable().getBucketNum() == null ? 0 : 1;
+        PTable table = context.getResolver().getTables().get(0).getTable();
+        boolean isSalted = table.getBucketNum() != null;
+        boolean isMultiTenant = context.getConnection().getTenantId() != null && table.isMultiTenant();
+        boolean isSharedViewIndex = table.getViewIndexId() != null;
+        // TODO: util for this offset, as it's computed in numerous places
+        positionOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
         entries = Lists.newArrayListWithExpectedSize(expectedEntrySize);
         this.ordering = ordering;
     }

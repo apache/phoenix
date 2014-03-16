@@ -31,6 +31,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FAMILY_NAME_INDEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE_BYTES;
@@ -191,6 +192,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
     private static final KeyValue SORT_ORDER_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, SORT_ORDER_BYTES);
     private static final KeyValue ARRAY_SIZE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, ARRAY_SIZE_BYTES);
     private static final KeyValue VIEW_CONSTANT_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VIEW_CONSTANT_BYTES);
+    private static final KeyValue IS_VIEW_REFERENCED_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, IS_VIEW_REFERENCED_BYTES);
     private static final List<KeyValue> COLUMN_KV_COLUMNS = Arrays.<KeyValue>asList(
             DECIMAL_DIGITS_KV,
             COLUMN_SIZE_KV,
@@ -200,7 +202,8 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             SORT_ORDER_KV,
             DATA_TABLE_NAME_KV, // included in both column and table row for metadata APIs
             ARRAY_SIZE_KV,
-            VIEW_CONSTANT_KV
+            VIEW_CONSTANT_KV,
+            IS_VIEW_REFERENCED_KV
             );
     static {
         Collections.sort(COLUMN_KV_COLUMNS, KeyValue.COMPARATOR);
@@ -213,6 +216,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
     private static final int SORT_ORDER_INDEX = COLUMN_KV_COLUMNS.indexOf(SORT_ORDER_KV);
     private static final int ARRAY_SIZE_INDEX = COLUMN_KV_COLUMNS.indexOf(ARRAY_SIZE_KV);
     private static final int VIEW_CONSTANT_INDEX = COLUMN_KV_COLUMNS.indexOf(VIEW_CONSTANT_KV);
+    private static final int IS_VIEW_REFERENCED_INDEX = COLUMN_KV_COLUMNS.indexOf(IS_VIEW_REFERENCED_KV);
     
     private static final int LINK_TYPE_INDEX = 0;
 
@@ -311,7 +315,9 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         Integer arraySize = arraySizeKv == null ? null : PDataType.INTEGER.getCodec().decodeInt(arraySizeKv.getBuffer(), arraySizeKv.getValueOffset(), SortOrder.getDefault());
         KeyValue viewConstantKv = colKeyValues[VIEW_CONSTANT_INDEX];
         byte[] viewConstant = viewConstantKv == null ? null : viewConstantKv.getValue();
-        PColumn column = new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable, position-1, sortOrder, arraySize, viewConstant);
+        KeyValue isViewReferencedKv = colKeyValues[IS_VIEW_REFERENCED_INDEX];
+        boolean isViewReferenced = isViewReferencedKv != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(isViewReferencedKv.getBuffer(), isViewReferencedKv.getValueOffset(), isViewReferencedKv.getValueLength()));
+        PColumn column = new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable, position-1, sortOrder, arraySize, viewConstant, isViewReferenced);
         columns.add(column);
     }
 
@@ -945,7 +951,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                                 } else {
                                     continue;
                                 }
-                                if (columnToDelete.getViewConstant() != null) { // Disallow deletion of column referenced in WHERE clause of view
+                                if (columnToDelete.isViewReferenced()) { // Disallow deletion of column referenced in WHERE clause of view
                                     return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), table, columnToDelete);
                                 }
                                 // Look for columnToDelete in any indexes. If found as PK column, get lock and drop the index. If found as covered column, delete from index (do this client side?).

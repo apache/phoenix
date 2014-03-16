@@ -35,8 +35,6 @@ import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
 
@@ -81,10 +79,10 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
         ColumnRef dataColRef = getResolver().resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
         PColumn dataCol = dataColRef.getColumn();
         TableRef dataTableRef = dataColRef.getTableRef();
-        PTable dataTable = dataTableRef.getTable();
-        // Rewrite view constants in updatable views as literals, as they won't be in the schema for
-        // an index on the view.
-        if (dataTable.getViewType() == ViewType.UPDATABLE && dataCol.getViewConstant() != null) {
+        // Rewrite view constants as literals, as they won't be in the schema for
+        // an index on the view. Our view may be READ_ONLY yet still have inherited
+        // view constants if based on an UPDATABLE view
+        if (dataCol.getViewConstant() != null) {
             byte[] viewConstant = dataCol.getViewConstant();
             // Ignore last byte, as it's only there so we can have a way to differentiate null
             // from the absence of a value.

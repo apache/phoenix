@@ -33,6 +33,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
@@ -62,6 +63,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Types;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -129,7 +131,6 @@ import com.google.common.primitives.Ints;
 
 public class MetaDataClient {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataClient.class);
-    public static final byte[][] EMPTY_VIEW_CONSTANTS = new byte[0][];
 
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
     private static final String CREATE_TABLE =
@@ -220,9 +221,10 @@ public class MetaDataClient {
         DATA_TABLE_NAME + "," + // write this both in the column and table rows for access by metadata APIs
         ARRAY_SIZE + "," +
         VIEW_CONSTANT + "," + 
+        IS_VIEW_REFERENCED + "," + 
         PK_NAME + "," +  // write this both in the column and table rows for access by metadata APIs
         KEY_SEQ +
-        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String UPDATE_COLUMN_POSITION =
         "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\" ( " + 
         TENANT_ID + "," +
@@ -356,11 +358,12 @@ public class MetaDataClient {
             colUpsert.setInt(13, column.getArraySize());
         }
         colUpsert.setBytes(14, column.getViewConstant());
-        colUpsert.setString(15, pkName);
+        colUpsert.setBoolean(15, column.isViewReferenced());
+        colUpsert.setString(16, pkName);
         if (keySeq == null) {
-            colUpsert.setNull(16, Types.SMALLINT);
+            colUpsert.setNull(17, Types.SMALLINT);
         } else {
-            colUpsert.setShort(16, keySeq);
+            colUpsert.setShort(17, keySeq);
         }
         colUpsert.execute();
     }
@@ -399,15 +402,15 @@ public class MetaDataClient {
             }
             
             PColumn column = new PColumnImpl(PNameFactory.newName(columnName), familyName, def.getDataType(),
-                    def.getMaxLength(), def.getScale(), def.isNull(), position, sortOrder, def.getArraySize(), null);
+                    def.getMaxLength(), def.getScale(), def.isNull(), position, sortOrder, def.getArraySize(), null, false);
             return column;
         } catch (IllegalArgumentException e) { // Based on precondition check in constructor
             throw new SQLException(e);
         }
     }
 
-    public MutationState createTable(CreateTableStatement statement, byte[][] splits, PTable parent, String viewStatement, ViewType viewType, byte[][] viewColumnConstants) throws SQLException {
-        PTable table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewColumnConstants, null);
+    public MutationState createTable(CreateTableStatement statement, byte[][] splits, PTable parent, String viewStatement, ViewType viewType, byte[][] viewColumnConstants, BitSet isViewColumnReferenced) throws SQLException {
+        PTable table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewColumnConstants, isViewColumnReferenced, null);
         if (table == null || table.getType() == PTableType.VIEW) {
             return new MutationState(0,connection);
         }
@@ -564,14 +567,13 @@ public class MetaDataClient {
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, SortOrder.getDefault()));
                     columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), false, null, null, false, SortOrder.getDefault()));
                 }
-                boolean isUpdatableView = dataTable.getViewType() == ViewType.UPDATABLE;
                 // First columns are the indexed ones
                 for (Pair<ColumnName, SortOrder> pair : indexedPkColumns) {
                     ColumnName colName = pair.getFirst();
                     PColumn col = resolver.resolveColumn(null, colName.getFamilyName(), colName.getColumnName()).getColumn();
                     unusedPkColumns.remove(col);
                     // Ignore view constants for updatable views as we don't need these in the index
-                    if (!isUpdatableView || col.getViewConstant() == null) {
+                    if (col.getViewConstant() == null) {
                         PDataType dataType = IndexUtil.getIndexColumnDataType(col);
                         colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
                         allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, pair.getSecond()));
@@ -584,7 +586,7 @@ public class MetaDataClient {
                     for (PColumn col : unusedPkColumns) {
                         // Don't add columns with constant values from updatable views, as
                         // we don't need these in the index
-                        if (!isUpdatableView || col.getViewConstant() == null) {
+                        if (col.getViewConstant() == null) {
                             ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
                             allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, col.getSortOrder()));
                             PDataType dataType = IndexUtil.getIndexColumnDataType(col);
@@ -607,7 +609,7 @@ public class MetaDataClient {
                         if (pk.contains(colName)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_EXIST_IN_DEF).build().buildException();
                         }
-                        if (!SchemaUtil.isPKColumn(col) && (!isUpdatableView || col.getViewConstant() == null)) {
+                        if (!SchemaUtil.isPKColumn(col) && col.getViewConstant() == null) {
                             // Need to re-create ColumnName, since the above one won't have the column family name
                             colName = ColumnName.caseSensitiveColumnName(col.getFamilyName().getString(), IndexUtil.getIndexColumnName(col));
                             columnDefs.add(FACTORY.columnDef(colName, col.getDataType().getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, col.getSortOrder()));
@@ -646,7 +648,7 @@ public class MetaDataClient {
                     statement.getProps().put("", new Pair<String,Object>(DEFAULT_COLUMN_FAMILY_NAME,dataTable.getDefaultFamilyName().getString()));
                 }
                 CreateTableStatement tableStatement = FACTORY.createTable(indexTableName, statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX, statement.ifNotExists(), null, null, statement.getBindCount());
-                table = createTableInternal(tableStatement, splits, dataTable, null, null, EMPTY_VIEW_CONSTANTS, viewIndexId);
+                table = createTableInternal(tableStatement, splits, dataTable, null, null, null, null, viewIndexId);
                 break;
             } catch (ConcurrentTableMutationException e) { // Can happen if parent data table changes while above is in progress
                 if (retry) {
@@ -714,7 +716,7 @@ public class MetaDataClient {
         return null;
     }
     
-    private PTable createTableInternal(CreateTableStatement statement, byte[][] splits, final PTable parent, String viewStatement, ViewType viewType, byte[][] viewColumnConstants, Short viewIndexId) throws SQLException {
+    private PTable createTableInternal(CreateTableStatement statement, byte[][] splits, final PTable parent, String viewStatement, ViewType viewType, final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, Short viewIndexId) throws SQLException {
         final PTableType tableType = statement.getTableType();
         boolean wasAutoCommit = connection.getAutoCommit();
         connection.rollback();
@@ -1065,16 +1067,28 @@ public class MetaDataClient {
             short nextKeySeq = 0;
             for (int i = 0; i < columns.size(); i++) {
                 PColumn column = columns.get(i);
-                int columnPosition = column.getPosition();
-                final byte[] viewConstant = columnPosition < viewColumnConstants.length ? viewColumnConstants[columnPosition] : null;
+                final int columnPosition = column.getPosition();
                 // For client-side cache, we need to update the column
-                if (viewConstant != null) {
-                    columns.set(i, column = new DelegateColumn(column) {
-                        @Override
-                        public byte[] getViewConstant() {
-                            return viewConstant;
-                        }
-                    });
+                if (isViewColumnReferenced != null) {
+                    if (viewColumnConstants != null && columnPosition < viewColumnConstants.length) {
+                        columns.set(i, column = new DelegateColumn(column) {
+                            @Override
+                            public byte[] getViewConstant() {
+                                return viewColumnConstants[columnPosition];
+                            }
+                            @Override
+                            public boolean isViewReferenced() {
+                                return isViewColumnReferenced.get(columnPosition);
+                            }
+                        });
+                    } else {
+                        columns.set(i, column = new DelegateColumn(column) {
+                            @Override
+                            public boolean isViewReferenced() {
+                                return isViewColumnReferenced.get(columnPosition);
+                            }
+                        });
+                    }
                 }
                 Short keySeq = SchemaUtil.isPKColumn(column) ? ++nextKeySeq : null;
                 addColumnMutation(schemaName, tableName, column, colUpsert, parentTableName, pkName, keySeq);

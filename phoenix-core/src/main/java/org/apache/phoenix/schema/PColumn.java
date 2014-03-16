@@ -49,5 +49,7 @@ public interface PColumn extends PDatum, Writable {
     
     byte[] getViewConstant();
     
+    boolean isViewReferenced();
+    
     int getEstimatedSize();
 }

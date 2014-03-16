@@ -47,6 +47,7 @@ import org.apache.phoenix.parse.BetweenParseNode;
 import org.apache.phoenix.parse.BindTableNode;
 import org.apache.phoenix.parse.CaseParseNode;
 import org.apache.phoenix.parse.CastParseNode;
+import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.ComparisonParseNode;
 import org.apache.phoenix.parse.ConcreteTableNode;
@@ -59,7 +60,6 @@ import org.apache.phoenix.parse.InListParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
 import org.apache.phoenix.parse.JoinTableNode;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
-import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.LikeParseNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.NotParseNode;
@@ -403,7 +403,7 @@ public class JoinCompiler {
         	PName name = PNameFactory.newName(aliasedName);
     		PColumnImpl column = new PColumnImpl(name, familyName, sourceColumn.getDataType(), 
     				sourceColumn.getMaxLength(), sourceColumn.getScale(), sourceColumn.isNullable(), 
-    				position, sourceColumn.getSortOrder(), sourceColumn.getArraySize(), sourceColumn.getViewConstant());
+    				position, sourceColumn.getSortOrder(), sourceColumn.getArraySize(), sourceColumn.getViewConstant(), sourceColumn.isViewReferenced());
         	Expression sourceExpression = new ColumnRef(sourceTable, sourceColumn.getPosition()).newColumnExpression();
         	projectedColumns.add(column);
         	sourceExpressions.add(sourceExpression);
@@ -1163,7 +1163,7 @@ public class JoinCompiler {
     			PColumnImpl column = new PColumnImpl(c.getName(), 
     					PNameFactory.newName(ScanProjector.VALUE_COLUMN_FAMILY), c.getDataType(), 
     					c.getMaxLength(), c.getScale(), innerJoin ? c.isNullable() : true, position++, 
-    					c.getSortOrder(), c.getArraySize(), c.getViewConstant());
+    					c.getSortOrder(), c.getArraySize(), c.getViewConstant(), c.isViewReferenced());
     			merged.add(column);
     		}
     	}

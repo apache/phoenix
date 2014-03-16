@@ -200,4 +200,13 @@ public class IndexUtil {
     public static boolean isDataPKColumn(PColumn column) {
         return column.getName().getString().startsWith(INDEX_COLUMN_NAME_SEP);
     }
+    
+    public static boolean getViewConstantValue(PColumn column, ImmutableBytesWritable ptr) {
+        byte[] value = column.getViewConstant();
+        if (value != null) {
+            ptr.set(value, 0, value.length-1);
+            return true;
+        }
+        return false;
+    }
 }

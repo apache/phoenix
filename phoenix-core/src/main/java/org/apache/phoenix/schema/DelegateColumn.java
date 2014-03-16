@@ -78,4 +78,9 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
     public int getEstimatedSize() {
         return SizedUtil.OBJECT_SIZE + getDelegate().getEstimatedSize();
     }
+
+    @Override
+    public boolean isViewReferenced() {
+        return getDelegate().isViewReferenced();
+    }
 }

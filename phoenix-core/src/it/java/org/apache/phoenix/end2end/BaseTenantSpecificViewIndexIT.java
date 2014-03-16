@@ -54,7 +54,7 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
     }
     
     protected void testUpdatableViewsWithSameNameDifferentTenants(Integer saltBuckets) throws Exception {
-        createBaseTable("t2", saltBuckets);
+        createBaseTable("t", saltBuckets);
         Connection conn1 = createTenantConnection(TENANT1_ID);
         Connection conn2 = createTenantConnection(TENANT2_ID);
         try {
@@ -62,8 +62,8 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
             String prefixForTenant2Data = "TII";
             
             // tenant views with same name for two different tables
-            createAndPopulateTenantView(conn1, TENANT1_ID, "t2", prefixForTenant1Data);
-            createAndPopulateTenantView(conn2, TENANT2_ID, "t2", prefixForTenant2Data);
+            createAndPopulateTenantView(conn1, TENANT1_ID, "t", prefixForTenant1Data);
+            createAndPopulateTenantView(conn2, TENANT2_ID, "t", prefixForTenant2Data);
             
             createAndVerifyIndex(conn1, saltBuckets, TENANT1_ID, prefixForTenant1Data);
             createAndVerifyIndex(conn2, saltBuckets, TENANT2_ID, prefixForTenant2Data);
@@ -104,8 +104,8 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
         conn.commit();
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT k1, k2, v2 FROM v WHERE v2='" + valuePrefix + "v2-1'");
         assertEquals(saltBuckets == null ? 
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER I ['" + tenantId + "',-32768,'" + valuePrefix + "v2-1']" :
-                "CLIENT PARALLEL 4-WAY SKIP SCAN ON 3 KEYS OVER I [0,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1'] - [2,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1']\n" + 
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T ['" + tenantId + "',-32768,'" + valuePrefix + "v2-1']" :
+                "CLIENT PARALLEL 4-WAY SKIP SCAN ON 3 KEYS OVER _IDX_T [0,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1'] - [2,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1']\n" + 
                 "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
     }
     

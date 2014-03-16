@@ -44,6 +44,7 @@ public class PColumnImpl implements PColumn {
     private SortOrder sortOrder;
     private Integer arraySize;
     private byte[] viewConstant;
+    private boolean isViewReferenced;
 
     public PColumnImpl() {
     }
@@ -55,13 +56,13 @@ public class PColumnImpl implements PColumn {
                        Integer scale,
                        boolean nullable,
                        int position,
-                       SortOrder sortOrder, Integer arrSize, byte[] viewConstant) {
-        init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize, viewConstant);
+                       SortOrder sortOrder, Integer arrSize, byte[] viewConstant, boolean isViewReferenced) {
+        init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize, viewConstant, isViewReferenced);
     }
 
     public PColumnImpl(PColumn column, int position) {
         this(column.getName(), column.getFamilyName(), column.getDataType(), column.getMaxLength(),
-                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), column.getViewConstant());
+                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced());
     }
 
     private void init(PName name,
@@ -73,7 +74,7 @@ public class PColumnImpl implements PColumn {
             int position,
             SortOrder sortOrder,
             Integer arrSize,
-            byte[] viewConstant) {
+            byte[] viewConstant, boolean isViewReferenced) {
     	Preconditions.checkNotNull(sortOrder);
         this.dataType = dataType;
         if (familyName == null) {
@@ -94,6 +95,7 @@ public class PColumnImpl implements PColumn {
         this.sortOrder = sortOrder;
         this.arraySize = arrSize;
         this.viewConstant = viewConstant;
+        this.isViewReferenced = isViewReferenced;
     }
 
     @Override
@@ -168,8 +170,9 @@ public class PColumnImpl implements PColumn {
         }
         SortOrder sortOrder = SortOrder.fromSystemValue(WritableUtils.readVInt(input));
         int arrSize = WritableUtils.readVInt(input);
+        boolean isViewReferenced = input.readBoolean();
         init(columnName, familyName, dataType, maxLength == NO_MAXLENGTH ? null : maxLength,
-                scale == NO_SCALE ? null : scale, nullable, position, sortOrder, arrSize == -1 ? null : arrSize, viewConstant);
+                scale == NO_SCALE ? null : scale, nullable, position, sortOrder, arrSize == -1 ? null : arrSize, viewConstant, isViewReferenced);
     }
 
     @Override
@@ -187,6 +190,7 @@ public class PColumnImpl implements PColumn {
         }
         WritableUtils.writeVInt(output, sortOrder.getSystemValue());
         WritableUtils.writeVInt(output, arraySize == null ? -1 : arraySize);
+        output.writeBoolean(isViewReferenced);
     }
     
     @Override
@@ -221,5 +225,10 @@ public class PColumnImpl implements PColumn {
     @Override
     public byte[] getViewConstant() {
         return viewConstant;
+    }
+
+    @Override
+    public boolean isViewReferenced() {
+        return isViewReferenced;
     }
 }
