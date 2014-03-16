@@ -67,7 +67,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 }
             });
         } catch (SQLException e) {
-            throw new IllegalStateException("Untable to register " + PhoenixDriver.class.getName() + ": "+ e.getMessage());
+            throw new IllegalStateException("Unable to register " + PhoenixDriver.class.getName() + ": "+ e.getMessage());
         }
     }
     // One entry per cluster here
@@ -79,10 +79,13 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     }
 
     private volatile QueryServices services;
+    private volatile boolean closed = false;
 
     @Override
     public QueryServices getQueryServices() {
-    	// Lazy initialize QueryServices so that we only attempt to create an HBase Configuration
+        checkClosed();
+
+        // Lazy initialize QueryServices so that we only attempt to create an HBase Configuration
     	// object upon the first attempt to connect to any cluster. Otherwise, an attempt will be
     	// made at driver initialization time which is too early for some systems.
     	QueryServices result = services;
@@ -105,6 +108,8 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
 
     @Override
     protected ConnectionQueryServices getConnectionQueryServices(String url, Properties info) throws SQLException {
+        checkClosed();
+
         ConnectionInfo connInfo = ConnectionInfo.create(url);
         ConnectionInfo normalizedConnInfo = connInfo.normalize(getQueryServices().getProps());
         ConnectionQueryServices connectionQueryServices = connectionQueryServicesMap.get(normalizedConnInfo);
@@ -123,20 +128,31 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
         return connectionQueryServices;
     }
 
+    private void checkClosed() {
+        if (closed) {
+            throw new IllegalStateException("The Phoenix jdbc driver has been closed.");
+        }
+    }
+
     @Override
-    public void close() throws SQLException {
+    public synchronized void close() throws SQLException {
+        if (closed) {
+            return;
+        }
+        closed = true;
         Collection<ConnectionQueryServices> connectionQueryServices = connectionQueryServicesMap.values();
-            if (!connectionQueryServices.isEmpty()) {
+        if (!connectionQueryServices.isEmpty()) {
+            try {
                 try {
-                    try {
-                        SQLCloseables.closeAll(connectionQueryServices);
-                    } finally {
-                        // We know there's a services object if any connections were made
-                        services.getExecutor().shutdownNow();
-                    }
+                    SQLCloseables.closeAll(connectionQueryServices);
                 } finally {
-                    connectionQueryServices.clear();            
+                    // We know there's a services object if any connections were made
+                    services.getExecutor().shutdownNow();
                 }
+            } finally {
+                connectionQueryServices.clear();
             }
+        }
+        services = null;
     }
 }
