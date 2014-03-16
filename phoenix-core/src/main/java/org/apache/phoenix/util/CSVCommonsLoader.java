@@ -19,6 +19,7 @@ package org.apache.phoenix.util;
 
 import java.io.File;
 import java.io.Reader;
+import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -72,7 +73,6 @@ public class CSVCommonsLoader {
             put("9",'\u0009');}};
 
     private final String arrayElementSeparator;
-    private int unfoundColumnCount;
 
     public enum PhoenixHeaderSource {
         FROM_TABLE,
@@ -269,21 +269,26 @@ public class CSVCommonsLoader {
         default:
             throw new IllegalStateException("parser has unknown column source.");
         }
-        return generateColumnInfo(columns);
+        return generateColumnInfo(conn, tableName, columns, isStrict);
     }
 
     /**
-     * Get array of ColumnInfos that contain Column Name and its associated
-     * PDataType
+     * Get list of ColumnInfos that contain Column Name and its associated
+     * PDataType for an import. The supplied list of columns can be null -- if it is non-null,
+     * it represents a user-supplied list of columns to be imported.
      *
-     * @param columns
-     * @return
-     * @throws SQLException
+     * @param conn Phoenix connection from which metadata will be read
+     * @param tableName Phoenix table name whose columns are to be checked. Can include a schema
+     *                  name
+     * @param columns user-supplied list of import columns, can be null
+     * @param strict if true, an exception will be thrown if unknown columns are supplied
      */
-    private List<ColumnInfo> generateColumnInfo(List<String> columns)
+    public static List<ColumnInfo> generateColumnInfo(Connection conn,
+            String tableName, List<String> columns, boolean strict)
             throws SQLException {
         Map<String, Integer> columnNameToTypeMap = Maps.newLinkedHashMap();
         DatabaseMetaData dbmd = conn.getMetaData();
+        int unfoundColumnCount = 0;
         // TODO: escape wildcard characters here because we don't want that
         // behavior here
         String escapedTableName = StringUtil.escapeLike(tableName);
@@ -317,7 +322,7 @@ public class CSVCommonsLoader {
                 String columnName = columns.get(i).trim();
                 Integer sqlType = columnNameToTypeMap.get(columnName);
                 if (sqlType == null) {
-                    if (isStrict) {
+                    if (strict) {
                         throw new SQLExceptionInfo.Builder(
                                 SQLExceptionCode.COLUMN_NOT_FOUND)
                                 .setColumnName(columnName)
