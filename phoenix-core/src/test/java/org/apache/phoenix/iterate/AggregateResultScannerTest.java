@@ -115,6 +115,11 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
             public byte[] getViewConstant() {
                 return null;
             }
+            
+            @Override
+            public boolean isViewReferenced() {
+                return false;
+            }
         })), null);
         aggregationManager.setAggregators(new ClientAggregators(Collections.<SingleAggregateFunction>singletonList(func), 1));
         ResultIterators iterators = new ResultIterators() {

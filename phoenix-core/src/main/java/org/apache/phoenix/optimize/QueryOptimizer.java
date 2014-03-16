@@ -43,7 +43,6 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 
 import com.google.common.collect.Lists;
@@ -266,7 +265,7 @@ public class QueryOptimizer {
         
         int nViewConstants = 0;
         PTable dataTable = dataPlan.getTableRef().getTable();
-        if (dataTable.getViewType() == ViewType.UPDATABLE) {
+        if (dataTable.getType() == PTableType.VIEW) {
             for (PColumn column : dataTable.getColumns()) {
                 if (column.getViewConstant() != null) {
                     nViewConstants++;

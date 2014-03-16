@@ -191,6 +191,8 @@ public class PostDDLCompiler {
                             // as this just means the view is invalid. Continue on and try to perform
                             // any other Post DDL operations.
                             try {
+                                // Since dropping a VIEW does not affect the underlying data, we do
+                                // not need to pass through the view statement here.
                                 WhereCompiler.compile(context, select); // Push where clause into scan
                             } catch (ColumnFamilyNotFoundException e) {
                                 continue;

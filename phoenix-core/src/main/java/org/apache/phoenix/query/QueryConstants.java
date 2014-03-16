@@ -70,6 +70,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 
@@ -184,6 +185,7 @@ public interface QueryConstants {
             SORT_ORDER + " INTEGER," +
             ARRAY_SIZE + " INTEGER,\n" +
             VIEW_CONSTANT + " VARBINARY,\n" +
+            IS_VIEW_REFERENCED + " BOOLEAN,\n" +
             KEY_SEQ + " SMALLINT,\n" +
             // Link metadata (only set on rows linking table to index or view)
             LINK_TYPE + " UNSIGNED_TINYINT,\n" +

@@ -51,7 +51,6 @@ import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
@@ -245,10 +244,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
         int dataPosOffset = (isDataTableSalted ? 1 : 0) + (this.isMultiTenant ? 1 : 0);
         int nDataPKColumns = dataRowKeySchema.getFieldCount() - dataPosOffset;
-        // For indexes on updatable views, we need to remember which data columns are "constants"
+        // For indexes on views, we need to remember which data columns are "constants"
         // These are the values in a VIEW where clause. For these, we don't put them in the
         // index, as they're the same for every row in the index.
-        if (dataTable.getViewType() == ViewType.UPDATABLE) {
+        if (dataTable.getType() == PTableType.VIEW) {
             List<PColumn>dataPKColumns = dataTable.getPKColumns();
             for (int i = dataPosOffset; i < dataPKColumns.size(); i++) {
                 PColumn dataPKColumn = dataPKColumns.get(i);

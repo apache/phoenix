@@ -243,10 +243,9 @@ public class QueryCompiler {
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
+        ParseNode viewWhere = null;
         if (table.getViewStatement() != null) {
-            ParseNode viewNode = new SQLParser(table.getViewStatement()).parseQuery().getWhere();
-            // Push VIEW expression into select
-            select = select.combine(viewNode);
+            viewWhere = new SQLParser(table.getViewStatement()).parseQuery().getWhere();
         }
         Integer limit = LimitCompiler.compile(context, select);
 
@@ -258,7 +257,7 @@ public class QueryCompiler {
         // Don't pass groupBy when building where clause expression, because we do not want to wrap these
         // expressions as group by key expressions since they're pre, not post filtered.
         context.setResolver(FromCompiler.getResolverForQuery(select, connection));
-        WhereCompiler.compile(context, select);
+        WhereCompiler.compile(context, select, viewWhere);
         context.setResolver(resolver); // recover resolver
         OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit); 
         RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, targetColumns);
