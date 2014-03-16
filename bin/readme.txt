@@ -31,26 +31,20 @@ Usage: performance <zookeeper> <row count>
 Example: Generates and upserts 1000000 rows and time basic queries on this data
 ./performance.sh localhost 1000000
 
-csv-bulk-loader.sh
-==================
+CSV MapReduce Loader
+====================
 
-Usage: csv-bulk-loader <option value>
-Note: phoenix-[version].jar needs to be on Hadoop classpath on each node
+Usage: hadoop jar phoneix-[version]-mapreduce.jar <parameters>
 
-<option>  <value>
--i        CSV data file path in hdfs (mandatory)
--s        Phoenix schema name (mandatory if not default)
--t        Phoenix table name (mandatory)
--sql      Phoenix create table sql file path (mandatory)
--zk       Zookeeper IP:<port> (mandatory)
--mr       MapReduce Job Tracker IP:<port> (mandatory)
--hd       HDFS NameNode IP:<port> (mandatory)
--o        Output directory path in hdfs (optional)
--idx      Phoenix index table name (optional, not yet supported)
--error    Ignore error while reading rows from CSV? (1-YES | 0-NO, default-1) (optional)
--help     Print all options (optional)
-
-Example:
-./csv-bulk-loader.sh -i hdfs://server:9000/mydir/data.csv -s ns -t example -sql ~/Documents/createTable.sql -zk server:2181 -hd hdfs://server:9000 -mr server:9001
-
+ -a,--array-delimiter <arg>   Array element delimiter (optional)
+ -c,--import-columns <arg>    Comma-separated list of columns to be
+                              imported
+ -d,--delimiter <arg>         Input delimiter, defaults to comma
+ -g,--ignore-errors           Ignore input errors
+ -h,--help                    Show this help and quit
+ -i,--input <arg>             Input CSV path (mandatory)
+ -o,--output <arg>            Output path for temporary HFiles (optional)
+ -s,--schema <arg>            Phoenix schema name (optional)
+ -t,--table <arg>             Phoenix table name (mandatory)
+ -z,--zookeeper <arg>         Zookeeper quorum to connect to (optional)
 

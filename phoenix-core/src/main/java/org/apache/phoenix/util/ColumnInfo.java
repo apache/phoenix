@@ -10,16 +10,30 @@
 
 package org.apache.phoenix.util;
 
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
+import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PDataType;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * ColumnInfo used to store Column Name and its associated PDataType
  */
 public class ColumnInfo {
-    private String columnName;
-    private Integer sqlType;
 
-    public ColumnInfo(String columnName, Integer sqlType) {
+    /** Separator used for the toString representation */
+    private static final String STR_SEPARATOR = ":";
+
+    private final String columnName;
+    private final int sqlType;
+
+    public ColumnInfo(String columnName, int sqlType) {
+        Preconditions.checkNotNull(columnName, "columnName cannot be null");
+        Preconditions.checkArgument(!columnName.isEmpty(), "columnName cannot be empty");
         this.columnName = columnName;
         this.sqlType = sqlType;
     }
@@ -28,12 +42,58 @@ public class ColumnInfo {
         return columnName;
     }
 
-    public Integer getSqlType() {
+    public int getSqlType() {
         return sqlType;
+    }
+
+    public PDataType getPDataType() {
+        return PDataType.fromTypeId(sqlType);
     }
 
     @Override
     public String toString() {
-        return columnName + " " + PDataType.fromTypeId(sqlType).getSqlTypeName();
+        return columnName + STR_SEPARATOR + getPDataType().getSqlTypeName();
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        ColumnInfo that = (ColumnInfo) o;
+
+        if (sqlType != that.sqlType) return false;
+        if (!columnName.equals(that.columnName)) return false;
+
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = columnName.hashCode();
+        result = 31 * result + sqlType;
+        return result;
+    }
+
+    /**
+     * Instantiate a {@code ColumnInfo} from a string representation created by the {@link
+     * #toString()} method.
+     *
+     * @param stringRepresentation string representation of a ColumnInfo
+     * @return the corresponding ColumnInfo
+     * @throws java.lang.IllegalArgumentException if the given string representation cannot be
+     * parsed
+     */
+    public static ColumnInfo fromString(String stringRepresentation) {
+        List<String> components =
+                Lists.newArrayList(Splitter.on(STR_SEPARATOR).split(stringRepresentation));
+        if (components.size() != 2) {
+            throw new IllegalArgumentException("Unparseable string: " + stringRepresentation);
+        }
+
+        return new ColumnInfo(
+                components.get(0),
+                PDataType.fromSqlTypeName(components.get(1)).getSqlType());
+    }
+
 }

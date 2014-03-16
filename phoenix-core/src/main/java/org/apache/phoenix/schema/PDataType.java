@@ -6965,7 +6965,7 @@ public enum PDataType {
 			}
 		}
 	}
-	public static PDataType fromTypeId(Integer typeId) {
+	public static PDataType fromTypeId(int typeId) {
 		int offset = typeId - SQL_TYPE_OFFSET;
 		if (offset >= 0 && offset < SQL_TYPE_TO_PCOLUMN_DATA_TYPE.length) {
 			PDataType type = SQL_TYPE_TO_PCOLUMN_DATA_TYPE[offset];
