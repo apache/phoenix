@@ -1005,7 +1005,28 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertTrue(e.getErrorCode() == SQLExceptionCode.TYPE_MISMATCH.getErrorCode());
         }  
     }
-    
+
+    @Test
+    public void testCastingWithLengthInSelect() throws Exception {
+        String query = "SELECT CAST (b_string AS VARCHAR(10)) FROM aTable";
+        List<Object> binds = Collections.emptyList();
+        compileQuery(query, binds);
+    }
+
+    @Test
+    public void testCastingWithLengthInWhere() throws Exception {
+        String query = "SELECT b_string FROM aTable WHERE CAST (b_string AS VARCHAR(10)) = 'b'";
+        List<Object> binds = Collections.emptyList();
+        compileQuery(query, binds);
+    }
+
+    @Test
+    public void testCastingWithLengthAndScaleInSelect() throws Exception {
+        String query = "SELECT CAST (x_decimal AS DECIMAL(10,5)) FROM aTable";
+        List<Object> binds = Collections.emptyList();
+        compileQuery(query, binds);
+    }
+
     @Test
     public void testUsingNonComparableDataTypesInRowValueConstructorFails() throws Exception {
         String query = "SELECT a_integer, x_integer FROM aTable WHERE (a_integer, x_integer) > (2, 'abc')";
