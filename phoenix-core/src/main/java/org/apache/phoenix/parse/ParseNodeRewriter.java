@@ -329,7 +329,7 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
             @Override
             public ParseNode createNode(List<ParseNode> children) {
-                return NODE_FACTORY.cast(children.get(0), node.getDataType());
+                return NODE_FACTORY.cast(children.get(0), node.getDataType(), node.getMaxLength(), node.getScale());
             }
         });
     }
