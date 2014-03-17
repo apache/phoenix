@@ -184,11 +184,13 @@ public class IndexUtil {
                     };
                     indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts));
                 } else {
-                    if (!maintainer.getIndexedColumns().isEmpty()) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_DELETE_IF_IMMUTABLE_INDEX).setSchemaName(table.getSchemaName().getString())
-                        .setTableName(table.getTableName().getString()).build().buildException();
+                    // We can only generate the correct Delete if we have no KV columns in our index.
+                    // Perhaps it'd be best to ignore Delete mutations all together here, as this
+                    // gets triggered typically for an initial population where Delete markers make
+                    // little sense.
+                    if (maintainer.getIndexedColumns().isEmpty()) {
+                        indexMutations.add(maintainer.buildDeleteMutation(kvBuilder, ptr, ts));
                     }
-                    indexMutations.add(maintainer.buildDeleteMutation(kvBuilder, ptr, ts));
                 }
             }
             return indexMutations;
