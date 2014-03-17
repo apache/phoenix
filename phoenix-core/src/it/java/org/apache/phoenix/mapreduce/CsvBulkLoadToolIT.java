@@ -17,7 +17,17 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import org.apache.hadoop.conf.Configuration;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import java.io.PrintWriter;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
+
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -27,17 +37,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.io.PrintWriter;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.Statement;
-
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 
 public class CsvBulkLoadToolIT {
 
@@ -49,7 +48,7 @@ public class CsvBulkLoadToolIT {
     @BeforeClass
     public static void setUp() throws Exception {
         hbaseTestUtil = new HBaseTestingUtility();
-        Configuration conf = hbaseTestUtil.getConfiguration();
+        hbaseTestUtil.getConfiguration();
         hbaseTestUtil.startMiniCluster();
         hbaseTestUtil.startMiniMapReduceCluster();
 

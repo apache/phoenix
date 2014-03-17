@@ -10,15 +10,13 @@
 
 package org.apache.phoenix.util;
 
-import com.google.common.base.Joiner;
+import java.util.List;
+
+import org.apache.phoenix.schema.PDataType;
+
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Lists;
-import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.PDataType;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * ColumnInfo used to store Column Name and its associated PDataType
