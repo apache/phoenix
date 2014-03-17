@@ -2022,6 +2022,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     Short keySeq = null;
                     Byte linkType = null;
                     if (columnName != null && familyName == null) { // pk column
+                        // TODO: remember columnName when keySeq == 1 so that we
+                        // can update NULLABLE is this is the sole PK column
                         keySeq = nextKeySeq++;
                         pkName = tablePkName;
                     }

@@ -68,33 +68,6 @@ public class IsNullIT extends BaseClientManagedTimeIT {
     }
     
     @Test
-    public void testIsNullAsSingleKey() throws Exception {
-        long ts = nextTimestamp();
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
-        conn.createStatement().execute("CREATE TABLE T(k VARCHAR PRIMARY KEY)");
-        conn.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
-        conn.createStatement().execute("UPSERT INTO T VALUES (null)");
-        conn.createStatement().execute("UPSERT INTO T VALUES ('a')");
-        conn.commit();
-        conn.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) FROM T");
-        assertTrue(rs.next());
-        assertEquals(2,rs.getInt(1));
-        rs = conn.createStatement().executeQuery("SELECT count(*) FROM T WHERE k = 'a' or k is null");
-        assertTrue(rs.next());
-        assertEquals(2,rs.getInt(1));
-        conn.close();
-    }
-    
-    @Test
     public void testIsNullInCompositeKey() throws Exception {
         long ts = nextTimestamp();
         Properties props = new Properties();

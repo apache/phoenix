@@ -460,6 +460,9 @@ public class PTableImpl implements PTable {
                     throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not be null");
                 }
             }
+            if (nValues == 0) { 
+                throw new ConstraintViolationException("Primary key may not be null ("+ name.getString() + ")");
+            }
             byte[] buf = os.getBuffer();
             int size = os.size();
             if (bucketNum != null) {

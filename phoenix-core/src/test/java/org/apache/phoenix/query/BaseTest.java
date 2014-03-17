@@ -186,7 +186,7 @@ public abstract class BaseTest {
                 "   (i1 integer not null, i2 integer not null\n" +
                 "    CONSTRAINT pk PRIMARY KEY (i1,i2))");
         builder.put(MDTEST_NAME,"create table " + MDTEST_NAME +
-                "   (id char(1) not null primary key,\n" +
+                "   (id char(1) primary key,\n" +
                 "    a.col1 integer,\n" +
                 "    b.col2 bigint,\n" +
                 "    b.col3 decimal,\n" +

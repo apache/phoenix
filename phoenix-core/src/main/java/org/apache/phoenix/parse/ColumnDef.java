@@ -38,7 +38,7 @@ import com.google.common.base.Preconditions;
 public class ColumnDef {
     private final ColumnName columnDefName;
     private PDataType dataType;
-    private final boolean isNull;
+    private final Boolean isNull;
     private final Integer maxLength;
     private final Integer scale;
     private final boolean isPK;
@@ -46,7 +46,7 @@ public class ColumnDef {
     private final boolean isArray;
     private final Integer arrSize;
  
-    ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, boolean isNull, Integer maxLength,
+    ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength,
     		            Integer scale, boolean isPK, SortOrder sortOrder) {
    	 try {
          Preconditions.checkNotNull(sortOrder);
@@ -128,7 +128,7 @@ public class ColumnDef {
          throw new ParseException(e);
      }
     }
-    ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isNull, Integer maxLength,
+    ColumnDef(ColumnName columnDefName, String sqlTypeName, Boolean isNull, Integer maxLength,
             Integer scale, boolean isPK, SortOrder sortOrder) {
     	this(columnDefName, sqlTypeName, false, 0, isNull, maxLength, scale, isPK, sortOrder);
     }
@@ -142,7 +142,13 @@ public class ColumnDef {
     }
 
     public boolean isNull() {
-        return isNull;
+        // null or Boolean.TRUE means NULL
+        // Boolean.FALSE means NOT NULL
+        return !Boolean.FALSE.equals(isNull);
+    }
+
+    public boolean isNullSet() {
+        return isNull != null;
     }
 
     public Integer getMaxLength() {
