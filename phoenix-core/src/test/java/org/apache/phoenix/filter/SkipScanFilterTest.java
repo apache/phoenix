@@ -354,6 +354,7 @@ public class SkipScanFilterTest extends TestCase {
             this.hint = hint;
         }
 
+        @SuppressWarnings("deprecation")
         @Override public void examine(SkipScanFilter skipper) throws IOException {
             KeyValue kv = KeyValue.createFirstOnRow(rowkey);
             skipper.reset();
@@ -375,6 +376,7 @@ public class SkipScanFilterTest extends TestCase {
             this.rowkey = Bytes.toBytes(rowkey);
         }
         
+        @SuppressWarnings("deprecation")
         @Override public void examine(SkipScanFilter skipper) throws IOException {
             KeyValue kv = KeyValue.createFirstOnRow(rowkey);
             skipper.reset();

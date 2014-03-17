@@ -45,15 +45,14 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 
 /**
@@ -80,6 +79,7 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
                 admin.deleteTable(HBASE_NATIVE_BYTES);
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
             }
+            @SuppressWarnings("deprecation")
             HTableDescriptor descriptor = new HTableDescriptor(HBASE_NATIVE_BYTES);
             HColumnDescriptor columnDescriptor =  new HColumnDescriptor(FAMILY_NAME);
             columnDescriptor.setKeepDeletedCells(true);
@@ -91,6 +91,7 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
         }
     }
     
+    @SuppressWarnings("deprecation")
     private static void initTableValues() throws Exception {
         ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES);
         HTableInterface hTable = services.getTable(SchemaUtil.getTableNameAsBytes(HBASE_NATIVE_SCHEMA_NAME, HBASE_NATIVE));
@@ -118,7 +119,6 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
             put.add(family, uintCol, ts-4, Bytes.toBytes(5000));
             put.add(family, ulongCol, ts-4, Bytes.toBytes(50000L));
             mutations.add(put);
-            @SuppressWarnings("deprecation") // FIXME: Remove when unintentionally deprecated method is fixed (HBASE-7870).
             // FIXME: the version of the Delete constructor without the lock args was introduced
             // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version
             // of the client.
@@ -266,6 +266,7 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
         }
     }
     
+    @SuppressWarnings("deprecation")
     @Test
     public void testNegativeCompareNegativeValue() throws Exception {
         String query = "SELECT string_key FROM HBASE_NATIVE WHERE uint_key > 100000";

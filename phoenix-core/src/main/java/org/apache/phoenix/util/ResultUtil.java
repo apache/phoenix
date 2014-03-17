@@ -71,6 +71,7 @@ public class ResultUtil {
         //key.set(getRawBytes(r), getKeyOffset(r), getKeyLength(r));
     }
     
+    @SuppressWarnings("deprecation")
     public static void getKey(KeyValue value, ImmutableBytesWritable key) {
         key.set(value.getBuffer(), value.getRowOffset(), value.getRowLength());
     }
@@ -118,6 +119,7 @@ public class ResultUtil {
         return Bytes.toShort(getRawBytes(r), getKeyOffset(r) - Bytes.SIZEOF_SHORT);
     }
     
+    @SuppressWarnings("deprecation")
     static byte[] getRawBytes(Result r) {
         KeyValue firstKV = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(r.rawCells()[0]);
         return firstKV.getBuffer();
@@ -157,6 +159,7 @@ public class ResultUtil {
      * @param r
      * @param searchTerm
      */
+    @SuppressWarnings("deprecation")
     public static KeyValue getColumnLatest(Result r, KeyValue searchTerm) {
         KeyValue [] kvs = r.raw(); // side effect possibly.
         if (kvs == null || kvs.length == 0) {

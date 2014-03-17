@@ -115,7 +115,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
               m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
           }
       }
-      @SuppressWarnings("unchecked")
       Mutation[] mutationArray = new Mutation[mutations.size()];
       // TODO: should we use the one that is all or none?
       region.batchMutate(mutations.toArray(mutationArray));

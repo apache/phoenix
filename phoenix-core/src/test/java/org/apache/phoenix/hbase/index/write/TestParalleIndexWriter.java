@@ -71,7 +71,7 @@ public class TestParalleIndexWriter {
     Mockito.verifyZeroInteractions(mockAbort, mockStop);
   }
 
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({ "unchecked", "deprecation" })
   @Test
   public void testSynchronouslyCompletesAllWrites() throws Exception {
     LOG.info("Starting " + test.getTableNameString());

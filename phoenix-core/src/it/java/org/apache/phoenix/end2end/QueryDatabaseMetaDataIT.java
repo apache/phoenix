@@ -566,6 +566,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
         }
         
+        @SuppressWarnings("deprecation")
         HTableDescriptor descriptor = new HTableDescriptor(htableName);
         for (byte[] familyName : familyNames) {
             HColumnDescriptor columnDescriptor = new HColumnDescriptor(familyName);
@@ -629,6 +630,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         conn2.close();
     }
     
+    @SuppressWarnings("deprecation")
     @Test
     public void testCreateViewOnExistingTable() throws Exception {
         PhoenixConnection pconn = DriverManager.getConnection(PHOENIX_JDBC_URL, TEST_PROPERTIES).unwrap(PhoenixConnection.class);

@@ -83,7 +83,7 @@ public class TestIndexWriter {
    * all index writes for a mutation/batch are completed.
    * @throws Exception on failure
    */
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({ "unchecked", "deprecation" })
   @Test
   public void testSynchronouslyCompletesAllWrites() throws Exception {
     LOG.info("Starting " + testName.getTableNameString());
@@ -139,7 +139,7 @@ public class TestIndexWriter {
    * the batch write, so we should never see a failure here.
    * @throws Exception on failure
    */
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({ "unchecked", "deprecation" })
   @Test
   public void testFailureOnRunningUpdateAbortsPending() throws Exception {
     Abortable abort = new StubAbortable();
@@ -215,7 +215,7 @@ public class TestIndexWriter {
    * that we correctly end the task
    * @throws Exception on failure
    */
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({ "unchecked", "deprecation" })
   @Test
   public void testShutdownInterruptsAsExpected() throws Exception {
     Stoppable stop = Mockito.mock(Stoppable.class);

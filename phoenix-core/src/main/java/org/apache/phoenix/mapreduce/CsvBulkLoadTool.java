@@ -17,9 +17,13 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Splitter;
-import com.google.common.collect.Lists;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.UUID;
+
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -53,16 +57,14 @@ import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.List;
-import java.util.UUID;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
 
 /**
  * Base tool for running MapReduce-based ingests of data.
  */
+@SuppressWarnings("deprecation")
 public class CsvBulkLoadTool extends Configured implements Tool {
 
     private static final Logger LOG = LoggerFactory.getLogger(CsvBulkLoadTool.class);
@@ -194,7 +196,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         job.setInputFormatClass(TextInputFormat.class);
         FileInputFormat.addInputPath(job, inputPath);
 
-        FileSystem fs = FileSystem.get(getConf());
+        FileSystem.get(getConf());
         FileOutputFormat.setOutputPath(job, outputPath);
 
         job.setMapperClass(CsvToKeyValueMapper.class);

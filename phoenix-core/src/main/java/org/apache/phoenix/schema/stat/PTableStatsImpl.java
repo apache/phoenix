@@ -17,14 +17,9 @@
  */
 package org.apache.phoenix.schema.stat;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Map;
-import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.io.WritableUtils;
 
 import com.google.common.collect.ImmutableMap;
 

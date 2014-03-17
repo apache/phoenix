@@ -55,13 +55,6 @@ import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
-import org.junit.Assert;
-import org.junit.Ignore;
-import org.junit.Rule;
-import org.junit.Test;
-
-import com.google.common.collect.Multimap;
-
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.TableName;
@@ -73,6 +66,12 @@ import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
+import org.junit.Assert;
+import org.junit.Ignore;
+import org.junit.Rule;
+import org.junit.Test;
+
+import com.google.common.collect.Multimap;
 
 /**
  * When a regionserver crashes, its WAL is split and then replayed to the server. If the index
@@ -140,7 +139,8 @@ public class TestWALRecoveryCaching {
   }
 
   //TODO: Jesse to fix
-  @Ignore("Configuration issue - valid test, just needs fixing")
+  @SuppressWarnings("deprecation")
+@Ignore("Configuration issue - valid test, just needs fixing")
   @Test
   public void testWaitsOnIndexRegionToReload() throws Exception {
     HBaseTestingUtility util = new HBaseTestingUtility();

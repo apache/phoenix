@@ -43,19 +43,9 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.ImmutableSet;
-import com.google.protobuf.ByteString;
-import com.google.protobuf.HBaseZeroCopyByteString;
-
 import org.apache.phoenix.compile.ScanRanges;
-import org.apache.phoenix.coprocessor.ServerCachingProtocol;
 import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.ServerCacheFactoryProtos;
-import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.AddServerCacheRequest;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.AddServerCacheResponse;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.RemoveServerCacheRequest;
@@ -71,6 +61,9 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
+
+import com.google.common.collect.ImmutableSet;
+import com.google.protobuf.HBaseZeroCopyByteString;
 
 /**
  * 

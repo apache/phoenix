@@ -17,8 +17,12 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import java.io.IOException;
+import java.util.List;
+
 import org.apache.commons.csv.CSVRecord;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
@@ -27,12 +31,8 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ColumnInfo;
 import org.junit.Test;
 
-import java.io.IOException;
-import java.util.List;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 
 public class CsvToKeyValueMapperTest {
 

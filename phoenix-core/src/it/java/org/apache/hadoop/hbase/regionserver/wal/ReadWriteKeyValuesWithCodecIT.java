@@ -20,7 +20,6 @@ package org.apache.hadoop.hbase.regionserver.wal;
 
 import static org.junit.Assert.assertEquals;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,11 +39,10 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.codec.Codec;
 import org.apache.hadoop.hbase.io.util.LRUDictionary;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 /**
  * Simple test to read/write simple files via our custom {@link WALEditCodec} to ensure properly
