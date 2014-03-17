@@ -243,6 +243,7 @@ public class PColumnImpl implements PColumn {
         if (column.getViewConstant() != null) {
             builder.setViewConstant(HBaseZeroCopyByteString.wrap(column.getViewConstant()));
         }
+        builder.setViewReferenced(column.isViewReferenced());
         return builder.build();
     }
 }
