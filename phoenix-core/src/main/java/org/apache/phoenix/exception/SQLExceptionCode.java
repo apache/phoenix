@@ -145,6 +145,7 @@ public enum SQLExceptionCode {
      * 
      * For the following exceptions, use errorcode 10.
      */
+    SINGLE_PK_MAY_NOT_BE_NULL(1000, "42I00", "Single column primary key may not be NULL."),
     COLUMN_FAMILY_NOT_FOUND(1001, "42I01", "Undefined column family.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {

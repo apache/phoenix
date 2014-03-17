@@ -368,7 +368,7 @@ public class MetaDataClient {
         colUpsert.execute();
     }
 
-    private PColumn newColumn(int position, ColumnDef def, PrimaryKeyConstraint pkConstraint, String defaultColumnFamily) throws SQLException {
+    private PColumn newColumn(int position, ColumnDef def, PrimaryKeyConstraint pkConstraint, String defaultColumnFamily, boolean addingToPK) throws SQLException {
         try {
             ColumnName columnDefName = def.getColumnDefName();
             SortOrder sortOrder = def.getSortOrder();
@@ -387,6 +387,7 @@ public class MetaDataClient {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_ALREADY_EXISTS)
                     .setColumnName(columnName).build().buildException();
             }
+            boolean isNull = def.isNull();
             if (def.getColumnDefName().getFamilyName() != null) {
                 String family = def.getColumnDefName().getFamilyName();
                 if (isPK) {
@@ -401,8 +402,16 @@ public class MetaDataClient {
                 familyName = PNameFactory.newName(defaultColumnFamily == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : defaultColumnFamily);
             }
             
+            if (isPK && !addingToPK && pkConstraint.getColumnNames().size() <= 1) {
+                if (def.isNull() && def.isNullSet()) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.SINGLE_PK_MAY_NOT_BE_NULL)
+                    .setColumnName(columnName).build().buildException();
+                }
+                isNull = false;
+            }
+            
             PColumn column = new PColumnImpl(PNameFactory.newName(columnName), familyName, def.getDataType(),
-                    def.getMaxLength(), def.getScale(), def.isNull(), position, sortOrder, def.getArraySize(), null, false);
+                    def.getMaxLength(), def.getScale(), isNull, position, sortOrder, def.getArraySize(), null, false);
             return column;
         } catch (IllegalArgumentException e) { // Based on precondition check in constructor
             throw new SQLException(e);
@@ -932,7 +941,7 @@ public class MetaDataClient {
                     }
                     isPK = true;
                 }
-                PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName);
+                PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName, false);
                 if (SchemaUtil.isPKColumn(column)) {
                     // TODO: remove this constraint?
                     if (pkColumnsIterator.hasNext() && !column.getName().getString().equals(pkColumnsIterator.next().getFirst().getColumnName())) {
@@ -1512,7 +1521,7 @@ public class MetaDataClient {
                             }
                         }                        
                         throwIfAlteringViewPK(colDef, table);
-                        PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString());
+                        PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true);
                         columns.add(column);
                         String pkName = null;
                         Short keySeq = null;
@@ -1537,7 +1546,7 @@ public class MetaDataClient {
                                     PDataType indexColDataType = IndexUtil.getIndexColumnDataType(colDef.isNull(), colDef.getDataType());
                                     ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, colDef.getColumnDefName().getColumnName()));
                                     ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder());
-                                    PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null);
+                                    PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null, true);
                                     addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString(), index.getPKName() == null ? null : index.getPKName().getString(), ++nextIndexKeySeq);
                                 }
                             }

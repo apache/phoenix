@@ -51,6 +51,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.ByteUtil;
@@ -1330,6 +1331,38 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
         }
         conn.close();
+    }
+    
+    @Test
+    public void testInvalidPrimaryKeyDecl() throws Exception {
+        String[] queries = {
+                "CREATE TABLE t (k varchar null primary key)",
+                "CREATE TABLE t (k varchar null, constraint pk primary key (k))",
+        };
+        Connection conn = DriverManager.getConnection(getUrl());
+        for (String query : queries) {
+            try {
+                conn.createStatement().execute(query);
+                fail("Compilation should have failed since this is an invalid PRIMARY KEY declaration: " + query);
+            } catch (SQLException e) {
+                assertEquals(query, SQLExceptionCode.SINGLE_PK_MAY_NOT_BE_NULL.getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
+    
+    @Test
+    public void testInvalidNullCompositePrimaryKey() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 varchar, k2 varchar, constraint pk primary key(k1,k2))");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO t values(?,?)");
+        stmt.setString(1, "");
+        stmt.setString(2, "");
+        try {
+            stmt.execute();
+            fail();
+        } catch (ConstraintViolationException e) {
+            assertTrue(e.getMessage().contains("Primary key may not be null"));
+        }
     }
 
 }
