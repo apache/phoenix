@@ -35,6 +35,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HTable;
@@ -85,7 +86,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
     }
 
     /**
-     * Parses the commandline arguments, throws IllegalStateException if mandatory argumentsn are
+     * Parses the commandline arguments, throws IllegalStateException if mandatory arguments are
      * missing.
      *
      * @param args supplied command line arguments
@@ -104,7 +105,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         }
 
         if (cmdLine.hasOption(HELP_OPT.getOpt())) {
-            printHelpAndExit(options);
+            printHelpAndExit(options, 0);
         }
 
         if (!cmdLine.hasOption(TABLE_NAME_OPT.getOpt())) {
@@ -143,17 +144,19 @@ public class CsvBulkLoadTool extends Configured implements Tool {
 
     private void printHelpAndExit(String errorMessage, Options options) {
         System.err.println(errorMessage);
-        printHelpAndExit(options);
+        printHelpAndExit(options, 1);
     }
 
-    private void printHelpAndExit(Options options) {
+    private void printHelpAndExit(Options options, int exitCode) {
         HelpFormatter formatter = new HelpFormatter();
         formatter.printHelp("help", options);
-        System.exit(0);
+        System.exit(exitCode);
     }
 
     @Override
     public int run(String[] args) throws Exception {
+
+        HBaseConfiguration.addHbaseResources(getConf());
 
         CommandLine cmdLine = null;
         try {
@@ -171,7 +174,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         configureOptions(cmdLine, importColumns, getConf());
 
         try {
-            validateTable(conn,schemaName, tableName);
+            validateTable(conn, schemaName, tableName);
         } finally {
             conn.close();
         }
