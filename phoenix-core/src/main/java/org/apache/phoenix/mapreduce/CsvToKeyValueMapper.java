@@ -40,6 +40,7 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.csv.CsvUpsertExecutor;
@@ -194,7 +195,8 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
     @VisibleForTesting
     CsvUpsertExecutor buildUpsertExecutor(Configuration conf) {
         String tableName = conf.get(TABLE_NAME_CONFKEY);
-        String arraySeparator = conf.get(ARRAY_DELIMITER_CONFKEY);
+        String arraySeparator = conf.get(ARRAY_DELIMITER_CONFKEY,
+                                            CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);
         Preconditions.checkNotNull(tableName, "table name is not configured");
 
         List<ColumnInfo> columnInfoList = buildColumnInfoList(conf);
