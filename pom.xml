@@ -85,6 +85,7 @@
     <netty.version>3.6.6.Final</netty.version>
     <commons-codec.version>1.7</commons-codec.version>
     <htrace.version>2.04</htrace.version>
+    <collections.version>3.2.1</collections.version>
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
@@ -481,6 +482,11 @@
         <groupId>commons-codec</groupId>
         <artifactId>commons-codec</artifactId>
         <version>${commons-codec.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-collections</groupId>
+        <artifactId>commons-collections</artifactId>
+        <version>${collections.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
