@@ -109,7 +109,7 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
         // This is unnecessary and problematic in the case of a null value.
         // TODO: test case for this
         if (!isTopLevel() && indexColType != dataColType) {
-            indexColNode = FACTORY.cast(indexColNode, dataColType);
+            indexColNode = FACTORY.cast(indexColNode, dataColType, null, null);
         }
         return indexColNode;
     }

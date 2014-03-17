@@ -39,24 +39,22 @@ import org.apache.phoenix.util.SchemaUtil;
 public class CastParseNode extends UnaryParseNode {
 	
 	private final PDataType dt;
+    private final Integer maxLength;
+    private final Integer scale;
 	
-	CastParseNode(ParseNode expr, String dataType, boolean arr) {
-		super(expr);
-		if(arr == true) {
-		    PDataType baseType = PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(dataType));
-		    dt = PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE);
-		} else {
-		    dt = PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(dataType));
-		}
+	CastParseNode(ParseNode expr, String dataType, Integer maxLength, Integer scale, boolean arr) {
+        this(expr, PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(dataType)), maxLength, scale, arr);
 	}
 
-	CastParseNode(ParseNode expr, PDataType dataType, boolean arr) {
+	CastParseNode(ParseNode expr, PDataType dataType, Integer maxLength, Integer scale, boolean arr) {
         super(expr);
         if (arr == true) {
             dt = PDataType.fromTypeId(dataType.getSqlType() + PDataType.ARRAY_TYPE_BASE);
         } else {
             dt = dataType;
         }
+        this.maxLength = maxLength;
+        this.scale = scale;
 	}
 
 	@Override
@@ -72,7 +70,15 @@ public class CastParseNode extends UnaryParseNode {
 		return dt;
 	}
 
-	public static Expression convertToRoundExpressionIfNeeded(PDataType fromDataType, PDataType targetDataType, List<Expression> expressions) throws SQLException {
+    public Integer getMaxLength() {
+        return maxLength;
+    }
+
+    public Integer getScale() {
+        return scale;
+    }
+
+    public static Expression convertToRoundExpressionIfNeeded(PDataType fromDataType, PDataType targetDataType, List<Expression> expressions) throws SQLException {
 	    Expression firstChildExpr = expressions.get(0);
 	    if(fromDataType == targetDataType) {
 	        return firstChildExpr;

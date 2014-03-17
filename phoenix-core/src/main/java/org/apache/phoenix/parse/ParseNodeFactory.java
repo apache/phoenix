@@ -414,20 +414,20 @@ public class ParseNodeFactory {
         return new LiteralParseNode(value);
     }
 
-    public CastParseNode cast(ParseNode expression, String dataType) {
-        return new CastParseNode(expression, dataType, false);
+    public CastParseNode cast(ParseNode expression, String dataType, Integer maxLength, Integer scale) {
+        return new CastParseNode(expression, dataType, maxLength, scale, false);
     }
 
-    public CastParseNode cast(ParseNode expression, PDataType dataType) {
-        return new CastParseNode(expression, dataType, false);
+    public CastParseNode cast(ParseNode expression, PDataType dataType, Integer maxLength, Integer scale) {
+        return new CastParseNode(expression, dataType, maxLength, scale, false);
     }
 
-    public CastParseNode cast(ParseNode expression, PDataType dataType, boolean arr) {
-        return new CastParseNode(expression, dataType, arr);
+    public CastParseNode cast(ParseNode expression, PDataType dataType, Integer maxLength, Integer scale, boolean arr) {
+        return new CastParseNode(expression, dataType, maxLength, scale, arr);
     }
 
-    public CastParseNode cast(ParseNode expression, String dataType, boolean arr) {
-        return new CastParseNode(expression, dataType, arr);
+    public CastParseNode cast(ParseNode expression, String dataType, Integer maxLength, Integer scale, boolean arr) {
+        return new CastParseNode(expression, dataType, maxLength, scale, arr);
     }
     
     public ParseNode rowValueConstructor(List<ParseNode> l) {
