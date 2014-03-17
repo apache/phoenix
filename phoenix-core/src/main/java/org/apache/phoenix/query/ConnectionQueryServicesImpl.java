@@ -133,7 +133,14 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.JDBCUtil;
+import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1894,6 +1901,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     Short keySeq = null;
                     Byte linkType = null;
                     if (columnName != null && familyName == null) { // pk column
+                        // TODO: remember columnName when keySeq == 1 so that we
+                        // can update NULLABLE is this is the sole PK column
                         keySeq = nextKeySeq++;
                         pkName = tablePkName;
                     }
