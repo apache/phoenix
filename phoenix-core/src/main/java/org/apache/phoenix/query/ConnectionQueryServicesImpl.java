@@ -298,30 +298,46 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public void close() throws SQLException {
         SQLException sqlE = null;
         try {
-            try {
-                // Clear Phoenix metadata cache before closing HConnection
-                clearCache();
-            } finally {
-                // Should not be necessary, but at test time in particular
-                // there seems to be a memory leak and this can't hurt.
-                childServices.clear();
-                statsManager.clearStats();
-                latestMetaData = null;
-            }
+            // Attempt to return any unused sequences.
+            returnAllSequences(this.sequenceMap);
         } catch (SQLException e) {
             sqlE = e;
         } finally {
             try {
-                connection.close();
-            } catch (IOException e) {
+                // Clear any client-side caches.  
+                statsManager.clearStats();
+            } catch (SQLException e) {
                 if (sqlE == null) {
-                    sqlE = ServerUtil.parseServerException(e);
+                    sqlE = e;
                 } else {
-                    sqlE.setNextException(ServerUtil.parseServerException(e));
+                    sqlE.setNextException(e);
                 }
-                throw sqlE;
             } finally {
-                super.close();
+                try {
+                    childServices.clear();
+                    latestMetaData = null;
+                    connection.close();
+                } catch (IOException e) {
+                    if (sqlE == null) {
+                        sqlE = ServerUtil.parseServerException(e);
+                    } else {
+                        sqlE.setNextException(ServerUtil.parseServerException(e));
+                    }
+                } finally {
+                    try {
+                        super.close();
+                    } catch (SQLException e) {
+                        if (sqlE == null) {
+                            sqlE = e;
+                        } else {
+                            sqlE.setNextException(e);
+                        }
+                    } finally {
+                        if (sqlE != null) {
+                            throw sqlE;
+                        }
+                    }
+                }
             }
         }
     }    
