@@ -58,6 +58,7 @@ public class SingleKeyValueTuple extends BaseTuple {
         keyPtr.set(ptr.get(), ptr.getOffset(), ptr.getLength());
     }
     
+    @SuppressWarnings("deprecation")
     public void setKey(KeyValue keyValue) {
         if (keyValue == null) {
             throw new IllegalArgumentException();
@@ -98,6 +99,7 @@ public class SingleKeyValueTuple extends BaseTuple {
         return keyValue;
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public boolean getValue(byte[] family, byte[] qualifier,
             ImmutableBytesWritable ptr) {

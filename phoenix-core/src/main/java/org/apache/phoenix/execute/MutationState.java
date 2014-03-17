@@ -27,7 +27,6 @@ import java.util.Map.Entry;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -327,6 +326,7 @@ public class MutationState implements SQLCloseable {
         logger.debug("Sending " + mutations.size() + " mutations for " + Bytes.toString(htable.getTableName()) + " with " + keyValueCount + " key values of total size " + byteSize + " bytes");
     }
     
+    @SuppressWarnings("deprecation")
     public void commit() throws SQLException {
         int i = 0;
         byte[] tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();

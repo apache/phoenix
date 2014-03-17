@@ -30,7 +30,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
@@ -41,15 +40,14 @@ import org.apache.hadoop.hbase.regionserver.wal.HLog;
 import org.apache.hadoop.hbase.regionserver.wal.HLogFactory;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
+import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 
 public class TestPerRegionIndexWriteCache {
   private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
@@ -69,7 +67,8 @@ public class TestPerRegionIndexWriteCache {
   HRegion r1;
   HRegion r2;
 
-  @Before
+  @SuppressWarnings("deprecation")
+@Before
   public void setUp() throws Exception {
       FileSystem newFS = FileSystem.get(TEST_UTIL.getConfiguration());
       Path hbaseRootDir = TEST_UTIL.getDataTestDir();

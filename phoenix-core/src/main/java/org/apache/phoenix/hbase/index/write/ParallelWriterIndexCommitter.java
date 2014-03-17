@@ -140,6 +140,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
          * Do the actual write to the primary table. We don't need to worry about closing the table
          * because that is handled the {@link CachingHTableFactory}.
          */
+        @SuppressWarnings("deprecation")
         @Override
         public Void call() throws Exception {
           // this may have been queued, so another task infront of us may have failed, so we should

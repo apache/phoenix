@@ -217,6 +217,7 @@ public class Sequence {
         return currentValue;
     }
 
+    @SuppressWarnings("deprecation")
     public Increment newIncrement(long timestamp, Sequence.Action action) {
         Increment inc = new Increment(SchemaUtil.getSequenceKey(key.getTenantId(), key.getSchemaName(), key.getSequenceName()));
         // It doesn't matter what we set the amount too - we always use the values we get

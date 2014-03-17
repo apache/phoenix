@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.schema.stat;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.HRegionInfo;

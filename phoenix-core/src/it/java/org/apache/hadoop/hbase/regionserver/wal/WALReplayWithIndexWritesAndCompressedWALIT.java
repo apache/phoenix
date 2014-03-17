@@ -48,19 +48,18 @@ import org.apache.hadoop.hbase.regionserver.RegionServerAccounting;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
-import org.apache.phoenix.util.ConfigUtil;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.mockito.Mockito;
-
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.covered.example.ColumnGroup;
 import org.apache.phoenix.hbase.index.covered.example.CoveredColumn;
 import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexSpecifierBuilder;
 import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexer;
+import org.apache.phoenix.util.ConfigUtil;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.mockito.Mockito;
 
 /**
  * For pre-0.94.9 instances, this class tests correctly deserializing WALEdits w/o compression. Post
@@ -159,7 +158,8 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
    * seqids.
    * @throws Exception on failure
    */
-  @Test
+  @SuppressWarnings("deprecation")
+@Test
   public void testReplayEditsWrittenViaHRegion() throws Exception {
     final String tableNameStr = "testReplayEditsWrittenViaHRegion";
     final HRegionInfo hri = new HRegionInfo(org.apache.hadoop.hbase.TableName.valueOf(tableNameStr), 
@@ -238,6 +238,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
    * @return
    */
   private HTableDescriptor createBasic3FamilyHTD(final String tableName) {
+    @SuppressWarnings("deprecation")
     HTableDescriptor htd = new HTableDescriptor(tableName);
     HColumnDescriptor a = new HColumnDescriptor(Bytes.toBytes("a"));
     htd.addFamily(a);
@@ -280,7 +281,8 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     return splits.get(0);
   }
 
-  private int getKeyValueCount(HTable table) throws IOException {
+  @SuppressWarnings("deprecation")
+private int getKeyValueCount(HTable table) throws IOException {
     Scan scan = new Scan();
     scan.setMaxVersions(Integer.MAX_VALUE - 1);
 

@@ -440,6 +440,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         return targetKey;
     }
 
+    @Override
     public void readFields(DataInput in) throws IOException {
         RowKeySchema schema = new RowKeySchema();
         schema.readFields(in);
@@ -458,6 +459,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         this.init(slots, schema);
     }
 
+    @Override
     public void write(DataOutput out) throws IOException {
         schema.write(out);
         out.writeInt(slots.size());

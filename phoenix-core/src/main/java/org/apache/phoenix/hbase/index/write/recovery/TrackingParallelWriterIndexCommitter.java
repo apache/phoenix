@@ -34,8 +34,6 @@ import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-
-import com.google.common.collect.Multimap;
 import org.apache.phoenix.hbase.index.CapturingAbortable;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
@@ -53,6 +51,8 @@ import org.apache.phoenix.hbase.index.write.IndexCommitter;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter;
+
+import com.google.common.collect.Multimap;
 
 /**
  * Like the {@link ParallelWriterIndexCommitter}, but blocks until all writes have attempted to
@@ -146,6 +146,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
          * Do the actual write to the primary table. We don't need to worry about closing the table
          * because that is handled the {@link CachingHTableFactory}.
          */
+        @SuppressWarnings("deprecation")
         @Override
         public Boolean call() throws Exception {
           try {

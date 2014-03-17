@@ -134,6 +134,7 @@ public class TupleUtil {
         }
     }
     
+    @SuppressWarnings("deprecation")
     public static int write(Tuple result, DataOutput out) throws IOException {
         int size = 0;
         for(int i = 0; i < result.size(); i++) {
