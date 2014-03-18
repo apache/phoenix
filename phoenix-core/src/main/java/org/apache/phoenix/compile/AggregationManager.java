@@ -37,6 +37,10 @@ public class AggregationManager {
         return aggregators;
     }
     
+    public boolean isEmpty() {
+        return aggregators == null || aggregators.getAggregatorCount() == 0;
+    }
+    
     /**
      * @return allocate the next available zero-based positional index
      * for the client-side aggregate function.

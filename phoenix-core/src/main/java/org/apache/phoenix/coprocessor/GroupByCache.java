@@ -33,7 +33,7 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
  * @since 3.0.0
  */
 public interface GroupByCache extends Closeable {
-    int size();
+    long size();
     Aggregator[] cache(ImmutableBytesWritable key);
     RegionScanner getScanner(RegionScanner s);
 }

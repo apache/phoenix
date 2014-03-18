@@ -30,6 +30,7 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collections;
@@ -56,6 +57,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -1386,4 +1388,46 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    
+    @Test
+    public void testGroupByLimitOptimization() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 varchar, k2 varchar, v varchar, constraint pk primary key(k1,k2))");
+        ResultSet rs;
+        String[] queries = {
+                "SELECT DISTINCT v FROM T LIMIT 3",
+                "SELECT v FROM T GROUP BY v,k1 LIMIT 3",
+                "SELECT count(*) FROM T GROUP BY k1 LIMIT 3",
+                "SELECT max(v) FROM T GROUP BY k1,k2 LIMIT 3",
+                "SELECT k1,k2 FROM T GROUP BY k1,k2 LIMIT 3",
+                "SELECT max(v) FROM T GROUP BY k2,k1 HAVING k1 > 'a' LIMIT 3", // Having optimized out, order of GROUP BY key not important
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertTrue("Expected to find GROUP BY limit optimization in: " + query, QueryUtil.getExplainPlan(rs).contains(" LIMIT 3 GROUPS"));
+        }
+    }
+    
+    @Test
+    public void testNoGroupByLimitOptimization() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 varchar, k2 varchar, v varchar, constraint pk primary key(k1,k2))");
+        ResultSet rs;
+        String[] queries = {
+                "SELECT DISTINCT v FROM T ORDER BY v LIMIT 3",
+                "SELECT v FROM T GROUP BY v,k1 ORDER BY v LIMIT 3",
+                "SELECT DISTINCT count(*) FROM T GROUP BY k1 LIMIT 3",
+                "SELECT count(1) FROM T GROUP BY v,k1 LIMIT 3",
+                "SELECT max(v) FROM T GROUP BY k1,k2 HAVING count(k1) > 1 LIMIT 3",
+                "SELECT count(v) FROM T GROUP BY to_date(k2),k1 LIMIT 3",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertFalse("Did not expected to find GROUP BY limit optimization in: " + query, QueryUtil.getExplainPlan(rs).contains(" LIMIT 3 GROUPS"));
+        }
+    }
 }
