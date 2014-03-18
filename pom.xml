@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>3.0.0-incubating-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -51,6 +51,18 @@
       <url>http://conjars.org/repo</url>
     </repository>
   </repositories>
+
+  <parent>
+    <groupId>org.apache</groupId>
+    <artifactId>apache</artifactId>
+    <version>14</version>
+  </parent>
+
+  <scm>
+    <connection>scm:git:http://git-wip-us.apache.org/repos/asf/incubator-phoenix.git</connection>
+    <url>https://git-wip-us.apache.org/repos/asf/incubator-phoenix.git</url>
+    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/incubator-phoenix.git</developerConnection>
+  </scm>
 
   <properties>
     <!-- General Properties -->
