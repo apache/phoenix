@@ -48,6 +48,38 @@ import org.junit.Test;
 
 public class UpsertValuesIT extends BaseClientManagedTimeIT {
     @Test
+    public void testGroupByWithLimitOverRowKey() throws Exception {
+        long ts = nextTimestamp();
+        ensureTableCreated(getUrl(),TestUtil.PTSDB_NAME,null, ts-2);
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn.setAutoCommit(true);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + TestUtil.PTSDB_NAME + " (inst,host,date) VALUES(?,'b',CURRENT_DATE())");
+        stmt.setString(1, "a");
+        stmt.execute();
+        stmt.execute();
+        stmt.execute();
+        stmt.setString(1, "b");
+        stmt.execute();
+        stmt.execute();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        ResultSet rs = conn.createStatement().executeQuery("select count(1) from " + TestUtil.PTSDB_NAME + " group by inst limit 1");
+        assertTrue(rs.next());
+        assertEquals(3,rs.getInt(1));
+        assertFalse(rs.next());
+
+        rs = conn.createStatement().executeQuery("select inst from " + TestUtil.PTSDB_NAME + " where inst > 'a' group by inst limit 1");
+        assertTrue(rs.next());
+        assertEquals("b",rs.getString(1));
+        assertFalse(rs.next());
+        conn.close();
+    }
+    
+    @Test
     public void testUpsertDateValues() throws Exception {
         long ts = nextTimestamp();
         Date now = new Date(System.currentTimeMillis());

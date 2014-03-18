@@ -114,14 +114,14 @@ public class GroupByCompiler {
             return !BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS.equals(scanAttribName);
         }
         
-        public void explain(List<String> planSteps) {
+        public void explain(List<String> planSteps, Integer limit) {
             if (scanAttribName != null) {
                 if (BaseScannerRegionObserver.UNGROUPED_AGG.equals(scanAttribName)) {
                     planSteps.add("    SERVER AGGREGATE INTO SINGLE ROW");
                 } else if (BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS.equals(scanAttribName)) {
-                    planSteps.add("    SERVER AGGREGATE INTO DISTINCT ROWS BY " + getExpressions());                    
+                    planSteps.add("    SERVER AGGREGATE INTO DISTINCT ROWS BY " + getExpressions() + (limit == null ? "" : " LIMIT " + limit + " GROUP" + (limit.intValue() == 1 ? "" : "S")));                    
                 } else {
-                    planSteps.add("    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY " + getExpressions());                    
+                    planSteps.add("    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY " + getExpressions() + (limit == null ? "" : " LIMIT " + limit + " GROUP" + (limit.intValue() == 1 ? "" : "S")));                    
                 }
             }
         }
@@ -257,7 +257,6 @@ public class GroupByCompiler {
         }
 
         // Set attribute with serialized expressions for coprocessor
-        // FIXME: what if group by is empty (i.e. only literals)?
         GroupedAggregateRegionObserver.serializeIntoScan(context.getScan(), groupExprAttribName, keyExpressions);
         GroupBy groupBy = new GroupBy.GroupByBuilder().setScanAttribName(groupExprAttribName).setExpressions(expressions).setKeyExpressions(keyExpressions).build();
         return groupBy;

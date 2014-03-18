@@ -18,6 +18,7 @@
 package org.apache.phoenix.cache;
 
 import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_PERC_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_WAIT_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_TENANT_MEMORY_PERC_ATTRIB;
 
@@ -117,9 +118,15 @@ public class GlobalCache extends TenantCacheImpl {
         return tenantCache;
     }
     
+    private static long getMaxMemorySize(Configuration config) {
+        long maxSize = Runtime.getRuntime().maxMemory() * 
+                config.getInt(MAX_MEMORY_PERC_ATTRIB, QueryServicesOptions.DEFAULT_MAX_MEMORY_PERC) / 100;
+        maxSize = Math.min(maxSize, config.getLong(MAX_MEMORY_SIZE_ATTRIB, Long.MAX_VALUE));
+        return maxSize;
+    }
+    
     private GlobalCache(Configuration config) {
-        super(new GlobalMemoryManager(Runtime.getRuntime().maxMemory() * 
-                                          config.getInt(MAX_MEMORY_PERC_ATTRIB, QueryServicesOptions.DEFAULT_MAX_MEMORY_PERC) / 100,
+        super(new GlobalMemoryManager(getMaxMemorySize(config),
                                       config.getInt(MAX_MEMORY_WAIT_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_MEMORY_WAIT_MS)),
               config.getInt(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS));
         this.config = config;

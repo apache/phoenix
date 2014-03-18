@@ -454,6 +454,24 @@ public class QueryIT extends BaseClientManagedTimeIT {
     }
 
     @Test
+    public void testDistinctLimitScan() throws Exception {
+        String query = "SELECT DISTINCT a_string FROM aTable WHERE organization_id=? LIMIT 1";
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), A_VALUE);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
     public void testInListSkipScan() throws Exception {
         String query = "SELECT entity_id, b_string FROM aTable WHERE organization_id=? and entity_id IN (?,?)";
         Properties props = new Properties(TEST_PROPERTIES);
