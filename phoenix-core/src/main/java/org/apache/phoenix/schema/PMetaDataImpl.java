@@ -231,17 +231,19 @@ public class PMetaDataImpl implements PMetaData {
 
     @Override
     public PMetaData pruneTables(Pruner pruner) {
+        List<PTableKey> keysToPrune = Lists.newArrayListWithExpectedSize(this.getTables().size());
         for (PTable table : this.getTables()) {
             if (pruner.prune(table)) {
-                Cache newCache = this.getTables().clone();
-                for (PTable value : this.getTables()) { // Go through old to prevent concurrent modification exception
-                    if (pruner.prune(value)) {
-                        newCache.remove(value.getKey());
-                    }
-                }
-                return new PMetaDataImpl(newCache);
+                keysToPrune.add(table.getKey());
             }
         }
-        return this;
+        if (keysToPrune.isEmpty()) {
+            return this;
+        }
+        Cache tables = metaData.clone();
+        for (PTableKey key : keysToPrune) {
+            tables.remove(key);
+        }
+        return new PMetaDataImpl(tables);
     }
 }
