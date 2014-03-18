@@ -42,7 +42,7 @@ public class PColumnFamilyImpl implements PColumnFamily {
     
     public PColumnFamilyImpl(PName name, List<PColumn> columns) {
         Preconditions.checkNotNull(name);
-        int estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 4 + SizedUtil.INT_SIZE + name.getEstimatedSize() +
+        long estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 4 + SizedUtil.INT_SIZE + name.getEstimatedSize() +
                 SizedUtil.sizeOfMap(columns.size()) * 2 + SizedUtil.sizeOfArrayList(columns.size());
         this.name = name;
         this.columns = ImmutableList.copyOf(columns);
@@ -55,7 +55,7 @@ public class PColumnFamilyImpl implements PColumnFamily {
         }
         this.columnByBytes = columnByBytesBuilder.build();
         this.columnByString = columnByStringBuilder.build();
-        this.estimatedSize = estimatedSize;
+        this.estimatedSize = (int)estimatedSize;
     }
     
     @Override

@@ -61,6 +61,8 @@ import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.ScanProjector;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.ScanUtil;
@@ -104,7 +106,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             keyOrdered = true;
         }
         List<Expression> expressions = deserializeGroupByExpressions(expressionBytes);
-
         ServerAggregators aggregators =
                 ServerAggregators.deserialize(scan
                         .getAttribute(BaseScannerRegionObserver.AGGREGATORS), c
@@ -112,6 +113,12 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
 
         final ScanProjector p = ScanProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
+        long limit = Long.MAX_VALUE;
+        byte[] limitBytes = scan.getAttribute(GROUP_BY_LIMIT);
+        if (limitBytes != null) {
+            limit = PDataType.INTEGER.getCodec().decodeInt(limitBytes, 0, SortOrder.getDefault());
+        }
+
         RegionScanner innerScanner = s;
         if (p != null || j != null) {
             innerScanner =
@@ -121,13 +128,13 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
 
         if (keyOrdered) { // Optimize by taking advantage that the rows are
                           // already in the required group by key order
-            return scanOrdered(c, scan, innerScanner, expressions, aggregators);
+            return scanOrdered(c, scan, innerScanner, expressions, aggregators, limit);
         } else { // Otherwse, collect them all up in an in memory map
-            return scanUnordered(c, scan, innerScanner, expressions, aggregators);
+            return scanUnordered(c, scan, innerScanner, expressions, aggregators, limit);
         }
     }
 
-    public static int sizeOfUnorderedGroupByMap(int nRows, int valueSize) {
+    public static long sizeOfUnorderedGroupByMap(int nRows, int valueSize) {
         return SizedUtil.sizeOfMap(nRows, SizedUtil.IMMUTABLE_BYTES_WRITABLE_SIZE, valueSize);
     }
 
@@ -201,7 +208,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         
         InMemoryGroupByCache(RegionCoprocessorEnvironment env, ImmutableBytesWritable tenantId, ServerAggregators aggregators, int estDistVals) {
             int estValueSize = aggregators.getEstimatedByteSize();
-            int estSize = sizeOfUnorderedGroupByMap(estDistVals, estValueSize);
+            long estSize = sizeOfUnorderedGroupByMap(estDistVals, estValueSize);
             TenantCache tenantCache = GlobalCache.getTenantCache(env, tenantId);
             this.env = env;
             this.estDistVals = estDistVals;
@@ -234,7 +241,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
 
                 if (aggregateMap.size() > estDistVals) { // increase allocation
                     estDistVals *= 1.5f;
-                    int estSize = sizeOfUnorderedGroupByMap(estDistVals, aggregators.getEstimatedByteSize());
+                    long estSize = sizeOfUnorderedGroupByMap(estDistVals, aggregators.getEstimatedByteSize());
                     chunk.resize(estSize);
                 }
             }
@@ -244,7 +251,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         @Override
         public RegionScanner getScanner(final RegionScanner s) {
             // Compute final allocation
-            int estSize = sizeOfUnorderedGroupByMap(aggregateMap.size(), aggregators.getEstimatedByteSize());
+            long estSize = sizeOfUnorderedGroupByMap(aggregateMap.size(), aggregators.getEstimatedByteSize());
             chunk.resize(estSize);
 
             final List<KeyValue> aggResults = new ArrayList<KeyValue>(aggregateMap.size());
@@ -304,7 +311,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         }
 
         @Override
-        public int size() {
+        public long size() {
             return aggregateMap.size();
         }
         
@@ -330,10 +337,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
      * Used for an aggregate query in which the key order does not necessarily match the group by
      * key order. In this case, we must collect all distinct groups within a region into a map,
      * aggregating as we go.
+     * @param limit TODO
      */
     private RegionScanner scanUnordered(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
             final RegionScanner s, final List<Expression> expressions,
-            final ServerAggregators aggregators) throws IOException {
+            final ServerAggregators aggregators, long limit) throws IOException {
         if (logger.isDebugEnabled()) {
             logger.debug("Grouped aggregation over unordered rows with scan " + scan
                     + ", group by " + expressions + ", aggregators " + aggregators);
@@ -344,7 +352,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         byte[] estDistValsBytes = scan.getAttribute(BaseScannerRegionObserver.ESTIMATED_DISTINCT_VALUES);
         if (estDistValsBytes != null) {
             // Allocate 1.5x estimation
-            estDistVals = Math.min(MIN_DISTINCT_VALUES, 
+            estDistVals = Math.max(MIN_DISTINCT_VALUES, 
                             (int) (Bytes.toInt(estDistValsBytes) * 1.5f));
         }
 
@@ -384,7 +392,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                         // Aggregate values here
                         aggregators.aggregate(rowAggregators, result);
                     }
-                } while (hasMore);
+                } while (hasMore && groupByCache.size() < limit);
             } finally {
                 region.closeRegionOperation();
             }
@@ -407,16 +415,18 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
     /**
      * Used for an aggregate query in which the key order match the group by key order. In this
      * case, we can do the aggregation as we scan, by detecting when the group by key changes.
+     * @param limit TODO
      */
     private RegionScanner scanOrdered(final ObserverContext<RegionCoprocessorEnvironment> c,
             Scan scan, final RegionScanner s, final List<Expression> expressions,
-            final ServerAggregators aggregators) {
+            final ServerAggregators aggregators, final long limit) {
 
         if (logger.isDebugEnabled()) {
             logger.debug("Grouped aggregation over ordered rows with scan " + scan + ", group by "
                     + expressions + ", aggregators " + aggregators);
         }
         return new BaseRegionScanner() {
+            private long rowCount = 0;
             private ImmutableBytesWritable currentKey = null;
 
             @Override
@@ -432,10 +442,14 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             @Override
             public boolean next(List<Cell> results) throws IOException {
                 boolean hasMore;
+                boolean atLimit;
                 boolean aggBoundary = false;
                 MultiKeyValueTuple result = new MultiKeyValueTuple();
                 ImmutableBytesWritable key = null;
                 Aggregator[] rowAggregators = aggregators.getAggregators();
+                // If we're calculating no aggregate functions, we can exit at the
+                // start of a new row. Otherwise, we have to wait until an agg
+                int countOffset = rowAggregators.length == 0 ? 1 : 0;
                 HRegion region = c.getEnvironment().getRegion();
                 region.startRegionOperation();
                 try {
@@ -461,7 +475,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                                 currentKey = key;
                             }
                         }
-                    } while (hasMore && !aggBoundary);
+                        atLimit = rowCount + countOffset >= limit;
+                        // Do rowCount + 1 b/c we don't have to wait for a complete
+                        // row in the case of a DISTINCT with a LIMIT
+                    } while (hasMore && !aggBoundary && !atLimit);
                 } finally {
                     region.closeRegionOperation();
                 }
@@ -489,10 +506,12 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                         aggregators.reset(rowAggregators);
                         aggregators.aggregate(rowAggregators, result);
                         currentKey = key;
+                        rowCount++;
+                        atLimit |= rowCount >= limit;
                     }
                 }
                 // Continue if there are more
-                if (hasMore || aggBoundary) {
+                if (!atLimit && (hasMore || aggBoundary)) {
                     return true;
                 }
                 currentKey = null;

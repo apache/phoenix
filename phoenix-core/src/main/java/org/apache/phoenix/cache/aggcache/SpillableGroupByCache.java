@@ -103,7 +103,7 @@ public class SpillableGroupByCache implements GroupByCache {
     // array types
     private final LinkedHashMap<ImmutableBytesWritable, Aggregator[]> cache;
     private SpillManager spillManager = null;
-    private int curNumCacheElements;
+    private long totalNumElements;
     private final ServerAggregators aggregators;
     private final RegionCoprocessorEnvironment env;
     private final MemoryChunk chunk;
@@ -128,7 +128,7 @@ public class SpillableGroupByCache implements GroupByCache {
      */
     public SpillableGroupByCache(final RegionCoprocessorEnvironment env, ImmutableBytesWritable tenantId,
             ServerAggregators aggs, final int estSizeNum) {
-        curNumCacheElements = 0;
+        totalNumElements = 0;
         this.aggregators = aggs;
         this.env = env;
 
@@ -145,7 +145,7 @@ public class SpillableGroupByCache implements GroupByCache {
 
         // use upper and lower bounds for the cache size
         final int maxCacheSize = Math.max(minSizeNum, Math.min(maxSizeNum, estSizeNum));
-        final int estSize = GroupedAggregateRegionObserver.sizeOfUnorderedGroupByMap(maxCacheSize, estValueSize);
+        final long estSize = GroupedAggregateRegionObserver.sizeOfUnorderedGroupByMap(maxCacheSize, estValueSize);
         try {
             this.chunk = tenantCache.getMemoryManager().allocate(estSize);
         } catch (InsufficientMemoryException ime) {
@@ -167,7 +167,7 @@ public class SpillableGroupByCache implements GroupByCache {
             protected boolean removeEldestEntry(Map.Entry<ImmutableBytesWritable, Aggregator[]> eldest) {
                 if (!spill && size() > cacheSize) { // increase allocation
                     cacheSize *= 1.5f;
-                    int estSize = GroupedAggregateRegionObserver.sizeOfUnorderedGroupByMap(cacheSize, estValueSize);
+                    long estSize = GroupedAggregateRegionObserver.sizeOfUnorderedGroupByMap(cacheSize, estValueSize);
                     try {
                         chunk.resize(estSize);
                     } catch (InsufficientMemoryException im) {
@@ -188,8 +188,6 @@ public class SpillableGroupByCache implements GroupByCache {
                                     new QueryCache());
                         }
                         spillManager.spill(eldest.getKey(), eldest.getValue());
-                        // keep track of elements in cache
-                        curNumCacheElements--;
                     } catch (IOException ioe) {
                         // Ensure that we always close and delete the temp files
                         try {
@@ -207,11 +205,11 @@ public class SpillableGroupByCache implements GroupByCache {
     }
 
     /**
-     * Size function returns the estimate LRU cache size in bytes
+     * Size function returns the current number of cached elements
      */
     @Override
-    public int size() {
-        return curNumCacheElements * aggregators.getEstimatedByteSize();
+    public long size() {
+        return totalNumElements;
     }
 
     /**
@@ -248,9 +246,9 @@ public class SpillableGroupByCache implements GroupByCache {
                             + Bytes.toStringBinary(key.get(), key.getOffset(), key.getLength()));
                 }
             }
-            cache.put(key, rowAggregators);
-            // keep track of elements in cache
-            curNumCacheElements++;
+            if (cache.put(key, rowAggregators) == null) {
+                totalNumElements++;
+            }
         }
         return rowAggregators;
     }

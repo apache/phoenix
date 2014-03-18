@@ -98,7 +98,7 @@ public class HashCacheFactory implements ServerCacheFactory {
                 int exprSize = dataInput.readInt();
                 offset += exprSize;
                 int nRows = dataInput.readInt();
-                int estimatedSize = SizedUtil.sizeOfMap(nRows, SizedUtil.IMMUTABLE_BYTES_WRITABLE_SIZE, SizedUtil.RESULT_SIZE) + hashCacheBytes.length;
+                long estimatedSize = SizedUtil.sizeOfMap(nRows, SizedUtil.IMMUTABLE_BYTES_WRITABLE_SIZE, SizedUtil.RESULT_SIZE) + hashCacheBytes.length;
                 this.memoryChunk.resize(estimatedSize);
                 HashMap<ImmutableBytesPtr,List<Tuple>> hashCacheMap = new HashMap<ImmutableBytesPtr,List<Tuple>>(nRows * 5 / 4);
                 offset += Bytes.SIZEOF_INT;

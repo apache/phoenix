@@ -43,6 +43,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String DELETE_CF = "_DeleteCF";
     public static final String EMPTY_CF = "_EmptyCF";
     public static final String SPECIFIC_ARRAY_INDEX = "_SpecificArrayIndex";
+    public static final String GROUP_BY_LIMIT = "_GroupByLimit";
 
     /**
      * Used by logger to identify coprocessor

@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.schema.PDataType;
@@ -145,7 +146,12 @@ public abstract class ExplainTable {
                 planSteps.add("    SERVER " + pageFilter.getPageSize() + " ROW LIMIT");
             }
         }
-        groupBy.explain(planSteps);
+        Integer groupByLimit = null;
+        byte[] groupByLimitBytes = scan.getAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT);
+        if (groupByLimitBytes != null) {
+            groupByLimit = (Integer)PDataType.INTEGER.toObject(groupByLimitBytes);
+        }
+        groupBy.explain(planSteps, groupByLimit);
     }
 
     private PageFilter getPageFilter(List<Filter> filterList) {
