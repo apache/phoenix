@@ -48,6 +48,7 @@
         <include>org.codehaus.jackson:jackson-mapper-asl</include>
         <include>org.codehaus.jackson:jackson-core-asl</include>
         <include>org.xerial.snappy:snappy-java</include>
+        <include>commons-collections:commons-collections</include>
       </includes>
     </dependencySet>
   </dependencySets>
