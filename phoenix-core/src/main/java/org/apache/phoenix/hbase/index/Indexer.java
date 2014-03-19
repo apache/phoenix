@@ -26,8 +26,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -51,13 +49,11 @@ import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
-import org.apache.hadoop.hbase.regionserver.wal.HLog;
 import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
 import org.apache.phoenix.hbase.index.builder.IndexBuilder;
-import org.apache.phoenix.hbase.index.builder.IndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
@@ -91,19 +87,11 @@ public class Indexer extends BaseRegionObserver {
 
   private static final Log LOG = LogFactory.getLog(Indexer.class);
 
-  /** WAL on this server */
-  private HLog log;
   protected IndexWriter writer;
   protected IndexBuildManager builder;
 
   /** Configuration key for the {@link IndexBuilder} to use */
   public static final String INDEX_BUILDER_CONF_KEY = "index.builder";
-
-  // Setup out locking on the index edits/WAL so we can be sure that we don't lose a roll a WAL edit
-  // before an edit is applied to the index tables
-  private static final ReentrantReadWriteLock INDEX_READ_WRITE_LOCK = new ReentrantReadWriteLock(
-      true);
-  public static final ReadLock INDEX_UPDATE_LOCK = INDEX_READ_WRITE_LOCK.readLock();
 
   /**
    * Configuration key for if the indexer should check the version of HBase is running. Generally,
@@ -162,12 +150,7 @@ public class Indexer extends BaseRegionObserver {
         }
     
         this.builder = new IndexBuildManager(env);
-    
-        // get a reference to the WAL
-      log = env.getRegionServerServices().getWAL(null);
-        // add a synchronizer so we don't archive a WAL that we need
-        log.registerWALActionsListener(new IndexLogRollSynchronizer(INDEX_READ_WRITE_LOCK.writeLock()));
-    
+
         // setup the actual index writer
         this.writer = new IndexWriter(env, serverName + "-index-writer");
     
@@ -217,46 +200,37 @@ public class Indexer extends BaseRegionObserver {
   public void prePut(final ObserverContext<RegionCoprocessorEnvironment> c, final Put put,
       final WALEdit edit, final Durability durability) throws IOException {
       if (this.disabled) {
-      super.prePut(c, put, edit, durability);
+          super.prePut(c, put, edit, durability);
           return;
-        }
-    // just have to add a batch marker to the WALEdit so we get the edit again in the batch
-    // processing step. We let it throw an exception here because something terrible has happened.
-    edit.add(BATCH_MARKER);
+      }
+      preSingleUpdate(c, put, edit, durability);
   }
 
   @Override
   public void preDelete(ObserverContext<RegionCoprocessorEnvironment> e, Delete delete,
       WALEdit edit, final Durability durability) throws IOException {
       if (this.disabled) {
-      super.preDelete(e, delete, edit, durability);
+          super.preDelete(e, delete, edit, durability);
           return;
-        }
-    try {
-      preDeleteWithExceptions(e, delete, edit, durability);
-      return;
-    } catch (Throwable t) {
-      rethrowIndexingException(t);
-    }
-    throw new RuntimeException(
-        "Somehow didn't return an index update but also didn't propagate the failure to the client!");
+      }
+      preSingleUpdate(e, delete, edit, durability);
   }
 
-  public void preDeleteWithExceptions(ObserverContext<RegionCoprocessorEnvironment> e,
-      Delete delete, WALEdit edit, final Durability durability) throws Exception {
-    // if we are making the update as part of a batch, we need to add in a batch marker so the WAL
-    // is retained
-    if (this.builder.getBatchId(delete) != null) {
+  /**
+   * Process the prePut and preDelete methods. These need to be handled so the preBatchMutate method
+   * can function properly.
+   * <p>
+   * As of HBase 0.96, these can all go through the same mechanism as puts and deletes all go
+   * through the batchMutation mechanism in HRegion. Previously, {@link Delete} had a separate path,
+   * which caused some interesting problems for managing WALs, but see older versions of Phoenix for
+   * more information there.
+   */
+  @SuppressWarnings("javadoc")
+  public void preSingleUpdate(final ObserverContext<RegionCoprocessorEnvironment> c, final Mutation put,
+      final WALEdit edit, final Durability durability) throws IOException {
+      // just have to add a batch marker to the WALEdit so we get the edit again in the batch
+      // processing step. We let it throw an exception here because something terrible has happened.
       edit.add(BATCH_MARKER);
-      return;
-    }
-
-    // get the mapping for index column -> target index table
-    Collection<Pair<Mutation, byte[]>> indexUpdates = this.builder.getIndexUpdate(delete);
-
-    if (doPre(indexUpdates, edit, durability)) {
-      takeUpdateLock("delete");
-    }
   }
 
   @Override
@@ -265,14 +239,14 @@ public class Indexer extends BaseRegionObserver {
       if (this.disabled) {
           super.preBatchMutate(c, miniBatchOp);
           return;
-        }
-    try {
-      preBatchMutateWithExceptions(c, miniBatchOp);
-      return;
-    } catch (Throwable t) {
-      rethrowIndexingException(t);
-    }
-    throw new RuntimeException(
+      }
+      try {
+          preBatchMutateWithExceptions(c, miniBatchOp);
+          return;
+      } catch (Throwable t) {
+          rethrowIndexingException(t);
+      }
+      throw new RuntimeException(
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
@@ -341,37 +315,9 @@ public class Indexer extends BaseRegionObserver {
     // get the index updates for all elements in this batch
     Collection<Pair<Mutation, byte[]>> indexUpdates =
         this.builder.getIndexUpdate(miniBatchOp, mutations.values());
-    // write them
-    if (doPre(indexUpdates, edit, durability)) {
-      takeUpdateLock("batch mutation");
-    }
-  }
 
-  private void takeUpdateLock(String opDesc) throws IndexBuildingFailureException {
-    boolean interrupted = false;
-    // lock the log, so we are sure that index write gets atomically committed
-    LOG.debug("Taking INDEX_UPDATE readlock for " + opDesc);
-    // wait for the update lock
-    while (!this.stopped) {
-      try {
-        INDEX_UPDATE_LOCK.lockInterruptibly();
-        LOG.debug("Got the INDEX_UPDATE readlock for " + opDesc);
-        // unlock the lock so the server can shutdown, if we find that we have stopped since getting
-        // the lock
-        if (this.stopped) {
-          INDEX_UPDATE_LOCK.unlock();
-          throw new IndexBuildingFailureException(
-              "Found server stop after obtaining the update lock, killing update attempt");
-        }
-        break;
-      } catch (InterruptedException e) {
-        LOG.info("Interrupted while waiting for update lock. Ignoring unless stopped");
-        interrupted = true;
-      }
-    }
-    if (interrupted) {
-      Thread.currentThread().interrupt();
-    }
+    // write them, either to WAL or the index tables
+    doPre(indexUpdates, edit, durability);
   }
 
   private class MultiMutation extends Mutation {
@@ -486,7 +432,11 @@ public class Indexer extends BaseRegionObserver {
           return;
         }
     this.builder.batchCompleted(miniBatchOp);
-    // noop for the rest of the indexer - its handled by the first call to put/delete
+
+    //each batch operation, only the first one will have anything useful, so we can just grab that
+    Mutation mutation = miniBatchOp.getOperation(0);
+    WALEdit edit = miniBatchOp.getWalEdit(0);
+    doPost(edit, mutation, mutation.getDurability());
   }
 
   private void doPost(WALEdit edit, Mutation m, final Durability durability) throws IOException {
@@ -542,13 +492,6 @@ public class Indexer extends BaseRegionObserver {
         // mark the batch as having been written. In the single-update case, this never gets check
         // again, but in the batch case, we will check it again (see above).
         ikv.markBatchFinished();
-      
-        // release the lock on the index, we wrote everything properly
-        // we took the lock for each Put/Delete, so we have to release it a matching number of times
-        // batch cases only take the lock once, so we need to make sure we don't over-release the
-        // lock.
-        LOG.debug("Releasing INDEX_UPDATE readlock");
-        INDEX_UPDATE_LOCK.unlock();
       }
     }
   }
