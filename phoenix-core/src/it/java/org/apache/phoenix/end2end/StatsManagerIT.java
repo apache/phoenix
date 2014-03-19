@@ -55,7 +55,7 @@ public class StatsManagerIT extends BaseParallelIteratorsRegionSplitterIT {
             return currentTime;
         }
         
-        public void setCurrentTimeMillis(long currentTime) {
+        public void setCurrentTime(long currentTime) {
             this.currentTime = currentTime;
         }
     }
@@ -126,7 +126,7 @@ public class StatsManagerIT extends BaseParallelIteratorsRegionSplitterIT {
         long waitTime = 5000;
         
         ManualTimeKeeper timeKeeper = new ManualTimeKeeper();
-        timeKeeper.setCurrentTimeMillis(startTime);
+        timeKeeper.setCurrentTime(startTime);
         ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES);
         StatsManager stats = new StatsManagerImpl(services, updateFreq, maxAge, timeKeeper);
         MinKeyChange minKeyChange = new MinKeyChange(stats, table);
@@ -152,7 +152,7 @@ public class StatsManagerIT extends BaseParallelIteratorsRegionSplitterIT {
         conn.commit();
 
         assertFalse(waitForAsyncChange(minKeyChange,waitTime)); // Stats won't change until they're attempted to be retrieved again
-        timeKeeper.setCurrentTimeMillis(timeKeeper.getCurrentTime() + updateFreq);
+        timeKeeper.setCurrentTime(timeKeeper.getCurrentTime() + updateFreq);
         minKeyChange = new MinKeyChange(stats, table); // Will kick off change, but will upate asynchronously
         assertArrayEquals(KMIN, minKeyChange.value);
         assertTrue(waitForAsyncChange(minKeyChange,waitTime));
@@ -160,7 +160,7 @@ public class StatsManagerIT extends BaseParallelIteratorsRegionSplitterIT {
         assertArrayEquals(KMAX, stats.getMaxKey(table));
         minKeyChange = new MinKeyChange(stats, table);
         
-        timeKeeper.setCurrentTimeMillis(timeKeeper.getCurrentTime() + maxAge);
+        timeKeeper.setCurrentTime(timeKeeper.getCurrentTime() + maxAge);
         minKeyChange = new MinKeyChange(stats, table); // Will kick off change, but will upate asynchronously
         assertTrue(null == minKeyChange.value);
         assertTrue(waitForAsyncChange(minKeyChange,waitTime));
@@ -177,7 +177,7 @@ public class StatsManagerIT extends BaseParallelIteratorsRegionSplitterIT {
         conn.close();
 
         assertFalse(waitForAsyncChange(maxKeyChange,waitTime)); // Stats won't change until they're attempted to be retrieved again
-        timeKeeper.setCurrentTimeMillis(timeKeeper.getCurrentTime() + updateFreq);
+        timeKeeper.setCurrentTime(timeKeeper.getCurrentTime() + updateFreq);
         maxKeyChange = new MaxKeyChange(stats, table); // Will kick off change, but will upate asynchronously
         assertArrayEquals(KMAX, maxKeyChange.value);
         assertTrue(waitForAsyncChange(maxKeyChange,waitTime));
@@ -185,7 +185,7 @@ public class StatsManagerIT extends BaseParallelIteratorsRegionSplitterIT {
         assertArrayEquals(KMIN2, stats.getMinKey(table));
         maxKeyChange = new MaxKeyChange(stats, table);
         
-        timeKeeper.setCurrentTimeMillis(timeKeeper.getCurrentTime() + maxAge);
+        timeKeeper.setCurrentTime(timeKeeper.getCurrentTime() + maxAge);
         maxKeyChange = new MaxKeyChange(stats, table); // Will kick off change, but will upate asynchronously
         assertTrue(null == maxKeyChange.value);
         assertTrue(waitForAsyncChange(maxKeyChange,waitTime));
