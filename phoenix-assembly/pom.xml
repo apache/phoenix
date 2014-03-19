@@ -51,7 +51,6 @@
                 <index>true</index>
                 <manifest>
                   <addClasspath>true</addClasspath>
-                  <mainClass>org.apache.phoenix.util.PhoenixRuntime</mainClass>
                   <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                   <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
                 </manifest>
@@ -59,26 +58,6 @@
               <descriptors>
                 <descriptor>src/build/client.xml</descriptor>
               </descriptors>
-            </configuration>
-          </execution>
-          <execution>
-            <id>mapreduce-jar</id>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-              <finalName>phoenix-${project.version}</finalName>
-              <attach>false</attach>
-              <appendAssemblyId>true</appendAssemblyId>
-              <descriptors>
-                <descriptor>src/build/mapreduce.xml</descriptor>
-              </descriptors>
-              <archive>
-                <manifest>
-                  <mainClass>org.apache.phoenix.mapreduce.CsvBulkLoadTool</mainClass>
-                </manifest>
-              </archive>
             </configuration>
           </execution>
           <execution>
