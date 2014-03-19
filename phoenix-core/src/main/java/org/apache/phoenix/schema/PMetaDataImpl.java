@@ -18,13 +18,17 @@
 package org.apache.phoenix.schema;
 
 import java.sql.SQLException;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
-import com.google.common.collect.Iterators;
+import org.apache.phoenix.util.TimeKeeper;
+
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.MinMaxPriorityQueue;
+import com.google.common.primitives.Longs;
 
 /**
  * 
@@ -38,7 +42,11 @@ public class PMetaDataImpl implements PMetaData {
     private final Cache metaData;
     
     public PMetaDataImpl(int initialCapacity, long maxByteSize) {
-        this.metaData = new CacheImpl(initialCapacity, maxByteSize);
+        this.metaData = new CacheImpl(initialCapacity, maxByteSize, TimeKeeper.SYSTEM);
+    }
+
+    public PMetaDataImpl(int initialCapacity, long maxByteSize, TimeKeeper timeKeeper) {
+        this.metaData = new CacheImpl(initialCapacity, maxByteSize, timeKeeper);
     }
 
     public PMetaDataImpl(Cache tables) {
@@ -46,34 +54,52 @@ public class PMetaDataImpl implements PMetaData {
     }
     
     private static class CacheImpl implements Cache, Cloneable {
-        private long currentSize;
-        private int initialCapacity;
-        private final long maxByteSize;
-        private final LinkedHashMap<PTableKey,PTable> tables;
+        private static final int MIN_REMOVAL_SIZE = 3;
+        private static final Comparator<PTableAccess> COMPARATOR = new Comparator<PTableAccess>() {
+            @Override
+            public int compare(PTableAccess tableAccess1, PTableAccess tableAccess2) {
+                return Longs.compare(tableAccess1.lastAccessTime, tableAccess2.lastAccessTime);
+            }
+        };
+        private static final MinMaxPriorityQueue.Builder<PTableAccess> BUILDER = MinMaxPriorityQueue.orderedBy(COMPARATOR);
         
-        private static LinkedHashMap<PTableKey,PTable> newLRUMap(int estimatedSize) {
-            return new LinkedHashMap<PTableKey,PTable>(estimatedSize, 0.75F, true);
+        private long currentSize;
+        private final long maxByteSize;
+        private final int expectedCapacity;
+        private final TimeKeeper timeKeeper;
+
+        // Use regular HashMap, as we cannot use a LinkedHashMap that orders by access time
+        // safely across multiple threads (as the underlying collection is not thread safe).
+        // Instead, we track access time and prune it based on the copy we've made.
+        private final HashMap<PTableKey,PTableAccess> tables;
+        
+        private static HashMap<PTableKey,PTableAccess> newMap(int expectedCapacity) {
+            return Maps.newHashMapWithExpectedSize(expectedCapacity);
         }
 
-        // Do our own clone, as the one in LinkedHashMap doesn't specialize clone like it should,
-        // so it doesn't clone it's own doubly linked list.
-        private static LinkedHashMap<PTableKey, PTable> cloneLRUMap(LinkedHashMap<PTableKey, PTable> tables, int estimatedSize) {
-            LinkedHashMap<PTableKey, PTable> newTables = newLRUMap(estimatedSize);
-            newTables.putAll(tables);
+        private static HashMap<PTableKey,PTableAccess> cloneMap(HashMap<PTableKey,PTableAccess> tables, int expectedCapacity) {
+            HashMap<PTableKey,PTableAccess> newTables = Maps.newHashMapWithExpectedSize(Math.max(tables.size(),expectedCapacity));
+            // Copy value so that access time isn't changing anymore
+            for (PTableAccess tableAccess : tables.values()) {
+                newTables.put(tableAccess.table.getKey(), new PTableAccess(tableAccess));
+            }
             return newTables;
         }
 
         private CacheImpl(CacheImpl toClone) {
+            this.timeKeeper = toClone.timeKeeper;
             this.maxByteSize = toClone.maxByteSize;
             this.currentSize = toClone.currentSize;
-            this.initialCapacity = toClone.initialCapacity;
-            this.tables = cloneLRUMap(toClone.tables, toClone.initialCapacity);
+            this.expectedCapacity = toClone.expectedCapacity;
+            this.tables = cloneMap(toClone.tables, toClone.expectedCapacity);
         }
         
-        public CacheImpl(int initialCapacity, long maxByteSize) {
-            this.maxByteSize = maxByteSize;
+        public CacheImpl(int initialCapacity, long maxByteSize, TimeKeeper timeKeeper) {
             this.currentSize = 0;
-            this.tables = newLRUMap(initialCapacity);
+            this.maxByteSize = maxByteSize;
+            this.expectedCapacity = initialCapacity;
+            this.tables = newMap(initialCapacity);
+            this.timeKeeper = timeKeeper;
         }
         
         @Override
@@ -83,28 +109,45 @@ public class PMetaDataImpl implements PMetaData {
         
         @Override
         public PTable get(PTableKey key) {
-            return tables.get(key);
+            PTableAccess tableAccess = tables.get(key);
+            if (tableAccess == null) {
+                return null;
+            }
+            tableAccess.lastAccessTime = timeKeeper.getCurrentTime();
+            return tableAccess.table;
         }
         
         private void pruneIfNecessary() {
-            if (currentSize > maxByteSize && size() > 1) {
-                Iterator<Map.Entry<PTableKey, PTable>> entries = this.tables.entrySet().iterator();
-                do {
-                    PTable table = entries.next().getValue();
-                    if (table.getType() != PTableType.SYSTEM) {
-                        currentSize -= table.getEstimatedSize();
-                        entries.remove();
+            // We have our own copy of the Map, as we copy on write, so its safe to remove from it.
+            while (currentSize > maxByteSize && size() > 1) {
+                // Estimate how many we need to remove by dividing the <number of bytes we're over the max>
+                // by the <average size of an entry>. We'll keep at least MIN_REMOVAL_SIZE.
+                int nToRemove = Math.max(MIN_REMOVAL_SIZE, (int)Math.ceil((currentSize-maxByteSize) / ((double)currentSize / size())));
+                MinMaxPriorityQueue<PTableAccess> toRemove = BUILDER.expectedSize(nToRemove+1).create();
+                // Make one pass through to find the <nToRemove> least recently accessed tables
+                for (PTableAccess tableAccess : this.tables.values()) {
+                    toRemove.add(tableAccess);
+                    if (toRemove.size() > nToRemove) {
+                        toRemove.removeLast();
                     }
-                } while (currentSize > maxByteSize && size() > 1 && entries.hasNext());
+                }
+                // Of those least recently accessed tables, remove the least recently used
+                // until we're under our size capacity
+                do {
+                    PTableAccess tableAccess = toRemove.removeFirst();
+                    remove(tableAccess.table.getKey());
+                } while (currentSize > maxByteSize && size() > 1 && !toRemove.isEmpty());
             }
         }
         
         @Override
         public PTable put(PTableKey key, PTable value) {
             currentSize += value.getEstimatedSize();
-            PTable oldTable = tables.put(key, value);
-            if (oldTable != null) {
-                currentSize -= oldTable.getEstimatedSize();
+            PTableAccess oldTableAccess = tables.put(key, new PTableAccess(value, timeKeeper.getCurrentTime()));
+            PTable oldTable = null;
+            if (oldTableAccess != null) {
+                currentSize -= oldTableAccess.table.getEstimatedSize();
+                oldTable = oldTableAccess.table;
             }
             pruneIfNecessary();
             return oldTable;
@@ -112,22 +155,55 @@ public class PMetaDataImpl implements PMetaData {
         
         @Override
         public PTable remove(PTableKey key) {
-            PTable value = tables.remove(key);
-            if (value != null) {
-                currentSize -= value.getEstimatedSize();
+            PTableAccess value = tables.remove(key);
+            if (value == null) {
+                return null;
             }
-            pruneIfNecessary();
-            return value;
+            currentSize -= value.table.getEstimatedSize();
+            return value.table;
         }
         
         @Override
         public Iterator<PTable> iterator() {
-            return Iterators.unmodifiableIterator(tables.values().iterator());
+            final Iterator<PTableAccess> iterator = tables.values().iterator();
+            return new Iterator<PTable>() {
+
+                @Override
+                public boolean hasNext() {
+                    return iterator.hasNext();
+                }
+
+                @Override
+                public PTable next() {
+                    return iterator.next().table;
+                }
+
+                @Override
+                public void remove() {
+                    throw new UnsupportedOperationException();
+                }
+                
+            };
         }
 
         @Override
         public int size() {
             return tables.size();
+        }
+        
+        private static class PTableAccess {
+            public PTable table;
+            public volatile long lastAccessTime;
+            
+            public PTableAccess(PTable table, long lastAccessTime) {
+                this.table = table;
+                this.lastAccessTime = lastAccessTime;
+            }
+
+            public PTableAccess(PTableAccess tableAccess) {
+                this.table = tableAccess.table;
+                this.lastAccessTime = tableAccess.lastAccessTime;
+            }
         }
     }
     

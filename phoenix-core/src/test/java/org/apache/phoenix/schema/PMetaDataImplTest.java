@@ -18,12 +18,12 @@
 package org.apache.phoenix.schema;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 
-import java.util.Iterator;
+import java.util.Set;
 
 import org.junit.Test;
+
+import com.google.common.collect.Sets;
 
 public class PMetaDataImplTest {
     
@@ -41,18 +41,28 @@ public class PMetaDataImplTest {
     }
     
     private static void assertNames(PMetaData.Cache cache, String... names) {
-        Iterator<PTable> tables = cache.iterator();
-        for (String name : names) {
-            assertTrue(tables.hasNext());
-            assertEquals(name, tables.next().getKey().getName());
+        Set<String> actualTables = Sets.newHashSet();
+        for (PTable table : cache) {
+            actualTables.add(table.getKey().getName());
         }
-        assertFalse(tables.hasNext());
+        Set<String> expectedTables = Sets.newHashSet(names);
+        assertEquals(expectedTables,actualTables);
+    }
+    
+    private static class TestTimeKeeper implements org.apache.phoenix.util.TimeKeeper {
+        private long time = 0;
+        
+        @Override
+        public long getCurrentTime() {
+            return time++;
+        }
+        
     }
     
     @Test
     public void testEviction() throws Exception {
         long maxSize = 10;
-        PMetaData metaData = new PMetaDataImpl(5, maxSize);
+        PMetaData metaData = new PMetaDataImpl(5, maxSize, new TestTimeKeeper());
         PMetaData.Cache cache = metaData.getTables();
         addToTable(cache, "a", 5);
         assertEquals(1, cache.size());
