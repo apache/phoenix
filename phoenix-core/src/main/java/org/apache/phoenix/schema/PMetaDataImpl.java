@@ -46,14 +46,28 @@ public class PMetaDataImpl implements PMetaData {
     }
     
     private static class CacheImpl implements Cache, Cloneable {
-        private final long maxByteSize;
         private long currentSize;
+        private int initialCapacity;
+        private final long maxByteSize;
         private final LinkedHashMap<PTableKey,PTable> tables;
         
-        private CacheImpl(long maxByteSize, long currentSize, LinkedHashMap<PTableKey,PTable> tables) {
-            this.maxByteSize = maxByteSize;
-            this.currentSize = currentSize;
-            this.tables = tables;
+        private static LinkedHashMap<PTableKey,PTable> newLRUMap(int estimatedSize) {
+            return new LinkedHashMap<PTableKey,PTable>(estimatedSize, 0.75F, true);
+        }
+
+        // Do our own clone, as the one in LinkedHashMap doesn't specialize clone like it should,
+        // so it doesn't clone it's own doubly linked list.
+        private static LinkedHashMap<PTableKey, PTable> cloneLRUMap(LinkedHashMap<PTableKey, PTable> tables, int estimatedSize) {
+            LinkedHashMap<PTableKey, PTable> newTables = newLRUMap(estimatedSize);
+            newTables.putAll(tables);
+            return newTables;
+        }
+
+        private CacheImpl(CacheImpl toClone) {
+            this.maxByteSize = toClone.maxByteSize;
+            this.currentSize = toClone.currentSize;
+            this.initialCapacity = toClone.initialCapacity;
+            this.tables = cloneLRUMap(toClone.tables, toClone.initialCapacity);
         }
         
         public CacheImpl(int initialCapacity, long maxByteSize) {
@@ -62,10 +76,9 @@ public class PMetaDataImpl implements PMetaData {
             this.tables = newLRUMap(initialCapacity);
         }
         
-        @SuppressWarnings("unchecked")
         @Override
         public Cache clone() {
-            return new CacheImpl(this.maxByteSize, this.currentSize, (LinkedHashMap<PTableKey, PTable>)this.tables.clone());
+            return new CacheImpl(this);
         }
         
         @Override
@@ -107,10 +120,6 @@ public class PMetaDataImpl implements PMetaData {
             return value;
         }
         
-        private LinkedHashMap<PTableKey,PTable> newLRUMap(int estimatedSize) {
-            return new LinkedHashMap<PTableKey,PTable>(estimatedSize, 0.75F, true);
-        }
-
         @Override
         public Iterator<PTable> iterator() {
             return Iterators.unmodifiableIterator(tables.values().iterator());
