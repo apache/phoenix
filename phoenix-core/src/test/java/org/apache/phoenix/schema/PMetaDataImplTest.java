@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 
 import java.util.Set;
 
+import org.apache.phoenix.util.TimeKeeper;
 import org.junit.Test;
 
 import com.google.common.collect.Sets;
@@ -49,7 +50,7 @@ public class PMetaDataImplTest {
         assertEquals(expectedTables,actualTables);
     }
     
-    private static class TestTimeKeeper implements org.apache.phoenix.util.TimeKeeper {
+    private static class TestTimeKeeper implements TimeKeeper {
         private long time = 0;
         
         @Override
