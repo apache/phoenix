@@ -43,7 +43,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
 
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
 
         // Table wildcard query
         String query = "SELECT * FROM aTable";
@@ -187,7 +187,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectFromViewOnExistingTable() throws Exception {
-        PhoenixConnection pconn = DriverManager.getConnection(PHOENIX_JDBC_URL, TEST_PROPERTIES).unwrap(
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(
                 PhoenixConnection.class);
         byte[] cfB = Bytes.toBytes(SchemaUtil.normalizeIdentifier("b"));
         byte[] cfC = Bytes.toBytes(SchemaUtil.normalizeIdentifier("c"));
@@ -206,7 +206,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn1 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
 
         String createStmt = "create view " + MDTEST_NAME + " (id integer not null primary key,"
                 + " b.col1 integer, c.col2 bigint, c.col3 varchar(20))";
@@ -214,7 +214,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
         conn1.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        PhoenixConnection conn2 = DriverManager.getConnection(PHOENIX_JDBC_URL, props).unwrap(PhoenixConnection.class);
+        PhoenixConnection conn2 = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         byte[] c1 = Bytes.toBytes("COL1");
         byte[] c2 = Bytes.toBytes("COL2");
         byte[] c3 = Bytes.toBytes("COL3");
@@ -240,7 +240,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
             conn2.close();
 
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-            Connection conn7 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            Connection conn7 = DriverManager.getConnection(getUrl(), props);
             String select = "SELECT id, b.col1 FROM " + MDTEST_NAME + " WHERE c.col2=?";
             PreparedStatement ps = conn7.prepareStatement(select);
             ps.setInt(1, 10);

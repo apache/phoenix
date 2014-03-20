@@ -236,7 +236,7 @@
           <version>${maven-failsafe-plugin.version}</version>
           <configuration>
             <encoding>UTF-8</encoding>
-            <argLine>-enableassertions -Xmx3000m -Djava.security.egd=file:/dev/./urandom</argLine>
+            <argLine>-enableassertions -Xmx3000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
             <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
             <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
           </configuration>
@@ -292,7 +292,7 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <version>${maven-surefire-plugin.version}</version>
         <configuration>
-          <argLine>-enableassertions -Xmx2250m
+          <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m 
             -Djava.security.egd=file:/dev/./urandom</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
         </configuration>

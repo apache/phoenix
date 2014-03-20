@@ -26,7 +26,6 @@ import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_DISPLAY_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_DISPLAY_NAME;
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -720,7 +719,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     public void testDefaultJoin() throws Exception {
         String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -765,7 +764,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     public void testInnerJoin() throws Exception {
         String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name, next value for my.seq FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item INNER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -819,7 +818,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         query[1] = "SELECT " + JOIN_ITEM_TABLE_FULL_NAME + ".\"item_id\", " + JOIN_ITEM_TABLE_FULL_NAME + ".name, " + JOIN_SUPPLIER_TABLE_FULL_NAME + ".\"supplier_id\", " + JOIN_SUPPLIER_TABLE_FULL_NAME + ".name, next value for my.seq FROM " + JOIN_ITEM_TABLE_FULL_NAME + " LEFT JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " ON " + JOIN_ITEM_TABLE_FULL_NAME + ".\"supplier_id\" = " + JOIN_SUPPLIER_TABLE_FULL_NAME + ".\"supplier_id\" ORDER BY \"item_id\"";
         query[2] = "SELECT item.\"item_id\", " + JOIN_ITEM_TABLE_FULL_NAME + ".name, supp.\"supplier_id\", " + JOIN_SUPPLIER_TABLE_FULL_NAME + ".name, next value for my.seq FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON " + JOIN_ITEM_TABLE_FULL_NAME + ".\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
@@ -873,7 +872,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     public void testRightJoin() throws Exception {
         String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp RIGHT JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " item ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -924,7 +923,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         String query1 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item INNER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND supp.\"supplier_id\" BETWEEN '0000000001' AND '0000000005'";
         String query2 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item INNER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.\"supplier_id\" = '0000000001' OR supp.\"supplier_id\" = '0000000005')";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -985,7 +984,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     public void testLeftJoinWithPreFilters() throws Exception {
         String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.\"supplier_id\" = '0000000001' OR supp.\"supplier_id\" = '0000000005') ORDER BY \"item_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1036,7 +1035,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         String query1 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp RIGHT JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " item ON item.\"supplier_id\" = supp.\"supplier_id\" WHERE supp.\"supplier_id\" BETWEEN '0000000001' AND '0000000005'";
         String query2 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" WHERE supp.\"supplier_id\" = '0000000001' OR supp.\"supplier_id\" = '0000000005'";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -1103,7 +1102,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 + JOIN_CUSTOMER_TABLE_FULL_NAME + " c ON o.\"customer_id\" = c.\"customer_id\" JOIN " 
                 + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
@@ -1162,7 +1161,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         String query3 = "SELECT i.\"item_id\" iid, sum(quantity) q FROM " + JOIN_ITEM_TABLE_FULL_NAME + " i LEFT JOIN " 
                 + JOIN_ORDER_TABLE_FULL_NAME + " o ON o.\"item_id\" = i.\"item_id\" GROUP BY i.\"item_id\" ORDER BY q DESC NULLS LAST, iid";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -1244,7 +1243,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         String query2 = "SELECT i.\"item_id\" iid, sum(quantity) q FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o RIGHT JOIN " 
             + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.\"item_id\" ORDER BY q DESC NULLS LAST, iid";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -1314,7 +1313,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
             + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1379,7 +1378,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
             + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON i.\"supplier_id\" = s.\"supplier_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1426,7 +1425,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
             + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1495,7 +1494,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     public void testJoinWithWildcard() throws Exception {
         String query = "SELECT * FROM " + JOIN_ITEM_TABLE_FULL_NAME + " LEFT JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON " + JOIN_ITEM_TABLE_FULL_NAME + ".\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1606,7 +1605,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
                 + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1750,7 +1749,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     public void testJoinMultiJoinKeys() throws Exception {
         String query = "SELECT c.name, s.name FROM " + JOIN_CUSTOMER_TABLE_FULL_NAME + " c LEFT JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON \"customer_id\" = \"supplier_id\" AND c.loc_id = s.loc_id AND substr(s.name, 2, 1) = substr(c.name, 2, 1)";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1784,7 +1783,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         String query = "SELECT \"order_id\", i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o INNER JOIN " 
             + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" AND o.price = (i.price * (100 - discount2)) / 100.0 WHERE quantity < 5000";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1806,7 +1805,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         String query = "SELECT \"order_id\", c.name, o.date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o INNER JOIN " 
             + JOIN_CUSTOMER_TABLE_FULL_NAME + " c ON o.\"customer_id\" = c.\"customer_id\" AND o.date = c.date";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
             PreparedStatement statement = conn.prepareStatement(query);
@@ -1839,7 +1838,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         String query = "SELECT \"order_id\", i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o INNER JOIN " 
             + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" AND o.price / 100 = substr(i.name, 2, 1)";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.executeQuery();
@@ -1856,7 +1855,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         String query1 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item LEFT JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON substr(item.name, 2, 1) = substr(supp.name, 2, 1) AND (supp.name BETWEEN 'S1' AND 'S5') WHERE item.name BETWEEN 'T1' AND 'T5'";
         String query2 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item INNER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" WHERE (item.name = 'T1' OR item.name = 'T5') AND (supp.name = 'S1' OR supp.name = 'S5')";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -1920,7 +1919,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             + JOIN_ORDER_TABLE_FULL_NAME + " o ON o.\"item_id\" = i.\"item_id\" AND quantity < 5000 JOIN "
             + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON i.\"supplier_id\" = s.\"supplier_id\"";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1949,7 +1948,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         String query2 = "SELECT i1.name, i2.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " i1 JOIN " 
             + JOIN_ITEM_TABLE_FULL_NAME + " i2 ON i1.\"item_id\" = i2.\"supplier_id\" ORDER BY i1.name, i2.name";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -2014,7 +2013,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     public void testUpsertWithJoin() throws Exception {
         String tempTable = "TEMP_JOINED_TABLE";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         try {
             conn.createStatement().execute("CREATE TABLE " + tempTable 
@@ -2106,7 +2105,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         String tempTableNoSalting = "TEMP_TABLE_NO_SALTING";
         String tempTableWithSalting = "TEMP_TABLE_WITH_SALTING";
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.createStatement().execute("CREATE TABLE " + tempTableNoSalting 
                     + "   (mypk INTEGER NOT NULL PRIMARY KEY, " 
@@ -2247,7 +2246,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
-            conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            conn = DriverManager.getConnection(getUrl(), props);
             String ddlA = "CREATE TABLE " + tableA + "   (pkA INTEGER NOT NULL, " + "    colA1 INTEGER, "
                     + "        colA2 VARCHAR " + "CONSTRAINT PK PRIMARY KEY" + "(pkA)" + ")";
 

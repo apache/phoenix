@@ -34,7 +34,7 @@ public class FunkyNamesIT extends BaseClientManagedTimeIT {
     protected static void initTableValues(byte[][] splits, long ts) throws Exception {
         ensureTableCreated(getUrl(),FUNKY_NAME,splits, ts-2);
 
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -65,7 +65,7 @@ public class FunkyNamesIT extends BaseClientManagedTimeIT {
     public void testUnaliasedFunkyNames() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT \"foo!\",\"#@$\",\"foo.bar-bas\",\"_blah^\" FROM FUNKY_NAMES";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -92,7 +92,7 @@ public class FunkyNamesIT extends BaseClientManagedTimeIT {
     public void testCaseSensitive() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT \"Value\",\"VALUE\",\"value\" FROM FUNKY_NAMES";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -122,7 +122,7 @@ public class FunkyNamesIT extends BaseClientManagedTimeIT {
     public void testAliasedFunkyNames() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT \"1-3.4$\".\"foo!\" as \"1-2\",\"#@$\" as \"[3]\",\"foo.bar-bas\" as \"$$$\",\"_blah^\" \"0\" FROM FUNKY_NAMES \"1-3.4$\"";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {

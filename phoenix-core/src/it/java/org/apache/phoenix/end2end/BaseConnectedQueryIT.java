@@ -19,7 +19,6 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
@@ -38,7 +37,6 @@ import static org.apache.phoenix.util.TestUtil.ENTITYHISTID9;
 import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_SALTED_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
-import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.apache.phoenix.util.TestUtil.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.PARENTID1;
 import static org.apache.phoenix.util.TestUtil.PARENTID2;
@@ -78,13 +76,17 @@ import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
-
+import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
+import org.apache.phoenix.schema.TableNotFoundException;
+import org.slf4j.LoggerFactory;
 
 /**
  * 
@@ -94,6 +96,8 @@ import org.junit.BeforeClass;
  * @since 0.1
  */
 public abstract class BaseConnectedQueryIT extends BaseTest {
+    private static final org.slf4j.Logger logger = LoggerFactory.getLogger(BaseConnectedQueryIT.class);
+    
     protected static byte[][] getDefaultSplits(String tenantId) {
         return new byte[][] { 
             Bytes.toBytes(tenantId + "00A"),
@@ -114,12 +118,8 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
       }
       // reconstruct url when running against a live cluster
       if (isDistributedCluster) {
-        return JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + conf.get(HConstants.ZOOKEEPER_QUORUM, LOCALHOST) 
-            + JDBC_PROTOCOL_SEPARATOR
-            + conf.getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT)
-            + JDBC_PROTOCOL_SEPARATOR
-            + conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT)
-            + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+        // Get all info from hbase-site.xml
+        return JDBC_PROTOCOL + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;      
       } else {
         return TestUtil.PHOENIX_JDBC_URL;
       }
@@ -139,8 +139,7 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
         if (ts != HConstants.LATEST_TIMESTAMP) {
             props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
         }
-        Connection conn = null;
-        conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             deletePriorTables(ts, conn);
             deletePriorSequences(ts, conn);
@@ -175,7 +174,13 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
                     conn = DriverManager.getConnection(getUrl(), props);
                     lastTenantId = tenantId;
                 }
-                conn.createStatement().executeUpdate(ddl);
+                try {
+                    conn.createStatement().executeUpdate(ddl);
+                } catch (NewerTableAlreadyExistsException ex) {
+                    logger.info("Newer table " + fullTableName + " or its delete marker exists. Ignore current deletion");
+                } catch (TableNotFoundException ex) {
+                    logger.info("Table " + fullTableName + " is already deleted.");
+                }
             }
             if (lastTenantId != null) {
                 conn.close();

@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -62,7 +61,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			statement.setString(1, tenantId);
@@ -98,7 +97,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			statement.setString(1, tenantId);
@@ -138,7 +137,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			statement.setString(1, tenantId);
@@ -180,7 +179,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
@@ -211,7 +210,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
@@ -239,7 +238,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
@@ -266,7 +265,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -292,7 +291,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts)); // Execute
                                                                                  // at
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             int executeUpdate = statement.executeUpdate();
@@ -303,7 +302,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             // create another connection
             props = new Properties(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-            conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            conn = DriverManager.getConnection(getUrl(), props);
             query = "SELECT ARRAY_ELEM(a_double_array,2) FROM table_with_array";
             statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -331,7 +330,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             initSimpleArrayTable(tenantId, null, ts, false);
             Properties props = new Properties(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-            conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            conn = DriverManager.getConnection(getUrl(), props);
             String query = "upsert into table_with_array(ORGANIZATION_ID,ENTITY_ID,a_double_array) "
                     + "SELECT organization_id, entity_id, a_double_array  FROM " + SIMPLE_TABLE_WITH_ARRAY
                     + " WHERE a_double_array[2] = 89.96d";
@@ -344,7 +343,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             // create another connection
             props = new Properties(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
-            conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            conn = DriverManager.getConnection(getUrl(), props);
             query = "SELECT ARRAY_ELEM(a_double_array,2) FROM table_with_array";
             statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -373,7 +372,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
                 + tenantId + "'";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -404,7 +403,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
                 + tenantId + "'";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -435,7 +434,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
                 + tenantId + "'";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -470,7 +469,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             initSimpleArrayTable(tenantId, null, ts, false);
             Properties props = new Properties(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-            conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            conn = DriverManager.getConnection(getUrl(), props);
             String query = "upsert into table_with_array(ORGANIZATION_ID,ENTITY_ID, a_unsigned_double, a_double_array) "
                     + "SELECT organization_id, entity_id, x_double, ARRAY[23.4d, 22.1d, x_double]  FROM " + SIMPLE_TABLE_WITH_ARRAY
                     + " WHERE a_double_array[2] = 89.96d";
@@ -483,7 +482,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             // create another connection
             props = new Properties(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
-            conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            conn = DriverManager.getConnection(getUrl(), props);
             query = "SELECT ARRAY_ELEM(a_double_array,2) FROM table_with_array";
             statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -511,7 +510,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_char_array[2] FROM SIMPLE_TABLE_WITH_ARRAY";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -711,7 +710,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
@@ -742,7 +741,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			Double[] doubleArr = new Double[1];
@@ -773,7 +772,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			Double[] doubleArr = new Double[1];
@@ -802,7 +801,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
@@ -827,7 +826,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -855,7 +854,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -883,7 +882,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -913,7 +912,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -942,7 +941,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -970,7 +969,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
@@ -996,7 +995,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
@@ -1024,7 +1023,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
@@ -1049,7 +1048,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		Properties props = new Properties(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
@@ -1071,7 +1070,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             ResultSet rs = conn.getMetaData().getColumns(null, null, StringUtil.escapeLike(TABLE_WITH_ARRAY), StringUtil.escapeLike(SchemaUtil.normalizeIdentifier("x_long_array")));
             assertTrue(rs.next());          

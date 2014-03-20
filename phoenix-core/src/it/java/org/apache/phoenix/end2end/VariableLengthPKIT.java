@@ -19,7 +19,6 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.BTABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.MILLIS_IN_DAY;
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.PTSDB2_NAME;
 import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -66,7 +65,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(),PTSDB_NAME, null, ts-2);
 
         // Insert all rows at ts
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         PreparedStatement stmt = conn.prepareStatement(
@@ -93,7 +92,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(),PTSDB_NAME, splits, ts-2);
 
         // Insert all rows at ts
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -181,7 +180,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     public void testSingleColumnScanKey() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM BTABLE WHERE A_STRING=?";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -205,7 +204,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     public void testSingleColumnGroupBy() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT INST FROM PTSDB GROUP BY INST";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -224,7 +223,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     public void testNonfirstColumnGroupBy() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT HOST FROM PTSDB WHERE INST='abc' GROUP BY HOST";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -243,7 +242,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     public void testGroupByRowKeyColumns() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT SUBSTR(INST,1,1),HOST FROM PTSDB GROUP BY SUBSTR(INST,1,1),HOST";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -266,7 +265,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     public void testSkipScan() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT HOST FROM PTSDB WHERE INST='abc' AND DATE>=TO_DATE('1970-01-01 00:00:00') AND DATE <TO_DATE('2015-01-01 00:00:00')";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -285,7 +284,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     public void testSkipMax() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT MAX(INST),MAX(DATE) FROM PTSDB WHERE INST='abc' AND DATE>=TO_DATE('1970-01-01 00:00:00') AND DATE <TO_DATE('2171-01-01 00:00:00')";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -304,7 +303,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     public void testSkipMaxWithLimit() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT MAX(INST),MAX(DATE) FROM PTSDB WHERE INST='abc' AND DATE>=TO_DATE('1970-01-01 00:00:00') AND DATE <TO_DATE('2171-01-01 00:00:00') LIMIT 2";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -325,7 +324,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         // Requires not null column to be projected, since the only one projected in the query is
         // nullable and will cause the no key value to be returned if it is the only one projected.
         String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM BTABLE WHERE B_STRING=?";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -351,7 +350,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         // TODO: add compile test to confirm start/stop scan key
         String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM BTABLE WHERE A_STRING=? AND A_ID=? AND B_STRING=?";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -379,7 +378,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         // TODO: add compile test to confirm start/stop scan key
         String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM BTABLE WHERE A_STRING=? AND A_ID=? AND B_STRING>?";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -412,7 +411,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         // TODO: add compile test to confirm start/stop scan key
         String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM BTABLE WHERE A_STRING>? AND A_INTEGER>=?";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -439,7 +438,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
 
         // Insert all rows at ts
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -450,7 +449,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
         // Comparisons against null are always false.
         String query = "SELECT HOST,DATE FROM PTSDB WHERE HOST='' AND INST=''";
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -466,7 +465,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
 
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -479,7 +478,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         conn.close();
 
         String query = "SELECT HOST,DATE FROM PTSDB WHERE INST='x' AND HOST='y'";
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -496,7 +495,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
 
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -510,7 +509,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
         String query1 = "SELECT INST,DATE FROM PTSDB WHERE INST='x''y'";
         String query2 = "SELECT INST,DATE FROM PTSDB WHERE INST='x\\\'y'";
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
@@ -534,7 +533,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     private static void initPtsdbTableValues(long ts) throws Exception {
         ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
 
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -550,7 +549,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         initPtsdbTableValues(ts);
 
         String query = "SELECT HOST,DATE FROM PTSDB WHERE INST='x' AND HOST='y'";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -567,7 +566,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     private static void initPtsdbTableValues2(long ts, Date d) throws Exception {
         ensureTableCreated(getUrl(),PTSDB2_NAME,null, ts-2);
 
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -610,7 +609,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         + " WHERE inst='a'"
         + " GROUP BY ROUND(date,'day',1)"
         + " ORDER BY MAX(val2)"; // disambiguate row order
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -639,7 +638,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         + " GROUP BY inst,ROUND(date,'day',1)"
         + " ORDER BY inst,ROUND(date,'day',1)"
         ;
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -684,7 +683,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         String query = "SELECT COUNT(*)"
         + " FROM "+PTSDB2_NAME
         + " WHERE inst='a'";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -709,7 +708,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         String sql1 = "UPSERT INTO "+PTSDB2_NAME+"(inst,date,val1) VALUES (?, ?, ?)";
         String sql2 = "UPSERT INTO "+PTSDB2_NAME+"(inst,date,val2) VALUES (?, ?, ?)";
         String sql3 = "UPSERT INTO "+PTSDB2_NAME+"(inst,date,val3) VALUES (?, ?, ?)";
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         // conn.setAutoCommit(true);
 
@@ -778,7 +777,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         
         // Query at a time after the upsert to confirm they took place
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -797,7 +796,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         initPtsdbTableValues(ts);
 
         String query = "SELECT * FROM PTSDB WHERE INST='x' AND HOST='y'";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -820,7 +819,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         initPtsdbTableValues(ts);
 
         String query = "SELECT HOST,TO_CHAR(DATE) FROM PTSDB WHERE INST='x' AND HOST='y'";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -841,7 +840,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         String format = "HH:mm:ss";
         Format dateFormatter = DateUtil.getDateFormatter(format);
         String query = "SELECT HOST,TO_CHAR(DATE,'" + format + "') FROM PTSDB WHERE INST='x' AND HOST='y'";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -862,7 +861,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         String format = "yyyy-MM-dd HH:mm:ss.S";
         Format dateFormatter = DateUtil.getDateFormatter(format);
         String query = "SELECT HOST,TO_CHAR(DATE,'" + format + "') FROM PTSDB WHERE INST='x' AND HOST='y' and DATE=TO_DATE(?,'" + format + "')";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -881,7 +880,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
 
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -901,7 +900,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         ensureTableCreated(getUrl(),BTABLE_NAME,null, ts-2);
 
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -921,7 +920,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         ensureTableCreated(getUrl(),BTABLE_NAME,null, ts-2);
 
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -949,7 +948,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         ensureTableCreated(getUrl(),BTABLE_NAME,null, ts-2);
 
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -985,7 +984,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         ensureTableCreated(getUrl(),BTABLE_NAME,null, ts-2);
 
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -1021,7 +1020,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         ensureTableCreated(getUrl(),BTABLE_NAME,null, ts-2);
 
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -1058,7 +1057,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         ensureTableCreated(getUrl(),BTABLE_NAME,null, ts-2);
 
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -1096,7 +1095,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     public void testMultiFixedLengthNull() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT B_INTEGER,C_INTEGER,COUNT(1) FROM BTABLE GROUP BY C_INTEGER,B_INTEGER";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1131,7 +1130,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     public void testSingleFixedLengthNull() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT C_INTEGER,COUNT(1) FROM BTABLE GROUP BY C_INTEGER";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1157,7 +1156,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     public void testMultiMixedTypeGroupBy() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT A_ID, E_STRING, D_STRING, C_INTEGER, COUNT(1) FROM BTABLE GROUP BY A_ID, E_STRING, D_STRING, C_INTEGER";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1229,7 +1228,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             "jkl   ",
         };
         assertEquals(query.length,result.length);
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1288,7 +1287,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             "DD Ēĕ ĜĞ ϗϘϛϢ",
         };
         assertEquals(query.length,result.length);
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1350,7 +1349,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             "Ēĕ",
         };
         assertEquals(query.length,result.length);
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1423,7 +1422,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             "1",
         };
         assertEquals(query.length,result.length);
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1458,7 +1457,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             "1",
         };
         assertEquals(query.length,result.length);
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1481,7 +1480,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
 
         // Insert all rows at ts
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         PreparedStatement stmt = conn.prepareStatement("upsert into PTSDB VALUES (?, ?, ?, 0.5)");
@@ -1518,7 +1517,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         conn.commit();
         conn.close();
 
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         conn = DriverManager.getConnection(url, props);
         PreparedStatement statement;
         ResultSet rs;
@@ -1593,7 +1592,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
 
         // Insert all rows at ts
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
@@ -1603,7 +1602,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         conn.close();
 
         String query = "SELECT HOST,INST,DATE FROM PTSDB WHERE HOST IS NULL AND INST IS NULL AND DATE=?";
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -1643,7 +1642,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             "abc",
         };
         assertEquals(query.length,result.length);
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1678,7 +1677,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
                 "SS",
         };
         assertEquals(query.length, result.length);
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1715,7 +1714,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
                 "ss",
         };
         assertEquals(query.length, result.length);
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1758,7 +1757,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             "jkl   ",
         };
         assertEquals(query.length, result.length);
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1801,7 +1800,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             "   def",
         };
         assertEquals(query.length, result.length);
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1821,12 +1820,12 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testSubstrFunctionOnRowKeyInWhere() throws Exception {
         long ts = nextTimestamp();
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts);
         Connection conn = DriverManager.getConnection(url);
         conn.createStatement().execute("CREATE TABLE substr_test (s1 varchar not null, s2 varchar not null constraint pk primary key(s1,s2))");
         conn.close();
 
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 2);
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 2);
         conn = DriverManager.getConnection(url);
         conn.createStatement().execute("UPSERT INTO substr_test VALUES('abc','a')");
         conn.createStatement().execute("UPSERT INTO substr_test VALUES('abcd','b')");
@@ -1835,7 +1834,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         conn.commit();
         conn.close();
 
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         conn = DriverManager.getConnection(url);
         ResultSet rs = conn.createStatement().executeQuery("SELECT s1 from substr_test where substr(s1,1,4) = 'abcd'");
         assertTrue(rs.next());
@@ -1848,12 +1847,12 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testRTrimFunctionOnRowKeyInWhere() throws Exception {
         long ts = nextTimestamp();
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts);
         Connection conn = DriverManager.getConnection(url);
         conn.createStatement().execute("CREATE TABLE substr_test (s1 varchar not null, s2 varchar not null constraint pk primary key(s1,s2))");
         conn.close();
 
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 2);
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 2);
         conn = DriverManager.getConnection(url);
         conn.createStatement().execute("UPSERT INTO substr_test VALUES('abc','a')");
         conn.createStatement().execute("UPSERT INTO substr_test VALUES('abcd','b')");
@@ -1864,7 +1863,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         conn.commit();
         conn.close();
 
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         conn = DriverManager.getConnection(url);
         ResultSet rs = conn.createStatement().executeQuery("SELECT s1 from substr_test where rtrim(s1) = 'abcd'");
         assertTrue(rs.next());
@@ -1879,12 +1878,12 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testLikeFunctionOnRowKeyInWhere() throws Exception {
         long ts = nextTimestamp();
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts);
         Connection conn = DriverManager.getConnection(url);
         conn.createStatement().execute("CREATE TABLE substr_test (s1 varchar not null, s2 varchar not null constraint pk primary key(s1,s2))");
         conn.close();
 
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 2);
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 2);
         conn = DriverManager.getConnection(url);
         conn.createStatement().execute("UPSERT INTO substr_test VALUES('abc','a')");
         conn.createStatement().execute("UPSERT INTO substr_test VALUES('abcd','b')");
@@ -1894,7 +1893,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         conn.commit();
         conn.close();
 
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         conn = DriverManager.getConnection(url);
         ResultSet rs = conn.createStatement().executeQuery("SELECT s1 from substr_test where s1 like 'abcd%1'");
         assertTrue(rs.next());
@@ -1934,7 +1933,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             "   ghi   ",
         };
         assertEquals(query.length, result.length);
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {

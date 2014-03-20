@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -175,7 +174,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
     // FIXME @Test
     public void testGetAllDynColsInFamily() throws Exception {
         String query = "SELECT A.* FROM WEB_STATS WHERE entry='entry1'";
-        String url = PHOENIX_JDBC_URL + ";";
+        String url = getUrl() + ";";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -203,7 +202,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
     // FIXME @Test
     public void testGetAllDynCols() throws Exception {
         String query = "SELECT * FROM WEB_STATS WHERE entry='entry1'";
-        String url = PHOENIX_JDBC_URL + ";";
+        String url = getUrl() + ";";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -230,7 +229,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
         String query = "SELECT B.* FROM WEB_STATS(" + 
                 "B." + LAST_LOGIN_TIME_PREFIX + USER_ID2 + " TIME," + 
                 "B." + LAST_LOGIN_TIME_PREFIX + USER_ID3 + " TIME) WHERE entry='entry2'";
-        String url = PHOENIX_JDBC_URL + ";";
+        String url = getUrl() + ";";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -255,7 +254,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
         String query = "SELECT B.* FROM WEB_STATS(" + 
                 "B.\"" + LAST_LOGIN_TIME_PREFIX + USER_ID2 + "\"" + " TIME," + 
                 "B.\"" + LAST_LOGIN_TIME_PREFIX + USER_ID3 + "\"" + " TIME) WHERE entry='entry2'";
-        String url = PHOENIX_JDBC_URL + ";";
+        String url = getUrl() + ";";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -280,7 +279,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
     // FIXME @Test
     public void testProjectStaticAndDynamic() throws Exception {
         String query = "SELECT ENTRY, A.DUMMY, B.DUMMY, A.*,B.* FROM WEB_STATS WHERE entry='entry3'";
-        String url = PHOENIX_JDBC_URL + ";";
+        String url = getUrl() + ";";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -307,7 +306,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
     @Test(expected = ColumnFamilyNotFoundException.class)
     public void testDynamicFamilyException() throws Exception {
         String query = "SELECT C.* FROM WEB_STATS";
-        String url = PHOENIX_JDBC_URL + ";";
+        String url = getUrl() + ";";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -321,7 +320,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
     @Test(expected = PhoenixParserException.class)
     public void testDynamicFamilyFunctionException() throws Exception {
         String query = "SELECT count(C.*) FROM WEB_STATS";
-        String url = PHOENIX_JDBC_URL + ";";
+        String url = getUrl() + ";";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
