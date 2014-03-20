@@ -238,6 +238,7 @@ public class UpsertCompiler {
             ViewValuesMapBuilder builder = new ViewValuesMapBuilder(context);
             String viewStatement = table.getViewStatement();
             if (viewStatement != null) {
+                // TODO: we persist the viewConstant on the column now, so there's no need to re-parse here
 	            ParseNode viewNode = new SQLParser(viewStatement).parseQuery().getWhere();
 	            viewNode.accept(builder);
 	            addViewColumnsToBe = builder.getViewColumns();
@@ -412,7 +413,7 @@ public class UpsertCompiler {
         final int[] columnIndexes = columnIndexesToBe;
         final int[] pkSlotIndexes = pkSlotIndexesToBe;
         final Map<ColumnRef, byte[]> addViewColumns = addViewColumnsToBe;
-        final Map<PColumn, byte[]> overlapViewColumns = Collections.emptyMap();
+        final Map<PColumn, byte[]> overlapViewColumns = overlapViewColumnsToBe;
         
         // TODO: break this up into multiple functions
         ////////////////////////////////////////////////////////////////////
@@ -777,7 +778,7 @@ public class UpsertCompiler {
         private Map<ColumnRef, byte[]> viewColumns = Maps.newHashMapWithExpectedSize(5);
 
         private ViewValuesMapBuilder(StatementContext context) {
-            super(context);
+            super(context, true);
         }
         
         public Map<ColumnRef, byte[]> getViewColumns() {
