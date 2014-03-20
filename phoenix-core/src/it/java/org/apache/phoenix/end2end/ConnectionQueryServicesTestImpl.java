@@ -53,6 +53,12 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
             IntegrationTestingUtility util =  new IntegrationTestingUtility(config);
             util.initializeCluster(this.NUM_SLAVES_BASE);
             this.util = util;
+            // remove all hbase tables
+            HBaseAdmin admin = util.getHBaseAdmin();
+            HTableDescriptor[] tables = admin.listTables();
+            for(HTableDescriptor table : tables){
+                util.deleteTable(table.getName());
+            }
         } else {
             util = new HBaseTestingUtility(config);
             util.startMiniCluster();

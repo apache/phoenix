@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end.salted;
 
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -45,7 +44,7 @@ import org.apache.phoenix.util.QueryUtil;
 public class SaltedTableIT extends BaseClientManagedTimeIT {
 
     private static void initTableValues(byte[][] splits, long ts) throws Exception {
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         
@@ -127,7 +126,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testTableWithInvalidBucketNumber() throws Exception {
         long ts = nextTimestamp();
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -156,7 +155,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testSelectValueNoWhereClause() throws Exception {
         long ts = nextTimestamp();
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -217,7 +216,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testSelectValueWithFullyQualifiedWhereClause() throws Exception {
         long ts = nextTimestamp();
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -349,7 +348,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testSelectValueWithNotFullyQualifiedWhereClause() throws Exception {
         long ts = nextTimestamp();
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -420,7 +419,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testSelectWithGroupBy() throws Exception {
         long ts = nextTimestamp();
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -442,7 +441,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testLimitScan() throws Exception {
         long ts = nextTimestamp();
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -462,7 +461,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testSelectWithOrderByRowKey() throws Exception {
         long ts = nextTimestamp();
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {

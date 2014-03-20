@@ -29,7 +29,6 @@ import static org.apache.phoenix.util.TestUtil.CUSTOM_ENTITY_DATA_SCHEMA_NAME;
 import static org.apache.phoenix.util.TestUtil.GROUPBYTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.MDTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.MDTEST_SCHEMA_NAME;
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -89,7 +88,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         DatabaseMetaData dbmd = conn.getMetaData();
         String aTableName = StringUtil.escapeLike(TestUtil.ATABLE_NAME);
         String aSchemaName = TestUtil.ATABLE_SCHEMA_NAME;
@@ -157,7 +156,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(), PTSDB_NAME, null, ts);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         DatabaseMetaData dbmd = conn.getMetaData();
         ResultSet rs;
         rs = dbmd.getSchemas(null, CUSTOM_ENTITY_DATA_SCHEMA_NAME);
@@ -185,7 +184,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(), MDTEST_NAME, null, ts);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         DatabaseMetaData dbmd = conn.getMetaData();
         ResultSet rs;
         rs = dbmd.getColumns(null, "", MDTEST_NAME, null);
@@ -364,7 +363,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, null, ts);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         DatabaseMetaData dbmd = conn.getMetaData();
         ResultSet rs;
         rs = dbmd.getPrimaryKeys(null, "", MDTEST_NAME);
@@ -455,7 +454,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, null, ts);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         DatabaseMetaData dbmd = conn.getMetaData();
         ResultSet rs = dbmd.getColumns(null, "", "%TEST%", null);
         assertTrue(rs.next());
@@ -517,7 +516,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn5 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn5 = DriverManager.getConnection(getUrl(), props);
         String query = "SELECT a_string FROM aTable";
         // Data should still be there b/c we only dropped the schema
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 8));
@@ -535,12 +534,12 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
 
         // Still should work b/c we're at an earlier timestamp than when table was deleted
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        Connection conn2 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn2 = DriverManager.getConnection(getUrl(), props);
         assertTrue(conn2.prepareStatement(query).executeQuery().next());
         conn2.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        Connection conn10 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn10 = DriverManager.getConnection(getUrl(), props);
         try {
             conn10.prepareStatement(query).executeQuery().next();
             fail();
@@ -550,7 +549,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
  
     @Test
     public void testCreateOnExistingTable() throws Exception {
-        PhoenixConnection pconn = DriverManager.getConnection(PHOENIX_JDBC_URL, TEST_PROPERTIES).unwrap(PhoenixConnection.class);
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
         String tableName = MDTEST_NAME;
         String schemaName = MDTEST_SCHEMA_NAME;
         byte[] cfA = Bytes.toBytes(SchemaUtil.normalizeIdentifier("a"));
@@ -577,7 +576,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        PhoenixConnection conn1 = DriverManager.getConnection(PHOENIX_JDBC_URL, props).unwrap(PhoenixConnection.class);
+        PhoenixConnection conn1 = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         ensureTableCreated(getUrl(), tableName, null, ts);
         
         descriptor = admin.getTableDescriptor(htableName);
@@ -612,7 +611,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         conn1.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        Connection conn2 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn2 = DriverManager.getConnection(getUrl(), props);
         String query = "SELECT count(1) FROM " + tableName;
         ResultSet rs = conn2.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -633,7 +632,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     @SuppressWarnings("deprecation")
     @Test
     public void testCreateViewOnExistingTable() throws Exception {
-        PhoenixConnection pconn = DriverManager.getConnection(PHOENIX_JDBC_URL, TEST_PROPERTIES).unwrap(PhoenixConnection.class);
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
         String tableName = MDTEST_NAME;
         String schemaName = MDTEST_SCHEMA_NAME;
         byte[] cfB = Bytes.toBytes(SchemaUtil.normalizeIdentifier("b"));
@@ -660,7 +659,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn1 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
         String createStmt = "create view bogusTable" + 
         "   (id char(1) not null primary key,\n" + 
         "    a.col1 integer,\n" +
@@ -704,7 +703,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         conn1.close();
                  
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        PhoenixConnection conn2 = DriverManager.getConnection(PHOENIX_JDBC_URL, props).unwrap(PhoenixConnection.class);
+        PhoenixConnection conn2 = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         
         ResultSet rs = conn2.getMetaData().getTables(null, null, MDTEST_NAME, null);
         assertTrue(rs.next());
@@ -741,7 +740,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
             conn2.close();
             
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-            Connection conn7 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            Connection conn7 = DriverManager.getConnection(getUrl(), props);
             // Should be ok b/c we've marked the view with IMMUTABLE_ROWS=true
             conn7.createStatement().execute("CREATE INDEX idx ON " + MDTEST_NAME + "(B.COL1)");
             String select = "SELECT col1 FROM " + MDTEST_NAME + " WHERE col2=?";
@@ -753,7 +752,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
             
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 12));
-            Connection conn75 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            Connection conn75 = DriverManager.getConnection(getUrl(), props);
             String dropTable = "DROP TABLE " + MDTEST_NAME ;
             ps = conn75.prepareStatement(dropTable);
             try {
@@ -769,7 +768,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
             conn75.close();
             
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
-            Connection conn8 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            Connection conn8 = DriverManager.getConnection(getUrl(), props);
             createStmt = "create view " + MDTEST_NAME + 
                     "   (id char(1) not null primary key,\n" + 
                     "    b.col1 integer,\n" +
@@ -779,17 +778,17 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
             conn8.close();
             
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-            Connection conn9 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            Connection conn9 = DriverManager.getConnection(getUrl(), props);
             conn9.createStatement().execute("CREATE INDEX idx ON " + MDTEST_NAME + "(B.COL1)");
             
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
-            Connection conn91 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            Connection conn91 = DriverManager.getConnection(getUrl(), props);
             ps = conn91.prepareStatement(dropView);
             ps.execute();
             conn91.close();
             
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 35));
-            Connection conn92 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            Connection conn92 = DriverManager.getConnection(getUrl(), props);
             createStmt = "create view " + MDTEST_NAME + 
                     "   (id char(1) not null primary key,\n" + 
                     "    b.col1 integer,\n" +
@@ -805,14 +804,14 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
             htable.put(put);
 
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
-            Connection conn92a = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            Connection conn92a = DriverManager.getConnection(getUrl(), props);
             rs = conn92a.createStatement().executeQuery("select count(*) from " + MDTEST_NAME);
             assertTrue(rs.next());
             assertEquals(1,rs.getInt(1));
             conn92a.close();
 
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 45));
-            Connection conn93 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            Connection conn93 = DriverManager.getConnection(getUrl(), props);
             try {
                 String alterView = "alter view " + MDTEST_NAME + " drop column b.col1";
                 conn93.createStatement().execute(alterView);
@@ -823,7 +822,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
             conn93.close();
             
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
-            Connection conn94 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            Connection conn94 = DriverManager.getConnection(getUrl(), props);
             String alterView = "alter view " + MDTEST_NAME + " drop column \"c\".col2";
             conn94.createStatement().execute(alterView);
             conn94.close();
@@ -845,7 +844,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn1 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
         // Failed attempt to repro table not found bug
 //        TestUtil.clearMetaDataCache(conn1);
 //        PhoenixConnection pconn = conn1.unwrap(PhoenixConnection.class);
@@ -854,13 +853,13 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         conn1.close();
  
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        Connection conn2 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn2 = DriverManager.getConnection(getUrl(), props);
         String query = "SELECT z_integer FROM aTable";
         assertTrue(conn2.prepareStatement(query).executeQuery().next());
         conn2.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3));
-        Connection conn3 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn3 = DriverManager.getConnection(getUrl(), props);
         try {
             conn3.prepareStatement(query).executeQuery().next();
             fail();
@@ -876,18 +875,18 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn1 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
         conn1.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " ADD newcf.z_integer integer");
         conn1.close();
  
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        Connection conn2 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn2 = DriverManager.getConnection(getUrl(), props);
         String query = "SELECT z_integer FROM aTable";
         assertTrue(conn2.prepareStatement(query).executeQuery().next());
         conn2.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3));
-        Connection conn3 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn3 = DriverManager.getConnection(getUrl(), props);
         try {
             conn3.prepareStatement(query).executeQuery().next();
             fail();
@@ -903,7 +902,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn1 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
         try {
             conn1.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " ADD z_string varchar not null primary key");
             fail();
@@ -914,13 +913,13 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         conn1.close();
  
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        Connection conn2 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn2 = DriverManager.getConnection(getUrl(), props);
         String query = "SELECT z_string FROM aTable";
         assertTrue(conn2.prepareStatement(query).executeQuery().next());
         conn2.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3));
-        Connection conn3 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn3 = DriverManager.getConnection(getUrl(), props);
         try {
             conn3.prepareStatement(query).executeQuery().next();
             fail();
@@ -936,13 +935,13 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn5 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn5 = DriverManager.getConnection(getUrl(), props);
         assertTrue(conn5.createStatement().executeQuery("SELECT 1 FROM atable WHERE b_string IS NOT NULL").next());
         conn5.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " DROP COLUMN b_string");
         conn5.close();
  
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        Connection conn2 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn2 = DriverManager.getConnection(getUrl(), props);
         String query = "SELECT b_string FROM aTable";
         try {
             conn2.prepareStatement(query).executeQuery().next();
@@ -952,17 +951,17 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         conn2.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3));
-        Connection conn3 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn3 = DriverManager.getConnection(getUrl(), props);
         assertTrue(conn3.prepareStatement(query).executeQuery().next());
         conn3.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 7));
-        Connection conn7 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn7 = DriverManager.getConnection(getUrl(), props);
         conn7.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " ADD b_string VARCHAR");
         conn7.close();
     
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 8));
-        Connection conn8 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn8 = DriverManager.getConnection(getUrl(), props);
         assertFalse(conn8.createStatement().executeQuery("SELECT 1 FROM atable WHERE b_string IS NOT NULL").next());
         conn8.close();
         
@@ -976,7 +975,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn1 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
         try {
             conn1.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " DROP COLUMN entity_id");
             fail();
@@ -995,38 +994,38 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         Properties props = new Properties();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        Connection conn2 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn2 = DriverManager.getConnection(getUrl(), props);
         conn2.createStatement().executeUpdate("UPSERT INTO " + MDTEST_NAME + " VALUES('a',1,1)");
         conn2.createStatement().executeUpdate("UPSERT INTO " + MDTEST_NAME + " VALUES('b',2,2)");
         conn2.commit();
         conn2.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3));
-        Connection conn3 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn3 = DriverManager.getConnection(getUrl(), props);
         rs = conn3.createStatement().executeQuery("SELECT count(1) FROM " + MDTEST_NAME);
         assertTrue(rs.next());
         assertEquals(2, rs.getLong(1));
         conn3.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn5 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn5 = DriverManager.getConnection(getUrl(), props);
         conn5.createStatement().executeUpdate("ALTER TABLE " + MDTEST_NAME + " DROP COLUMN col1");
         conn5.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        Connection conn6 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn6 = DriverManager.getConnection(getUrl(), props);
         rs = conn6.createStatement().executeQuery("SELECT count(1) FROM " + MDTEST_NAME);
         assertTrue(rs.next());
         assertEquals(2, rs.getLong(1));
         conn6.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 7));
-        Connection conn7 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn7 = DriverManager.getConnection(getUrl(), props);
         conn7.createStatement().executeUpdate("ALTER TABLE " + MDTEST_NAME + " DROP COLUMN col2");
         conn7.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 8));
-        Connection conn8 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn8 = DriverManager.getConnection(getUrl(), props);
         rs = conn8.createStatement().executeQuery("SELECT count(1) FROM " + MDTEST_NAME);
         assertTrue(rs.next());
         assertEquals(2, rs.getLong(1));
@@ -1040,7 +1039,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn5 = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn5 = DriverManager.getConnection(getUrl(), props);
         conn5.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " DROP COLUMN x_integer");
         try {
             conn5.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " DROP COLUMN y_integer");

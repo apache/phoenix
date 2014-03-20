@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
@@ -139,7 +138,7 @@ public class StatsManagerIT extends BaseParallelIteratorsRegionSplitterIT {
         assertArrayEquals(KMAX, stats.getMaxKey(table));
         minKeyChange = new MinKeyChange(stats, table);
         
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts+2;
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts+2;
         props = new Properties(TEST_PROPERTIES);
         conn = DriverManager.getConnection(url, props);
         PreparedStatement delStmt = conn.prepareStatement("delete from " + STABLE_NAME + " where id=?");

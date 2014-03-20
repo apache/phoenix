@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.GROUPBYTEST_NAME;
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -77,7 +76,7 @@ public class SpillableGroupByIT extends BaseConnectedQueryIT {
     private void loadData(long ts) throws SQLException {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         int groupFactor = NUM_ROWS_INSERTED / 2;
         for (int i = 0; i < NUM_ROWS_INSERTED; i++) {
             insertRow(conn, Integer.toString(i % (groupFactor)), 10);
@@ -110,7 +109,7 @@ public class SpillableGroupByIT extends BaseConnectedQueryIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 10));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery(GROUPBY1);
@@ -137,7 +136,7 @@ public class SpillableGroupByIT extends BaseConnectedQueryIT {
         // Test group by with limit that will exit after first row
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 10));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         try {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT appcpu FROM " + GROUPBYTEST_NAME + " group by appcpu limit 1");
@@ -152,7 +151,7 @@ public class SpillableGroupByIT extends BaseConnectedQueryIT {
         // Test group by with limit that will do spilling before exiting
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 10));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         try {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT to_number(uri) FROM " + GROUPBYTEST_NAME + " group by to_number(uri) limit 100");
