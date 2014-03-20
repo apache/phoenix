@@ -172,8 +172,9 @@
             <excludes>
               <exclude>CHANGES.txt</exclude>
               <exclude>README.md</exclude>
-	            <exclude>dev/phoenix.importorder</exclude>
+	      <exclude>dev/phoenix.importorder</exclude>
               <exclude>**/target/**</exclude>
+              <exclude>**/resources/*.Driver</exclude>
               <exclude>**/*.versionsBackup</exclude>
               <!-- exclude docs -->
               <exclude>docs/**</exclude>
