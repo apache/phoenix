@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.closeStatement;
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
 import static org.junit.Assert.assertEquals;
@@ -53,7 +52,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(),TestUtil.PTSDB_NAME,null, ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + TestUtil.PTSDB_NAME + " (inst,host,date) VALUES(?,'b',CURRENT_DATE())");
         stmt.setString(1, "a");
@@ -66,7 +65,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         conn.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs = conn.createStatement().executeQuery("select count(1) from " + TestUtil.PTSDB_NAME + " group by inst limit 1");
         assertTrue(rs.next());
         assertEquals(3,rs.getInt(1));
@@ -86,7 +85,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(),TestUtil.PTSDB_NAME,null, ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1)); // Execute at timestamp 1
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String dateString = "1999-01-01 02:00:00";
         PreparedStatement upsertStmt = conn.prepareStatement("upsert into ptsdb(inst,host,date) values('aaa','bbb',to_date('" + dateString + "'))");
         int rowsInserted = upsertStmt.executeUpdate();
@@ -97,7 +96,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         conn.commit();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 1
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         String select = "SELECT date,current_date() FROM ptsdb";
         ResultSet rs = conn.createStatement().executeQuery(select);
         Date then = new Date(System.currentTimeMillis());
@@ -115,7 +114,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(),"IntKeyTest",null, ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1)); // Execute at timestamp 1
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO IntKeyTest VALUES(-1)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
         int rowsInserted = upsertStmt.executeUpdate();
@@ -128,7 +127,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         conn.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 1
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         String select = "SELECT i FROM IntKeyTest";
         ResultSet rs = conn.createStatement().executeQuery(select);
         assertTrue(rs.next());

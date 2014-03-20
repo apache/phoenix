@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -67,7 +66,7 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
     }
     
     private void testDeleteFilter(boolean autoCommit) throws Exception {
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL);
+        Connection conn = DriverManager.getConnection(getUrl());
         initTableValues(conn);
         
         ResultSet rs;
@@ -104,7 +103,7 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
    }
     
     private void testDeleteRange(boolean autoCommit, boolean createIndex) throws Exception {
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL);
+        Connection conn = DriverManager.getConnection(getUrl());
         initTableValues(conn);
         
         String indexName = "IDX";

@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.GROUPBYTEST_NAME;
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -66,7 +65,7 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
     private void loadData(long ts) throws SQLException {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         insertRow(conn, "Report1", 10);
         insertRow(conn, "Report2", 10);
         insertRow(conn, "Report3", 30);
@@ -96,14 +95,14 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
         GroupByCaseIT gbt = new GroupByCaseIT();
         long ts = gbt.createTable();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("ALTER TABLE " + GROUPBYTEST_NAME + " SET IMMUTABLE_ROWS=true");
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE INDEX idx ON " + GROUPBYTEST_NAME + "(uri)");
         gbt.loadData(ts);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         gbt.executeQuery(conn,GROUPBY1);
         gbt.executeQuery(conn,GROUPBY2);
         // TODO: validate query results
@@ -124,7 +123,7 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
         gbt.loadData(ts);
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery("select uri from " + GROUPBYTEST_NAME);
         assertTrue(rs.next());
@@ -154,7 +153,7 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
         gbt.loadData(ts);
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery("select count(1) from " + GROUPBYTEST_NAME);
         assertTrue(rs.next());
@@ -178,7 +177,7 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
         gbt.loadData(ts);
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         gbt.executeQuery(conn,GROUPBY1);
         gbt.executeQuery(conn,GROUPBY2);
         // TODO: validate query results
