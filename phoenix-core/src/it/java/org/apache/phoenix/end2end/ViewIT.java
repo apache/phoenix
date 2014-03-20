@@ -117,6 +117,20 @@ public class ViewIT extends BaseViewIT {
         assertEquals(122, rs.getInt(2));
         assertEquals(2, rs.getInt(3));
         assertFalse(rs.next());
+        
+        try {
+            conn.createStatement().execute("UPSERT INTO v2(k2,k3) VALUES(123,3)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_UPDATE_VIEW_COLUMN.getErrorCode(), e.getErrorCode());
+        }
+
+        try {
+            conn.createStatement().execute("UPSERT INTO v2(k2,k3) select k2, 3 from v2");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_UPDATE_VIEW_COLUMN.getErrorCode(), e.getErrorCode());
+        }
     }
 
     @Test
