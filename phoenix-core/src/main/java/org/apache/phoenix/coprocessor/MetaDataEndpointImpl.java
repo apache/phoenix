@@ -444,7 +444,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
     @SuppressWarnings("deprecation")
     private void addColumnToTable(List<Cell> results, PName colName, PName famName,
-        Cell[] colKeyValues, List<PColumn> columns) {
+        Cell[] colKeyValues, List<PColumn> columns, boolean isSalted) {
         int i = 0;
         int j = 0;
         while (i < results.size() && j < COLUMN_KV_COLUMNS.size()) {
@@ -481,7 +481,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         Cell ordinalPositionKv = colKeyValues[ORDINAL_POSITION_INDEX];
         int position =
                 PDataType.INTEGER.getCodec().decodeInt(ordinalPositionKv.getValueArray(),
-                    ordinalPositionKv.getValueOffset(), SortOrder.getDefault());
+                    ordinalPositionKv.getValueOffset(), SortOrder.getDefault()) + (isSalted ? 1 : 0);
         Cell nullableKv = colKeyValues[NULLABLE_INDEX];
         boolean isNullable =
                 PDataType.INTEGER.getCodec().decodeInt(nullableKv.getValueArray(),
@@ -650,7 +650,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                   logger.warn("Unknown link type: " + colKv.getValueArray()[colKv.getValueOffset()] + " for " + SchemaUtil.getTableName(schemaName.getString(), tableName.getString()));
               }
           } else {
-              addColumnToTable(results, colName, famName, colKeyValues, columns);
+              addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
           }
         }
 
@@ -854,11 +854,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private boolean hasViews(HRegion region, byte[] tenantId, PTable table) throws IOException {
         byte[] schemaName = table.getSchemaName().getBytes();
         byte[] tableName = table.getTableName().getBytes();
+        boolean isMultiTenant = table.isMultiTenant();
         Scan scan = new Scan();
         // If the table is multi-tenant, we need to check across all tenant_ids,
         // so we can't constrain the row key. Otherwise, any views would have
         // the same tenantId.
-        if (!table.isMultiTenant()) {
+        if (!isMultiTenant) {
             byte[] startRow = ByteUtil.concat(tenantId, QueryConstants.SEPARATOR_BYTE_ARRAY);
             byte[] stopRow = ByteUtil.nextKey(startRow);
             scan.setStartRow(startRow);
@@ -929,8 +930,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         doDropTable(key, tenantIdBytes, schemaName, tableName,
                             PTableType.fromSerializedValue(tableType), tableMetadata,
                             invalidateList, locks, tableNamesToDelete);
-                if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS
-                        || result.getTable() == null) {
+                if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     done.run(MetaDataMutationResult.toProto(result));
                     return;
                 }
@@ -973,54 +973,37 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         if (table != null
                 || (table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP)) != null) {
             if (table.getTimeStamp() < clientTimeStamp) {
-                // If the table is older than the client time stamp and its deleted, continue
-                if (isTableDeleted(table)) {
-                    return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,
-                            EnvironmentEdgeManager.currentTimeMillis(), null);
-                }
-                if (tableType != table.getType()) {
-                    // We said to drop a table, but found a view or visa versa
-                    return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
-                            EnvironmentEdgeManager.currentTimeMillis(), null);
+                if (isTableDeleted(table) || tableType != table.getType()) {
+                    return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
                 }
             } else {
                 return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND,
                         EnvironmentEdgeManager.currentTimeMillis(), null);
             }
         }
-        if (table == null && buildDeletedTable(key, cacheKey, region, clientTimeStamp) != null) {
-            return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND,
-                    EnvironmentEdgeManager.currentTimeMillis(), null);
+        // We didn't find a table at the latest timestamp, so either there is no table or
+        // there was a table, but it's been deleted. In either case we want to return.
+        if (table == null) {
+            if (buildDeletedTable(key, cacheKey, region, clientTimeStamp) != null) {
+                return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
+            }
+            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
         }
-        // Get mutations for main table.
+        // Since we don't allow back in time DDL, we know if we have a table it's the one
+        // we want to delete. FIXME: we shouldn't need a scan here, but should be able to
+        // use the table to generate the Delete markers.
         Scan scan = newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
         RegionScanner scanner = region.getScanner(scan);
         List<Cell> results = Lists.newArrayList();
         scanner.next(results);
-        if (results.isEmpty()) {
-            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
-                    EnvironmentEdgeManager.currentTimeMillis(), null);
+        if (results.isEmpty()) { // Should not be possible
+            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
         }
-
-        Cell typeKeyValue =
-                KeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, results, PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                    PhoenixDatabaseMetaData.TABLE_TYPE_BYTES);
-        assert (typeKeyValue != null && typeKeyValue.getValueLength() == 1);
-        if (tableType != PTableType.fromSerializedValue(typeKeyValue.getValueArray()[typeKeyValue
-                .getValueOffset()])) {
-            // We said to drop a table, but found a view or visa versa
-            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
-                    EnvironmentEdgeManager.currentTimeMillis(), null);
+        if (hasViews(region, tenantId, table)) {
+            return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
         }
-        // Don't allow a table with views to be deleted
-        // TODO: support CASCADE with DROP
-        if (tableType == PTableType.TABLE && hasViews(region, tenantId, table)) {
-            return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, 
-              EnvironmentEdgeManager.currentTimeMillis(), null);
-        }
-        if (table.getType() != PTableType.VIEW) { // Add to list of HTables to delete, unless it's a view
-            byte[] fullName = table.getName().getBytes();
-            tableNamesToDelete.add(fullName);
+        if (tableType != PTableType.VIEW) { // Add to list of HTables to delete, unless it's a view
+            tableNamesToDelete.add(table.getName().getBytes());
         }
         List<byte[]> indexNames = Lists.newArrayList();
         invalidateList.add(cacheKey);
@@ -1058,8 +1041,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             MetaDataMutationResult result =
                     doDropTable(indexKey, tenantId, schemaName, indexName, PTableType.INDEX,
                         rowsToDelete, invalidateList, locks, tableNamesToDelete);
-            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS
-                    || result.getTable() == null) {
+            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                 return result;
             }
         }

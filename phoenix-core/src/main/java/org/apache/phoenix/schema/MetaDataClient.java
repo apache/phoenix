@@ -331,7 +331,7 @@ public class MetaDataClient {
     }
 
 
-    private void addColumnMutation(String schemaName, String tableName, PColumn column, PreparedStatement colUpsert, String parentTableName, String pkName, Short keySeq) throws SQLException {
+    private void addColumnMutation(String schemaName, String tableName, PColumn column, PreparedStatement colUpsert, String parentTableName, String pkName, Short keySeq, boolean isSalted) throws SQLException {
         colUpsert.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
         colUpsert.setString(2, schemaName);
         colUpsert.setString(3, tableName);
@@ -349,7 +349,7 @@ public class MetaDataClient {
         } else {
             colUpsert.setInt(9, column.getScale());
         }
-        colUpsert.setInt(10, column.getPosition() + 1);
+        colUpsert.setInt(10, column.getPosition() + (isSalted ? 0 : 1));
         colUpsert.setInt(11, column.getSortOrder().getSystemValue());
         colUpsert.setString(12, parentTableName);
         if (column.getArraySize() == null) {
@@ -1100,7 +1100,7 @@ public class MetaDataClient {
                     }
                 }
                 Short keySeq = SchemaUtil.isPKColumn(column) ? ++nextKeySeq : null;
-                addColumnMutation(schemaName, tableName, column, colUpsert, parentTableName, pkName, keySeq);
+                addColumnMutation(schemaName, tableName, column, colUpsert, parentTableName, pkName, keySeq, saltBucketNum != null);
             }
             
             tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
@@ -1451,7 +1451,7 @@ public class MetaDataClient {
                 List<PColumn> currentPKs = table.getPKColumns();
                 PColumn lastPK = currentPKs.get(currentPKs.size()-1);
                 // Disallow adding columns if the last column is VARBIANRY.
-                if (lastPK.getDataType() == PDataType.VARBINARY) {
+                if (lastPK.getDataType() == PDataType.VARBINARY || lastPK.getDataType().isArrayType()) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_LAST_PK)
                         .setColumnName(lastPK.getName().getString()).build().buildException();
                 }
@@ -1534,7 +1534,7 @@ public class MetaDataClient {
                         } else {
                             families.add(new Pair<byte[],Map<String,Object>>(column.getFamilyName().getBytes(),statement.getProps()));
                         }
-                        addColumnMutation(schemaName, tableName, column, colUpsert, null, pkName, keySeq);
+                        addColumnMutation(schemaName, tableName, column, colUpsert, null, pkName, keySeq, table.getBucketNum() != null);
                     }
                     // Add any new PK columns to end of index PK
                     if (isAddingPKColumn) {
@@ -1547,7 +1547,7 @@ public class MetaDataClient {
                                     ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, colDef.getColumnDefName().getColumnName()));
                                     ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder());
                                     PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null, true);
-                                    addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString(), index.getPKName() == null ? null : index.getPKName().getString(), ++nextIndexKeySeq);
+                                    addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString(), index.getPKName() == null ? null : index.getPKName().getString(), ++nextIndexKeySeq, index.getBucketNum() != null);
                                 }
                             }
                         }
@@ -1706,6 +1706,7 @@ public class MetaDataClient {
             }
         });
     
+        boolean isSalted = table.getBucketNum() != null;
         int columnsToDropIndex = 0;
         PreparedStatement colUpdate = connection.prepareStatement(UPDATE_COLUMN_POSITION);
         colUpdate.setString(1, tenantId);
@@ -1719,7 +1720,8 @@ public class MetaDataClient {
             }
             colUpdate.setString(4, column.getName().getString());
             colUpdate.setString(5, column.getFamilyName() == null ? null : column.getFamilyName().getString());
-            colUpdate.setInt(6, column.getPosition() - columnsToDropIndex);
+            // Adjust position to not include the salt column
+            colUpdate.setInt(6, column.getPosition() - columnsToDropIndex - (isSalted ? 1 : 0));
             colUpdate.execute();
         }
        return familyName;
