@@ -553,4 +553,9 @@ public class SchemaUtil {
         }
         return (short)(table.getPKColumns().size() - offset);
     }
+
+    public static int getPKPosition(PTable table, PColumn column) {
+        // TODO: when PColumn has getPKPosition, use that instead
+        return table.getPKColumns().indexOf(column);
+    }
 }
