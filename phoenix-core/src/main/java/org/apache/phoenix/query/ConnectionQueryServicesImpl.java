@@ -177,6 +177,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
     private static final String OLD_DEFAULT_COLUMN_FAMILY = "_0";
     private static final byte[] OLD_DEFAULT_COLUMN_FAMILY_BYTES = Bytes.toBytes(OLD_DEFAULT_COLUMN_FAMILY);
+    private static final String OLD_SYSTEM_SCHEMA_NAME = "SYSTEM";
+    private static final String OLD_SYSTEM_TABLE_NAME = "TABLE";
     private static final byte[] OLD_SYSTEM_TABLE_NAME_BYTES = SchemaUtil.getTableNameAsBytes("SYSTEM", "TABLE");
     // Don't use SYSTEM as the schema name, otherwise we'll treat it as a system table
     private static final String OLD_SYSTEM_TABLE_AS_VIEW_NAME = SchemaUtil.getTableName("META", "\"TABLE\"");
@@ -1858,23 +1860,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         
         public WhiteList(Set<String> matchList) {
-            this.matchList = ImmutableSet.copyOf(matchList);
+            this.matchList = matchList == null ? null : ImmutableSet.copyOf(matchList);
         }
         
         public WhiteList(String tableNames) {
             Set<String> matchList = Sets.newHashSet();
             if (tableNames == null) {
-                matchList = Collections.emptySet();
+                this.matchList = ImmutableSet.of();
             } else if (MATCH_EVERYTHING.equals(tableNames)) {
-                matchList = null;
+                this.matchList = null;
             } else {
                 matchList = Sets.newHashSet();
                 StringTokenizer tokenizer = new StringTokenizer(tableNames,DELIMITER);
                 while (tokenizer.hasMoreTokens()) {
                     matchList.add(tokenizer.nextToken().trim());
                 }
+                this.matchList = ImmutableSet.copyOf(matchList);
             }
-            this.matchList = ImmutableSet.copyOf(matchList);
         }
         
         public boolean alwaysMatches() {
@@ -1906,7 +1908,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
 
         public boolean matches(String tableName) {
-            return matchList.contains(tableName);
+            return matchList == null ? true : matchList.contains(tableName);
         }
     }
     
@@ -1946,7 +1948,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Filter out system tables
             // Filter in tables in white list and indexes for tables in white list
             buf.append(" WHERE ");
-            if (!whiteList.alwaysMatches()) {
+            if (whiteList.alwaysMatches()) {
+                buf.append("NOT (");
+                buf.append(TABLE_SCHEM +  " = '" + OLD_SYSTEM_SCHEMA_NAME + "'" + " AND ");
+                buf.append(TABLE_NAME + " = '" + OLD_SYSTEM_TABLE_NAME + "')\n");
+            } else {
                 for (String fullName : whiteList) {
                     buf.append(" (");
                     String schemaName = SchemaUtil.getSchemaNameFromFullName(fullName);
@@ -2211,15 +2217,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         HTableDescriptor newDesc = new HTableDescriptor(existingDesc);
                         addCoprocessors(tableName, newDesc, tableType);
                         String fullTableName = Bytes.toString(tableName);
-                        if (forceUpgrade) {
-                            upgradedTables.add(fullTableName);
-                        }
+                        upgradedTables.add(fullTableName);
 
                         if (!existingDesc.equals(newDesc)) {
                             if (logger.isInfoEnabled()) {
                                 logger.info("Upgrading coprocessors for: " + SchemaUtil.getTableName(schemaBytes, tableBytes));
                             }
-                            upgradedTables.add(fullTableName);
                             admin.disableTable(tableName);
                             admin.modifyTable(tableName, newDesc);
                             admin.enableTable(tableName);
