@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.junit.Before;
 
 /**
@@ -36,6 +37,6 @@ public abstract class BaseClientManagedTimeIT extends BaseConnectedQueryIT {
     @Before
     public void doTestSetup() throws Exception {
         long ts = nextTimestamp();
-        deletePriorTables(ts-1);
+        deletePriorTables(ts-1);    
     }
 }

@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -90,7 +89,7 @@ public class ToNumberFunctionIT extends BaseClientManagedTimeIT {
     public void initTable() throws Exception {
         long ts = nextTimestamp();
         createTestTable(getUrl(), TO_NUMBER_TABLE_DDL, null, ts-2);
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(false);
@@ -282,7 +281,7 @@ public class ToNumberFunctionIT extends BaseClientManagedTimeIT {
     }
     
     private void runOneRowQueryTest(String oneRowQuery, boolean isIntegerColumn, Integer expectedIntValue, BigDecimal expectedDecimalValue) throws Exception {
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(oneRowQuery);
             ResultSet rs = statement.executeQuery();

@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
@@ -47,7 +46,7 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
         
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             String query = "SELECT a_date FROM atable WHERE organization_id='" + tenantId + "' and a_date < TO_DATE(?)";
             PreparedStatement statement = conn.prepareStatement(query);
@@ -68,7 +67,7 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId),null, ts);
         Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             String query = "SELECT a_date FROM atable WHERE organization_id='" + tenantId + "' and a_date < TO_DATE(?)";
             PreparedStatement statement = conn.prepareStatement(query);
@@ -97,7 +96,7 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
         
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             ResultSet rs;
             String queryPrefix = "SELECT a_date FROM atable WHERE organization_id='" + tenantId + "' and ";
@@ -143,7 +142,7 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
         
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             ResultSet rs;
             String query = "SELECT a_date, count(1) FROM atable WHERE organization_id='" + tenantId + "' group by a_date";

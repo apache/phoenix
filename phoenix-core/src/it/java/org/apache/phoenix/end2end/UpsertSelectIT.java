@@ -22,7 +22,6 @@ import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.CUSTOM_ENTITY_DATA_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
 import static org.apache.phoenix.util.TestUtil.ROW6;
 import static org.apache.phoenix.util.TestUtil.ROW7;
@@ -66,12 +65,12 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts-1);
-        ensureTableCreated(PHOENIX_JDBC_URL, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
+        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
         String indexName = "IDX1";
         if (createIndex) {
             Properties props = new Properties();
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts)); // Execute at timestamp 1
-            Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            Connection conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + indexName + " ON " + TestUtil.ATABLE_NAME + "(a_string)" );
             conn.close();
         }
@@ -79,7 +78,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         props.setProperty(UPSERT_BATCH_SIZE_ATTRIB, Integer.toString(3)); // Trigger multiple batches
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         String upsert = "UPSERT INTO " + CUSTOM_ENTITY_DATA_FULL_NAME + "(custom_entity_data_id, key_prefix, organization_id, created_by) " +
             "SELECT substr(entity_id, 4), substr(entity_id, 1, 3), organization_id, a_string  FROM ATABLE WHERE ?=a_string";
@@ -101,7 +100,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         
         String query = "SELECT key_prefix, substr(custom_entity_data_id, 1, 1), created_by FROM " + CUSTOM_ENTITY_DATA_FULL_NAME + " WHERE organization_id = ? ";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3)); // Execute at timestamp 3
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         statement.setString(1, tenantId);
         ResultSet rs = statement.executeQuery();
@@ -131,7 +130,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
 
         // Test UPSERT through coprocessor
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         upsert = "UPSERT INTO " + CUSTOM_ENTITY_DATA_FULL_NAME + "(custom_entity_data_id, key_prefix, organization_id, last_update_by, division) " +
             "SELECT custom_entity_data_id, key_prefix, organization_id, created_by, 1.0  FROM " + CUSTOM_ENTITY_DATA_FULL_NAME + " WHERE organization_id = ? and created_by >= 'a'";
@@ -143,7 +142,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
 
         query = "SELECT key_prefix, substr(custom_entity_data_id, 1, 1), created_by, last_update_by, division FROM " + CUSTOM_ENTITY_DATA_FULL_NAME + " WHERE organization_id = ?";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5)); 
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         statement = conn.prepareStatement(query);
         statement.setString(1, tenantId);
         rs = statement.executeQuery();
@@ -186,10 +185,10 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts-1);
-        ensureTableCreated(PHOENIX_JDBC_URL, PTSDB_NAME, ts-1);
+        ensureTableCreated(getUrl(), PTSDB_NAME, ts-1);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1)); // Execute at timestamp 1
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         String upsert = "UPSERT INTO " + PTSDB_NAME + "(date, val, host) " +
             "SELECT current_date(), x_integer+2, entity_id FROM ATABLE WHERE a_integer >= ?";
@@ -202,7 +201,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         
         String query = "SELECT inst,host,date,val FROM " + PTSDB_NAME;
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
         
@@ -235,7 +234,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         upsert = "UPSERT INTO " + PTSDB_NAME + "(date, val, inst) " +
             "SELECT date+1, val*10, host FROM " + PTSDB_NAME;
@@ -248,7 +247,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         Date then = new Date(now.getTime() + QueryConstants.MILLIS_IN_DAY);
         query = "SELECT host,inst, date,val FROM " + PTSDB_NAME + " where inst is not null";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4)); // Execute at timestamp 2
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         statement = conn.prepareStatement(query);
         
         rs = statement.executeQuery();
@@ -281,7 +280,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         
         // Should just update all values with the same value, essentially just updating the timestamp
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         upsert = "UPSERT INTO " + PTSDB_NAME + " SELECT * FROM " + PTSDB_NAME;
         upsertStmt = conn.prepareStatement(upsert);
@@ -292,7 +291,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         
         query = "SELECT * FROM " + PTSDB_NAME ;
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4)); // Execute at timestamp 2
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         statement = conn.prepareStatement(query);
         
         rs = statement.executeQuery();
@@ -362,10 +361,10 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts-1);
-        ensureTableCreated(PHOENIX_JDBC_URL, PTSDB_NAME, ts-1);
+        ensureTableCreated(getUrl(), PTSDB_NAME, ts-1);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1)); // Execute at timestamp 1
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(autoCommit);
         String upsert = "UPSERT INTO " + PTSDB_NAME + "(date, val, host) " +
             "SELECT current_date(), sum(a_integer), a_string FROM ATABLE GROUP BY a_string";
@@ -379,7 +378,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         
         String query = "SELECT inst,host,date,val FROM " + PTSDB_NAME;
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
         Date now = new Date(System.currentTimeMillis());
@@ -404,7 +403,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         assertFalse(rs.next());
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         upsert = "UPSERT INTO " + PTSDB_NAME + "(date, val, host, inst) " +
             "SELECT current_date(), max(val), max(host), 'x' FROM " + PTSDB_NAME;
@@ -418,7 +417,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         
         query = "SELECT inst,host,date,val FROM " + PTSDB_NAME + " WHERE inst='x'";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         statement = conn.prepareStatement(query);
         rs = statement.executeQuery();
         now = new Date(System.currentTimeMillis());
@@ -440,7 +439,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(),"IntKeyTest",splits, ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO IntKeyTest VALUES(1)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
         int rowsInserted = upsertStmt.executeUpdate();
@@ -449,7 +448,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         upsert = "UPSERT INTO IntKeyTest select i+1 from IntKeyTest";
         upsertStmt = conn.prepareStatement(upsert);
         rowsInserted = upsertStmt.executeUpdate();
@@ -458,7 +457,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         String select = "SELECT i FROM IntKeyTest";
         ResultSet rs = conn.createStatement().executeQuery(select);
         assertTrue(rs.next());
@@ -477,7 +476,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         createTestTable(getUrl(), "create table IntKeyTest (i integer not null primary key desc, j integer)" ,splits, ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO IntKeyTest VALUES(1, 1)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
         int rowsInserted = upsertStmt.executeUpdate();
@@ -486,7 +485,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         String select = "SELECT i,j+1 FROM IntKeyTest";
         ResultSet rs = conn.createStatement().executeQuery(select);
         assertTrue(rs.next());
@@ -496,7 +495,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true); // Force to run on server side.
         upsert = "UPSERT INTO IntKeyTest(i,j) select i, j+1 from IntKeyTest";
         upsertStmt = conn.prepareStatement(upsert);
@@ -505,7 +504,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         select = "SELECT j FROM IntKeyTest";
         rs = conn.createStatement().executeQuery(select);
         assertTrue(rs.next());
@@ -514,7 +513,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true); // Force to run on server side.
         upsert = "UPSERT INTO IntKeyTest(i,j) select i, i from IntKeyTest";
         upsertStmt = conn.prepareStatement(upsert);
@@ -523,7 +522,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         select = "SELECT j FROM IntKeyTest";
         rs = conn.createStatement().executeQuery(select);
         assertTrue(rs.next());
@@ -540,7 +539,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         createTestTable(getUrl(), "create table IntKeyTest (i integer not null primary key desc, j integer)" ,splits, ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO IntKeyTest VALUES(1, 1)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
         int rowsInserted = upsertStmt.executeUpdate();
@@ -549,7 +548,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true); // Force to run on server side.
         upsert = "UPSERT INTO IntKeyTest(i,j) select i+1, j+1 from IntKeyTest";
         upsertStmt = conn.prepareStatement(upsert);
@@ -559,7 +558,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         String select = "SELECT i,j FROM IntKeyTest";
         ResultSet rs = conn.createStatement().executeQuery(select);
         assertTrue(rs.next());
@@ -580,7 +579,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(),"IntKeyTest",splits,ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO IntKeyTest VALUES(?)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
         upsertStmt.setInt(1, 1);
@@ -591,7 +590,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         // Normally this would force a server side update. But since this changes the PK column, it would
         // for to run on the client side.
         conn.setAutoCommit(true);
@@ -603,7 +602,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         String select = "SELECT i FROM IntKeyTest";
         ResultSet rs = conn.createStatement().executeQuery(select);
         assertTrue(rs.next());
@@ -621,19 +620,19 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("create table phoenix_test (id varchar(10) not null primary key, val varchar(10), ts timestamp)");
         conn.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("upsert into phoenix_test values ('aaa', 'abc', current_date())");
         conn.createStatement().execute("upsert into phoenix_test values ('bbb', 'bcd', current_date())");
         conn.createStatement().execute("upsert into phoenix_test values ('ccc', 'cde', current_date())");
         conn.commit();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs = conn.createStatement().executeQuery("select * from phoenix_test");
         
         assertTrue(rs.next());
@@ -655,13 +654,13 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("upsert into phoenix_test (id, ts) select id, null from phoenix_test where id <= 'bbb' limit 1");
         conn.commit();
         conn.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("select * from phoenix_test");
         
         assertTrue(rs.next());
@@ -689,26 +688,26 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("create table t1 (id bigint not null primary key, v varchar)");
         conn.createStatement().execute("create table t2 (k varchar primary key)");
         conn.createStatement().execute("create sequence s");
         conn.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("upsert into t2 values ('a')");
         conn.createStatement().execute("upsert into t2 values ('b')");
         conn.createStatement().execute("upsert into t2 values ('c')");
         conn.commit();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("upsert into t1 select next value for s, k from t2");
         conn.commit();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs = conn.createStatement().executeQuery("select * from t1");
         
         assertTrue(rs.next());

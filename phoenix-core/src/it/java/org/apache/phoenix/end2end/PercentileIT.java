@@ -42,7 +42,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -67,7 +67,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -92,7 +92,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -128,7 +128,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -165,7 +165,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at
 										// timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
@@ -190,7 +190,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at
 										// timestamp 2
-		Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
@@ -214,7 +214,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -247,7 +247,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -280,7 +280,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -305,7 +305,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -330,7 +330,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -355,7 +355,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -380,7 +380,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -405,7 +405,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -430,7 +430,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         String query = "SELECT PERCENTILE_CONT(1) WITHIN GROUP (ORDER BY long_pk ASC) FROM " + INDEX_DATA_SCHEMA
                 + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
 
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -452,7 +452,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         String query = "SELECT PERCENT_RANK(2) WITHIN GROUP (ORDER BY long_pk ASC) FROM " + INDEX_DATA_SCHEMA
                 + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
 
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -474,7 +474,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
         String query = "SELECT PERCENTILE_DISC(0.4) WITHIN GROUP (ORDER BY long_pk DESC) FROM " + INDEX_DATA_SCHEMA
                 + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
 
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();

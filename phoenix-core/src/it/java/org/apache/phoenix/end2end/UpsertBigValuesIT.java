@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.junit.Assert.*;
 
 import java.sql.*;
@@ -37,7 +36,7 @@ public class UpsertBigValuesIT extends BaseHBaseManagedTimeIT {
                 -2, -1, 0, 1, 2, Integer.MAX_VALUE - 1, Integer.MAX_VALUE};
         ensureTableCreated(getUrl(),"PKIntValueTest");
         Properties props = new Properties();
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO PKIntValueTest VALUES(?)";
         PreparedStatement stmt = conn.prepareStatement(upsert);
         for (int i = 0; i < testNumbers.length; i++) {
@@ -123,7 +122,7 @@ public class UpsertBigValuesIT extends BaseHBaseManagedTimeIT {
                 -2L, -1L, 0L, 1L, 2L, Long.MAX_VALUE-1, Long.MAX_VALUE};
         ensureTableCreated(getUrl(),"PKBigIntValueTest");
         Properties props = new Properties();
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO PKBigIntValueTest VALUES(?)";
         PreparedStatement stmt = conn.prepareStatement(upsert);
         for (int i=0; i<testNumbers.length; i++) {
@@ -206,7 +205,7 @@ public class UpsertBigValuesIT extends BaseHBaseManagedTimeIT {
                 -2, -1, 0, 1, 2, Integer.MAX_VALUE - 1, Integer.MAX_VALUE};
         ensureTableCreated(getUrl(),"KVIntValueTest");
         Properties props = new Properties();
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO KVIntValueTest VALUES(?, ?)";
         PreparedStatement stmt = conn.prepareStatement(upsert);
         for (int i=0; i<testNumbers.length; i++) {
@@ -289,7 +288,7 @@ public class UpsertBigValuesIT extends BaseHBaseManagedTimeIT {
                 -2L, -1L, 0L, 1L, 2L, Long.MAX_VALUE-1, Long.MAX_VALUE};
         ensureTableCreated(getUrl(),"KVBigIntValueTest");
         Properties props = new Properties();
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO KVBigIntValueTest VALUES(?,?)";
         PreparedStatement stmt = conn.prepareStatement(upsert);
         for (int i = 0; i < testNumbers.length; i++) {

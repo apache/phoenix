@@ -23,7 +23,6 @@ import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
 import static org.apache.phoenix.util.TestUtil.MILLIS_IN_DAY;
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.ROW2;
 import static org.apache.phoenix.util.TestUtil.ROW3;
@@ -222,7 +221,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
             "    A_INTEGER) " +
             "VALUES (?, ?, ?)";
         // Override value that was set at creation time
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1);
         Properties props = new Properties(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
@@ -235,7 +234,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT entity_id FROM aTable WHERE organization_id=? and a_integer >= ?";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         statement.setString(1, tenantId);
         statement.setInt(2, 7);
@@ -274,7 +273,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_string, /* comment ok? */ b_string FROM aTable WHERE ?=organization_id and 5=a_integer";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -293,7 +292,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_string, b_string, a_byte FROM aTable WHERE ?=organization_id and 1=a_byte";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -313,7 +312,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_string, b_string, a_short FROM aTable WHERE ?=organization_id and 128=a_short";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -333,7 +332,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_string, b_string, a_float FROM aTable WHERE ?=organization_id and ?=a_float";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -354,7 +353,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_string, b_string, a_unsigned_float FROM aTable WHERE ?=organization_id and ?=a_unsigned_float";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -375,7 +374,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_string, b_string, a_double FROM aTable WHERE ?=organization_id and ?=a_double";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -396,7 +395,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_string, b_string, a_unsigned_double FROM aTable WHERE ?=organization_id and ?=a_unsigned_double";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -417,7 +416,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT ALL a_string, b_string FROM aTable WHERE ?=organization_id and 5=a_integer";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -436,7 +435,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT DISTINCT a_string FROM aTable WHERE organization_id=?";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -458,7 +457,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT DISTINCT a_string FROM aTable WHERE organization_id=? LIMIT 1";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -476,7 +475,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id, b_string FROM aTable WHERE organization_id=? and entity_id IN (?,?)";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -503,7 +502,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable WHERE organization_id=? and entity_id NOT IN (?,?,?,?,?,?)";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -531,7 +530,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_float FROM aTable WHERE organization_id=? and a_float NOT IN (?,?,?,?,?,?)";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -559,7 +558,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_double FROM aTable WHERE organization_id=? and a_double NOT IN (?,?,?,?,?,?)";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -587,7 +586,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_integer+1 FROM aTable WHERE organization_id=? and a_integer = 5 GROUP BY a_integer+1";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -605,7 +604,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     public void testGroupByCondition() throws Exception {
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement("SELECT count(*) FROM aTable WHERE organization_id=? GROUP BY a_integer=6");
         statement.setString(1, tenantId);
         ResultSet rs = statement.executeQuery();
@@ -624,7 +623,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
 
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         try {
             statement = conn.prepareStatement("UPSERT into aTable(organization_id,entity_id,a_integer) values(?,?,null)");
             statement.setString(1, tenantId);
@@ -635,7 +634,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
             conn.close();
         }
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         statement = conn.prepareStatement("SELECT count(*) FROM aTable WHERE organization_id=? GROUP BY a_integer=6");
         statement.setString(1, tenantId);
         rs = statement.executeQuery();
@@ -667,7 +666,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT y_integer FROM aTable";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -689,7 +688,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_string FROM aTable WHERE organization_id=? and a_integer = 5";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -709,7 +708,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         "FROM aTable WHERE organization_id=? and a_integer != 1 and a_integer <= 2";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -728,7 +727,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         "FROM aTable WHERE organization_id=? and a_byte != 1 and a_byte <= 2";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -747,7 +746,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         "FROM aTable WHERE organization_id=? and a_short != 128 and a_short !=0 and a_short <= 129";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -766,7 +765,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         "FROM aTable WHERE organization_id=? and a_float != 0.01d and a_float <= 0.02d";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -785,7 +784,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         "FROM aTable WHERE organization_id=? and a_unsigned_float != 0.01d and a_unsigned_float <= 0.02d";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -804,7 +803,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         "FROM aTable WHERE organization_id=? and a_double != 0.0001d and a_double <= 0.0002d";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -823,7 +822,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         "FROM aTable WHERE organization_id=? and a_unsigned_double != 0.0001d and a_unsigned_double <= 0.0002d";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -842,7 +841,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         "aTable WHERE organization_id=? and not a_integer = 1 and a_integer <= 2";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -860,7 +859,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable WHERE organization_id=? and a_string = b_string";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -874,7 +873,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     }
 
     public void testNoStringValue(String value) throws Exception {
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1);
         Properties props = new Properties(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
@@ -889,7 +888,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         
         String query = "SELECT a_string, b_string FROM aTable WHERE organization_id=? and a_integer = 5";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -912,7 +911,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testPointInTimeScan() throws Exception {
         // Override value that was set at creation time
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         String upsertStmt =
@@ -932,7 +931,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         upsertConn.close();
 
         // Override value again, but should be ignored since it's past the SCN
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3); // Run query at timestamp 5
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3); // Run query at timestamp 5
         upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
         // Insert all rows at ts
@@ -945,7 +944,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         
         String query = "SELECT organization_id, a_string AS a FROM atable WHERE organization_id=? and a_integer = 5";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         statement.setString(1, tenantId);
         ResultSet rs = statement.executeQuery();
@@ -1029,7 +1028,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testPointInTimeLimitedScan() throws Exception {
         // Override value that was set at creation time
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         String upsertStmt =
@@ -1049,7 +1048,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         upsertConn.close();
 
         // Override value again, but should be ignored since it's past the SCN
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3);
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3);
         upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
         // Insert all rows at ts
@@ -1062,7 +1061,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         
         String query = "SELECT a_integer,b_string FROM atable WHERE organization_id=? and a_integer <= 5 limit 2";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         statement.setString(1, tenantId);
         ResultSet rs = statement.executeQuery();
@@ -1083,7 +1082,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable WHERE organization_id=? and substr(entity_id,1,3) > '00A' and substr(entity_id,1,3) < '00C'";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -1107,7 +1106,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable WHERE organization_id=? and substr(entity_id,1,3) >= '00B' ";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -1133,7 +1132,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable WHERE organization_id=? and substr(entity_id,1,3) < '00B' ";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -1157,7 +1156,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable WHERE organization_id <= ?";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -1191,7 +1190,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable WHERE organization_id >= ?";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -1230,7 +1229,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_string as a_string, count(1), 'foo' FROM atable WHERE organization_id=? GROUP BY a_string";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -1258,7 +1257,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT DISTINCT a_string, count(1), 'foo' FROM atable WHERE organization_id=? GROUP BY a_string, b_string ORDER BY a_string, count(1)";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -1300,7 +1299,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT /*+ NO_INDEX */ DISTINCT a_string, count(1), 'foo' FROM atable WHERE organization_id=? GROUP BY a_string, b_string ORDER BY count(1) desc,a_string LIMIT 2";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -1338,7 +1337,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT DISTINCT count(1), 'foo' FROM atable WHERE organization_id=?";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -1357,7 +1356,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_string, count(1) FROM atable WHERE organization_id=? GROUP BY a_string LIMIT 2";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -1380,7 +1379,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
             "upsert into " +
             "ATABLE VALUES ('" + tenantId + "','" + ROW5 + "','" + C_VALUE +"')";
         // Override value that was set at creation time
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
@@ -1390,7 +1389,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         upsertConn.close();
 
         // Override value again, but should be ignored since it's past the SCN
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3); // Run query at timestamp 5
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3); // Run query at timestamp 5
         upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
         updateStmt = 
@@ -1406,7 +1405,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         
         String query = "SELECT a_string, count(1) FROM atable WHERE organization_id='" + tenantId + "' GROUP BY a_string";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
         assertTrue(rs.next());
@@ -1425,7 +1424,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testUngroupedAggregation() throws Exception {
         String query = "SELECT count(1) FROM atable WHERE organization_id=? and a_string = ?";
-        String url = PHOENIX_JDBC_URL;
+        String url = getUrl();
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5)); // Execute query at ts + 5
         Connection conn = DriverManager.getConnection(url, props);
@@ -1459,7 +1458,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testUngroupedAggregationNoWhere() throws Exception {
         String query = "SELECT count(*) FROM atable";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(url, props);
@@ -1477,7 +1476,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testPointInTimeUngroupedAggregation() throws Exception {
         // Override value that was set at creation time
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         String updateStmt = 
@@ -1502,7 +1501,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         upsertConn.close();
 
         // Override value again, but should be ignored since it's past the SCN
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3); // Run query at timestamp 5
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3); // Run query at timestamp 5
         upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
         stmt = upsertConn.prepareStatement(updateStmt);
@@ -1514,7 +1513,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         
         String query = "SELECT count(1) FROM atable WHERE organization_id=? and a_string = ?";
         // Specify CurrentSCN on URL with extra stuff afterwards (which should be ignored)
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 2) + ";foo=bar"; // Run query at timestamp 2 
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 2) + ";foo=bar"; // Run query at timestamp 2 
         Connection conn = DriverManager.getConnection(url, props);
         PreparedStatement statement = conn.prepareStatement(query);
         statement.setString(1, tenantId);
@@ -1536,7 +1535,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
             "    A_STRING) " +
             "VALUES (?, ?, ?)";
         // Override value that was set at creation time
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
@@ -1554,7 +1553,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         upsertConn.close();
 
         // Override value again, but should be ignored since it's past the SCN
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3); // Run query at timestamp 5
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3); // Run query at timestamp 5
         upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
         stmt = upsertConn.prepareStatement(updateStmt);
@@ -1566,7 +1565,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT count(1) FROM atable WHERE organization_id=? and a_string = ? LIMIT 3";
         // Specify CurrentSCN on URL with extra stuff afterwards (which should be ignored)
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 2) + ";foo=bar"; // Run query at timestamp 2 
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 2) + ";foo=bar"; // Run query at timestamp 2 
         Connection conn = DriverManager.getConnection(url, props);
         PreparedStatement statement = conn.prepareStatement(query);
         statement.setString(1, tenantId);
@@ -1589,7 +1588,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
             "VALUES (?, ?, ?)";
         
         // Override value that was set at creation time
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
 
         // Remove column value at ts + 1 (i.e. equivalent to setting the value to null)
@@ -1610,7 +1609,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         
         // Delete row at timestamp 3. This should not be seen by the query executing
         // Remove column value at ts + 1 (i.e. equivalent to setting the value to null)
-        Connection futureConn = DriverManager.getConnection(PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3), props);
+        Connection futureConn = DriverManager.getConnection(getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3), props);
         stmt = futureConn.prepareStatement("delete from atable where organization_id=? and entity_id=?");
         stmt.setString(1, tenantId);
         stmt.setString(2, ROW6);
@@ -1620,7 +1619,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT count(1) FROM atable WHERE organization_id=? and a_string = ?";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         statement.setString(1, tenantId);
         statement.setString(2, B_VALUE);
@@ -1640,7 +1639,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testDateAdd() throws Exception {
         String query = "SELECT entity_id, b_string FROM ATABLE WHERE a_date + 0.5d < ?";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1661,7 +1660,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testDateInList() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE a_date IN (?,?) AND a_integer < 4";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1680,7 +1679,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testDateSubtract() throws Exception {
         String query = "SELECT entity_id, b_string FROM ATABLE WHERE a_date - 0.5d > ?";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1708,7 +1707,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
             "    A_TIMESTAMP) " +
             "VALUES (?, ?, ?)";
         // Override value that was set at creation time
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1);
         Properties props = new Properties(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
@@ -1744,7 +1743,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT entity_id, a_timestamp, a_time FROM aTable WHERE organization_id=? and a_timestamp > ?";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -1763,7 +1762,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testCoerceTinyIntToSmallInt() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND a_byte >= a_short";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1781,7 +1780,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testCoerceIntegerToLong() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND x_long >= x_integer";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1801,7 +1800,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testCoerceLongToDecimal1() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND x_decimal > x_integer";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1819,7 +1818,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testCoerceLongToDecimal2() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND x_integer <= x_decimal";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1837,7 +1836,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testSimpleCaseStatement() throws Exception {
         String query = "SELECT CASE a_integer WHEN 1 THEN 'a' WHEN 2 THEN 'b' WHEN 3 THEN 'c' ELSE 'd' END, entity_id AS a FROM ATABLE WHERE organization_id=? AND a_integer < 6";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1860,7 +1859,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testMultiCondCaseStatement() throws Exception {
         String query = "SELECT CASE WHEN a_integer <= 2 THEN 1.5 WHEN a_integer = 3 THEN 2 WHEN a_integer <= 6 THEN 4.5 ELSE 5 END AS a FROM ATABLE WHERE organization_id=?";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1894,7 +1893,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testPartialEvalCaseStatement() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? and CASE WHEN 1234 = a_integer THEN 1 WHEN x_integer = 5 THEN 2 ELSE 3 END = 2";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1912,7 +1911,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testFoundIndexOnPartialEvalCaseStatement() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? and CASE WHEN a_integer = 1234 THEN 1 WHEN x_integer = 3 THEN y_integer ELSE 3 END = 300";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1931,7 +1930,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testUnfoundMultiColumnCaseStatement() throws Exception {
         String query = "SELECT entity_id, b_string FROM ATABLE WHERE organization_id=? and CASE WHEN a_integer = 1234 THEN 1 WHEN a_date < ? THEN y_integer WHEN x_integer = 4 THEN 4 ELSE 3 END = 4";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1950,13 +1949,13 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testUnfoundSingleColumnCaseStatement() throws Exception {
         String query = "SELECT entity_id, b_string FROM ATABLE WHERE organization_id=? and CASE WHEN a_integer = 0 or a_integer != 0 THEN 1 ELSE 0 END = 0";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         // Set ROW5.A_INTEGER to null so that we have one row
         // where the else clause of the CASE statement will
         // fire.
-        url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
         Connection upsertConn = DriverManager.getConnection(url, props);
         String upsertStmt =
             "upsert into " +
@@ -1983,7 +1982,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testNonNullMultiCondCaseStatement() throws Exception {
         String query = "SELECT CASE WHEN entity_id = '000000000000000' THEN 1 WHEN entity_id = '000000000000001' THEN 2 ELSE 3 END FROM ATABLE WHERE organization_id=?";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -2000,7 +1999,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testNullMultiCondCaseStatement() throws Exception {
         String query = "SELECT CASE WHEN entity_id = '000000000000000' THEN 1 WHEN entity_id = '000000000000001' THEN 2 END FROM ATABLE WHERE organization_id=?";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -2017,7 +2016,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testNullabilityMultiCondCaseStatement() throws Exception {
         String query = "SELECT CASE WHEN a_integer <= 2 THEN ? WHEN a_integer = 3 THEN ? WHEN a_integer <= ? THEN ? ELSE 5 END AS a FROM ATABLE WHERE organization_id=?";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -2055,7 +2054,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testSimpleInListStatement() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND a_integer IN (2,4)";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -2071,7 +2070,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testPartiallyQualifiedRVCInList() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE (a_integer,a_string) IN ((2,'a'),(5,'b'))";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -2086,7 +2085,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testFullyQualifiedRVCInList() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE (a_integer,a_string, organization_id,entity_id) IN ((2,'a',:1,:2),(5,'b',:1,:3))";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -2108,7 +2107,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testInFilterOnKey() throws Exception {
         String query = "SELECT count(entity_id) FROM ATABLE WHERE organization_id IN (?,?)";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -2127,7 +2126,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testOneInListStatement() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND b_string IN (?)";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -2151,7 +2150,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
     @Test
     public void testMixedTypeInListStatement() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND x_long IN (5, ?)";
-        String url = PHOENIX_JDBC_URL + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -2175,7 +2174,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable WHERE X_DECIMAL is null";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2202,7 +2201,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable WHERE a_integer > 0 and coalesce(X_DECIMAL,0.0) = 0.0";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO aTable(organization_id,entity_id,x_decimal) values(?,?,?)");
         stmt.setString(1, getOrganizationId());
         stmt.setString(2, ROW1);
@@ -2223,7 +2222,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         conn.commit();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20)); // Execute at timestamp 2
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2242,7 +2241,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT count(1) FROM aTable WHERE X_DECIMAL is null";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2259,7 +2258,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT count(1) FROM aTable WHERE X_DECIMAL is not null";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2276,7 +2275,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable WHERE X_DECIMAL is not null";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2297,7 +2296,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where A_INTEGER - 4  <= 0";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2311,7 +2310,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where A_INTEGER - 3.5  <= 0";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2325,7 +2324,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where X_DECIMAL - 3.5  > 0";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2341,7 +2340,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where X_LONG - 1  < 0";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2357,7 +2356,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where a_double - 0.0002d  < 0";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2373,7 +2372,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where a_short - 129  = 0";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2390,7 +2389,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where  X_INTEGER - X_LONG - 10  < 0";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2408,7 +2407,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id, x_integer - 4 FROM aTable where  x_integer - 4 = 0";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2425,7 +2424,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where A_INTEGER = 5 - 1 - 2";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2442,7 +2441,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where A_INTEGER / 3 > 2";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2459,7 +2458,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where a_double / 3.0d = 0.0003";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2476,7 +2475,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where a_short / 135 = 1";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2493,7 +2492,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where A_INTEGER / 3.0 > 2";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2508,7 +2507,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where A_INTEGER = 9 / 3 / 3";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2524,7 +2523,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id, a_integer/3 FROM aTable where  a_integer = 9";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2542,7 +2541,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where A_INTEGER - 4 = -1";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2559,7 +2558,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where A_INTEGER * 2 = 16";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2576,7 +2575,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where A_DOUBLE * 2.0d = 0.0002";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2593,7 +2592,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where X_LONG * 2 * 2 = 20";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2610,7 +2609,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where A_INTEGER * 1.5 > 9";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2626,7 +2625,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where X_DECIMAL * A_INTEGER > 29.5";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2641,7 +2640,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where A_INTEGER + 2 = 4";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2658,7 +2657,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where A_INTEGER + X_DECIMAL > 11";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2677,7 +2676,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where a_double + a_float > 0.08";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2696,7 +2695,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable where a_unsigned_double + a_unsigned_float > 0.08";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2725,7 +2724,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         for (String query : queries) {
             Properties props = new Properties();
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-            Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+            Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
                 statement.executeQuery();
@@ -2751,7 +2750,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         for (String query : queries) {
         	Properties props = new Properties();
         	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        	Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        	Connection conn = DriverManager.getConnection(getUrl(), props);
         	try {
         		PreparedStatement statement = conn.prepareStatement(query);
         		ResultSet rs=statement.executeQuery();
@@ -2770,7 +2769,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable WHERE organization_id=? and entity_id IN (?,?,?)";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -2796,7 +2795,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT entity_id FROM aTable WHERE organization_id=? and entity_id IN (?,?,?) and a_string IN (?,?)";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -2821,7 +2820,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT CAST(a_integer AS decimal)/2 FROM aTable WHERE ?=organization_id and 5=a_integer";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -2839,7 +2838,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_integer FROM aTable WHERE ?=organization_id and 2.5 = CAST(a_integer AS DECIMAL)/2 ";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -2863,7 +2862,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a_string, b_string, count(1) FROM atable WHERE organization_id=? and entity_id<=? GROUP BY a_string,b_string";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         HBaseAdmin admin = null;
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -2925,7 +2924,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String query = "SELECT a.a_string, aTable.b_string FROM aTable a WHERE ?=organization_id and 5=a_integer ORDER BY a_string, b_string";
         Properties props = new Properties(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
