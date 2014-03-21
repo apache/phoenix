@@ -545,12 +545,9 @@ public class SchemaUtil {
         if (table.getBucketNum() != null) {
             offset++;
         }
-        if (table.isMultiTenant()) {
-            offset++;
-        }
-        if (table.getViewIndexId() != null) {
-            offset++;
-        }
+        // TODO: for tenant-specific table on tenant-specific connection,
+        // we should subtract one for tenant column and another one for
+        // index ID
         return (short)(table.getPKColumns().size() - offset);
     }
 
