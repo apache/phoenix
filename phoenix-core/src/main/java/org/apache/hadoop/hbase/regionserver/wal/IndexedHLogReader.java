@@ -19,17 +19,6 @@
 package org.apache.hadoop.hbase.regionserver.wal;
 
 import java.io.IOException;
-import java.util.Arrays;
-
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.regionserver.wal.HLog.Entry;
-import org.apache.hadoop.hbase.regionserver.wal.HLog.Reader;
-import org.apache.hadoop.io.Writable;
 
 
 
@@ -51,7 +40,6 @@ import org.apache.hadoop.io.Writable;
  * edits out into their respective regions.
  */
 public class IndexedHLogReader extends ProtobufLogReader {
-  private static final Log LOG = LogFactory.getLog(IndexedHLogReader.class);
 
   @Override
   protected void initAfterCompression() throws IOException {

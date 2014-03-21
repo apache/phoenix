@@ -2012,6 +2012,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 String lastTableName = null;
                 short nextKeySeq = 1;
                 String tablePkName = null;
+                boolean isSalted = false;
                 while (rs.next()) {
                     String pkName = null;
                     String defaultColumnFamily = null;
@@ -2028,6 +2029,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         lastTableName = tableName;
                         nextKeySeq = 1; // reset
                         defaultColumnFamily = "_0"; // old default column family
+                        isSalted = rs.getInt(SALT_BUCKETS) > 0;
                         pkName = tablePkName = rs.getString(PK_NAME);
                         if (logger.isInfoEnabled()) {
                             logger.info("Upgrading table meta data for: " + SchemaUtil.getTableName(schemaName, tableName));
@@ -2052,6 +2054,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                      * - don't persist maxLength and scale for non decimal numbers
                      * - don't persist default precision for decimal
                      */
+                    Integer ordinalPosition = (Integer)rs.getObject(ORDINAL_POSITION);
+                    // ORDINAL_POSITION is not taking into account salting so we need
+                    // to subtract one
+                    if (ordinalPosition != null && isSalted) {
+                        ordinalPosition--;
+                    }
                     Integer maxLength = (Integer)rs.getObject(COLUMN_SIZE);
                     Integer scale = (Integer)rs.getObject(DECIMAL_DIGITS);
                     Integer dataTypeNum = (Integer)rs.getObject(DATA_TYPE);
@@ -2113,7 +2121,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     stmt.setObject(16, maxLength);
                     stmt.setObject(17, scale);
                     stmt.setObject(18, rs.getObject(NULLABLE));
-                    stmt.setObject(19, rs.getObject(ORDINAL_POSITION));
+                    stmt.setObject(19, ordinalPosition);
                     stmt.setObject(20, rs.getObject("COLUMN_MODIFIER")); // old column name
                     stmt.setObject(21, keySeq); // new column for PK position
                     stmt.setObject(22, linkType); // link to index

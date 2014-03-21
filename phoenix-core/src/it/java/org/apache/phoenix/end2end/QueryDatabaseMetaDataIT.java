@@ -31,6 +31,7 @@ import static org.apache.phoenix.util.TestUtil.MDTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.MDTEST_SCHEMA_NAME;
 import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
+import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -354,6 +355,13 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
         assertFalse(rs.next());
+
+        ensureTableCreated(getUrl(), TABLE_WITH_SALTING, null, ts);
+        rs = dbmd.getColumns("", "", TABLE_WITH_SALTING, StringUtil.escapeLike("A_INTEGER"));
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt("ORDINAL_POSITION"));
+        assertFalse(rs.next());
+    
     }
 
     @Test

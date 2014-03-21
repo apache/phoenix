@@ -31,7 +31,6 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.codec.BaseDecoder;
 import org.apache.hadoop.hbase.codec.BaseEncoder;
-
 import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
 import org.apache.phoenix.hbase.index.wal.KeyValueCodec;
 
@@ -49,11 +48,9 @@ public class IndexedWALEditCodec extends WALCellCodec {
   // the stream
   private static final int REGULAR_KEY_VALUE_MARKER = 0;
   private CompressionContext compression;
-  private Configuration conf;
 
   public IndexedWALEditCodec(Configuration conf, CompressionContext compression) {
       super(conf, compression);
-      this.conf = conf;
       this.compression = compression;
   }
 
