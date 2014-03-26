@@ -33,6 +33,8 @@ public abstract class BaseTenantSpecificTablesIT extends BaseClientManagedTimeIT
     protected static final String TENANT_ID = "ZZTop";
     protected static final String TENANT_TYPE_ID = "abc";
     protected static final String PHOENIX_JDBC_TENANT_SPECIFIC_URL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + TENANT_ID;
+    protected static final String TENANT_ID2 = "Styx";
+    protected static final String PHOENIX_JDBC_TENANT_SPECIFIC_URL2 = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + TENANT_ID2;
     
     protected static final String PARENT_TABLE_NAME = "PARENT_TABLE";
     protected static final String PARENT_TABLE_DDL = "CREATE TABLE " + PARENT_TABLE_NAME + " ( \n" + 
