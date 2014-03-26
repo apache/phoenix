@@ -945,7 +945,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         long indexMaxFileSize = maxFileSize * indexMaxFileSizePerc / 100;
         tableProps.put(HTableDescriptor.MAX_FILESIZE, indexMaxFileSize);
         tableProps.put(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME, TRUE_BYTES_AS_STRING);
-        // Only use splits if table is salted, otherwise it may not be applicable
         HTableDescriptor desc = ensureTableCreated(physicalIndexName, PTableType.TABLE, tableProps, families, splits, false);
         if (desc != null) {
             if (!Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES)))) {
@@ -1015,7 +1014,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 ensureViewIndexTableCreated(tenantIdBytes.length == 0 ? null : PNameFactory.newName(tenantIdBytes), physicalTableName, MetaDataUtil.getClientTimeStamp(m));
             }
         } else if (tableType == PTableType.TABLE && MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) { // Create view index table up front for multi tenant tables
-            ensureViewIndexTableCreated(tableName, tableProps, families, MetaDataUtil.isSalted(m, kvBuilder, ptr) ? splits : null, MetaDataUtil.getClientTimeStamp(m));
+            ptr.set(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+            MetaDataUtil.getMutationValue(m, PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME_BYTES, kvBuilder, ptr);
+            List<Pair<byte[],Map<String,Object>>> familiesPlusDefault = null;
+            for (Pair<byte[],Map<String,Object>> family : families) {
+                byte[] cf = family.getFirst();
+                if (Bytes.compareTo(cf, 0, cf.length, ptr.get(), ptr.getOffset(),ptr.getLength()) == 0) {
+                    familiesPlusDefault = families;
+                    break;
+                }
+            }
+            // Don't override if default family already present
+            if (familiesPlusDefault == null) {
+                byte[] defaultCF = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                // Only use splits if table is salted, otherwise it may not be applicable
+                // Always add default column family, as we don't know in advance if we'll need it
+                familiesPlusDefault = Lists.newArrayList(families);
+                familiesPlusDefault.add(new Pair<byte[],Map<String,Object>>(defaultCF,Collections.<String,Object>emptyMap()));
+            }
+            ensureViewIndexTableCreated(tableName, tableProps, familiesPlusDefault, MetaDataUtil.isSalted(m, kvBuilder, ptr) ? splits : null, MetaDataUtil.getClientTimeStamp(m));
         }
         
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
@@ -1151,17 +1168,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] physicalTableName = table.getPhysicalName().getBytes();
         HTableDescriptor htableDesc = this.getTableDescriptor(physicalTableName);
         Map<String,Object> tableProps = createPropertiesMap(htableDesc.getValues());
-        List<Pair<byte[],Map<String,Object>>> families = Lists.newArrayListWithExpectedSize(Math.max(1, table.getColumnFamilies().size()));
+        List<Pair<byte[],Map<String,Object>>> families = Lists.newArrayListWithExpectedSize(Math.max(1, table.getColumnFamilies().size()+1));
         if (families.isEmpty()) {
             byte[] familyName = SchemaUtil.getEmptyColumnFamily(table);
             Map<String,Object> familyProps = createPropertiesMap(htableDesc.getFamily(familyName).getValues());
             families.add(new Pair<byte[],Map<String,Object>>(familyName, familyProps));
         } else {
             for (PColumnFamily family : table.getColumnFamilies()) {
-                byte[] familyName = SchemaUtil.getEmptyColumnFamily(table);
+                byte[] familyName = family.getName().getBytes();
                 Map<String,Object> familyProps = createPropertiesMap(htableDesc.getFamily(familyName).getValues());
-                families.add(new Pair<byte[],Map<String,Object>>(family.getName().getBytes(), familyProps));
+                families.add(new Pair<byte[],Map<String,Object>>(familyName, familyProps));
             }
+            // Always create default column family, because we don't know in advance if we'll
+            // need it for an index with no covered columns.
+            families.add(new Pair<byte[],Map<String,Object>>(table.getDefaultFamilyName().getBytes(), Collections.<String,Object>emptyMap()));
         }
         byte[][] splits = null;
         if (table.getBucketNum() != null) {
