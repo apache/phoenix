@@ -25,10 +25,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.google.common.collect.ImmutableMap;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -53,24 +53,29 @@ public class CSVCommonsLoader {
 
     public static final String DEFAULT_ARRAY_ELEMENT_SEPARATOR = ":";
 
+    private static final Map<Character,Character> CTRL_CHARACTER_TABLE =
+            ImmutableMap.<Character,Character>builder()
+                        .put('1', '\u0001')
+                        .put('2', '\u0002')
+                        .put('3', '\u0003')
+                        .put('4', '\u0004')
+                        .put('5', '\u0005')
+                        .put('6', '\u0006')
+                        .put('7', '\u0007')
+                        .put('8', '\u0008')
+                        .put('9', '\u0009')
+                        .build();
+
     private final PhoenixConnection conn;
     private final String tableName;
     private final List<String> columns;
     private final boolean isStrict;
-    boolean userSuppliedMetaCharacters = false;
-    private final List<String> customMetaCharacters;
+    private final char fieldDelimiter;
+    private final char quoteCharacter;
+    private final Character escapeCharacter;
     private PhoenixHeaderSource headerSource = PhoenixHeaderSource.FROM_TABLE;
     private final CSVFormat format;
-    private final Map<String,Character> ctrlTable = new HashMap<String,Character>() {
-        {   put("1",'\u0001');
-            put("2",'\u0002');
-            put("3",'\u0003');
-            put("4",'\u0004');
-            put("5",'\u0005');
-            put("6",'\u0006');
-            put("7",'\u0007');
-            put("8",'\u0008');
-            put("9",'\u0009');}};
+
 
     private final String arrayElementSeparator;
 
@@ -82,26 +87,19 @@ public class CSVCommonsLoader {
 
     public CSVCommonsLoader(PhoenixConnection conn, String tableName,
             List<String> columns, boolean isStrict) {
-        this(conn, tableName, columns, isStrict, null, DEFAULT_ARRAY_ELEMENT_SEPARATOR);
+        this(conn, tableName, columns, isStrict, ',', '"', null, DEFAULT_ARRAY_ELEMENT_SEPARATOR);
     }
 
     public CSVCommonsLoader(PhoenixConnection conn, String tableName,
-            List<String> columns, boolean isStrict, List<String> customMetaCharacters, String arrayElementSeparator) {
+            List<String> columns, boolean isStrict, char fieldDelimiter, char quoteCharacter,
+            Character escapeCharacter, String arrayElementSeparator) {
         this.conn = conn;
         this.tableName = tableName;
         this.columns = columns;
         this.isStrict = isStrict;
-        this.customMetaCharacters = customMetaCharacters;
-        if (customMetaCharacters==null || customMetaCharacters.size()==0) {
-            userSuppliedMetaCharacters=false;
-        } else if (customMetaCharacters.size()==3) {
-            userSuppliedMetaCharacters=true;
-        }
-        else{
-            throw new IllegalArgumentException(
-                    String.format("customMetaCharacters must have no elements or three elements. Supplied value is %s",
-                            buildStringFromList(customMetaCharacters)));
-        }
+        this.fieldDelimiter = fieldDelimiter;
+        this.quoteCharacter = quoteCharacter;
+        this.escapeCharacter = escapeCharacter;
 
         // implicit in the columns value.
         if (columns !=null && !columns.isEmpty()) {
@@ -131,25 +129,14 @@ public class CSVCommonsLoader {
      */
     private CSVFormat buildFormat() {
         CSVFormat format = CSVFormat.DEFAULT
-                .withIgnoreEmptyLines(true);
-        if (userSuppliedMetaCharacters) {
-            // list error checking handled in constructor above.
-            // use 0 to keep default setting
-            String delimiter = customMetaCharacters.get(0);
-            String quote = customMetaCharacters.get(1);
-            String escape = customMetaCharacters.get(2);
+                .withIgnoreEmptyLines(true)
+                .withDelimiter(asControlCharacter(fieldDelimiter))
+                .withQuoteChar(asControlCharacter(quoteCharacter));
 
-            if (!"0".equals(delimiter)) {
-                format = format.withDelimiter(getCustomMetaCharacter(delimiter));
-            }
-            if (!"0".equals(quote)) {
-                format = format.withQuoteChar(getCustomMetaCharacter(quote));
-            }
-            if (!"0".equals(quote)) {
-                format = format.withEscape(getCustomMetaCharacter(escape));
-            }
-
+        if (escapeCharacter != null) {
+            format = format.withEscape(asControlCharacter(escapeCharacter));
         }
+
         switch(headerSource) {
         case FROM_TABLE:
             // obtain headers from table, so format should not expect a header.
@@ -170,11 +157,18 @@ public class CSVCommonsLoader {
     }
 
 
-    public char getCustomMetaCharacter(String field) {
-        if(this.ctrlTable.containsKey(field)) {
-            return this.ctrlTable.get(field);
+    /**
+     * Translate a field separator, escape character, or phrase delimiter into a control character
+     * if it is a single digit other than 0.
+     *
+     * @param delimiter
+     * @return
+     */
+    public static char asControlCharacter(char delimiter) {
+        if(CTRL_CHARACTER_TABLE.containsKey(delimiter)) {
+            return CTRL_CHARACTER_TABLE.get(delimiter);
         } else {
-            return field.charAt(0);
+            return delimiter;
         }
     }
 

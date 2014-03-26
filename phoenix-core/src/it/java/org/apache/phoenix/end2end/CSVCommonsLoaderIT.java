@@ -155,7 +155,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
 
             // Upsert TDV file
             CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, STOCK_TABLE,Collections.<String> emptyList()
-                    , true,Arrays.asList("\t", "0", "0"), CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);
+                    , true, '\t', '"', null, CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);
             csvUtil.upsert(new StringReader(STOCK_TDV_VALUES_WITH_HEADER));
 
             // Compare Phoenix ResultSet with CSV file content
@@ -197,8 +197,8 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
 
             // Upsert CSV file
             CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, STOCK_TABLE,
-                    Arrays.<String> asList(STOCK_COLUMNS), true, Arrays.asList(
-                    "1", "2", "3"), CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);
+                    Arrays.<String> asList(STOCK_COLUMNS), true,
+                    '1', '2', '3', CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);
             csvUtil.upsert(new StringReader(STOCK_CSV_VALUES_WITH_DELIMITER));
 
             // Compare Phoenix ResultSet with CSV file content
@@ -577,7 +577,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
 
             // Upsert CSV file
             CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, "ARRAY_TABLE",
-                    Collections.<String> emptyList(), true, null, "!");
+                    null, true, ',', '"', null, "!");
             csvUtil.upsert(
                     new StringReader("ID,VALARRAY\n"
                             + "1,2!3!4\n"));
@@ -607,7 +607,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
             conn = DriverManager.getConnection(getUrl()).unwrap(
                     PhoenixConnection.class);
             CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, "NONEXISTENTTABLE",
-                    null, true, Collections.<String>emptyList(), "!");
+                    null, true, ',', '"', '\\', "!");
             csvUtil.upsert(
                     new StringReader("ID,VALARRAY\n"
                             + "1,2!3!4\n"));
