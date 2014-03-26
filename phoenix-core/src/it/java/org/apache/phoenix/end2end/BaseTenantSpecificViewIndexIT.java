@@ -32,7 +32,6 @@ import java.util.Set;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
-import org.junit.After;
 
 public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
     
@@ -139,18 +138,5 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
         assertEquals(9, rs.getInt(2));
         assertEquals(valuePrefix + "v2-1", rs.getString(3));
         assertFalse(rs.next());
-    }
-    
-    @After
-    public void deleteTenantViews() throws Exception {
-        for (Pair<String,String> tenantView : tenantViewsToDelete) {
-            try {
-                Connection conn = createTenantConnection(tenantView.getFirst());
-                conn.createStatement().executeUpdate("drop view " + tenantView.getSecond());
-                conn.close();
-            }
-            catch (Exception ignored) {}
-        }
-        tenantViewsToDelete.clear();
     }
 }

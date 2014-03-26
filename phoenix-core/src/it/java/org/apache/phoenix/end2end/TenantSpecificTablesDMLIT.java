@@ -33,11 +33,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-/**
- * TODO: derived from BaseClientMangedTimeTest, but not setting SCN
- * 
- * @since 2.0
- */
 public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
     
     @Test
