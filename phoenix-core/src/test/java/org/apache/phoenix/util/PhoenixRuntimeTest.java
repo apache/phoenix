@@ -19,12 +19,17 @@
 package org.apache.phoenix.util;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
+import java.io.File;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.util.Arrays;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.junit.Test;
 
@@ -40,5 +45,57 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
         byte[] value = PhoenixRuntime.encodePK(conn, "T", expectedValues);
         Object[] actualValues = PhoenixRuntime.decodePK(conn, "T", value);
         assertEquals(Arrays.asList(expectedValues), Arrays.asList(actualValues));
+    }
+
+    @Test
+    public void testParseArguments_MinimalCase() {
+        PhoenixRuntime.ExecutionCommand execCmd = PhoenixRuntime.ExecutionCommand.parseArgs(
+                new String[] { "localhost", "test.csv" });
+
+
+        assertEquals(
+                "localhost",
+                execCmd.getConnectionString());
+
+        assertEquals(
+                ImmutableList.of("test.csv"),
+                execCmd.getInputFiles());
+
+        assertEquals(',', execCmd.getFieldDelimiter());
+        assertEquals('"', execCmd.getQuoteCharacter());
+        assertNull(execCmd.getEscapeCharacter());
+
+        assertNull(execCmd.getTableName());
+
+        assertNull(execCmd.getColumns());
+
+        assertFalse(execCmd.isStrict());
+
+        assertEquals(
+                CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR,
+                execCmd.getArrayElementSeparator());
+    }
+
+    @Test
+    public void testParseArguments_FullOption() {
+        PhoenixRuntime.ExecutionCommand execCmd = PhoenixRuntime.ExecutionCommand.parseArgs(
+                new String[] { "-t", "mytable", "myzkhost:2181",  "--strict", "file1.sql",
+                        "test.csv", "file2.sql", "--header", "one, two,three", "-a", "!", "-d",
+                        ":", "-q", "3", "-e", "4" });
+
+        assertEquals("myzkhost:2181", execCmd.getConnectionString());
+
+        assertEquals(ImmutableList.of("file1.sql", "test.csv", "file2.sql"),
+                execCmd.getInputFiles());
+
+        assertEquals(':', execCmd.getFieldDelimiter());
+        assertEquals('3', execCmd.getQuoteCharacter());
+        assertEquals(Character.valueOf('4'), execCmd.getEscapeCharacter());
+
+        assertEquals("mytable", execCmd.getTableName());
+
+        assertEquals(ImmutableList.of("one", "two", "three"), execCmd.getColumns());
+        assertTrue(execCmd.isStrict());
+        assertEquals("!", execCmd.getArrayElementSeparator());
     }
 }
