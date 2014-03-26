@@ -248,13 +248,30 @@ public class UpsertCompiler {
             pkSlotIndexesToBe = new int[columnIndexesToBe.length];
             targetColumns = Lists.newArrayListWithExpectedSize(columnIndexesToBe.length);
             targetColumns.addAll(Collections.<PColumn>nCopies(columnIndexesToBe.length, null));
-            for (int i = posOffset, j = posOffset; i < allColumns.size(); i++) {
+            int minPKPos = 0;
+            if (isTenantSpecific) {
+                PColumn tenantColumn = table.getPKColumns().get(minPKPos);
+                columnIndexesToBe[minPKPos] = tenantColumn.getPosition();
+                targetColumns.set(minPKPos, tenantColumn);
+                minPKPos++;
+            }
+            if (isSharedViewIndex) {
+                PColumn indexIdColumn = table.getPKColumns().get(minPKPos);
+                columnIndexesToBe[minPKPos] = indexIdColumn.getPosition();
+                targetColumns.set(minPKPos, indexIdColumn);
+                minPKPos++;
+            }
+            for (int i = posOffset, j = 0; i < allColumns.size(); i++) {
                 PColumn column = allColumns.get(i);
-                columnIndexesToBe[i-posOffset] = i;
-                targetColumns.set(i-posOffset, column);
                 if (SchemaUtil.isPKColumn(column)) {
-                    pkSlotIndexesToBe[i-posOffset] = j++;
+                    pkSlotIndexesToBe[i-posOffset] = j + posOffset;
+                    if (j++ < minPKPos) { // Skip, as it's already been set above
+                        continue;
+                    }
+                    minPKPos = 0;
                 }
+                columnIndexesToBe[i-posOffset+minPKPos] = i;
+                targetColumns.set(i-posOffset+minPKPos, column);
             }
             if (!addViewColumnsToBe.isEmpty()) {
                 // All view columns overlap in this case
@@ -273,8 +290,22 @@ public class UpsertCompiler {
             Arrays.fill(pkSlotIndexesToBe, -1); // TODO: necessary? So we'll get an AIOB exception if it's not replaced
             BitSet pkColumnsSet = new BitSet(table.getPKColumns().size());
             int i = 0;
-            for (i = 0; i < numColsInUpsert; i++) {
-                ColumnName colName = columnNodes.get(i);
+            // Add tenant column directly, as we don't want to resolve it as this will fail
+            if (isTenantSpecific) {
+                PColumn tenantColumn = table.getPKColumns().get(i + posOffset);
+                columnIndexesToBe[i] = tenantColumn.getPosition();
+                pkColumnsSet.set(pkSlotIndexesToBe[i] = i + posOffset);
+                targetColumns.set(i, tenantColumn);
+                i++;
+            }
+            if (isSharedViewIndex) {
+                PColumn indexIdColumn = table.getPKColumns().get(i + posOffset);
+                columnIndexesToBe[i] = indexIdColumn.getPosition();
+                pkColumnsSet.set(pkSlotIndexesToBe[i] = i + posOffset);
+                targetColumns.set(i, indexIdColumn);
+                i++;
+            }
+            for (ColumnName colName : columnNodes) {
                 ColumnRef ref = resolver.resolveColumn(null, colName.getFamilyName(), colName.getColumnName());
                 PColumn column = ref.getColumn();
                 if (IndexUtil.getViewConstantValue(column, ptr)) {
@@ -290,6 +321,7 @@ public class UpsertCompiler {
                 if (SchemaUtil.isPKColumn(column)) {
                     pkColumnsSet.set(pkSlotIndexesToBe[i] = ref.getPKSlotPosition());
                 }
+                i++;
             }
             for (PColumn column : addViewColumnsToBe) {
                 columnIndexesToBe[i] = column.getPosition();
@@ -299,26 +331,7 @@ public class UpsertCompiler {
                 }
                 i++;
             }
-            int hiddenOffset = posOffset;
-            // Add tenant column directly, as we don't want to resolve it as this will fail
-            if (isTenantSpecific) {
-                PColumn tenantColumn = table.getPKColumns().get(hiddenOffset);
-                columnIndexesToBe[i] = tenantColumn.getPosition();
-                pkColumnsSet.set(pkSlotIndexesToBe[i] = hiddenOffset);
-                targetColumns.set(i, tenantColumn);
-                hiddenOffset++;
-                i++;
-            }
-            if (isSharedViewIndex) {
-                PColumn indexIdColumn = table.getPKColumns().get(hiddenOffset);
-                columnIndexesToBe[i] = indexIdColumn.getPosition();
-                pkColumnsSet.set(pkSlotIndexesToBe[i] = hiddenOffset);
-                targetColumns.set(i, indexIdColumn);
-                hiddenOffset++;
-                i++;
-            }
-            i = posOffset;
-            for ( ; i < table.getPKColumns().size(); i++) {
+            for (i = posOffset; i < table.getPKColumns().size(); i++) {
                 PColumn pkCol = table.getPKColumns().get(i);
                 if (!pkColumnsSet.get(i)) {
                     if (!pkCol.isNullable()) {
@@ -341,7 +354,7 @@ public class UpsertCompiler {
             assert(select != null);
             ColumnResolver selectResolver = FromCompiler.getResolverForQuery(select, connection);
             select = StatementNormalizer.normalize(select, selectResolver);
-            select = addTenantAndViewConstants(table, select, tenantId, addViewColumnsToBe);
+            select = prependTenantAndViewConstants(table, select, tenantId, addViewColumnsToBe);
             sameTable = select.getFrom().size() == 1
                 && tableRef.equals(selectResolver.getTables().get(0));
             /* We can run the upsert in a coprocessor if:
@@ -617,6 +630,15 @@ public class UpsertCompiler {
         // UPSERT VALUES
         /////////////////////////////////////////////////////////////////////
         int nodeIndex = 0;
+        // initialze values with constant byte values first
+        final byte[][] values = new byte[nValuesToSet][];
+        if (isTenantSpecific) {
+            values[nodeIndex++] = connection.getTenantId().getBytes();
+        }
+        if (isSharedViewIndex) {
+            values[nodeIndex++] = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
+        }
+        final int nodeIndexOffset = nodeIndex;
         // Allocate array based on size of all columns in table,
         // since some values may not be set (if they're nullable).
         final StatementContext context = new StatementContext(statement, resolver, new Scan());
@@ -661,8 +683,7 @@ public class UpsertCompiler {
                 ImmutableBytesWritable ptr = context.getTempPtr();
                 final SequenceManager sequenceManager = context.getSequenceManager();
                 // Next evaluate all the expressions
-                int nodeIndex = 0;
-                final byte[][] values = new byte[nValuesToSet][];
+                int nodeIndex = nodeIndexOffset;
                 Tuple tuple = sequenceManager.getSequenceCount() == 0 ? null :
                     sequenceManager.newSequenceTuple(null);
                 for (Expression constantExpression : constantExpressions) {
@@ -703,12 +724,6 @@ public class UpsertCompiler {
                     } else {
                         throw new IllegalStateException();
                     }
-                }
-                if (isTenantSpecific) {
-                    values[nodeIndex++] = connection.getTenantId().getBytes();
-                }
-                if (isSharedViewIndex) {
-                    values[nodeIndex++] = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
                 }
                 Map<ImmutableBytesPtr, Map<PColumn, byte[]>> mutation = Maps.newHashMapWithExpectedSize(1);
                 setValues(values, pkSlotIndexes, columnIndexes, tableRef.getTable(), mutation);
@@ -765,22 +780,22 @@ public class UpsertCompiler {
     }
     
 
-    private static SelectStatement addTenantAndViewConstants(PTable table, SelectStatement select, String tenantId, Set<PColumn> addViewColumns) {
+    private static SelectStatement prependTenantAndViewConstants(PTable table, SelectStatement select, String tenantId, Set<PColumn> addViewColumns) {
         if ((!table.isMultiTenant() || tenantId == null) && table.getViewIndexId() == null && addViewColumns.isEmpty()) {
             return select;
         }
         List<AliasedNode> selectNodes = newArrayListWithCapacity(select.getSelect().size() + 1 + addViewColumns.size());
-        selectNodes.addAll(select.getSelect());
-        for (PColumn column : addViewColumns) {
-            byte[] byteValue = column.getViewConstant();
-            Object value = column.getDataType().toObject(byteValue, 0, byteValue.length-1);
-            selectNodes.add(new AliasedNode(null, new LiteralParseNode(value)));
-        }
         if (table.isMultiTenant() && tenantId != null) {
             selectNodes.add(new AliasedNode(null, new LiteralParseNode(tenantId)));
         }
         if (table.getViewIndexId() != null) {
             selectNodes.add(new AliasedNode(null, new LiteralParseNode(table.getViewIndexId())));
+        }
+        selectNodes.addAll(select.getSelect());
+        for (PColumn column : addViewColumns) {
+            byte[] byteValue = column.getViewConstant();
+            Object value = column.getDataType().toObject(byteValue, 0, byteValue.length-1);
+            selectNodes.add(new AliasedNode(null, new LiteralParseNode(value)));
         }
         
         return SelectStatement.create(select, selectNodes);

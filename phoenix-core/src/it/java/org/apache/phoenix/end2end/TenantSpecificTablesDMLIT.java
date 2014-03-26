@@ -61,6 +61,46 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         }
     }
     
+    @Test
+    public void testBasicUpsertSelect2() throws Exception {
+        Connection conn1 = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
+        createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL2, TENANT_TABLE_DDL, null, nextTimestamp());
+        Connection conn2 = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL2);
+        try {
+            conn1.setAutoCommit(false);
+            conn1.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " values ('me','" + TENANT_TYPE_ID + "',1,'Cheap Sunglasses')");
+            conn1.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " values ('you','" + TENANT_TYPE_ID +"',2,'Viva Las Vegas')");
+            conn1.commit();
+            
+            
+            conn2.setAutoCommit(false);
+            conn2.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " values ('them','" + TENANT_TYPE_ID + "',1,'Long Hair')");
+            conn2.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " values ('us','" + TENANT_TYPE_ID + "',2,'Hot Chicks')");
+            conn2.commit();
+
+            conn2.close();            
+            conn1.close();
+            
+            conn1 = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
+            ResultSet rs = conn1.createStatement().executeQuery("select * from " + TENANT_TABLE_NAME + " where id = 1");
+            assertTrue("Expected 1 row in result set", rs.next());
+            assertEquals(1, rs.getInt(3));
+            assertEquals("Cheap Sunglasses", rs.getString(4));
+            assertFalse("Expected 1 row in result set", rs.next());
+
+            conn2 = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL2);
+            rs = conn2.createStatement().executeQuery("select * from " + TENANT_TABLE_NAME + " where id = 2");
+            assertTrue("Expected 1 row in result set", rs.next());
+            assertEquals(2, rs.getInt(3));
+            assertEquals("Hot Chicks", rs.getString(4));
+            assertFalse("Expected 1 row in result set", rs.next());
+        }
+        finally {
+            conn1.close();
+            conn2.close();
+        }
+    }
+    
     private Connection nextConnection(String url) throws SQLException {
         Properties props = new Properties(TestUtil.TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
