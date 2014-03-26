@@ -17,9 +17,17 @@
  */
 package org.apache.phoenix.compile;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -29,7 +37,11 @@ import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.expression.*;
+import org.apache.phoenix.expression.BaseTerminalExpression;
+import org.apache.phoenix.expression.CoerceExpression;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.aggregator.ClientAggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
@@ -37,15 +49,44 @@ import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
 import org.apache.phoenix.expression.visitor.SingleAggregateFunctionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.parse.*;
+import org.apache.phoenix.parse.AliasedNode;
+import org.apache.phoenix.parse.BindParseNode;
+import org.apache.phoenix.parse.ColumnParseNode;
+import org.apache.phoenix.parse.FamilyWildcardParseNode;
+import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.SequenceValueParseNode;
+import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.parse.TableWildcardParseNode;
+import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.*;
+import org.apache.phoenix.schema.ArgumentTypeMismatchException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
+import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.SizedUtil;
 
-import com.google.common.collect.*;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 
 /**
@@ -71,9 +112,9 @@ public class ProjectionCompiler {
         return compile(context, statement, groupBy, Collections.<PColumn>emptyList());
     }
     
-    private static int getPosOffset(PTable table, PName tenantId) {
-        int posOffset = table.getBucketNum() == null ? 0 : 1;
+    private static int getMinPKOffset(PTable table, PName tenantId) {
         // In SELECT *, don't include tenant column or index ID column for tenant connection
+        int posOffset = table.getBucketNum() == null ? 0 : 1;
         if (table.isMultiTenant() && tenantId != null) {
             posOffset++;
         }
@@ -86,8 +127,16 @@ public class ProjectionCompiler {
     private static void projectAllTableColumns(StatementContext context, TableRef tableRef, boolean resolveColumn, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns, List<? extends PDatum> targetColumns) throws SQLException {
         ColumnResolver resolver = context.getResolver();
         PTable table = tableRef.getTable();
-        int posOffset = getPosOffset(table, context.getConnection().getTenantId());
-        for (int i = posOffset; i < table.getColumns().size(); i++) {
+        int projectedOffset = projectedExpressions.size();
+        int posOffset = table.getBucketNum() == null ? 0 : 1;
+        int minPKOffset = getMinPKOffset(table, context.getConnection().getTenantId());
+        for (int i = posOffset, j = posOffset; i < table.getColumns().size(); i++) {
+            PColumn column = table.getColumns().get(i);
+            // Skip tenant ID column (which may not be the first column, but is the first PK column)
+            if (SchemaUtil.isPKColumn(column) && j++ < minPKOffset) {
+                posOffset++;
+                continue;
+            }
             ColumnRef ref = new ColumnRef(tableRef,i);
             String colName = ref.getColumn().getName().getString();
             if (resolveColumn) {
@@ -101,7 +150,11 @@ public class ProjectionCompiler {
                 }
             }
             Expression expression = ref.newColumnExpression();
-            expression = coerceIfNecessary(i-posOffset, targetColumns, expression);
+            expression = coerceIfNecessary(i-posOffset+projectedOffset, targetColumns, expression);
+            ImmutableBytesWritable ptr = context.getTempPtr();
+            if (IndexUtil.getViewConstantValue(column, ptr)) {
+                expression = LiteralExpression.newConstant(column.getDataType().toObject(ptr), expression.getDataType());
+            }
             projectedExpressions.add(expression);
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
             projectedColumns.add(new ExpressionProjector(colName, table.getName().getString(), expression, isCaseSensitive));
@@ -111,17 +164,25 @@ public class ProjectionCompiler {
     private static void projectAllIndexColumns(StatementContext context, TableRef tableRef, boolean resolveColumn, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns, List<? extends PDatum> targetColumns) throws SQLException {
         ColumnResolver resolver = context.getResolver();
         PTable index = tableRef.getTable();
+        int projectedOffset = projectedExpressions.size();
         PhoenixConnection conn = context.getConnection();
         PName tenantId = conn.getTenantId();
         String tableName = index.getParentName().getString();
         PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), tableName));
-        int tableOffset = getPosOffset(table, tenantId);
-        int indexOffset = getPosOffset(index, tenantId);
-        if (index.getColumns().size()-indexOffset != table.getColumns().size()-tableOffset) {
+        int tableOffset = table.getBucketNum() == null ? 0 : 1;
+        int minTablePKOffset = getMinPKOffset(table, tenantId);
+        int minIndexPKOffset = getMinPKOffset(index, tenantId);
+        if (index.getColumns().size()-minIndexPKOffset != table.getColumns().size()-minTablePKOffset) {
             // We'll end up not using this by the optimizer, so just throw
             throw new ColumnNotFoundException(WildcardParseNode.INSTANCE.toString());
         }
-        for (int i = tableOffset; i < table.getColumns().size(); i++) {
+        for (int i = tableOffset, j = tableOffset; i < table.getColumns().size(); i++) {
+            PColumn column = table.getColumns().get(i);
+            // Skip tenant ID column (which may not be the first column, but is the first PK column)
+            if (SchemaUtil.isPKColumn(column) && j++ < minTablePKOffset) {
+                tableOffset++;
+                continue;
+            }
             PColumn tableColumn = table.getColumns().get(i);
             String indexColName = IndexUtil.getIndexColumnName(tableColumn);
             PColumn indexColumn = index.getColumn(indexColName);
@@ -138,7 +199,9 @@ public class ProjectionCompiler {
                 }
             }
             Expression expression = ref.newColumnExpression();
-            expression = coerceIfNecessary(i-tableOffset, targetColumns, expression);
+            expression = coerceIfNecessary(i-tableOffset+projectedOffset, targetColumns, expression);
+            // We do not need to check if the column is a viewConstant, because view constants never
+            // appear as a column in an index
             projectedExpressions.add(expression);
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
             ExpressionProjector projector = new ExpressionProjector(colName, table.getName().getString(), expression, isCaseSensitive);
