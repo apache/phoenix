@@ -1,0 +1,128 @@
+
+Release Notes - Phoenix - Version 4.0.0-incubating
+
+** New Feature
+    * [PHOENIX-21] - Support indexes on VIEWs including tenant-specific views
+    * [PHOENIX-92] - Hive StorageHandler
+    * [PHOENIX-149] - Support SEQUENCE creation and usage
+    * [PHOENIX-427] - Allow creating VIEWs on the same physical HBase table
+    * [PHOENIX-632] - Support equi-joins through broadcast hash join
+    * [PHOENIX-749] - Support JDBC ARRAY type
+
+** Improvement
+    * [PHOENIX-10] - Push projection of a single ARRAY element to the server
+    * [PHOENIX-13] - Provide a "nocache" hint to a query
+    * [PHOENIX-15] - Allow forcing a memstore flush for a table
+    * [PHOENIX-16] - Where clause optimization in join queries
+    * [PHOENIX-17] - Support to make use of partial covered indexes in scan
+    * [PHOENIX-19] - Enhance JDBC connection of Phoenix to support connecting to a Secure HBase cluster.
+    * [PHOENIX-31] - Add encode/decode methods for PK values
+    * [PHOENIX-33] - Support table-wildcard select in join queries
+    * [PHOENIX-40] - Add support for batching
+    * [PHOENIX-42] - Provide end2end test command line utility
+    * [PHOENIX-50] - Convert shell scripts under bin to python script so same scripts can run in unix & windows
+    * [PHOENIX-68] - Add hint "NO_STAR_JOIN" to indicate if star join optimization should be avoided for multi inner join queries
+    * [PHOENIX-85] - Refine error handling in HashJoinPlan execution and add warnings
+    * [PHOENIX-129] - Improve MapReduce-based import
+    * [PHOENIX-130] - Separate execution of slow (integration) tests from fast unit tests
+    * [PHOENIX-853] - Support CAST(x as varchar(length)) syntax
+    * [PHOENIX-856] - Allow phoenix driver reuse after being closed
+
+** Bug
+    * [PHOENIX-7] - after Connection close, there are still 10 phoenix threads alive
+    * [PHOENIX-12] - snappy error on osx 64bit
+    * [PHOENIX-18] - Distinct based aggregations not working correctly when query contains ORDER BY
+    * [PHOENIX-20] - Single Key(s) not recognized by optimizer when table is salted
+    * [PHOENIX-22] - Explicitly declare views as read-only or updatable
+    * [PHOENIX-26] - Unit test ArithmeticQueryTest#testDecimalUpsertSelect fails on HBase 0.94.15
+    * [PHOENIX-29] - Add custom filter to more efficiently navigate KeyValues in row
+    * [PHOENIX-30] - NPE on PTable.getColumn(String) if column with same name used in the PK and non PK
+    * [PHOENIX-32] - Replace generic ColumnModifier with specific SortOrder
+    * [PHOENIX-34] - Insufficient memory exception on join when RHS rows count > 250K 
+    * [PHOENIX-35] - Perf test memory usage for indexes
+    * [PHOENIX-37] - Prevent deserialize and re-serialize all array elements in construction of array
+    * [PHOENIX-38] - Data load time with mutable index is 5X slower than Phoenix 2.2.2, 2.2.3
+    * [PHOENIX-44] - Cannot create index on tables with case-sensitive schema names
+    * [PHOENIX-49] - ArrayIndexOutOfBoundsException when creating index
+    * [PHOENIX-53] - Replace CSV loader with Apache Commons CSV loader
+    * [PHOENIX-54] - PhoenixSink references jboss channel exception
+    * [PHOENIX-57] - ClientKeyValue doesn't work in debug mode
+    * [PHOENIX-58] - Client jars are missing phoenix code
+    * [PHOENIX-60] - UPSERT SELECT does not increment sequences
+    * [PHOENIX-61] - Indexing on columns of Date/Timestamp type would lead to ArgumentTypeMismatchException in optimize()
+    * [PHOENIX-62] - Precision loss for decimal type (no scale specified) when creation of index happens after the record insertion
+    * [PHOENIX-65] - Timeout in running E2E tests after PHOENIX-42 commit 
+    * [PHOENIX-66] - Support array creation from CSV file
+    * [PHOENIX-67] - Lazy initialize QueryServices in PhoenixDriver 
+    * [PHOENIX-70] - Add doc for client jar being for a specific Hadoop version
+    * [PHOENIX-72] - SkipScanFilter intersect may be incorrect for ranges
+    * [PHOENIX-75] - Add documentation on website describing ARRAY support
+    * [PHOENIX-76] - Fix perf regression due to PHOENIX-29
+    * [PHOENIX-77] - Indexes and salting on views is broken
+    * [PHOENIX-78] - MetaDataUtil must respect ClientKeyValue usage
+    * [PHOENIX-80] - Improve handing of TableNotFoundException in ConnectionQueryServicesImpl#getTable
+    * [PHOENIX-82] - Allow ARRAY to be compared and used at end of PK
+    * [PHOENIX-83] - select with left join when the where condition has right tables, the result is not expected
+    * [PHOENIX-84] - explain the query plan is not the actually order 
+    * [PHOENIX-89] - Statements are not closed using PhoenixConnection.executeStatements()
+    * [PHOENIX-90] - MemoryChunk objects might be orphaned when creating new caches in TenantCacheImpl
+    * [PHOENIX-93] - Add shutdown hook to free any straggling resources
+    * [PHOENIX-94] - Memory leak in running unit tests on Mac perhaps mini-cluster related
+    * [PHOENIX-95] - Use catalog argument for tenant in JDBC metadata APIs
+    * [PHOENIX-96] - Enable use of ClientKeyValueBuilder to reduce memory footprint
+    * [PHOENIX-97] - Sort columns by COLUMN_NAME for metaData.getPrimaryKey() as dictated by spec
+    * [PHOENIX-99] - Automatic white list based upgrade from 2.2 to 3.0
+    * [PHOENIX-100] - Relax compatibility check to only check that the major version matches between the client and server jars
+    * [PHOENIX-106] - NPE when adding dynamic columns to a salted table
+    * [PHOENIX-107] - Pass through already normalized strings to CSVLoader
+    * [PHOENIX-108] - Add testing around multi-tenancy
+    * [PHOENIX-110] - Indexes with tenant-specific views appear to be broken
+    * [PHOENIX-113] - Enable usage of ClientKeyValue on for indexing on server
+    * [PHOENIX-114] - Add Hints so that user can select whether to use "avoid seek optimization" or not
+    * [PHOENIX-116] - Phoenix array integer types overlap with existing java.sql.Types
+    * [PHOENIX-118] - Type mismatch error on upsert for unsigned_date and date
+    * [PHOENIX-119] - Removed unnecessary Expression.getByteSize() method
+    * [PHOENIX-121] - Metadata query on 2.X fails after upgrade to Phoenix 3.0
+    * [PHOENIX-122] - SELECT * FROM TABLE ORDER BY NONPK COLUMN doesn't return values for all the columns
+    * [PHOENIX-123] - Fixed with array should not write any footer
+    * [PHOENIX-124] - Add one page documentation in markdown for ARRAY support
+    * [PHOENIX-126] - Use of BOOLEAN in index and/or group by causes exception
+    * [PHOENIX-127] - Query with pk IS NULL OR pk IN (1,2) return incorrect results
+    * [PHOENIX-128] - Support coercion and descending sort order for ARRAY
+    * [PHOENIX-131] - Incorrect determination of total available memory
+    * [PHOENIX-829] - Uppercase file name if none supplied for CSV import
+    * [PHOENIX-830] - Add DISCLAIMER file along side NOTICE file
+    * [PHOENIX-832] - Drop the ".txt" extension on the NOTICE, LICENSE, CHANGES, and README files
+    * [PHOENIX-834] - Unit tests fail if default locale is not en_US
+    * [PHOENIX-835] - Datatype statements in CAST operations are case-sensitive
+    * [PHOENIX-841] - Upserting into tenant-specific view with no where clause fails with an NPE
+    * [PHOENIX-842] - Use better namespace for maven artifacts
+    * [PHOENIX-843] - Incorrect java.sql.Types value returned for array types in result set
+    * [PHOENIX-845] - log4j setting is wrong
+    * [PHOENIX-846] - Select DISTINCT with LIMIT does full scans
+    * [PHOENIX-847] - Tenant metadata isolation broken in Connection.getMetaData()
+    * [PHOENIX-849] - Test StatsManagerIT#testStatsManager is flaky 
+    * [PHOENIX-850] - Optimize ORDER BY and GROUP BY for tenant specific indexes
+    * [PHOENIX-857] - Duplicate dependency on phoenix-core in phoenix-flume
+    * [PHOENIX-858] - Disallow null primary key
+    * [PHOENIX-861] - MapReduce import doesn't use a default array separator
+    * [PHOENIX-863] - Relax delete check for immutable secondary indexes
+    * [PHOENIX-865] - Bump utility logging level from INFO to WARN because of too much logging info
+    * [PHOENIX-871] - Mutable Secondary Indexing can cause a deadlock on exception
+    * [PHOENIX-872] - getConnection() sometimes fails with a ConcurrentModificationException
+    * [PHOENIX-875] - NPE when running end2end tests against a live cluster
+    * [PHOENIX-876] - Remove unnecessary phoenix-*-mapreduce.jar
+    * [PHOENIX-881] - end2end test fails to run against a live cluster using end2endtest.py
+    * [PHOENIX-882] - Updatable view should check view condition upon upsert
+    * [PHOENIX-885] - Metadata ORDINAL_POSITION is off by one if table is salted
+    * [PHOENIX-887] - Fix upgrade when wildcard used to upgrade everything
+    * [PHOENIX-891] - Multi-tenant - Upserting values without specifying columns names upserts values in wrong columns
+    * [PHOENIX-892] - Multi-tenant - Creating index throws NoSuchColumnFamilyException when CF is specified in base table
+
+** Task
+    * [PHOENIX-25] - Remove @author tags
+    * [PHOENIX-45] - Insure all source files include the ASF preamble
+    * [PHOENIX-46] - Use Apache Rat for release compliance checking
+    * [PHOENIX-622] - Support multi-tenant tables as views
+    * [PHOENIX-873] - Add missing license headers as discovered by Apache Rat
+    * [PHOENIX-874] - Update NOTICE file based on http://apache.org/legal/src-headers.html#notice

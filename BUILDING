@@ -1,7 +1,5 @@
 ############################################################################
 #
-# Copyright 2010 The Apache Software Foundation
-#
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -25,6 +23,17 @@
 =========================
 
 Phoenix uses Maven (3.X) to build all its necessary resources. 
+
+## Building with HBase 0.98.1
+=============================
+
+Phoenix 4.0.0-incubating requires HBase 0.98.1+ to compile. HBase 0.98.1 is in
+RC stage as of 03/26/2014. As a workaround to build until final release is 
+available in maven repo, install HBase 0.98.1-RC0 to your local maven repo:
+
+    $ svn checkout http://svn.apache.org/repos/asf/hbase/tags/0.98.1RC0/
+    $ dev-support/generate-hadoopX-poms.sh 0.98.1 0.98.1-hadoop[version]
+    $ mvn -f pom.xml.hadoop[version] install -DskipTests
 
 ## Building from source
 =======================
