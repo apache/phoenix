@@ -20,12 +20,14 @@ package org.apache.phoenix.end2end;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.Properties;
 
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
@@ -51,13 +53,20 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("UPSERT INTO MT_BASE values ('a','b','c','d')");
         conn.commit();
+        
+        ResultSet rs = conn.createStatement().executeQuery("select * from mt_base where (pk1,pk2) IN (('a','b'),('b','b'))");
+        assertTrue(rs.next());
+        assertEquals("a",rs.getString(1));
+        assertEquals("b",rs.getString(2));
+        assertFalse(rs.next());
+        
         conn.close();
         String tenantId = "a";
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         conn = DriverManager.getConnection(getUrl(),props);
         conn.createStatement().execute("CREATE VIEW acme AS SELECT * FROM MT_BASE");
-        ResultSet rs = conn.createStatement().executeQuery("select * from acme");
+        rs = conn.createStatement().executeQuery("select * from acme");
         assertTrue(rs.next());
         assertEquals("b",rs.getString(1));
         assertEquals("c",rs.getString(2));
@@ -86,5 +95,28 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("explain select pk2,col1 from acme where col1='f'");
         assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_MT_BASE ['a',-32768,'f']",QueryUtil.getExplainPlan(rs));
+        
+        try {
+            // Cannot reference tenant_id column in tenant specific connection
+            conn.createStatement().executeQuery("select * from mt_base where (pk1,pk2) IN (('a','b'),('b','b'))");
+            fail();
+        } catch (ColumnNotFoundException e) {
+        }
+        
+        // This is ok, though
+        rs = conn.createStatement().executeQuery("select * from mt_base where pk2 IN ('b','e')");
+        assertTrue(rs.next());
+        assertEquals("b",rs.getString(1));
+        assertTrue(rs.next());
+        assertEquals("e",rs.getString(1));
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("select * from acme where pk2 IN ('b','e')");
+        assertTrue(rs.next());
+        assertEquals("b",rs.getString(1));
+        assertTrue(rs.next());
+        assertEquals("e",rs.getString(1));
+        assertFalse(rs.next());
+        
     }
 }
