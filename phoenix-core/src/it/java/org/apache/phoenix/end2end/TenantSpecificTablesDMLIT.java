@@ -68,10 +68,9 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             conn1.commit();
             
             
-            conn2.setAutoCommit(false);
+            conn2.setAutoCommit(true);
             conn2.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " values ('them','" + TENANT_TYPE_ID + "',1,'Long Hair')");
-            conn2.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " values ('us','" + TENANT_TYPE_ID + "',2,'Hot Chicks')");
-            conn2.commit();
+            conn2.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " values ('us','" + TENANT_TYPE_ID + "',2,'Black Hat')");
 
             conn2.close();            
             conn1.close();
@@ -87,8 +86,46 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             rs = conn2.createStatement().executeQuery("select * from " + TENANT_TABLE_NAME + " where id = 2");
             assertTrue("Expected 1 row in result set", rs.next());
             assertEquals(2, rs.getInt(3));
-            assertEquals("Hot Chicks", rs.getString(4));
+            assertEquals("Black Hat", rs.getString(4));
             assertFalse("Expected 1 row in result set", rs.next());
+            conn2.close();
+            
+            conn2 = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL2);
+            conn2.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " select * from " + TENANT_TABLE_NAME );
+            conn2.commit();
+            conn2.close();
+            
+            conn2 = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL2);
+            rs = conn2.createStatement().executeQuery("select * from " + TENANT_TABLE_NAME);
+            assertTrue("Expected row in result set", rs.next());
+            assertEquals(1, rs.getInt(3));
+            assertEquals("Long Hair", rs.getString(4));
+            assertTrue("Expected row in result set", rs.next());
+            assertEquals(2, rs.getInt(3));
+            assertEquals("Black Hat", rs.getString(4));
+            assertFalse("Expected 2 rows total", rs.next());
+            conn2.close();
+            
+            conn2 = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL2);
+            conn2.setAutoCommit(true);;
+            conn2.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " select 'all', tenant_type_id, id, 'Big ' || tenant_col from " + TENANT_TABLE_NAME );
+            conn2.close();
+
+            conn2 = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL2);
+            rs = conn2.createStatement().executeQuery("select * from " + TENANT_TABLE_NAME);
+            assertTrue("Expected row in result set", rs.next());
+            assertEquals("all", rs.getString(1));
+            assertEquals(TENANT_TYPE_ID, rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals("Big Long Hair", rs.getString(4));
+            assertTrue("Expected row in result set", rs.next());
+            assertEquals("all", rs.getString(1));
+            assertEquals(TENANT_TYPE_ID, rs.getString(2));
+            assertEquals(2, rs.getInt(3));
+            assertEquals("Big Black Hat", rs.getString(4));
+            assertFalse("Expected 2 rows total", rs.next());
+            conn2.close();
+            
         }
         finally {
             conn1.close();

@@ -864,4 +864,32 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
             conn.close();
         }
     }
+    
+    @Test
+    public void testRVCWithMultiCompKeysForIn() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE t (pk1 varchar, pk2 varchar, constraint pk primary key (pk1,pk2))");
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+        conn.createStatement().execute("UPSERT INTO t VALUES('a','a')");
+        conn.createStatement().execute("UPSERT INTO t VALUES('b','b')");
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM t WHERE (pk1,pk2) IN (('a','a'),('b','b'))");
+        assertTrue(rs.next());
+        assertEquals("a",rs.getString(1));
+        assertEquals("a",rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("b",rs.getString(1));
+        assertEquals("b",rs.getString(2));
+        assertFalse(rs.next());
+    }
 }
