@@ -17,22 +17,16 @@
  */
 package org.apache.phoenix.util;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.Reader;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Properties;
-import java.util.Set;
-import java.util.StringTokenizer;
-import java.util.TreeSet;
-
+import com.google.common.base.Splitter;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.PosixParser;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -52,13 +46,25 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableNotFoundException;
 
-import com.google.common.collect.Lists;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.Reader;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Properties;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
- * 
+ *
  * Collection of non JDBC compliant utility methods
  *
- * 
+ *
  * @since 0.1
  */
 public class PhoenixRuntime {
@@ -76,19 +82,19 @@ public class PhoenixRuntime {
     public final static String JDBC_PROTOCOL = "jdbc:phoenix";
     public final static char JDBC_PROTOCOL_TERMINATOR = ';';
     public final static char JDBC_PROTOCOL_SEPARATOR = ':';
-    
+
     @Deprecated
     public final static String EMBEDDED_JDBC_PROTOCOL = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-    
+
     /**
      * Use this connection property to control the number of rows that are
      * batched together on an UPSERT INTO table1... SELECT ... FROM table2.
      * It's only used when autoCommit is true and your source table is
-     * different than your target table or your SELECT statement has a 
+     * different than your target table or your SELECT statement has a
      * GROUP BY clause.
      */
     public final static String UPSERT_BATCH_SIZE_ATTRIB = "UpsertBatchSize";
-    
+
     /**
      * Use this connection property to help with fairness of resource allocation
      * for the client and server. The value of the attribute determines the
@@ -104,37 +110,11 @@ public class PhoenixRuntime {
      * upserting data into them, and getting the uncommitted state through {@link #getUncommittedData(Connection)}
      */
     public final static String CONNECTIONLESS = "none";
-    
-    private static final String TABLE_OPTION = "-t";
-    private static final String HEADER_OPTION = "-h";
-    private static final String STRICT_OPTION = "-s";
-    private static final String CSV_OPTION = "-d";
-    private static final String ARRAY_ELEMENT_SEP_OPTION = "-a";
+
     private static final String HEADER_IN_LINE = "in-line";
     private static final String SQL_FILE_EXT = ".sql";
     private static final String CSV_FILE_EXT = ".csv";
 
-    private static void usageError() {
-        System.err.println("Usage: psql [-t table-name] [-h comma-separated-column-names | in-line] [-d field-delimiter-char quote-char escape-char]<zookeeper>  <path-to-sql-or-csv-file>...\n" +
-                "  By default, the name of the CSV file (case insensitive) is used to determine the Phoenix table into which the CSV data is loaded\n" +
-                "  and the ordinal value of the columns determines the mapping.\n" +
-                "  -t overrides the table into which the CSV data is loaded and is case sensitive.\n" +
-                "  -h overrides the column names to which the CSV data maps and is case sensitive.\n" +
-                "     A special value of in-line indicating that the first line of the CSV file\n" +
-                "     determines the column to which the data maps.\n" +
-                "  -s uses strict mode by throwing an exception if a column name doesn't match during CSV loading.\n" +
-                "  -d uses custom delimiters for CSV loader, need to specify single char for field delimiter, phrase delimiter, and escape char.\n" +
-                "     number is NOT usually a delimiter and shall be taken as 1 -> ctrl A, 2 -> ctrl B ... 9 -> ctrl I. \n" +
-                "  -a define the array element separator, defaults to ':'\n" +
-                "Examples:\n" +
-                "  psql localhost my_ddl.sql\n" +
-                "  psql localhost my_ddl.sql my_table.csv\n" +
-                "  psql -t MY_TABLE my_cluster:1825 my_table2012-Q3.csv\n" +
-                "  psql -t MY_TABLE -h COL1,COL2,COL3 my_cluster:1825 my_table2012-Q3.csv\n" +
-                "  psql -t MY_TABLE -h COL1,COL2,COL3 -d 1 2 3 my_cluster:1825 my_table2012-Q3.csv\n"
-        );
-        System.exit(-1);
-    }
     /**
      * Provides a mechanism to run SQL scripts against, where the arguments are:
      * 1) connection URL string
@@ -144,90 +124,40 @@ public class PhoenixRuntime {
      * increment timestamp value.
      */
     public static void main(String [] args) {
-        if (args.length < 2) {
-            usageError();
-        }
+
+        ExecutionCommand execCmd = ExecutionCommand.parseArgs(args);
+        String jdbcUrl = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + execCmd.getConnectionString();
+
         PhoenixConnection conn = null;
         try {
-            String tableName = null;
-            List<String> columns = null;
-            boolean isStrict = false;
-            String arrayElementSeparator = CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR;
-            List<String> customMetaCharacters = new ArrayList<String>();
-
-            int i = 0;
-            for (; i < args.length; i++) {
-                if (TABLE_OPTION.equals(args[i])) {
-                    if (++i == args.length || tableName != null) {
-                        usageError();
-                    }
-                    tableName = args[i];
-                } else if (HEADER_OPTION.equals(args[i])) {
-                    if (++i >= args.length || columns != null) {
-                        usageError();
-                    }
-                    String header = args[i];
-                    if (HEADER_IN_LINE.equals(header)) {
-                        columns = Collections.emptyList();
-                    } else {
-                        columns = Lists.newArrayList();
-                        StringTokenizer tokenizer = new StringTokenizer(header,",");
-                        while(tokenizer.hasMoreTokens()) {
-                            columns.add(tokenizer.nextToken());
-                        }
-                    }
-                } else if (STRICT_OPTION.equals(args[i])) {
-                    isStrict = true;
-                } else if (CSV_OPTION.equals(args[i])) {
-                    for(int j=0; j < 3; j++) {
-                        if(args[++i].length()==1){
-                            customMetaCharacters.add(args[i]);
-                        } else {
-                            usageError();
-                        }
-                    }
-                } else if (ARRAY_ELEMENT_SEP_OPTION.equals(args[i])) {
-                    arrayElementSeparator = args[++i];
-                } else {
-                    break;
-                }
-            }
-            if (i == args.length) {
-                usageError();
-            }
-            
             Properties props = new Properties();
-            String connectionUrl = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + args[i++];
-            conn = DriverManager.getConnection(connectionUrl, props).unwrap(PhoenixConnection.class);
-            
-            for (; i < args.length; i++) {
-                String fileName = args[i];
-                if (fileName.endsWith(SQL_FILE_EXT)) {
-               		PhoenixRuntime.executeStatements(conn, new FileReader(args[i]), Collections.emptyList());
-                } else if (fileName.endsWith(CSV_FILE_EXT)) {
+            conn = DriverManager.getConnection(jdbcUrl, props)
+                    .unwrap(PhoenixConnection.class);
+
+            for (String inputFile : execCmd.getInputFiles()) {
+                if (inputFile.endsWith(SQL_FILE_EXT)) {
+                    PhoenixRuntime.executeStatements(conn,
+                            new FileReader(inputFile), Collections.emptyList());
+                } else if (inputFile.endsWith(CSV_FILE_EXT)) {
+
+                    String tableName = execCmd.getTableName();
                     if (tableName == null) {
-                        tableName = SchemaUtil.normalizeIdentifier(fileName.substring(fileName.lastIndexOf(File.separatorChar) + 1, fileName.length()-CSV_FILE_EXT.length()));
+                        tableName = SchemaUtil.normalizeIdentifier(
+                                inputFile.substring(inputFile.lastIndexOf(File.separatorChar) + 1,
+                                        inputFile.length() - CSV_FILE_EXT.length()));
                     }
-                    CSVCommonsLoader csvLoader = 
-                    		new CSVCommonsLoader(conn, tableName, columns, isStrict, customMetaCharacters, arrayElementSeparator);
-                    csvLoader.upsert(fileName);
-                } else {
-                    usageError();
-                }
-                Long scn = conn.getSCN();
-                // If specifying SCN, increment it between processing files to allow
-                // for later files to see earlier files tables.
-                if (scn != null) {
-                    scn++;
-                    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, scn.toString());
-                    conn.close();
-                    conn = DriverManager.getConnection(connectionUrl, props).unwrap(PhoenixConnection.class);
+                    CSVCommonsLoader csvLoader =
+                            new CSVCommonsLoader(conn, tableName, execCmd.getColumns(),
+                                    execCmd.isStrict(), execCmd.getFieldDelimiter(),
+                                    execCmd.getQuoteCharacter(), execCmd.getEscapeCharacter(),
+                                    execCmd.getArrayElementSeparator());
+                    csvLoader.upsert(inputFile);
                 }
             }
         } catch (Throwable t) {
             t.printStackTrace();
         } finally {
-            if(conn != null) {
+            if (conn != null) {
                 try {
                     conn.close();
                 } catch (SQLException e) {
@@ -242,7 +172,7 @@ public class PhoenixRuntime {
 
     private PhoenixRuntime() {
     }
-    
+
     /**
      * Runs a series of semicolon-terminated SQL statements using the connection provided, returning
      * the number of SQL statements executed. Note that if the connection has specified an SCN through
@@ -261,13 +191,13 @@ public class PhoenixRuntime {
         pconn.setAutoCommit(true);
         return pconn.executeStatements(reader, binds, System.out);
     }
-    
+
     /**
      * Get the list of uncommitted KeyValues for the connection. Currently used to write an
      * Phoenix-compliant HFile from a map/reduce job.
      * @param conn an open JDBC connection
      * @return the list of HBase mutations for uncommitted data
-     * @throws SQLException 
+     * @throws SQLException
      */
     @Deprecated
     public static List<KeyValue> getUncommittedData(Connection conn) throws SQLException {
@@ -277,24 +207,24 @@ public class PhoenixRuntime {
         }
         return Collections.emptyList();
     }
-    
+
     /**
      * Get the list of uncommitted KeyValues for the connection. Currently used to write an
      * Phoenix-compliant HFile from a map/reduce job.
      * @param conn an open JDBC connection
      * @return the list of HBase mutations for uncommitted data
-     * @throws SQLException 
+     * @throws SQLException
      */
     public static Iterator<Pair<byte[],List<KeyValue>>> getUncommittedDataIterator(Connection conn) throws SQLException {
         return getUncommittedDataIterator(conn, false);
     }
-    
+
     /**
      * Get the list of uncommitted KeyValues for the connection. Currently used to write an
      * Phoenix-compliant HFile from a map/reduce job.
      * @param conn an open JDBC connection
      * @return the list of HBase mutations for uncommitted data
-     * @throws SQLException 
+     * @throws SQLException
      */
     public static Iterator<Pair<byte[],List<KeyValue>>> getUncommittedDataIterator(Connection conn, boolean includeMutableIndexes) throws SQLException {
         final PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
@@ -325,10 +255,10 @@ public class PhoenixRuntime {
             public void remove() {
                 throw new UnsupportedOperationException();
             }
-            
+
         };
     }
-    
+
     public static PTable getTable(Connection conn, String name) throws SQLException {
         PTable table = null;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
@@ -345,7 +275,7 @@ public class PhoenixRuntime {
         }
         return table;
     }
-    
+
     /**
      * Get list of ColumnInfos that contain Column Name and its associated
      * PDataType for an import. The supplied list of columns can be null -- if it is non-null,
@@ -366,7 +296,7 @@ public class PhoenixRuntime {
         if (columns == null) {
             // use all columns in the table
             for(PColumn pColumn : table.getColumns()) {
-               int sqlType = pColumn.getDataType().getResultSetSqlType();        
+               int sqlType = pColumn.getDataType().getResultSetSqlType();
                columnInfoList.add(new ColumnInfo(pColumn.toString(), sqlType));
             }
         } else {
@@ -400,14 +330,14 @@ public class PhoenixRuntime {
                     else exceptionMessage.append(",");
                     exceptionMessage.append(pColumn.toString());
                 }
-                throw new SQLException(exceptionMessage.toString()); 
+                throw new SQLException(exceptionMessage.toString());
       }
        return columnInfoList;
     }
 
     /**
      * Returns the column info for the given column for the given table.
-     * 
+     *
      * @param table
      * @param columnName User-specified column name. May be family-qualified or bare.
      * @return columnInfo associated with the column in the table
@@ -420,7 +350,7 @@ public class PhoenixRuntime {
         if (columnName==null) {
             throw new SQLException("columnName must not be null.");
         }
-        columnName = columnName.trim().toUpperCase(); 
+        columnName = columnName.trim().toUpperCase();
         PColumn pColumn = null;
         if (columnName.contains(QueryConstants.NAME_SEPARATOR)) {
             String[] tokens = columnName.split(QueryConstants.NAME_SEPARATOR_REGEX);
@@ -436,7 +366,7 @@ public class PhoenixRuntime {
         }
         return getColumnInfo(pColumn);
     }
-    
+
     /**
      * Constructs a column info for the supplied pColumn
      * @param pColumn
@@ -451,12 +381,12 @@ public class PhoenixRuntime {
         ColumnInfo columnInfo = new ColumnInfo(pColumn.toString(),sqlType);
         return columnInfo;
     }
-    
+
     /**
      * Encode the primary key values from the table as a byte array. The values must
      * be in the same order as the primary key constraint. If the connection and
      * table are both tenant-specific, the tenant ID column must not be present in
-     * the values. 
+     * the values.
      * @param conn an open connection
      * @param fullTableName the full table name
      * @param values the values of the primary key columns ordered in the same order
@@ -477,7 +407,7 @@ public class PhoenixRuntime {
         }
         PDataType type = null;
         TrustedByteArrayOutputStream output = new TrustedByteArrayOutputStream(table.getRowKeySchema().getEstimatedValueLength());
-        try { 
+        try {
             for (int i = offset; i < pkColumns.size(); i++) {
                 if (type != null && !type.isFixedWidth()) {
                     output.write(QueryConstants.SEPARATOR_BYTE);
@@ -495,14 +425,14 @@ public class PhoenixRuntime {
             }
         }
     }
-    
+
     /**
      * Decode a byte array value back into the Object values of the
      * primary key constraint. If the connection and table are both
      * tenant-specific, the tenant ID column is not expected to have
      * been encoded and will not appear in the returned values.
      * @param conn an open connection
-     * @param fullTableName the full table name
+     * @param name the full table name
      * @param value the value that was encoded with {@link #encodePK(Connection, String, Object[])}
      * @return the Object values encoded in the byte array value
      * @throws SQLException
@@ -522,5 +452,182 @@ public class PhoenixRuntime {
             i++;
         }
         return values;
+    }
+
+    /**
+     * Represents the parsed commandline parameters definining the command or commands to be
+     * executed.
+     */
+    static class ExecutionCommand {
+        private String connectionString;
+        private List<String> columns;
+        private String tableName;
+        private char fieldDelimiter;
+        private char quoteCharacter;
+        private Character escapeCharacter;
+        private String arrayElementSeparator;
+        private boolean strict;
+        private List<String> inputFiles;
+
+        /**
+         * Factory method to build up an {@code ExecutionCommand} based on supplied parameters.
+         */
+        public static ExecutionCommand parseArgs(String[] args) {
+            Option tableOption = new Option("t", "table", true,
+                    "Overrides the table into which the CSV data is loaded and is case sensitive");
+            Option headerOption = new Option("h", "header", true, "Overrides the column names to" +
+                    " which the CSV data maps and is case sensitive. A special value of " +
+                    "in-line indicating that the first line of the CSV file determines the " +
+                    "column to which the data maps");
+            Option strictOption = new Option("s", "strict", false, "Use strict mode by throwing " +
+                    "an exception if a column name doesn't match during CSV loading");
+            Option delimiterOption = new Option("d", "delimiter", true,
+                    "Field delimiter for CSV loader. A digit is interpreted as " +
+                    "1 -> ctrl A, 2 -> ctrl B ... 9 -> ctrl I.");
+            Option quoteCharacterOption = new Option("q", "quote-character", true,
+                    "Quote character for CSV loader. A digit is interpreted as a control " +
+                            "character");
+            Option escapeCharacterOption = new Option("e", "escape-character", true,
+                    "Escape character for CSV loader. A digit is interpreted as a control " +
+                            "character");
+            Option arrayValueSeparatorOption = new Option("a", "array-separator", true,
+                    "Define the array element separator, defaults to ':'");
+            Options options = new Options();
+            options.addOption(tableOption);
+            options.addOption(headerOption);
+            options.addOption(strictOption);
+            options.addOption(delimiterOption);
+            options.addOption(quoteCharacterOption);
+            options.addOption(escapeCharacterOption);
+            options.addOption(arrayValueSeparatorOption);
+
+            CommandLineParser parser = new PosixParser();
+            CommandLine cmdLine = null;
+            try {
+                cmdLine = parser.parse(options, args);
+            } catch (ParseException e) {
+                usageError(options);
+            }
+
+            ExecutionCommand execCmd = new ExecutionCommand();
+
+            if (cmdLine.hasOption(tableOption.getOpt())) {
+                execCmd.tableName = cmdLine.getOptionValue(tableOption.getOpt());
+            }
+
+            if (cmdLine.hasOption(headerOption.getOpt())) {
+                String columnString = cmdLine.getOptionValue(headerOption.getOpt());
+                if (HEADER_IN_LINE.equals(columnString)) {
+                    execCmd.columns = ImmutableList.of();
+                } else {
+                    execCmd.columns = ImmutableList.copyOf(
+                            Splitter.on(",").trimResults().split(columnString));
+                }
+            }
+
+            execCmd.strict = cmdLine.hasOption(strictOption.getOpt());
+            execCmd.fieldDelimiter = getCharacter(
+                    cmdLine.getOptionValue(delimiterOption.getOpt(), ","));
+            execCmd.quoteCharacter = getCharacter(
+                    cmdLine.getOptionValue(quoteCharacterOption.getOpt(), "\""));
+
+            if (cmdLine.hasOption(escapeCharacterOption.getOpt())) {
+                execCmd.escapeCharacter = getCharacter(
+                        cmdLine.getOptionValue(escapeCharacterOption.getOpt(), "\\"));
+            }
+
+            execCmd.arrayElementSeparator = cmdLine.getOptionValue(
+                    arrayValueSeparatorOption.getOpt(),
+                    CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);
+
+
+            List<String> argList = Lists.newArrayList(cmdLine.getArgList());
+            if (argList.isEmpty()) {
+                usageError("Connection string to HBase must be supplied", options);
+            }
+            execCmd.connectionString = argList.remove(0);
+            List<String> inputFiles = Lists.newArrayList();
+            for (String arg : argList) {
+                if (arg.endsWith(CSV_FILE_EXT) || arg.endsWith(SQL_FILE_EXT)) {
+                    inputFiles.add(arg);
+                } else {
+                    usageError("Don't know how to interpret argument '" + arg + "'", options);
+                }
+            }
+
+            if (inputFiles.isEmpty()) {
+                usageError("At least one input file must be supplied", options);
+            }
+
+            execCmd.inputFiles = inputFiles;
+
+
+
+            return execCmd;
+        }
+
+        private static char getCharacter(String s) {
+            if (s.length() > 1) {
+                throw new IllegalArgumentException("Invalid single character: '" + s + "'");
+            }
+            return s.charAt(0);
+        }
+
+        private static void usageError(String errorMsg, Options options) {
+            System.out.println(errorMsg);
+            usageError(options);
+        }
+
+        private static void usageError(Options options) {
+            HelpFormatter formatter = new HelpFormatter();
+            formatter.printHelp(
+                    "psql [-t table-name] [-h comma-separated-column-names | in-line] [-d " +
+                            "field-delimiter-char quote-char escape-char]<zookeeper>  " +
+                            "<path-to-sql-or-csv-file>...",
+                    options);
+            System.out.println("Examples:\n" +
+                    "  psql localhost my_ddl.sql\n" +
+                    "  psql localhost my_ddl.sql my_table.csv\n" +
+                    "  psql -t MY_TABLE my_cluster:1825 my_table2012-Q3.csv\n" +
+                    "  psql -t MY_TABLE -h COL1,COL2,COL3 my_cluster:1825 my_table2012-Q3.csv\n" +
+                    "  psql -t MY_TABLE -h COL1,COL2,COL3 -d : my_cluster:1825 my_table2012-Q3.csv");
+            System.exit(-1);
+        }
+
+        public String getConnectionString() {
+            return connectionString;
+        }
+
+        public List<String> getColumns() {
+            return columns;
+        }
+
+        public String getTableName() {
+            return tableName;
+        }
+
+        public char getFieldDelimiter() {
+            return fieldDelimiter;
+        }
+
+        public char getQuoteCharacter() {
+            return quoteCharacter;
+        }
+
+        public Character getEscapeCharacter() {
+            return escapeCharacter;
+        }
+
+        public String getArrayElementSeparator() {
+            return arrayElementSeparator;
+        }
+
+        public List<String> getInputFiles() {
+            return inputFiles;
+        }
+
+        public boolean isStrict() {
+            return strict;
+        }
     }
 }
