@@ -246,9 +246,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // find the HBase version and use that to determine the KeyValueBuilder that should be used
         String hbaseVersion = VersionInfo.getVersion();
         this.kvBuilder = KeyValueBuilder.get(hbaseVersion);
-        
-        // connection is initialized inside init()
-        connection = null;
     }
     
     private void openConnection() throws SQLException {
