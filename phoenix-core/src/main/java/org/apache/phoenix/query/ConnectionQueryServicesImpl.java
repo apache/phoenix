@@ -171,9 +171,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     // Copy of config.getProps(), but read-only to prevent synchronization that we
     // don't need.
     private final ReadOnlyProps props;
-    private final HConnection connection;
-    private final StatsManager statsManager;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
+    private final StatsManager statsManager;
     // Cache the latest meta data here for future connections
     private volatile PMetaData latestMetaData;
     private final Object latestMetaDataLock = new Object();
@@ -182,7 +181,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private boolean hasInvalidIndexConfiguration = false;
     private int connectionCount = 0;
     private WhiteList upgradeWhiteList = null;
-    
+
+    private HConnection connection;
+    private volatile boolean initialized;
+    private volatile boolean closed;
+    private volatile SQLException initializationException;
     private ConcurrentMap<SequenceKey,Sequence> sequenceMap = Maps.newConcurrentMap();
     private KeyValueBuilder kvBuilder;
 
@@ -198,7 +201,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @param connectionInfo to provide connection information
      * @throws SQLException
      */
-    public ConnectionQueryServicesImpl(QueryServices services, ConnectionInfo connectionInfo) throws SQLException {
+    public ConnectionQueryServicesImpl(QueryServices services, ConnectionInfo connectionInfo) {
         super(services);
         Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
         for (Entry<String,String> entry : services.getProps()) {
@@ -211,15 +214,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // on the server side during testing.
         this.config = HBaseConfiguration.create(config);
         this.props = new ReadOnlyProps(this.config.iterator());
-        try {
-            this.connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(this.config);
-        } catch (ZooKeeperConnectionException e) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
-                .setRootCause(e).build().buildException();
-        }
-        if (this.connection.isClosed()) { // TODO: why the heck doesn't this throw above?
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION).build().buildException();
-        }
         this.latestMetaData = newEmptyMetaData();
         // TODO: should we track connection wide memory usage or just org-wide usage?
         // If connection-wide, create a MemoryManager here, otherwise just use the one from the delegate
@@ -231,6 +225,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // find the HBase version and use that to determine the KeyValueBuilder that should be used
         String hbaseVersion = VersionInfo.getVersion();
         this.kvBuilder = KeyValueBuilder.get(hbaseVersion);
+    }
+    
+    private void openConnection() throws SQLException {
+        try {
+            this.connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(this.config);
+        } catch (ZooKeeperConnectionException e) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
+                .setRootCause(e).build().buildException();
+        }
+        if (this.connection.isClosed()) { // TODO: why the heck doesn't this throw above?
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION).build().buildException();
+        }
     }
 
     @Override
@@ -277,45 +283,54 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      */
     @Override
     public void close() throws SQLException {
-        SQLException sqlE = null;
-        try {
-            // Attempt to return any unused sequences.
-            returnAllSequences(this.sequenceMap);
-        } catch (SQLException e) {
-            sqlE = e;
-        } finally {
+        if (closed) {
+            return;
+        }
+        synchronized (this) {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            SQLException sqlE = null;
             try {
-                // Clear any client-side caches.  
-                statsManager.clearStats();
+                // Attempt to return any unused sequences.
+                if (connection != null) returnAllSequences(this.sequenceMap);
             } catch (SQLException e) {
-                if (sqlE == null) {
-                    sqlE = e;
-                } else {
-                    sqlE.setNextException(e);
-                }
+                sqlE = e;
             } finally {
                 try {
-                    childServices.clear();
-                    latestMetaData = null;
-                    connection.close();
-                } catch (IOException e) {
+                    // Clear any client-side caches.  
+                    statsManager.clearStats();
+                } catch (SQLException e) {
                     if (sqlE == null) {
-                        sqlE = ServerUtil.parseServerException(e);
+                        sqlE = e;
                     } else {
-                        sqlE.setNextException(ServerUtil.parseServerException(e));
+                        sqlE.setNextException(e);
                     }
                 } finally {
                     try {
-                        super.close();
-                    } catch (SQLException e) {
+                        childServices.clear();
+                        latestMetaData = null;
+                        if (connection != null) connection.close();
+                    } catch (IOException e) {
                         if (sqlE == null) {
-                            sqlE = e;
+                            sqlE = ServerUtil.parseServerException(e);
                         } else {
-                            sqlE.setNextException(e);
+                            sqlE.setNextException(ServerUtil.parseServerException(e));
                         }
                     } finally {
-                        if (sqlE != null) {
-                            throw sqlE;
+                        try {
+                            super.close();
+                        } catch (SQLException e) {
+                            if (sqlE == null) {
+                                sqlE = e;
+                            } else {
+                                sqlE.setNextException(e);
+                            }
+                        } finally {
+                            if (sqlE != null) {
+                                throw sqlE;
+                            }
                         }
                     }
                 }
@@ -1306,41 +1321,65 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     @Override
     public void init(String url, Properties props) throws SQLException {
-        Properties scnProps = PropertiesUtil.deepCopy(props);
-        scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
-        scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
-        PhoenixConnection metaConnection = new PhoenixConnection(this, url, scnProps, newEmptyMetaData());
-        SQLException sqlE = null;
-        try {
-            try {
-                metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
-            } catch (NewerTableAlreadyExistsException ignore) {
-                // Ignore, as this will happen if the SYSTEM.TABLE already exists at this fixed timestamp.
-                // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
+        if (initialized) {
+            if (initializationException != null) {
+                // Throw previous initialization exception, as we won't resuse this instance
+                throw initializationException;
             }
-            try {
-                metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
-            } catch (NewerTableAlreadyExistsException ignore) {
-                // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
-                // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
+            return;
+        }
+        synchronized (this) {
+            if (initialized) {
+                if (initializationException != null) {
+                    // Throw previous initialization exception, as we won't resuse this instance
+                    throw initializationException;
+                }
+                return;
             }
-        } catch (SQLException e) {
-            sqlE = e;
-        } finally {
+            if (closed) {
+                throw new SQLException("The connection to the cluster has been closed.");
+            }
+            initialized = true;
+                
+            SQLException sqlE = null;
+            PhoenixConnection metaConnection = null;
             try {
-                metaConnection.close();
+                openConnection();
+                Properties scnProps = PropertiesUtil.deepCopy(props);
+                scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
+                scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
+                metaConnection = new PhoenixConnection(this, url, scnProps, newEmptyMetaData());
+                try {
+                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
+                } catch (NewerTableAlreadyExistsException ignore) {
+                    // Ignore, as this will happen if the SYSTEM.TABLE already exists at this fixed timestamp.
+                    // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
+                }
+                try {
+                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
+                } catch (NewerTableAlreadyExistsException ignore) {
+                    // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
+                    // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
+                }
+                upgradeMetaDataTo3_0(url, props);
             } catch (SQLException e) {
+                sqlE = e;
+            } finally {
+                try {
+                    if (metaConnection != null) metaConnection.close();
+                } catch (SQLException e) {
+                    if (sqlE != null) {
+                        sqlE.setNextException(e);
+                    } else {
+                        sqlE = e;
+                    }
+                }
                 if (sqlE != null) {
-                    sqlE.setNextException(e);
-                } else {
-                    sqlE = e;
+                    initializationException = sqlE;
+                    throw sqlE;
                 }
             }
-            if (sqlE != null) {
-                throw sqlE;
-            }
         }
-        upgradeMetaDataTo3_0(url, props);
     }
 
     @Override
@@ -2136,5 +2175,4 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
     }
-        
 }
