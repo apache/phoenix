@@ -111,18 +111,44 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
         checkClosed();
 
         ConnectionInfo connInfo = ConnectionInfo.create(url);
-        ConnectionInfo normalizedConnInfo = connInfo.normalize(getQueryServices().getProps());
+        QueryServices services = getQueryServices();
+        ConnectionInfo normalizedConnInfo = connInfo.normalize(services.getProps());
         ConnectionQueryServices connectionQueryServices = connectionQueryServicesMap.get(normalizedConnInfo);
         if (connectionQueryServices == null) {
             if (normalizedConnInfo.isConnectionless()) {
-                connectionQueryServices = new ConnectionlessQueryServicesImpl(getQueryServices());
+                connectionQueryServices = new ConnectionlessQueryServicesImpl(services);
             } else {
-                connectionQueryServices = new ConnectionQueryServicesImpl(getQueryServices(), normalizedConnInfo);
+                connectionQueryServices = new ConnectionQueryServicesImpl(services, normalizedConnInfo);
             }
-            connectionQueryServices.init(url, info);
             ConnectionQueryServices prevValue = connectionQueryServicesMap.putIfAbsent(normalizedConnInfo, connectionQueryServices);
             if (prevValue != null) {
                 connectionQueryServices = prevValue;
+            }
+        }
+        boolean success = false;
+        SQLException sqlE = null;
+        try {
+            connectionQueryServices.init(url, info);
+            success = true;
+        } catch (SQLException e) {
+            sqlE = e;
+        }
+        finally {
+            if (!success) {
+                try {
+                    connectionQueryServices.close();
+                } catch (SQLException e) {
+                    if (sqlE == null) {
+                        sqlE = e;
+                    } else {
+                        sqlE.setNextException(e);
+                    }
+                }
+                // Remove from map, as initialization failed
+                connectionQueryServicesMap.remove(connectionQueryServices);
+                if (sqlE != null) {
+                    throw sqlE;
+                }
             }
         }
         return connectionQueryServices;
