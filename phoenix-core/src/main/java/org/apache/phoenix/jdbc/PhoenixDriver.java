@@ -143,11 +143,12 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                     } else {
                         sqlE.setNextException(e);
                     }
-                }
-                // Remove from map, as initialization failed
-                connectionQueryServicesMap.remove(connectionQueryServices);
-                if (sqlE != null) {
-                    throw sqlE;
+                } finally {
+                    // Remove from map, as initialization failed
+                    connectionQueryServicesMap.remove(normalizedConnInfo);
+                    if (sqlE != null) {
+                        throw sqlE;
+                    }
                 }
             }
         }
