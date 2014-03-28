@@ -86,6 +86,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private PMetaData metaData;
     private final Map<SequenceKey, Long> sequenceMap = Maps.newHashMap();
     private KeyValueBuilder kvBuilder;
+    private volatile boolean initialized;
+    private volatile SQLException initializationException;
     
     public ConnectionlessQueryServicesImpl(QueryServices queryServices) {
         super(queryServices);
@@ -204,40 +206,58 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, null);
     }
 
+    // TODO: share this with ConnectionQueryServicesImpl
     @Override
     public void init(String url, Properties props) throws SQLException {
-        Properties scnProps = PropertiesUtil.deepCopy(props);
-        scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
-        scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
-        PhoenixConnection metaConnection = new PhoenixConnection(this, url, scnProps, newEmptyMetaData());
-        SQLException sqlE = null;
-        try {
-            try {
-                metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
-            } catch (TableAlreadyExistsException ignore) {
-                // Ignore, as this will happen if the SYSTEM.TABLE already exists at this fixed timestamp.
-                // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
+        if (initialized) {
+            if (initializationException != null) {
+                throw initializationException;
             }
-            try {
-                metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
-            } catch (NewerTableAlreadyExistsException ignore) {
-                // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
-                // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
-            }
-        } catch (SQLException e) {
-            sqlE = e;
-        } finally {
-            try {
-                metaConnection.close();
-            } catch (SQLException e) {
-                if (sqlE != null) {
-                    sqlE.setNextException(e);
-                } else {
-                    sqlE = e;
+            return;
+        }
+        synchronized (this) {
+            if (initialized) {
+                if (initializationException != null) {
+                    throw initializationException;
                 }
+                return;
             }
-            if (sqlE != null) {
-                throw sqlE;
+            initialized = true;
+            SQLException sqlE = null;
+            PhoenixConnection metaConnection = null;
+            try {
+                Properties scnProps = PropertiesUtil.deepCopy(props);
+                scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
+                scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
+                metaConnection = new PhoenixConnection(this, url, scnProps, newEmptyMetaData());
+                try {
+                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
+                } catch (TableAlreadyExistsException ignore) {
+                    // Ignore, as this will happen if the SYSTEM.TABLE already exists at this fixed timestamp.
+                    // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
+                }
+                try {
+                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
+                } catch (NewerTableAlreadyExistsException ignore) {
+                    // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
+                    // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
+                }
+            } catch (SQLException e) {
+                sqlE = e;
+            } finally {
+                try {
+                    if (metaConnection != null) metaConnection.close();
+                } catch (SQLException e) {
+                    if (sqlE != null) {
+                        sqlE.setNextException(e);
+                    } else {
+                        sqlE = e;
+                    }
+                }
+                if (sqlE != null) {
+                    initializationException = sqlE;
+                    throw sqlE;
+                }
             }
         }
     }
