@@ -1440,7 +1440,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (closed) {
                 throw new SQLException("The connection to the cluster has been closed.");
             }
-            initialized = true;
                 
             SQLException sqlE = null;
             PhoenixConnection metaConnection = null;
@@ -1474,10 +1473,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     } else {
                         sqlE = e;
                     }
-                }
-                if (sqlE != null) {
-                    initializationException = sqlE;
-                    throw sqlE;
+                } finally {
+                    try {
+                        if (sqlE != null) {
+                            initializationException = sqlE;
+                            throw sqlE;
+                        }
+                    } finally {
+                        initialized = true;
+                    }
                 }
             }
         }
