@@ -48,7 +48,6 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADAT
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -2031,8 +2030,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (upgradeWhiteList == null) {
             return;
         }
-        // If we go through DriverManager, another ConnectionQueryServices is created
-        Connection conn = new PhoenixConnection(this, url, props, this.latestMetaData);
         if (upgradeWhiteList.neverMatches()) {
             if (logger.isInfoEnabled()) {
                 logger.info("No table meta data needs to be upgraded to Apache Phoenix 3.0");
@@ -2041,33 +2038,36 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (logger.isInfoEnabled()) {
                 logger.info("Upgrading table meta data to Apache Phoenix 3.0 based on the following white list: " + upgradeWhiteList);
             }
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + SYSTEM_CATALOG_NAME + "(\n" +
-                    TENANT_ID + "," +
-                    TABLE_SCHEM + "," +
-                    TABLE_NAME + "," +
-                    COLUMN_NAME + "," +
-                    COLUMN_FAMILY + "," +
-                    TABLE_SEQ_NUM + "," +
-                    TABLE_TYPE + "," +
-                    DATA_TYPE + "," +
-                    PK_NAME + "," +
-                    COLUMN_COUNT + "," +
-                    SALT_BUCKETS + "," +
-                    DATA_TABLE_NAME + "," +
-                    INDEX_STATE + "," +
-                    IMMUTABLE_ROWS + "," +
-                    DEFAULT_COLUMN_FAMILY_NAME + "," +
-                    COLUMN_SIZE + "," +
-                    DECIMAL_DIGITS + "," +
-                    NULLABLE + "," +
-                    ORDINAL_POSITION + "," +
-                    SORT_ORDER + "," +
-                    KEY_SEQ + "," +
-                    LINK_TYPE + ")\n" + 
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-            StringBuilder buf = new StringBuilder("SELECT * FROM " + OLD_SYSTEM_TABLE_AS_VIEW_NAME + "\n");
             boolean createdView = false;
+            SQLException sqlE = null;
+            // If we go through DriverManager, another ConnectionQueryServices is created
+            Connection conn = new PhoenixConnection(this, url, props, this.latestMetaData);
             try {
+                PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + SYSTEM_CATALOG_NAME + "(\n" +
+                        TENANT_ID + "," +
+                        TABLE_SCHEM + "," +
+                        TABLE_NAME + "," +
+                        COLUMN_NAME + "," +
+                        COLUMN_FAMILY + "," +
+                        TABLE_SEQ_NUM + "," +
+                        TABLE_TYPE + "," +
+                        DATA_TYPE + "," +
+                        PK_NAME + "," +
+                        COLUMN_COUNT + "," +
+                        SALT_BUCKETS + "," +
+                        DATA_TABLE_NAME + "," +
+                        INDEX_STATE + "," +
+                        IMMUTABLE_ROWS + "," +
+                        DEFAULT_COLUMN_FAMILY_NAME + "," +
+                        COLUMN_SIZE + "," +
+                        DECIMAL_DIGITS + "," +
+                        NULLABLE + "," +
+                        ORDINAL_POSITION + "," +
+                        SORT_ORDER + "," +
+                        KEY_SEQ + "," +
+                        LINK_TYPE + ")\n" + 
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+                StringBuilder buf = new StringBuilder("SELECT * FROM " + OLD_SYSTEM_TABLE_AS_VIEW_NAME + "\n");
                 addWhereClauseForUpgrade3_0(upgradeWhiteList, buf);
                 buf.append("ORDER BY " + TABLE_SCHEM + "," + TABLE_NAME + "," + COLUMN_NAME + "," + TABLE_CAT + "," + ORDINAL_POSITION);
                 addViewForSystemTable(conn);
@@ -2202,19 +2202,44 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (logger.isInfoEnabled()) {
                     logger.info("Unable to upgrade metadata.",e);
                 }
+            } catch (SQLException e) {
+                sqlE = e;
             } finally {
-                if (createdView) {
-                    Long scn = JDBCUtil.getCurrentSCN(url, props);
-                    if (scn == null) {
-                        conn.createStatement().execute("DROP VIEW IF EXISTS " + OLD_SYSTEM_TABLE_AS_VIEW_NAME);                        
+                try {
+                    if (createdView) {
+                        Long scn = JDBCUtil.getCurrentSCN(url, props);
+                        if (scn == null) {
+                            conn.createStatement().execute("DROP VIEW IF EXISTS " + OLD_SYSTEM_TABLE_AS_VIEW_NAME);                        
+                        } else {
+                            Properties newProps = new Properties(props);
+                            newProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn + 1));
+                            // If we go through DriverManager, another ConnectionQueryServices is created
+                            Connection newConn = new PhoenixConnection(this, url, newProps, this.latestMetaData);
+                            try {
+                                newConn.createStatement().execute("DROP VIEW IF EXISTS " + OLD_SYSTEM_TABLE_AS_VIEW_NAME);                        
+                            } finally {
+                                try { // Don't propagate a close exception
+                                    newConn.close();
+                                } catch (SQLException e) {
+                                    logger.warn("Unable to close connection",e);
+                                }
+                            }
+                        }
+                    }
+                } catch (SQLException e) {
+                    if (sqlE == null) { // Chain together sql exceptions
+                        sqlE = e;
                     } else {
-                        Properties newProps = new Properties(props);
-                        newProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn + 1));
-                        Connection newConn = DriverManager.getConnection(url, newProps);
-                        try {
-                            newConn.createStatement().execute("DROP VIEW IF EXISTS " + OLD_SYSTEM_TABLE_AS_VIEW_NAME);                        
-                        } finally {
-                            newConn.close();
+                        sqlE.setNextException(e);
+                    }
+                } finally {
+                    try { // Don't propagate a close exception
+                        conn.close();
+                    } catch (SQLException e) {
+                        logger.warn("Unable to close connection",e);
+                    } finally {
+                        if (sqlE != null) { // Throw if any sql exceptions
+                            throw sqlE;
                         }
                     }
                 }
