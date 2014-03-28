@@ -118,6 +118,7 @@ Release Notes - Phoenix - Version 3.0.0-incubating
     * [PHOENIX-887] - Fix upgrade when wildcard used to upgrade everything
     * [PHOENIX-891] - Multi-tenant - Upserting values without specifying columns names upserts values in wrong columns
     * [PHOENIX-892] - Multi-tenant - Creating index throws NoSuchColumnFamilyException when CF is specified in base table
+    * [PHOENIX-901] - Ensure ConnectionQueryServices only initialized once
 
 ** Task
     * [PHOENIX-25] - Remove @author tags
