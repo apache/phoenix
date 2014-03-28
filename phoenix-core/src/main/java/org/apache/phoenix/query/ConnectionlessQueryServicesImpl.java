@@ -218,7 +218,6 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 }
                 return;
             }
-            initialized = true;
             SQLException sqlE = null;
             PhoenixConnection metaConnection = null;
             try {
@@ -249,10 +248,15 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                     } else {
                         sqlE = e;
                     }
-                }
-                if (sqlE != null) {
-                    initializationException = sqlE;
-                    throw sqlE;
+                } finally {
+                    try {
+                        if (sqlE != null) {
+                            initializationException = sqlE;
+                            throw sqlE;
+                        }
+                    } finally {
+                        initialized = true;
+                    }
                 }
             }
         }
