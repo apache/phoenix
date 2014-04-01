@@ -27,9 +27,9 @@ import java.sql.SQLException;
  * 
  * @since 0.1
  */
-public interface TableNodeVisitor {
-    void visit(BindTableNode boundTableNode) throws SQLException;
-    void visit(JoinTableNode joinNode) throws SQLException;
-    void visit(NamedTableNode namedTableNode) throws SQLException;
-    void visit(DerivedTableNode subselectNode) throws SQLException;
+public interface TableNodeVisitor<E> {
+    E visit(BindTableNode boundTableNode) throws SQLException;
+    E visit(JoinTableNode joinNode) throws SQLException;
+    E visit(NamedTableNode namedTableNode) throws SQLException;
+    E visit(DerivedTableNode subselectNode) throws SQLException;
 }
