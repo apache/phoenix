@@ -226,7 +226,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    BUILD HASH TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
                 /*
-                 * testSelfJoin
+                 * testSelfJoin()
                  *     SELECT i2.item_id, i1.name FROM joinItemTable i1 
                  *     JOIN joinItemTable i2 ON i1.item_id = i2.item_id 
                  *     ORDER BY i1.item_id
@@ -237,7 +237,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY",
                 /*
-                 * testSelfJoin
+                 * testSelfJoin()
                  *     SELECT i1.name, i2.name FROM joinItemTable i1 
                  *     JOIN joinItemTable i2 ON i1.item_id = i2.supplier_id 
                  *     ORDER BY i1.name, i2.name
@@ -249,12 +249,12 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    BUILD HASH TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME,
                 /*
-                 * testStarJoin
-                 * SELECT order_id, c.name, i.name iname, quantity, o.date 
-                 * FROM joinOrderTable o 
-                 * JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
-                 * JOIN joinItemTable i ON o.item_id = i.item_id 
-                 * ORDER BY order_id
+                 * testStarJoin()
+                 *     SELECT order_id, c.name, i.name iname, quantity, o.date 
+                 *     FROM joinOrderTable o 
+                 *     JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
+                 *     JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     ORDER BY order_id
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
@@ -263,12 +263,12 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    BUILD HASH TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME,
                 /*
-                 * testStarJoin
-                 * SELECT (*NO_STAR_JOIN*) order_id, c.name, i.name iname, quantity, o.date 
-                 * FROM joinOrderTable o 
-                 * JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
-                 * JOIN joinItemTable i ON o.item_id = i.item_id 
-                 * ORDER BY order_id
+                 * testStarJoin()
+                 *     SELECT (*NO_STAR_JOIN*) order_id, c.name, i.name iname, quantity, o.date 
+                 *     FROM joinOrderTable o 
+                 *     JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
+                 *     JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     ORDER BY order_id
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER SORTED BY [O.order_id]\n" +
@@ -279,6 +279,33 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "            BUILD HASH TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME,
+                /*
+                 * testSubJoin()
+                 *     SELECT * FROM joinCustomerTable c 
+                 *     INNER JOIN (joinOrderTable o 
+                 *         INNER JOIN (joinSupplierTable s 
+                 *             RIGHT JOIN joinItemTable i ON i.supplier_id = s.supplier_id)
+                 *         ON o.item_id = i.item_id)
+                 *     ON c.customer_id = o.customer_id
+                 *     WHERE c.customer_id <= '0000000005' 
+                 *         AND order_id != '000000000000003' 
+                 *         AND i.name != 'T3' 
+                 *     ORDER BY c.customer_id, i.name
+                 */
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " [*] - ['0000000005']\n" +
+                "    SERVER SORTED BY [C.customer_id, I.NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "            BUILD HASH TABLE 0\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "                    SERVER FILTER BY NAME != 'T3'\n" +
+                "                    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "                    BUILD HASH TABLE 0\n" +
+                "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
                 }});
         testCases.add(new String[][] {
                 {
@@ -404,7 +431,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    BUILD HASH TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_supplier",
                 /*
-                 * testSelfJoin
+                 * testSelfJoin()
                  *     SELECT i2.item_id, i1.name FROM joinItemTable i1 
                  *     JOIN joinItemTable i2 ON i1.item_id = i2.item_id 
                  *     ORDER BY i1.item_id
@@ -415,7 +442,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY",
                 /*
-                 * testSelfJoin
+                 * testSelfJoin()
                  *     SELECT i1.name, i2.name FROM joinItemTable i1 
                  *     JOIN joinItemTable i2 ON i1.item_id = i2.supplier_id 
                  *     ORDER BY i1.name, i2.name
@@ -428,12 +455,12 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    BUILD HASH TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item",
                 /*
-                 * testStarJoin
-                 * SELECT order_id, c.name, i.name iname, quantity, o.date 
-                 * FROM joinOrderTable o 
-                 * JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
-                 * JOIN joinItemTable i ON o.item_id = i.item_id 
-                 * ORDER BY order_id
+                 * testStarJoin()
+                 *     SELECT order_id, c.name, i.name iname, quantity, o.date 
+                 *     FROM joinOrderTable o 
+                 *     JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
+                 *     JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     ORDER BY order_id
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
@@ -443,12 +470,12 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY",
                 /*
-                 * testStarJoin
-                 * SELECT (*NO_STAR_JOIN*) order_id, c.name, i.name iname, quantity, o.date 
-                 * FROM joinOrderTable o 
-                 * JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
-                 * JOIN joinItemTable i ON o.item_id = i.item_id 
-                 * ORDER BY order_id
+                 * testStarJoin()
+                 *     SELECT (*NO_STAR_JOIN*) order_id, c.name, i.name iname, quantity, o.date 
+                 *     FROM joinOrderTable o 
+                 *     JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
+                 *     JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     ORDER BY order_id
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
@@ -460,6 +487,33 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "            BUILD HASH TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_customer",
+                /*
+                 * testSubJoin()
+                 *     SELECT * FROM joinCustomerTable c 
+                 *     INNER JOIN (joinOrderTable o 
+                 *         INNER JOIN (joinSupplierTable s 
+                 *             RIGHT JOIN joinItemTable i ON i.supplier_id = s.supplier_id)
+                 *         ON o.item_id = i.item_id)
+                 *     ON c.customer_id = o.customer_id
+                 *     WHERE c.customer_id <= '0000000005' 
+                 *         AND order_id != '000000000000003' 
+                 *         AND i.name != 'T3' 
+                 *     ORDER BY c.customer_id, i.name
+                 */
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " [*] - ['0000000005']\n" +
+                "    SERVER SORTED BY [C.customer_id, I.0:NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "            BUILD HASH TABLE 0\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
+                "                    SERVER FILTER BY NAME != 'T3'\n" +
+                "                    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "                    BUILD HASH TABLE 0\n" +
+                "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_supplier",
                 }});
         return testCases;
     }
@@ -1309,13 +1363,16 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testLeftRightJoin() throws Exception {
-        String query = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " 
-            + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
-            + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
+        String query1 = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " 
+                + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
+                + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
+        String query2 = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " 
+                + "(" + JOIN_ITEM_TABLE_FULL_NAME + " i RIGHT JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON i.\"supplier_id\" = s.\"supplier_id\")" 
+                + " ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            PreparedStatement statement = conn.prepareStatement(query);
+            PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
             assertNull(rs.getString(1));
@@ -1367,21 +1424,9 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             assertNotNull(rs.getDate(5));
 
             assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-    
-    @Test
-    public void testMultiLeftJoin() throws Exception {
-        String query = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " 
-            + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
-            + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON i.\"supplier_id\" = s.\"supplier_id\"";
-        Properties props = new Properties(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
+            
+            statement = conn.prepareStatement(query2);
+            rs = statement.executeQuery();
             assertTrue (rs.next());
             assertEquals(rs.getString(1), "000000000000001");
             assertEquals(rs.getString(2), "T1");
@@ -1414,6 +1459,59 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             assertNotNull(rs.getDate(5));
 
             assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testMultiLeftJoin() throws Exception {
+        String[] queries = {
+                "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " 
+                        + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
+                        + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON i.\"supplier_id\" = s.\"supplier_id\"",
+                "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " 
+                        + "(" + JOIN_ITEM_TABLE_FULL_NAME + " i LEFT JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON i.\"supplier_id\" = s.\"supplier_id\") " 
+                        + "ON o.\"item_id\" = i.\"item_id\""};
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            for (String query : queries) {
+                PreparedStatement statement = conn.prepareStatement(query);
+                ResultSet rs = statement.executeQuery();
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000001");
+                assertEquals(rs.getString(2), "T1");
+                assertEquals(rs.getString(3), "S1");
+                assertEquals(rs.getInt(4), 1000);
+                assertNotNull(rs.getDate(5));
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000002");
+                assertEquals(rs.getString(2), "T6");
+                assertEquals(rs.getString(3), "S6");
+                assertEquals(rs.getInt(4), 2000);
+                assertNotNull(rs.getDate(5));
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000003");
+                assertEquals(rs.getString(2), "T2");
+                assertEquals(rs.getString(3), "S1");
+                assertEquals(rs.getInt(4), 3000);
+                assertNotNull(rs.getDate(5));
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000004");
+                assertEquals(rs.getString(2), "T6");
+                assertEquals(rs.getString(3), "S6");
+                assertEquals(rs.getInt(4), 4000);
+                assertNotNull(rs.getDate(5));
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000005");
+                assertEquals(rs.getString(2), "T3");
+                assertEquals(rs.getString(3), "S2");
+                assertEquals(rs.getInt(4), 5000);
+                assertNotNull(rs.getDate(5));
+
+                assertFalse(rs.next());
+            }
         } finally {
             conn.close();
         }
@@ -2305,6 +2403,72 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
 
         }
 
+    }
+    
+    @Test
+    public void testSubJoin() throws Exception {
+        String query1 = "SELECT i.name, count(c.name), min(s.name), max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " 
+                + "(" + JOIN_SUPPLIER_TABLE_FULL_NAME + " s RIGHT JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON i.\"supplier_id\" = s.\"supplier_id\")" 
+                + " ON o.\"item_id\" = i.\"item_id\" LEFT JOIN " 
+                + JOIN_CUSTOMER_TABLE_FULL_NAME + " c ON c.\"customer_id\" = o.\"customer_id\" GROUP BY i.name ORDER BY i.name";
+        String query2 = "SELECT c.name, o.\"order_id\", i.name, s.name FROM " + JOIN_CUSTOMER_TABLE_FULL_NAME + " c INNER JOIN " 
+                + "(" + JOIN_ORDER_TABLE_FULL_NAME + " o INNER JOIN " 
+                + "(" + JOIN_SUPPLIER_TABLE_FULL_NAME + " s RIGHT JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON i.\"supplier_id\" = s.\"supplier_id\")" 
+                + " ON o.\"item_id\" = i.\"item_id\") ON c.\"customer_id\" = o.\"customer_id\"" 
+                + " WHERE c.\"customer_id\" <= '0000000005' AND \"order_id\" != '000000000000003' AND i.name != 'T3' ORDER BY c.\"customer_id\", i.name";
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query1);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T1");
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getString(3), "S1");
+            assertEquals(rs.getInt(4), 1000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T2");
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getString(3), "S1");
+            assertEquals(rs.getInt(4), 3000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T3");
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getString(3), "S2");
+            assertEquals(rs.getInt(4), 5000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T6");
+            assertEquals(rs.getInt(2), 2);
+            assertEquals(rs.getString(3), "S6");
+            assertEquals(rs.getInt(4), 4000);
+
+            assertFalse(rs.next());
+            
+            statement = conn.prepareStatement(query2);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(rs.getString("c.name"), "C3");
+            assertEquals(rs.getString("O.order_id"), "000000000000002");
+            assertEquals(rs.getString("i.name"), "T6");
+            assertEquals(rs.getString("s.name"), "S6");
+            assertTrue(rs.next());
+            assertEquals(rs.getString("c.name"), "C4");
+            assertEquals(rs.getString("O.order_id"), "000000000000001");
+            assertEquals(rs.getString("i.name"), "T1");
+            assertEquals(rs.getString("s.name"), "S1");
+            assertTrue(rs.next());
+            assertEquals(rs.getString("c.name"), "C4");
+            assertEquals(rs.getString("O.order_id"), "000000000000004");
+            assertEquals(rs.getString("i.name"), "T6");
+            assertEquals(rs.getString("s.name"), "S6");
+
+            assertFalse(rs.next());            
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query2);
+            assertEquals(plans[13], QueryUtil.getExplainPlan(rs));
+        } finally {
+            conn.close();
+        }
     }
 
 }

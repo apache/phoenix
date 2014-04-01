@@ -17,27 +17,37 @@
  */
 package org.apache.phoenix.parse;
 
-import java.sql.SQLException;
-
-
+import org.apache.phoenix.parse.JoinTableNode.JoinType;
 
 /**
  * 
- * Node representing a TABLE bound using an ARRAY variable
- * TODO: modify grammar to support this
+ * Node representing the partial join clause in the FROM clause of SQL
+ *
  * 
  * @since 0.1
  */
-public class BindTableNode extends ConcreteTableNode {
-
-    BindTableNode(String alias, TableName name) {
-        super(alias, name);
+class JoinPartNode {
+    
+    private final JoinType type;
+    private final ParseNode onNode;
+    private final TableNode table;
+    
+    JoinPartNode(JoinType type, ParseNode onNode, TableNode table) {
+        this.type = type;
+        this.onNode = onNode;
+        this.table = table;
     }
 
-    @Override
-    public <T> T accept(TableNodeVisitor<T> visitor) throws SQLException {
-        return visitor.visit(this);
+    JoinType getType() {
+        return type;
     }
-
+    
+    ParseNode getOnNode() {
+        return onNode;
+    }
+    
+    TableNode getTable() {
+        return table;
+    }
 }
 

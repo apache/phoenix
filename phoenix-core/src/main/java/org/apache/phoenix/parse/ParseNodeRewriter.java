@@ -59,29 +59,21 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         Map<String,ParseNode> aliasMap = rewriter.getAliasMap();
         List<TableNode> from = statement.getFrom();
         List<TableNode> normFrom = from;
-        if (from.size() > 1) {
-        	for (int i = 1; i < from.size(); i++) {
-        		TableNode tableNode = from.get(i);
-        		if (tableNode instanceof JoinTableNode) {
-        			JoinTableNode joinTableNode = (JoinTableNode) tableNode;
-        			ParseNode onNode = joinTableNode.getOnNode();
-        			rewriter.reset();
-        			ParseNode normOnNode = onNode.accept(rewriter);
-        			if (onNode == normOnNode) {
-        				if (from != normFrom) {
-        					normFrom.add(tableNode);
-        				}
-        				continue;
-        			}
-        			if (from == normFrom) {
-        				normFrom = Lists.newArrayList(from.subList(0, i));
-        			}
-        			TableNode normTableNode = NODE_FACTORY.join(joinTableNode.getType(), normOnNode, joinTableNode.getTable());
-        			normFrom.add(normTableNode);
-        		} else if (from != normFrom) {
-					normFrom.add(tableNode);
-				}
-        	}
+        TableNodeRewriter tableNodeRewriter = new TableNodeRewriter(rewriter);
+        for (int i = 0; i < from.size(); i++) {
+            TableNode tableNode = from.get(i);
+            tableNodeRewriter.reset();
+            TableNode normTableNode = tableNode.accept(tableNodeRewriter);
+            if (normTableNode == tableNode) {
+                if (from != normFrom) {
+                    normFrom.add(tableNode);
+                }
+                continue;
+            }
+            if (from == normFrom) {
+                normFrom = Lists.newArrayList(from.subList(0, i));        		    
+            }
+            normFrom.add(normTableNode);
         }
         ParseNode where = statement.getWhere();
         ParseNode normWhere = where;
@@ -496,5 +488,48 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
                 return NODE_FACTORY.upsertStmtArrayNode(children);
             }
         });
+	}
+	
+	private static class TableNodeRewriter implements TableNodeVisitor<TableNode> {
+	    private final ParseNodeRewriter parseNodeRewriter;
+	    
+	    public TableNodeRewriter(ParseNodeRewriter parseNodeRewriter) {
+	        this.parseNodeRewriter = parseNodeRewriter;
+	    }
+	    
+	    public void reset() {
+	    }
+
+        @Override
+        public TableNode visit(BindTableNode boundTableNode) throws SQLException {
+            return boundTableNode;
+        }
+
+        @Override
+        public TableNode visit(JoinTableNode joinNode) throws SQLException {
+            TableNode lhsNode = joinNode.getLHS();
+            TableNode rhsNode = joinNode.getRHS();
+            ParseNode onNode = joinNode.getOnNode();
+            TableNode normLhsNode = lhsNode.accept(this);
+            TableNode normRhsNode = rhsNode.accept(this);
+            parseNodeRewriter.reset();
+            ParseNode normOnNode = onNode.accept(parseNodeRewriter);
+            if (lhsNode == normLhsNode && rhsNode == normRhsNode && onNode == normOnNode)
+                return joinNode;
+            
+            return NODE_FACTORY.join(joinNode.getType(), normLhsNode, normRhsNode, normOnNode);
+        }
+
+        @Override
+        public TableNode visit(NamedTableNode namedTableNode) throws SQLException {
+            return namedTableNode;
+            
+        }
+
+        @Override
+        public TableNode visit(DerivedTableNode subselectNode) throws SQLException {
+            return subselectNode;
+        }
+	    
 	}
 }
