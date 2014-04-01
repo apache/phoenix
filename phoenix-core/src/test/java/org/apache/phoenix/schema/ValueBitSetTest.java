@@ -18,7 +18,9 @@
 package org.apache.phoenix.schema;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.junit.Test;
@@ -124,6 +126,33 @@ public class ValueBitSetTest {
         schema = generateSchema(nFields, nRepeating, nNotNull);
         valueSet = ValueBitSet.newInstance(schema);
         assertEquals(0, valueSet.getEstimatedLength());
+        
+        nFields = 129;
+        nRepeating = 1;
+        nNotNull = 0;
+        schema = generateSchema(nFields, nRepeating, nNotNull);
+        valueSet = ValueBitSet.newInstance(schema);
+        assertEquals(Bytes.SIZEOF_SHORT, valueSet.getEstimatedLength());
+        setValueBitSet(schema, valueSet);
+        assertEquals(Bytes.SIZEOF_SHORT + Bytes.SIZEOF_LONG * 2, valueSet.getEstimatedLength());
+        valueSet.set(128);
+        assertEquals(Bytes.SIZEOF_SHORT + Bytes.SIZEOF_LONG * 3, valueSet.getEstimatedLength());
+    }
+    
+    @Test
+    public void testMaxSetBit() {        
+        int nFields = 19;
+        int nRepeating = 1;
+        int nNotNull = 2;
+        KeyValueSchema schema = generateSchema(nFields, nRepeating, nNotNull);
+        ValueBitSet valueSet = ValueBitSet.newInstance(schema);
+        setValueBitSet(schema, valueSet);
+        int length = valueSet.getEstimatedLength();
+        byte[] buf = new byte[length];
+        valueSet.toBytes(buf, 0);
+        ValueBitSet copyValueSet = ValueBitSet.newInstance(schema);
+        copyValueSet.or(new ImmutableBytesWritable(buf));
+        assertTrue(copyValueSet.getMaxSetBit() >= valueSet.getMaxSetBit());
     }
 
 }

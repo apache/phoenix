@@ -66,6 +66,7 @@ import com.google.common.collect.Maps;
 @RunWith(Parameterized.class)
 public class HashJoinIT extends BaseHBaseManagedTimeIT {
     
+    private SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     private String[] indexDDL;
     private String[] plans;
     
@@ -513,7 +514,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "                    SERVER FILTER BY NAME != 'T3'\n" +
                 "                    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "                    BUILD HASH TABLE 0\n" +
-                "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_supplier",
+                "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
                 }});
         return testCases;
     }
@@ -529,7 +530,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.createStatement().execute("CREATE SEQUENCE my.seq");
-            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
             // Insert into customer table
             PreparedStatement stmt = conn.prepareStatement(
                     "upsert into " + JOIN_CUSTOMER_TABLE_FULL_NAME +
@@ -1905,7 +1905,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -2411,7 +2410,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 + "(" + JOIN_SUPPLIER_TABLE_FULL_NAME + " s RIGHT JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON i.\"supplier_id\" = s.\"supplier_id\")" 
                 + " ON o.\"item_id\" = i.\"item_id\" LEFT JOIN " 
                 + JOIN_CUSTOMER_TABLE_FULL_NAME + " c ON c.\"customer_id\" = o.\"customer_id\" GROUP BY i.name ORDER BY i.name";
-        String query2 = "SELECT c.name, o.\"order_id\", i.name, s.name FROM " + JOIN_CUSTOMER_TABLE_FULL_NAME + " c INNER JOIN " 
+        String query2 = "SELECT * FROM " + JOIN_CUSTOMER_TABLE_FULL_NAME + " c INNER JOIN " 
                 + "(" + JOIN_ORDER_TABLE_FULL_NAME + " o INNER JOIN " 
                 + "(" + JOIN_SUPPLIER_TABLE_FULL_NAME + " s RIGHT JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON i.\"supplier_id\" = s.\"supplier_id\")" 
                 + " ON o.\"item_id\" = i.\"item_id\") ON c.\"customer_id\" = o.\"customer_id\"" 
@@ -2447,20 +2446,80 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             statement = conn.prepareStatement(query2);
             rs = statement.executeQuery();
             assertTrue(rs.next());
+            assertEquals(rs.getString("C.customer_id"), "0000000003");
             assertEquals(rs.getString("c.name"), "C3");
+            assertEquals(rs.getString("c.phone"), "999-999-3333");
+            assertEquals(rs.getString("c.address"), "303 XXX Street");
+            assertNull(rs.getString("c.loc_id"));
+            assertEquals(rs.getDate("c.date"), new Date(format.parse("2013-11-25 10:06:29").getTime()));
             assertEquals(rs.getString("O.order_id"), "000000000000002");
+            assertEquals(rs.getString("O.customer_id"), "0000000003");
+            assertEquals(rs.getString("O.item_id"), "0000000006");
+            assertEquals(rs.getInt("o.price"), 552);
+            assertEquals(rs.getInt("o.quantity"), 2000);
+            assertEquals(rs.getTimestamp("o.date"), new Timestamp(format.parse("2013-11-25 10:06:29").getTime()));
+            assertEquals(rs.getString("I.item_id"), "0000000006");
             assertEquals(rs.getString("i.name"), "T6");
+            assertEquals(rs.getInt("i.price"), 600);
+            assertEquals(rs.getInt("i.discount1"), 8);
+            assertEquals(rs.getInt("i.discount2"), 15);
+            assertEquals(rs.getString("I.supplier_id"), "0000000006");
+            assertEquals(rs.getString("i.description"), "Item T6");
+            assertEquals(rs.getString("S.supplier_id"), "0000000006");
             assertEquals(rs.getString("s.name"), "S6");
+            assertEquals(rs.getString("s.phone"), "888-888-6666");
+            assertEquals(rs.getString("s.address"), "606 YYY Street");
+            assertEquals(rs.getString("s.loc_id"), "10006");
             assertTrue(rs.next());
+            assertEquals(rs.getString("C.customer_id"), "0000000004");
             assertEquals(rs.getString("c.name"), "C4");
+            assertEquals(rs.getString("c.phone"), "999-999-4444");
+            assertEquals(rs.getString("c.address"), "404 XXX Street");
+            assertEquals(rs.getString("c.loc_id"), "10004");
+            assertEquals(rs.getDate("c.date"), new Date(format.parse("2013-11-22 14:22:56").getTime()));
             assertEquals(rs.getString("O.order_id"), "000000000000001");
+            assertEquals(rs.getString("O.customer_id"), "0000000004");
+            assertEquals(rs.getString("O.item_id"), "0000000001");
+            assertEquals(rs.getInt("o.price"), 100);
+            assertEquals(rs.getInt("o.quantity"), 1000);
+            assertEquals(rs.getTimestamp("o.date"), new Timestamp(format.parse("2013-11-22 14:22:56").getTime()));
+            assertEquals(rs.getString("I.item_id"), "0000000001");
             assertEquals(rs.getString("i.name"), "T1");
+            assertEquals(rs.getInt("i.price"), 100);
+            assertEquals(rs.getInt("i.discount1"), 5);
+            assertEquals(rs.getInt("i.discount2"), 10);
+            assertEquals(rs.getString("I.supplier_id"), "0000000001");
+            assertEquals(rs.getString("i.description"), "Item T1");
+            assertEquals(rs.getString("S.supplier_id"), "0000000001");
             assertEquals(rs.getString("s.name"), "S1");
+            assertEquals(rs.getString("s.phone"), "888-888-1111");
+            assertEquals(rs.getString("s.address"), "101 YYY Street");
+            assertEquals(rs.getString("s.loc_id"), "10001");
             assertTrue(rs.next());
+            assertEquals(rs.getString("C.customer_id"), "0000000004");
             assertEquals(rs.getString("c.name"), "C4");
+            assertEquals(rs.getString("c.phone"), "999-999-4444");
+            assertEquals(rs.getString("c.address"), "404 XXX Street");
+            assertEquals(rs.getString("c.loc_id"), "10004");
+            assertEquals(rs.getDate("c.date"), new Date(format.parse("2013-11-22 14:22:56").getTime()));
             assertEquals(rs.getString("O.order_id"), "000000000000004");
+            assertEquals(rs.getString("O.customer_id"), "0000000004");
+            assertEquals(rs.getString("O.item_id"), "0000000006");
+            assertEquals(rs.getInt("o.price"), 510);
+            assertEquals(rs.getInt("o.quantity"), 4000);
+            assertEquals(rs.getTimestamp("o.date"), new Timestamp(format.parse("2013-11-26 13:26:04").getTime()));
+            assertEquals(rs.getString("I.item_id"), "0000000006");
             assertEquals(rs.getString("i.name"), "T6");
+            assertEquals(rs.getInt("i.price"), 600);
+            assertEquals(rs.getInt("i.discount1"), 8);
+            assertEquals(rs.getInt("i.discount2"), 15);
+            assertEquals(rs.getString("I.supplier_id"), "0000000006");
+            assertEquals(rs.getString("i.description"), "Item T6");
+            assertEquals(rs.getString("S.supplier_id"), "0000000006");
             assertEquals(rs.getString("s.name"), "S6");
+            assertEquals(rs.getString("s.phone"), "888-888-6666");
+            assertEquals(rs.getString("s.address"), "606 YYY Street");
+            assertEquals(rs.getString("s.loc_id"), "10006");
 
             assertFalse(rs.next());            
             
