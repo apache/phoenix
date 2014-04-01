@@ -146,7 +146,7 @@ public class FromCompiler {
     public static ColumnResolver getResolverForQuery(SelectStatement statement, PhoenixConnection connection)
     		throws SQLException {
     	List<TableNode> fromNodes = statement.getFrom();
-        if (fromNodes.size() == 1)
+        if (!statement.isJoin())
             return new SingleTableColumnResolver(connection, (NamedTableNode)fromNodes.get(0), true);
 
         MultiTableColumnResolver visitor = new MultiTableColumnResolver(connection);
@@ -337,7 +337,7 @@ public class FromCompiler {
     }
     
     // TODO: unused, but should be used for joins - make private once used
-    public static class MultiTableColumnResolver extends BaseColumnResolver implements TableNodeVisitor {
+    public static class MultiTableColumnResolver extends BaseColumnResolver implements TableNodeVisitor<Void> {
         private final ListMultimap<String, TableRef> tableMap;
         private final List<TableRef> tables;
 
@@ -353,17 +353,19 @@ public class FromCompiler {
         }
 
         @Override
-        public void visit(BindTableNode boundTableNode) throws SQLException {
+        public Void visit(BindTableNode boundTableNode) throws SQLException {
             throw new SQLFeatureNotSupportedException();
         }
 
         @Override
-        public void visit(JoinTableNode joinNode) throws SQLException {
-            joinNode.getTable().accept(this);
+        public Void visit(JoinTableNode joinNode) throws SQLException {
+            joinNode.getLHS().accept(this);
+            joinNode.getRHS().accept(this);
+            return null;
         }
 
         @Override
-        public void visit(NamedTableNode tableNode) throws SQLException {
+        public Void visit(NamedTableNode tableNode) throws SQLException {
             String alias = tableNode.getAlias();
             TableRef tableRef = createTableRef(tableNode, true);
             PTable theTable = tableRef.getTable();
@@ -378,10 +380,11 @@ public class FromCompiler {
             	tableMap.put(name, tableRef);
             }
             tables.add(tableRef);
+            return null;
         }
 
         @Override
-        public void visit(DerivedTableNode subselectNode) throws SQLException {
+        public Void visit(DerivedTableNode subselectNode) throws SQLException {
             throw new SQLFeatureNotSupportedException();
         }
 

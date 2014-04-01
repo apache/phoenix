@@ -34,7 +34,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.phoenix.compile.JoinCompiler.JoinSpec;
+import org.apache.phoenix.compile.JoinCompiler.JoinTable;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SQLParser;
@@ -80,62 +80,62 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
                 + "WHERE t1.\"item_id\" = '0000000001' AND t2.\"item_id\" = '0000000002' AND t3.\"item_id\" = '0000000003'";
 
         String query = String.format(queryTemplate, "INNER", "INNER");
-        JoinSpec joinSpec = getJoinSpec(query, pconn);
-        assertEquals(1, joinSpec.getPreFilters().size());
-        assertEquals(1, joinSpec.getJoinTables().get(0).getPreFilters().size());
-        assertEquals(1, joinSpec.getJoinTables().get(1).getPreFilters().size());
+        JoinTable joinTable = getJoinTable(query, pconn);
+        assertEquals(1, joinTable.getTable().getPreFilters().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(0).getJoinTable().getTable().getPreFilters().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(1).getJoinTable().getTable().getPreFilters().size());
 
         query = String.format(queryTemplate, "INNER", "LEFT");
-        joinSpec = getJoinSpec(query, pconn);
-        assertEquals(1, joinSpec.getPreFilters().size());
-        assertEquals(1, joinSpec.getJoinTables().get(0).getPreFilters().size());
-        assertEquals(0, joinSpec.getJoinTables().get(1).getPreFilters().size());
+        joinTable = getJoinTable(query, pconn);
+        assertEquals(1, joinTable.getTable().getPreFilters().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(0).getJoinTable().getTable().getPreFilters().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(1).getJoinTable().getTable().getPreFilters().size());
 
         query = String.format(queryTemplate, "INNER", "RIGHT");
-        joinSpec = getJoinSpec(query, pconn);
-        assertEquals(0, joinSpec.getPreFilters().size());
-        assertEquals(0, joinSpec.getJoinTables().get(0).getPreFilters().size());
-        assertEquals(1, joinSpec.getJoinTables().get(1).getPreFilters().size());
+        joinTable = getJoinTable(query, pconn);
+        assertEquals(0, joinTable.getTable().getPreFilters().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(0).getJoinTable().getTable().getPreFilters().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(1).getJoinTable().getTable().getPreFilters().size());
 
         query = String.format(queryTemplate, "LEFT", "INNER");
-        joinSpec = getJoinSpec(query, pconn);
-        assertEquals(1, joinSpec.getPreFilters().size());
-        assertEquals(0, joinSpec.getJoinTables().get(0).getPreFilters().size());
-        assertEquals(1, joinSpec.getJoinTables().get(1).getPreFilters().size());
+        joinTable = getJoinTable(query, pconn);
+        assertEquals(1, joinTable.getTable().getPreFilters().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(0).getJoinTable().getTable().getPreFilters().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(1).getJoinTable().getTable().getPreFilters().size());
 
         query = String.format(queryTemplate, "LEFT", "LEFT");
-        joinSpec = getJoinSpec(query, pconn);
-        assertEquals(1, joinSpec.getPreFilters().size());
-        assertEquals(0, joinSpec.getJoinTables().get(0).getPreFilters().size());
-        assertEquals(0, joinSpec.getJoinTables().get(1).getPreFilters().size());
+        joinTable = getJoinTable(query, pconn);
+        assertEquals(1, joinTable.getTable().getPreFilters().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(0).getJoinTable().getTable().getPreFilters().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(1).getJoinTable().getTable().getPreFilters().size());
 
         query = String.format(queryTemplate, "LEFT", "RIGHT");
-        joinSpec = getJoinSpec(query, pconn);
-        assertEquals(0, joinSpec.getPreFilters().size());
-        assertEquals(0, joinSpec.getJoinTables().get(0).getPreFilters().size());
-        assertEquals(1, joinSpec.getJoinTables().get(1).getPreFilters().size());
+        joinTable = getJoinTable(query, pconn);
+        assertEquals(0, joinTable.getTable().getPreFilters().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(0).getJoinTable().getTable().getPreFilters().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(1).getJoinTable().getTable().getPreFilters().size());
 
         query = String.format(queryTemplate, "RIGHT", "INNER");
-        joinSpec = getJoinSpec(query, pconn);
-        assertEquals(0, joinSpec.getPreFilters().size());
-        assertEquals(1, joinSpec.getJoinTables().get(0).getPreFilters().size());
-        assertEquals(1, joinSpec.getJoinTables().get(1).getPreFilters().size());
+        joinTable = getJoinTable(query, pconn);
+        assertEquals(0, joinTable.getTable().getPreFilters().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(0).getJoinTable().getTable().getPreFilters().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(1).getJoinTable().getTable().getPreFilters().size());
 
         query = String.format(queryTemplate, "RIGHT", "RIGHT");
-        joinSpec = getJoinSpec(query, pconn);
-        assertEquals(0, joinSpec.getPreFilters().size());
-        assertEquals(0, joinSpec.getJoinTables().get(0).getPreFilters().size());
-        assertEquals(1, joinSpec.getJoinTables().get(1).getPreFilters().size());
+        joinTable = getJoinTable(query, pconn);
+        assertEquals(0, joinTable.getTable().getPreFilters().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(0).getJoinTable().getTable().getPreFilters().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(1).getJoinTable().getTable().getPreFilters().size());
     }
     
-    private static JoinSpec getJoinSpec(String query, PhoenixConnection connection) throws SQLException {
+    private static JoinTable getJoinTable(String query, PhoenixConnection connection) throws SQLException {
         Scan scan = new Scan();
         SQLParser parser = new SQLParser(query);
         SelectStatement select = parser.parseQuery();
         ColumnResolver resolver = FromCompiler.getResolverForQuery(select, connection);
         select = StatementNormalizer.normalize(select, resolver);
         StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, scan);
-        return JoinCompiler.getJoinSpec(context, select);        
+        return JoinCompiler.compile(select, context.getResolver());        
     }
 }
 
