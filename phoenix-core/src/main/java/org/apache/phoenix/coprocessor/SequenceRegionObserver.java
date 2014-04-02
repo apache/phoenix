@@ -121,10 +121,6 @@ public class SequenceRegionObserver extends BaseRegionObserver {
             acquireLock(region, row, locks);
             try {
                 long maxTimestamp = tr.getMax();
-                if (maxTimestamp == HConstants.LATEST_TIMESTAMP) {
-                    maxTimestamp = EnvironmentEdgeManager.currentTimeMillis();
-                    tr = new TimeRange(tr.getMin(), maxTimestamp);
-                }
                 boolean validateOnly = true;
                 Get get = new Get(row);
                 get.setTimeRange(tr.getMin(), tr.getMax());

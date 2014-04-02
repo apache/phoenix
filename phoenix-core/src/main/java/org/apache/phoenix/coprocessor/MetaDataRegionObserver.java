@@ -46,7 +46,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
       // among region servers because we relies on server time of RS which is hosting
       // SYSTEM.CATALOG
       long sleepTime = env.getConfiguration().getLong(QueryServices.CLOCK_SKEW_INTERVAL_ATTRIB, 
-          QueryServicesOptions.DEFAULT_PHOENIX_CLOCK_SKEW_INTERVAL_VALUES);
+          QueryServicesOptions.DEFAULT_CLOCK_SKEW_INTERVAL);
       try {
           if(sleepTime > 0) {
               Thread.sleep(sleepTime);
