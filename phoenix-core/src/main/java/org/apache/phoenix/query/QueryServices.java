@@ -102,6 +102,9 @@ public interface QueryServices extends SQLCloseable {
     // Mainly for testing to force spilling
     public static final String MAX_MEMORY_SIZE_ATTRIB = "phoenix.query.maxGlobalMemorySize";
     
+    // The following config settings is to deal with SYSTEM.CATALOG moves(PHOENIX-916) among region servers
+    public static final String CLOCK_SKEW_INTERVAL_ATTRIB = "phoenix.clock.skew.interval";
+    
     /**
      * Get executor service used for parallel scans
      */
