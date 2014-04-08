@@ -17,10 +17,15 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import java.io.IOException;
+
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.cache.GlobalCache;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 
 
 /**
@@ -33,5 +38,21 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
     public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
             boolean abortRequested) {
         GlobalCache.getInstance(c.getEnvironment()).getMetaDataCache().invalidateAll();
+    }
+    
+    @Override
+    public void start(CoprocessorEnvironment env) throws IOException {
+      // sleep a little bit to compensate time clock skew when SYSTEM.CATALOG moves 
+      // among region servers because we relies on server time of RS which is hosting
+      // SYSTEM.CATALOG
+      long sleepTime = env.getConfiguration().getLong(QueryServices.CLOCK_SKEW_INTERVAL_ATTRIB, 
+          QueryServicesOptions.DEFAULT_PHOENIX_CLOCK_SKEW_INTERVAL_VALUES);
+      try {
+          if(sleepTime > 0) {
+              Thread.sleep(sleepTime);
+          }
+      } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+      }
     }
 }
