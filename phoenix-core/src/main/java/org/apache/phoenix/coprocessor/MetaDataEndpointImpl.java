@@ -653,7 +653,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             if (result != null) {
                 return result; 
             }
-            List<Integer> lids = Lists.newArrayList(5);
+            List<Integer> lids = Lists.newArrayListWithExpectedSize(5);
             try {
                 acquireLock(region, lockKey, lids);
                 if (key != lockKey) {
@@ -791,7 +791,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             if (result != null) {
                 return result; 
             }
-            List<Integer> lids = Lists.newArrayList(5);
+            List<Integer> lids = Lists.newArrayListWithExpectedSize(5);
             try {
                 acquireLock(region, key, lids);
                 ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
