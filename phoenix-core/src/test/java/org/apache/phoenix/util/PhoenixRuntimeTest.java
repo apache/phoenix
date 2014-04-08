@@ -18,21 +18,14 @@
 
 package org.apache.phoenix.util;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
-import java.sql.SQLException;
 import java.util.Arrays;
-import java.util.List;
-
-import junit.framework.Assert;
 
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PTable;
 import org.junit.Test;
 
 public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
@@ -48,31 +41,4 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
         Object[] actualValues = PhoenixRuntime.decodePK(conn, "T", value);
         assertEquals(Arrays.asList(expectedValues), Arrays.asList(actualValues));
     }
-    
-    @Test
-    public void testColumnFamilyParsing() {
-    	String columnName = "F.C";
-    	assertTrue(columnName.contains(QueryConstants.NAME_SEPARATOR));
-		String[] tokens = columnName.split(QueryConstants.NAME_SEPARATOR_REGEX);
-    	assertTrue(tokens.length==2);
-    	
-		String familyName = tokens[0];
-		String familyColumn = tokens[1];
-		assertEquals("F",familyName);
-		assertEquals("C",familyColumn);
-		
-    }
-    
-    
-    //TODO add tests for the following:
-    /*
-     * 
-       public static List<ColumnInfo> generateColumnInfo(Connection conn,
-            String tableName, List<String> columns)
-            throws SQLException {...}
-            
-        public static ColumnInfo getColumnInfo(PTable table, String columnName) throws SQLException {...}
-        
-        public static ColumnInfo getColumnInfo(PColumn pColumn) throws SQLException {...}
-     */
 }
