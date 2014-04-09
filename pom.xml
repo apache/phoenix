@@ -172,7 +172,7 @@
             <excludes>
               <exclude>CHANGES.txt</exclude>
               <exclude>README.md</exclude>
-	            <exclude>dev/phoenix.importorder</exclude>
+	      <exclude>dev/phoenix.importorder</exclude>
               <exclude>**/target/**</exclude>
               <exclude>**/*.versionsBackup</exclude>
               <!-- exclude docs -->
@@ -188,6 +188,9 @@
               <exclude>.project</exclude>
               <exclude>.classpath</exclude>
               <exclude>.settings/**</exclude>
+              <exclude>**/resources/java.sql.Driver</exclude>
+              <!-- exclude protobuf files -->
+              <exclude>**/generated/**</exclude>
             </excludes>
           </configuration>
         </plugin>
