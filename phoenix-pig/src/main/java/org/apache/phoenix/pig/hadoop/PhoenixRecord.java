@@ -27,11 +27,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.io.Writable;
+import org.apache.pig.ResourceSchema.ResourceFieldSchema;
+import org.apache.pig.data.DataType;
+
 import org.apache.phoenix.pig.TypeUtil;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ColumnInfo;
-import org.apache.pig.ResourceSchema.ResourceFieldSchema;
-import org.apache.pig.data.DataType;
 
 /**
  * A {@link Writable} representing a Phoenix record. This class
@@ -62,22 +63,17 @@ public class PhoenixRecord implements Writable {
 	public void write(PreparedStatement statement, List<ColumnInfo> columnMetadataList) throws SQLException {
 		for (int i = 0; i < columnMetadataList.size(); i++) {
 			Object o = values.get(i);
-			ColumnInfo columnInfo = columnMetadataList.get(i);
 			
 			byte type = (fieldSchemas == null) ? DataType.findType(o) : fieldSchemas[i].getType();
-			try {
-				Object upsertValue = convertTypeSpecificValue(o, type, columnInfo.getSqlType());
-				if (upsertValue != null) {
-					statement.setObject(i + 1, upsertValue, columnInfo.getSqlType());
-				} else {
-					statement.setNull(i + 1, columnInfo.getSqlType());
-				}
-			} catch (RuntimeException re) {
-				throw new RuntimeException(String.format("Unable to process column %s, innerMessage=%s"
-						,columnInfo.toString(),re.getMessage()),re);
-				
+			Object upsertValue = convertTypeSpecificValue(o, type, columnMetadataList.get(i).getSqlType());
+
+			if (upsertValue != null) {
+				statement.setObject(i + 1, upsertValue, columnMetadataList.get(i).getSqlType());
+			} else {
+				statement.setNull(i + 1, columnMetadataList.get(i).getSqlType());
 			}
 		}
+		
 		statement.execute();
 	}
 	
