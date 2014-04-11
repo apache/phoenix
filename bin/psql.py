@@ -30,6 +30,9 @@ phoenix_jar_path = os.getenv('PHOENIX_LIB_DIR',
                                 "target"))
 phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", phoenix_jar_path)
 
+if phoenix_client_jar == "":
+    phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", os.path.join(current_dir, ".."))
+
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
 java_cmd = 'java -cp ".' + os.pathsep + current_dir + os.pathsep + phoenix_client_jar + \
