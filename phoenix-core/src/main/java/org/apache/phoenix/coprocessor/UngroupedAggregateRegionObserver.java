@@ -60,7 +60,7 @@ import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.join.HashJoinInfo;
-import org.apache.phoenix.join.ScanProjector;
+import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ConstraintViolationException;
@@ -131,7 +131,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             return s;
         }
         
-        final ScanProjector p = ScanProjector.deserializeProjectorFromScan(scan);
+        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         RegionScanner theScanner = s;
         if (p != null || j != null)  {

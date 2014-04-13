@@ -59,7 +59,7 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.join.HashJoinInfo;
-import org.apache.phoenix.join.ScanProjector;
+import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.memory.GlobalMemoryManager;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
@@ -113,7 +113,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                         .getAttribute(BaseScannerRegionObserver.AGGREGATORS), c
                         .getEnvironment().getConfiguration());
 
-        final ScanProjector p = ScanProjector.deserializeProjectorFromScan(scan);
+        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         long limit = Long.MAX_VALUE;
         byte[] limitBytes = scan.getAttribute(GROUP_BY_LIMIT);

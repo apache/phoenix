@@ -27,6 +27,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.query.*;
 import org.apache.phoenix.schema.*;
 import org.apache.phoenix.util.*;
@@ -60,6 +61,7 @@ public class StatementContext {
 
     private TableRef currentTable;
     private List<Pair<byte[], byte[]>> whereConditionColumns;
+    private TupleProjector clientTupleProjector;
     
     public StatementContext(PhoenixStatement statement) {
         this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan());
@@ -225,5 +227,13 @@ public class StatementContext {
 
     public List<Pair<byte[], byte[]>> getWhereCoditionColumns() {
         return whereConditionColumns;
+    }
+    
+    public TupleProjector getClientTupleProjector() {
+        return clientTupleProjector;
+    }
+    
+    public void setClientTupleProjector(TupleProjector projector) {
+        this.clientTupleProjector = projector;
     }
 }

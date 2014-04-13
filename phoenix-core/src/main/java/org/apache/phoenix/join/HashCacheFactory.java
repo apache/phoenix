@@ -23,7 +23,6 @@ import java.util.*;
 
 import net.jcip.annotations.Immutable;
 
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
