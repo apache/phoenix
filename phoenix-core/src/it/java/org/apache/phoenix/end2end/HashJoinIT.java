@@ -307,6 +307,103 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "                    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "                    BUILD HASH TABLE 0\n" +
                 "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
+                /* 
+                 * testJoinWithSubqueryAndAggregation()
+                 *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
+                 *     LEFT JOIN (SELECT name, item_id iid FROM joinItemTable) AS i 
+                 *     ON o.item_id = i.iid 
+                 *     GROUP BY i.name ORDER BY i.name
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [I.NAME]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME,
+                /* 
+                 * testJoinWithSubqueryAndAggregation()
+                 *     SELECT o.iid, sum(o.quantity) q 
+                 *     FROM (SELECT item_id iid, quantity FROM joinOrderTable) AS o 
+                 *     LEFT JOIN (SELECT item_id FROM joinItemTable) AS i 
+                 *     ON o.iid = i.item_id 
+                 *     GROUP BY o.iid ORDER BY q DESC                 
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [O.IID]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0 (SKIP MERGE)\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
+                /* 
+                 * testJoinWithSubqueryAndAggregation()
+                 *     SELECT i.iid, o.q 
+                 *     FROM (SELECT item_id iid FROM joinItemTable) AS i 
+                 *     LEFT JOIN (SELECT item_id iid, sum(quantity) q FROM joinOrderTable GROUP BY item_id) AS o 
+                 *     ON o.iid = i.iid 
+                 *     ORDER BY o.q DESC NULLS LAST, i.iid
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER SORTED BY [O.Q DESC NULLS LAST, I.IID]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [item_id]\n" +
+                "        CLIENT MERGE SORT",
+                /* 
+                 * testJoinWithSubqueryAndAggregation()
+                 *     SELECT i.iid, o.q 
+                 *     FROM (SELECT item_id iid, sum(quantity) q FROM joinOrderTable GROUP BY item_id) AS o 
+                 *     JOIN (SELECT item_id iid FROM joinItemTable) AS i 
+                 *     ON o.iid = i.iid 
+                 *     ORDER BY o.q DESC, i.iid
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER SORTED BY [O.Q DESC, I.IID]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [item_id]\n" +
+                "        CLIENT MERGE SORT",
+                /*
+                 * testNestedSubqueries()
+                 *     SELECT * FROM (SELECT customer_id cid, name, phone, address, loc_id, date FROM joinCustomerTable) AS c 
+                 *     INNER JOIN (SELECT o.oid ooid, o.cid ocid, o.iid oiid, o.price oprice, o.quantity oquantity, o.date odate, 
+                 *     qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, 
+                 *     qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id 
+                 *         FROM (SELECT item_id iid, customer_id cid, order_id oid, price, quantity, date FROM joinOrderTable) AS o 
+                 *         INNER JOIN (SELECT i.iid iiid, i.name iname, i.price iprice, i.discount1 idiscount1, i.discount2 idiscount2, i.sid isid, i.description idescription, 
+                 *         s.sid ssid, s.name sname, s.phone sphone, s.address saddress, s.loc_id sloc_id 
+                 *             FROM (SELECT supplier_id sid, name, phone, address, loc_id FROM joinSupplierTable) AS s 
+                 *             RIGHT JOIN (SELECT item_id iid, name, price, discount1, discount2, supplier_id sid, description FROM joinItemTable) AS i 
+                 *             ON i.sid = s.sid) as qi 
+                 *         ON o.iid = qi.iiid) as qo 
+                 *     ON c.cid = qo.ocid 
+                 *     WHERE c.cid <= '0000000005' 
+                 *         AND qo.ooid != '000000000000003' 
+                 *         AND qo.iname != 'T3' 
+                 *     ORDER BY c.cid, qo.iname
+                 */
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " [*] - ['0000000005']\n" +
+                "    SERVER SORTED BY [C.CID, QO.INAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "            BUILD HASH TABLE 0\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "                    SERVER FILTER BY NAME != 'T3'\n" +
+                "                    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "                    BUILD HASH TABLE 0\n" +
+                "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
                 }});
         testCases.add(new String[][] {
                 {
@@ -503,6 +600,104 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " [*] - ['0000000005']\n" +
                 "    SERVER SORTED BY [C.customer_id, I.0:NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "            BUILD HASH TABLE 0\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
+                "                    SERVER FILTER BY NAME != 'T3'\n" +
+                "                    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "                    BUILD HASH TABLE 0\n" +
+                "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
+                /* 
+                 * testJoinWithSubqueryAndAggregation()
+                 *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
+                 *     LEFT JOIN (SELECT name, item_id iid FROM joinItemTable) AS i 
+                 *     ON o.item_id = i.iid 
+                 *     GROUP BY i.name ORDER BY i.name
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [I.NAME]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
+                /* 
+                 * testJoinWithSubqueryAndAggregation()
+                 *     SELECT o.iid, sum(o.quantity) q 
+                 *     FROM (SELECT item_id iid, quantity FROM joinOrderTable) AS o 
+                 *     LEFT JOIN (SELECT item_id FROM joinItemTable) AS i 
+                 *     ON o.iid = i.item_id 
+                 *     GROUP BY o.iid ORDER BY q DESC                 
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [O.IID]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0 (SKIP MERGE)\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
+                /* 
+                 * testJoinWithSubqueryAndAggregation()
+                 *     SELECT i.iid, o.q 
+                 *     FROM (SELECT item_id iid FROM joinItemTable) AS i 
+                 *     LEFT JOIN (SELECT item_id iid, sum(quantity) q FROM joinOrderTable GROUP BY item_id) AS o 
+                 *     ON o.iid = i.iid 
+                 *     ORDER BY o.q DESC NULLS LAST, i.iid
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER SORTED BY [O.Q DESC NULLS LAST, I.IID]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [item_id]\n" +
+                "        CLIENT MERGE SORT",
+                /* 
+                 * testJoinWithSubqueryAndAggregation()
+                 *     SELECT i.iid, o.q 
+                 *     FROM (SELECT item_id iid, sum(quantity) q FROM joinOrderTable GROUP BY item_id) AS o 
+                 *     JOIN (SELECT item_id iid FROM joinItemTable) AS i 
+                 *     ON o.iid = i.iid 
+                 *     ORDER BY o.q DESC, i.iid
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER SORTED BY [O.Q DESC, I.IID]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [item_id]\n" +
+                "        CLIENT MERGE SORT",
+                /*
+                 * testNestedSubqueries()
+                 *     SELECT * FROM (SELECT customer_id cid, name, phone, address, loc_id, date FROM joinCustomerTable) AS c 
+                 *     INNER JOIN (SELECT o.oid ooid, o.cid ocid, o.iid oiid, o.price oprice, o.quantity oquantity, o.date odate, 
+                 *     qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, 
+                 *     qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id 
+                 *         FROM (SELECT item_id iid, customer_id cid, order_id oid, price, quantity, date FROM joinOrderTable) AS o 
+                 *         INNER JOIN (SELECT i.iid iiid, i.name iname, i.price iprice, i.discount1 idiscount1, i.discount2 idiscount2, i.sid isid, i.description idescription, 
+                 *         s.sid ssid, s.name sname, s.phone sphone, s.address saddress, s.loc_id sloc_id 
+                 *             FROM (SELECT supplier_id sid, name, phone, address, loc_id FROM joinSupplierTable) AS s 
+                 *             RIGHT JOIN (SELECT item_id iid, name, price, discount1, discount2, supplier_id sid, description FROM joinItemTable) AS i 
+                 *             ON i.sid = s.sid) as qi 
+                 *         ON o.iid = qi.iiid) as qo 
+                 *     ON c.cid = qo.ocid 
+                 *     WHERE c.cid <= '0000000005' 
+                 *         AND qo.ooid != '000000000000003' 
+                 *         AND qo.iname != 'T3' 
+                 *     ORDER BY c.cid, qo.iname
+                 */
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " [*] - ['0000000005']\n" +
+                "    SERVER SORTED BY [C.CID, QO.INAME]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
@@ -2525,6 +2720,300 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query2);
             assertEquals(plans[13], QueryUtil.getExplainPlan(rs));
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testJoinWithSubquery() throws Exception {
+        String query1 = "SELECT item.\"item_id\", item.name, supp.sid, supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item INNER JOIN (SELECT \"supplier_id\" sid, name FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + " WHERE name BETWEEN 'S1' AND 'S5') AS supp ON item.\"supplier_id\" = supp.sid";
+        String query2 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item INNER JOIN (SELECT \"supplier_id\", name FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + ") AS supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.name = 'S1' OR supp.name = 'S5')";
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query1);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000001");
+            assertEquals(rs.getString(2), "T1");
+            assertEquals(rs.getString(3), "0000000001");
+            assertEquals(rs.getString(4), "S1");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000002");
+            assertEquals(rs.getString(2), "T2");
+            assertEquals(rs.getString(3), "0000000001");
+            assertEquals(rs.getString(4), "S1");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000003");
+            assertEquals(rs.getString(2), "T3");
+            assertEquals(rs.getString(3), "0000000002");
+            assertEquals(rs.getString(4), "S2");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000004");
+            assertEquals(rs.getString(2), "T4");
+            assertEquals(rs.getString(3), "0000000002");
+            assertEquals(rs.getString(4), "S2");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000005");
+            assertEquals(rs.getString(2), "T5");
+            assertEquals(rs.getString(3), "0000000005");
+            assertEquals(rs.getString(4), "S5");
+
+            assertFalse(rs.next());
+            
+            
+            statement = conn.prepareStatement(query2);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000001");
+            assertEquals(rs.getString(2), "T1");
+            assertEquals(rs.getString(3), "0000000001");
+            assertEquals(rs.getString(4), "S1");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000002");
+            assertEquals(rs.getString(2), "T2");
+            assertEquals(rs.getString(3), "0000000001");
+            assertEquals(rs.getString(4), "S1");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000005");
+            assertEquals(rs.getString(2), "T5");
+            assertEquals(rs.getString(3), "0000000005");
+            assertEquals(rs.getString(4), "S5");
+
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testJoinWithSubqueryAndAggregation() throws Exception {
+        String query1 = "SELECT i.name, sum(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN (SELECT name, \"item_id\" iid FROM " 
+            + JOIN_ITEM_TABLE_FULL_NAME + ") AS i ON o.\"item_id\" = i.iid GROUP BY i.name ORDER BY i.name";
+        String query2 = "SELECT o.iid, sum(o.quantity) q FROM (SELECT \"item_id\" iid, quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + ") AS o LEFT JOIN (SELECT \"item_id\" FROM " 
+                + JOIN_ITEM_TABLE_FULL_NAME + ") AS i ON o.iid = i.\"item_id\" GROUP BY o.iid ORDER BY q DESC";
+        String query3 = "SELECT i.iid, o.q FROM (SELECT \"item_id\" iid FROM " + JOIN_ITEM_TABLE_FULL_NAME + ") AS i LEFT JOIN (SELECT \"item_id\" iid, sum(quantity) q FROM " 
+                + JOIN_ORDER_TABLE_FULL_NAME + " GROUP BY \"item_id\") AS o ON o.iid = i.iid ORDER BY o.q DESC NULLS LAST, i.iid";
+        String query4 = "SELECT i.iid, o.q FROM (SELECT \"item_id\" iid, sum(quantity) q FROM " + JOIN_ORDER_TABLE_FULL_NAME + " GROUP BY \"item_id\") AS o JOIN (SELECT \"item_id\" iid FROM " 
+                + JOIN_ITEM_TABLE_FULL_NAME + ") AS i ON o.iid = i.iid ORDER BY o.q DESC, i.iid";
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query1);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T1");
+            assertEquals(rs.getInt(2), 1000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T2");
+            assertEquals(rs.getInt(2), 3000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T3");
+            assertEquals(rs.getInt(2), 5000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T6");
+            assertEquals(rs.getInt(2), 6000);
+
+            assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query1);
+            assertEquals(plans[14], QueryUtil.getExplainPlan(rs));
+            
+            statement = conn.prepareStatement(query2);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString("o.iid"), "0000000006");
+            assertEquals(rs.getInt("q"), 6000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("o.iid"), "0000000003");
+            assertEquals(rs.getInt("q"), 5000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("o.iid"), "0000000002");
+            assertEquals(rs.getInt("q"), 3000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("o.iid"), "0000000001");
+            assertEquals(rs.getInt("q"), 1000);
+
+            assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query2);
+            assertEquals(plans[15], QueryUtil.getExplainPlan(rs));
+            
+            statement = conn.prepareStatement(query3);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString("i.iid"), "0000000006");
+            assertEquals(rs.getInt("o.q"), 6000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("i.iid"), "0000000003");
+            assertEquals(rs.getInt("o.q"), 5000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("i.iid"), "0000000002");
+            assertEquals(rs.getInt("o.q"), 3000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("i.iid"), "0000000001");
+            assertEquals(rs.getInt("o.q"), 1000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("i.iid"), "0000000004");
+            assertEquals(rs.getInt("o.q"), 0);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("i.iid"), "0000000005");
+            assertEquals(rs.getInt("o.q"), 0);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("i.iid"), "invalid001");
+            assertEquals(rs.getInt("o.q"), 0);
+
+            assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query3);
+            assertEquals(plans[16], QueryUtil.getExplainPlan(rs));
+            
+            statement = conn.prepareStatement(query4);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString("i.iid"), "0000000006");
+            assertEquals(rs.getInt("o.q"), 6000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("i.iid"), "0000000003");
+            assertEquals(rs.getInt("o.q"), 5000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("i.iid"), "0000000002");
+            assertEquals(rs.getInt("o.q"), 3000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString("i.iid"), "0000000001");
+            assertEquals(rs.getInt("o.q"), 1000);
+
+            assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query4);
+            assertEquals(plans[17], QueryUtil.getExplainPlan(rs));
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testNestedSubqueries() throws Exception {
+        String query1 = "SELECT q.iname, count(c.name), min(q.sname), max(o.quantity) FROM (SELECT \"customer_id\" cid, \"item_id\" iid, quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + ") AS o LEFT JOIN " 
+                + "(SELECT i.iid iid, s.name sname, i.name iname FROM (SELECT \"supplier_id\" sid, name FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + ") AS s RIGHT JOIN (SELECT \"item_id\" iid, name, \"supplier_id\" sid FROM " + JOIN_ITEM_TABLE_FULL_NAME + ") AS i ON i.sid = s.sid) AS q" 
+                + " ON o.iid = q.iid LEFT JOIN (SELECT \"customer_id\" cid, name FROM " 
+                + JOIN_CUSTOMER_TABLE_FULL_NAME + ") AS c ON c.cid = o.cid GROUP BY q.iname ORDER BY q.iname";
+        String query2 = "SELECT * FROM (SELECT \"customer_id\" cid, name, phone, address, loc_id, date FROM " + JOIN_CUSTOMER_TABLE_FULL_NAME + ") AS c INNER JOIN " 
+                + "(SELECT o.oid ooid, o.cid ocid, o.iid oiid, o.price oprice, o.quantity oquantity, o.date odate, qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id FROM (SELECT \"item_id\" iid, \"customer_id\" cid, \"order_id\" oid, price, quantity, date FROM " + JOIN_ORDER_TABLE_FULL_NAME + ") AS o INNER JOIN " 
+                + "(SELECT i.iid iiid, i.name iname, i.price iprice, i.discount1 idiscount1, i.discount2 idiscount2, i.sid isid, i.description idescription, s.sid ssid, s.name sname, s.phone sphone, s.address saddress, s.loc_id sloc_id FROM (SELECT \"supplier_id\" sid, name, phone, address, loc_id FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + ") AS s RIGHT JOIN (SELECT \"item_id\" iid, name, price, discount1, discount2, \"supplier_id\" sid, description FROM " + JOIN_ITEM_TABLE_FULL_NAME + ") AS i ON i.sid = s.sid) as qi" 
+                + " ON o.iid = qi.iiid) as qo ON c.cid = qo.ocid" 
+                + " WHERE c.cid <= '0000000005' AND qo.ooid != '000000000000003' AND qo.iname != 'T3' ORDER BY c.cid, qo.iname";
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query1);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T1");
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getString(3), "S1");
+            assertEquals(rs.getInt(4), 1000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T2");
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getString(3), "S1");
+            assertEquals(rs.getInt(4), 3000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T3");
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getString(3), "S2");
+            assertEquals(rs.getInt(4), 5000);
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T6");
+            assertEquals(rs.getInt(2), 2);
+            assertEquals(rs.getString(3), "S6");
+            assertEquals(rs.getInt(4), 4000);
+
+            assertFalse(rs.next());
+            
+            statement = conn.prepareStatement(query2);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(rs.getString("c.cid"), "0000000003");
+            assertEquals(rs.getString("c.name"), "C3");
+            assertEquals(rs.getString("c.phone"), "999-999-3333");
+            assertEquals(rs.getString("c.address"), "303 XXX Street");
+            assertNull(rs.getString("c.loc_id"));
+            assertEquals(rs.getDate("c.date"), new Date(format.parse("2013-11-25 10:06:29").getTime()));
+            assertEquals(rs.getString("qo.ooid"), "000000000000002");
+            assertEquals(rs.getString("qo.ocid"), "0000000003");
+            assertEquals(rs.getString("qo.oiid"), "0000000006");
+            assertEquals(rs.getInt("qo.oprice"), 552);
+            assertEquals(rs.getInt("qo.oquantity"), 2000);
+            assertEquals(rs.getTimestamp("qo.odate"), new Timestamp(format.parse("2013-11-25 10:06:29").getTime()));
+            assertEquals(rs.getString("qo.iiid"), "0000000006");
+            assertEquals(rs.getString("qo.iname"), "T6");
+            assertEquals(rs.getInt("qo.iprice"), 600);
+            assertEquals(rs.getInt("qo.idiscount1"), 8);
+            assertEquals(rs.getInt("qo.idiscount2"), 15);
+            assertEquals(rs.getString("qo.isid"), "0000000006");
+            assertEquals(rs.getString("qo.idescription"), "Item T6");
+            assertEquals(rs.getString("qo.ssid"), "0000000006");
+            assertEquals(rs.getString("qo.sname"), "S6");
+            assertEquals(rs.getString("qo.sphone"), "888-888-6666");
+            assertEquals(rs.getString("qo.saddress"), "606 YYY Street");
+            assertEquals(rs.getString("qo.sloc_id"), "10006");
+            assertTrue(rs.next());
+            assertEquals(rs.getString("c.cid"), "0000000004");
+            assertEquals(rs.getString("c.name"), "C4");
+            assertEquals(rs.getString("c.phone"), "999-999-4444");
+            assertEquals(rs.getString("c.address"), "404 XXX Street");
+            assertEquals(rs.getString("c.loc_id"), "10004");
+            assertEquals(rs.getDate("c.date"), new Date(format.parse("2013-11-22 14:22:56").getTime()));
+            assertEquals(rs.getString("qo.ooid"), "000000000000001");
+            assertEquals(rs.getString("qo.ocid"), "0000000004");
+            assertEquals(rs.getString("qo.oiid"), "0000000001");
+            assertEquals(rs.getInt("qo.oprice"), 100);
+            assertEquals(rs.getInt("qo.oquantity"), 1000);
+            assertEquals(rs.getTimestamp("qo.odate"), new Timestamp(format.parse("2013-11-22 14:22:56").getTime()));
+            assertEquals(rs.getString("qo.iiid"), "0000000001");
+            assertEquals(rs.getString("qo.iname"), "T1");
+            assertEquals(rs.getInt("qo.iprice"), 100);
+            assertEquals(rs.getInt("qo.idiscount1"), 5);
+            assertEquals(rs.getInt("qo.idiscount2"), 10);
+            assertEquals(rs.getString("qo.isid"), "0000000001");
+            assertEquals(rs.getString("qo.idescription"), "Item T1");
+            assertEquals(rs.getString("qo.ssid"), "0000000001");
+            assertEquals(rs.getString("qo.sname"), "S1");
+            assertEquals(rs.getString("qo.sphone"), "888-888-1111");
+            assertEquals(rs.getString("qo.saddress"), "101 YYY Street");
+            assertEquals(rs.getString("qo.sloc_id"), "10001");
+            assertTrue(rs.next());
+            assertEquals(rs.getString("c.cid"), "0000000004");
+            assertEquals(rs.getString("c.name"), "C4");
+            assertEquals(rs.getString("c.phone"), "999-999-4444");
+            assertEquals(rs.getString("c.address"), "404 XXX Street");
+            assertEquals(rs.getString("c.loc_id"), "10004");
+            assertEquals(rs.getDate("c.date"), new Date(format.parse("2013-11-22 14:22:56").getTime()));
+            assertEquals(rs.getString("qo.ooid"), "000000000000004");
+            assertEquals(rs.getString("qo.ocid"), "0000000004");
+            assertEquals(rs.getString("qo.oiid"), "0000000006");
+            assertEquals(rs.getInt("qo.oprice"), 510);
+            assertEquals(rs.getInt("qo.oquantity"), 4000);
+            assertEquals(rs.getTimestamp("qo.odate"), new Timestamp(format.parse("2013-11-26 13:26:04").getTime()));
+            assertEquals(rs.getString("qo.iiid"), "0000000006");
+            assertEquals(rs.getString("qo.iname"), "T6");
+            assertEquals(rs.getInt("qo.iprice"), 600);
+            assertEquals(rs.getInt("qo.idiscount1"), 8);
+            assertEquals(rs.getInt("qo.idiscount2"), 15);
+            assertEquals(rs.getString("qo.isid"), "0000000006");
+            assertEquals(rs.getString("qo.idescription"), "Item T6");
+            assertEquals(rs.getString("qo.ssid"), "0000000006");
+            assertEquals(rs.getString("qo.sname"), "S6");
+            assertEquals(rs.getString("qo.sphone"), "888-888-6666");
+            assertEquals(rs.getString("qo.saddress"), "606 YYY Street");
+            assertEquals(rs.getString("qo.sloc_id"), "10006");
+
+            assertFalse(rs.next());            
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query2);
+            assertEquals(plans[18], QueryUtil.getExplainPlan(rs));
         } finally {
             conn.close();
         }

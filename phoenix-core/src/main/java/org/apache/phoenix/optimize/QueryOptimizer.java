@@ -80,7 +80,7 @@ public class QueryOptimizer {
         // TODO: the recompile for the index tables could skip the normalize step
         SelectStatement select = (SelectStatement)dataPlan.getStatement();
         // TODO: consider not even compiling index plans if we have a point lookup
-        if (!useIndexes || select.isJoin()) {
+        if (!useIndexes || select.isJoin() || dataPlan.getContext().getResolver().getTables().size() > 1) {
             return dataPlan;
         }
         PTable dataTable = dataPlan.getTableRef().getTable();

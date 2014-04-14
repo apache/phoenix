@@ -23,7 +23,7 @@ import java.io.IOException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.join.ScanProjector;
+import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
@@ -95,7 +95,7 @@ public class ProjectedColumnExpression extends ColumnExpression {
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         try {
-            ScanProjector.decodeProjectedValue(tuple, ptr);
+            TupleProjector.decodeProjectedValue(tuple, ptr);
             int maxOffset = ptr.getOffset() + ptr.getLength();
             bitSet.clear();
             bitSet.or(ptr);

@@ -69,16 +69,16 @@ public class HashCacheClient  {
      * @throws MaxServerCacheSizeExceededException if size of hash cache exceeds max allowed
      * size
      */
-    public ServerCache addHashCache(ScanRanges keyRanges, ResultIterator iterator, long estimatedSize, List<Expression> onExpressions, TableRef cacheUsingTableRef) throws SQLException {
+    public ServerCache addHashCache(ScanRanges keyRanges, ResultIterator iterator, TupleProjector projector, long estimatedSize, List<Expression> onExpressions, TableRef cacheUsingTableRef) throws SQLException {
         /**
          * Serialize and compress hashCacheTable
          */
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        serialize(ptr, iterator, estimatedSize, onExpressions);
+        serialize(ptr, iterator, projector, estimatedSize, onExpressions);
         return serverCache.addServerCache(keyRanges, ptr, new HashCacheFactory(), cacheUsingTableRef);
     }
     
-    private void serialize(ImmutableBytesWritable ptr, ResultIterator iterator, long estimatedSize, List<Expression> onExpressions) throws SQLException {
+    private void serialize(ImmutableBytesWritable ptr, ResultIterator iterator, TupleProjector projector, long estimatedSize, List<Expression> onExpressions) throws SQLException {
         long maxSize = serverCache.getConnection().getQueryServices().getProps().getLong(QueryServices.MAX_SERVER_CACHE_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_SIZE);
         estimatedSize = Math.min(estimatedSize, maxSize);
         if (estimatedSize > Integer.MAX_VALUE) {
@@ -98,6 +98,9 @@ public class HashCacheClient  {
             int nRows = 0;
             out.writeInt(nRows); // In the end will be replaced with total number of rows            
             for (Tuple result = iterator.next(); result != null; result = iterator.next()) {
+                if (projector != null) {
+                    result = projector.projectResults(result);
+                }
                 TupleUtil.write(result, out);
                 if (baOut.size() > maxSize) {
                     throw new MaxServerCacheSizeExceededException("Size of hash cache (" + baOut.size() + " bytes) exceeds the maximum allowed size (" + maxSize + " bytes)");

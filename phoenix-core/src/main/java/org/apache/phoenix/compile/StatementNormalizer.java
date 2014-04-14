@@ -18,7 +18,6 @@
 package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.util.Collections;
 import java.util.List;
 
@@ -137,7 +136,8 @@ public class StatementNormalizer extends ParseNodeRewriter {
         @Override
         public List<TableName> visit(DerivedTableNode subselectNode)
                 throws SQLException {
-            throw new SQLFeatureNotSupportedException();
+            TableName name = TableName.create(null, subselectNode.getAlias());
+            return Collections.singletonList(name);
         }
     };
     
