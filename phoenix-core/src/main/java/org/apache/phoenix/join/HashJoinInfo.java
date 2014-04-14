@@ -45,9 +45,10 @@ public class HashJoinInfo {
     private KeyValueSchema[] schemas;
     private int[] fieldPositions;
     private Expression postJoinFilterExpression;
+    private boolean forceProjection;
     
-    public HashJoinInfo(PTable joinedTable, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, PTable[] tables, int[] fieldPositions, Expression postJoinFilterExpression) {
-    	this(buildSchema(joinedTable), joinIds, joinExpressions, joinTypes, earlyEvaluation, buildSchemas(tables), fieldPositions, postJoinFilterExpression);
+    public HashJoinInfo(PTable joinedTable, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, PTable[] tables, int[] fieldPositions, Expression postJoinFilterExpression, boolean forceProjection) {
+    	this(buildSchema(joinedTable), joinIds, joinExpressions, joinTypes, earlyEvaluation, buildSchemas(tables), fieldPositions, postJoinFilterExpression, forceProjection);
     }
     
     private static KeyValueSchema[] buildSchemas(PTable[] tables) {
@@ -70,7 +71,7 @@ public class HashJoinInfo {
         return builder.build();
     }
     
-    private HashJoinInfo(KeyValueSchema joinedSchema, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, KeyValueSchema[] schemas, int[] fieldPositions, Expression postJoinFilterExpression) {
+    private HashJoinInfo(KeyValueSchema joinedSchema, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, KeyValueSchema[] schemas, int[] fieldPositions, Expression postJoinFilterExpression, boolean forceProjection) {
     	this.joinedSchema = joinedSchema;
     	this.joinIds = joinIds;
         this.joinExpressions = joinExpressions;
@@ -79,6 +80,7 @@ public class HashJoinInfo {
         this.schemas = schemas;
         this.fieldPositions = fieldPositions;
         this.postJoinFilterExpression = postJoinFilterExpression;
+        this.forceProjection = forceProjection;
     }
     
     public KeyValueSchema getJoinedSchema() {
@@ -113,6 +115,14 @@ public class HashJoinInfo {
         return postJoinFilterExpression;
     }
     
+    /*
+     * If the LHS table is a sub-select, we always do projection, since
+     * the ON expressions reference only projected columns.
+     */
+    public boolean forceProjection() {
+        return forceProjection;
+    }
+    
     public static void serializeHashJoinIntoScan(Scan scan, HashJoinInfo joinInfo) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try {
@@ -138,6 +148,7 @@ public class HashJoinInfo {
             } else {
                 WritableUtils.writeVInt(output, -1);
             }
+            output.writeBoolean(joinInfo.forceProjection);
             scan.setAttribute(HASH_JOIN, stream.toByteArray());
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -193,7 +204,8 @@ public class HashJoinInfo {
                 postJoinFilterExpression = ExpressionType.values()[expressionOrdinal].newInstance();
                 postJoinFilterExpression.readFields(input);
             }
-            return new HashJoinInfo(joinedSchema, joinIds, joinExpressions, joinTypes, earlyEvaluation, schemas, fieldPositions, postJoinFilterExpression);
+            boolean forceProjection = input.readBoolean();
+            return new HashJoinInfo(joinedSchema, joinIds, joinExpressions, joinTypes, earlyEvaluation, schemas, fieldPositions, postJoinFilterExpression, forceProjection);
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {

@@ -73,6 +73,11 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
     public static SelectStatement translate(SelectStatement statement, ColumnResolver dataResolver, Map<TableRef, TableRef> multiTableRewriteMap) throws SQLException {
         return rewrite(statement, new IndexStatementRewriter(dataResolver, multiTableRewriteMap));
     }
+    
+    @Override
+    protected boolean visitDerivedTableNode() {
+        return false;
+    }
 
     @Override
     public ParseNode visit(ColumnParseNode node) throws SQLException {

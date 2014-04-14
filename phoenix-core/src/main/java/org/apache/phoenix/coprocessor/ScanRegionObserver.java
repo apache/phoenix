@@ -48,7 +48,7 @@ import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.iterate.RegionScannerResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.join.HashJoinInfo;
-import org.apache.phoenix.join.ScanProjector;
+import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.KeyValueSchema;
@@ -177,7 +177,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             return s;
         }
         
-        final ScanProjector p = ScanProjector.deserializeProjectorFromScan(scan);
+        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         final ImmutableBytesWritable tenantId = ScanUtil.getTenantId(scan);
         

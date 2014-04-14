@@ -43,6 +43,7 @@ import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.join.HashJoinInfo;
+import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
@@ -57,17 +58,23 @@ import com.google.common.collect.Lists;
 public class HashJoinPlan implements QueryPlan {
     private static final Log LOG = LogFactory.getLog(HashJoinPlan.class);
     
-    private BasicQueryPlan plan;
-    private HashJoinInfo joinInfo;
-    private List<Expression>[] hashExpressions;
-    private QueryPlan[] hashPlans;
+    private final FilterableStatement statement;
+    private final BasicQueryPlan plan;
+    private final HashJoinInfo joinInfo;
+    private final List<Expression>[] hashExpressions;
+    private final QueryPlan[] hashPlans;
+    private final TupleProjector[] clientProjectors;
     
-    public HashJoinPlan(BasicQueryPlan plan, HashJoinInfo joinInfo,
-            List<Expression>[] hashExpressions, QueryPlan[] hashPlans) {
+    public HashJoinPlan(FilterableStatement statement, 
+            BasicQueryPlan plan, HashJoinInfo joinInfo,
+            List<Expression>[] hashExpressions, QueryPlan[] hashPlans, 
+            TupleProjector[] clientProjectors) {
+        this.statement = statement;
         this.plan = plan;
         this.joinInfo = joinInfo;
         this.hashExpressions = hashExpressions;
         this.hashPlans = hashPlans;
+        this.clientProjectors = clientProjectors;
     }
 
     @Override
@@ -110,7 +117,7 @@ public class HashJoinPlan implements QueryPlan {
                 public ServerCache call() throws Exception {
                     QueryPlan hashPlan = hashPlans[index];
                     ServerCache cache = hashClient.addHashCache(ranges, hashPlan.iterator(), 
-                            hashPlan.getEstimatedSize(), hashExpressions[index], plan.getTableRef());
+                            clientProjectors[index], hashPlan.getEstimatedSize(), hashExpressions[index], plan.getTableRef());
                     long endTime = System.currentTimeMillis();
                     boolean isSet = firstJobEndTime.compareAndSet(0, endTime);
                     if (!isSet && (endTime - firstJobEndTime.get()) > maxServerCacheTimeToLive) {
@@ -205,7 +212,7 @@ public class HashJoinPlan implements QueryPlan {
 
     @Override
     public FilterableStatement getStatement() {
-        return plan.getStatement();
+        return statement;
     }
 
     @Override
