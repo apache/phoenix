@@ -33,6 +33,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
@@ -113,6 +114,7 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.util.ByteUtil;
@@ -151,8 +153,9 @@ public class MetaDataClient {
             DISABLE_WAL + "," +
             MULTI_TENANT + "," +
             VIEW_TYPE + "," +
-            VIEW_INDEX_ID +
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            VIEW_INDEX_ID + "," +
+            INDEX_TYPE +
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String CREATE_LINK =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
             TENANT_ID + "," +
@@ -419,7 +422,7 @@ public class MetaDataClient {
     }
 
     public MutationState createTable(CreateTableStatement statement, byte[][] splits, PTable parent, String viewStatement, ViewType viewType, byte[][] viewColumnConstants, BitSet isViewColumnReferenced) throws SQLException {
-        PTable table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewColumnConstants, isViewColumnReferenced, null);
+        PTable table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewColumnConstants, isViewColumnReferenced, null, null);
         if (table == null || table.getType() == PTableType.VIEW) {
             return new MutationState(0,connection);
         }
@@ -526,8 +529,8 @@ public class MetaDataClient {
         TableRef tableRef = null;
         PTable table = null;
         boolean retry = true;
-        Short viewIndexId = null;
-        boolean allocateViewIndexId = false;
+        Short indexId = null;
+        boolean allocateIndexId = false;
         while (true) {
             try {
                 ColumnResolver resolver = FromCompiler.getResolverForMutation(statement, connection);
@@ -568,8 +571,13 @@ public class MetaDataClient {
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, col.getSortOrder()));
                     columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, SortOrder.getDefault()));
                 }
-                if (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED) {
-                    allocateViewIndexId = true;
+                /*
+                 * Allocate an index ID in two circumstances:
+                 * 1) for a local index, as all local indexes will reside in the same HBase table
+                 * 2) for a view on an index.
+                 */
+                if (statement.getIndexType() == IndexType.LOCAL || (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED)) {
+                    allocateIndexId = true;
                     // Next add index ID column
                     PDataType dataType = MetaDataUtil.getViewIndexIdDataType();
                     ColumnName colName = ColumnName.caseSensitiveColumnName(MetaDataUtil.getViewIndexIdColumnName());
@@ -626,9 +634,9 @@ public class MetaDataClient {
                     }
                 }
                 
-                // Don't re-allocate viewIndexId on ConcurrentTableMutationException,
+                // Don't re-allocate indexId on ConcurrentTableMutationException,
                 // as there's no need to burn another sequence value.
-                if (allocateViewIndexId && viewIndexId == null) { 
+                if (allocateIndexId && indexId == null) { 
                     Long scn = connection.getSCN();
                     long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
                     PName tenantId = connection.getTenantId();
@@ -646,10 +654,10 @@ public class MetaDataClient {
                     }
                     long seqValue = seqValues[0];
                     if (seqValue > Short.MAX_VALUE) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.TOO_MANY_VIEW_INDEXES)
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.TOO_MANY_INDEXES)
                         .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())).setTableName(SchemaUtil.getTableNameFromFullName(physicalName.getString())).build().buildException();
                     }
-                    viewIndexId = (short) seqValue;
+                    indexId = (short) seqValue;
                 }
                 // Set DEFAULT_COLUMN_FAMILY_NAME of index to match data table
                 // We need this in the props so that the correct column family is created
@@ -657,7 +665,7 @@ public class MetaDataClient {
                     statement.getProps().put("", new Pair<String,Object>(DEFAULT_COLUMN_FAMILY_NAME,dataTable.getDefaultFamilyName().getString()));
                 }
                 CreateTableStatement tableStatement = FACTORY.createTable(indexTableName, statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX, statement.ifNotExists(), null, null, statement.getBindCount());
-                table = createTableInternal(tableStatement, splits, dataTable, null, null, null, null, viewIndexId);
+                table = createTableInternal(tableStatement, splits, dataTable, null, null, null, null, indexId, statement.getIndexType());
                 break;
             } catch (ConcurrentTableMutationException e) { // Can happen if parent data table changes while above is in progress
                 if (retry) {
@@ -725,7 +733,7 @@ public class MetaDataClient {
         return null;
     }
     
-    private PTable createTableInternal(CreateTableStatement statement, byte[][] splits, final PTable parent, String viewStatement, ViewType viewType, final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, Short viewIndexId) throws SQLException {
+    private PTable createTableInternal(CreateTableStatement statement, byte[][] splits, final PTable parent, String viewStatement, ViewType viewType, final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, Short indexId, IndexType indexType) throws SQLException {
         final PTableType tableType = statement.getTableType();
         boolean wasAutoCommit = connection.getAutoCommit();
         connection.rollback();
@@ -751,10 +759,10 @@ public class MetaDataClient {
                 // TODO: Can we support a multi-tenant index directly on a multi-tenant
                 // table instead of only a view? We don't have anywhere to put the link
                 // from the table to the index, though.
-                if (parent.getType() == PTableType.VIEW && parent.getViewType() != ViewType.MAPPED) {
+                if (indexType == IndexType.LOCAL || (parent.getType() == PTableType.VIEW && parent.getViewType() != ViewType.MAPPED)) {
                     PName physicalName = parent.getPhysicalName();
                     saltBucketNum = parent.getBucketNum();
-                    addSaltColumn = (saltBucketNum != null);
+                    addSaltColumn = (saltBucketNum != null && indexType != IndexType.LOCAL);
                     defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
                     // Set physical name of view index table
                     physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(physicalName.getBytes())));
@@ -824,10 +832,12 @@ public class MetaDataClient {
             }
             
             // Can't set any of these on views or shared indexes on views
-            if (tableType != PTableType.VIEW && viewIndexId == null) {
+            if (tableType != PTableType.VIEW && indexId == null) {
                 saltBucketNum = (Integer) tableProps.remove(PhoenixDatabaseMetaData.SALT_BUCKETS);
-                if (saltBucketNum != null && (saltBucketNum < 0 || saltBucketNum > SaltingUtil.MAX_BUCKET_NUM)) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_BUCKET_NUM).build().buildException();
+                if (saltBucketNum != null) {
+                    if (saltBucketNum < 0 || saltBucketNum > SaltingUtil.MAX_BUCKET_NUM) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_BUCKET_NUM).build().buildException();
+                    }
                 }
                 // Salt the index table if the data table is salted
                 if (saltBucketNum == null) {
@@ -858,7 +868,11 @@ public class MetaDataClient {
                 disableWAL = disableWALProp;
             }
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
-            if ((statement.getTableType() == PTableType.VIEW || viewIndexId != null) && !tableProps.isEmpty()) {
+            if ((statement.getTableType() == PTableType.VIEW || indexId != null) && !tableProps.isEmpty()) {
+                // TODO: do this check in CreateIndexCompiler
+                if (indexType == IndexType.LOCAL && saltBucketNum != null) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SALT_LOCAL_INDEX).build().buildException();
+                }
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WITH_PROPERTIES).build().buildException();
             }
             if (removedProp) {
@@ -869,7 +883,7 @@ public class MetaDataClient {
             List<PColumn> columns;
             LinkedHashSet<PColumn> pkColumns;    
             
-            if (tenantId != null && (tableType != PTableType.VIEW && viewIndexId == null)) {
+            if (tenantId != null && (tableType != PTableType.VIEW && indexId == null)) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_TENANT_SPECIFIC_TABLE)
                     .setSchemaName(schemaName).setTableName(tableName).build().buildException();
             }
@@ -1061,9 +1075,9 @@ public class MetaDataClient {
                         null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM,
                         PNameFactory.newName(QueryConstants.SYSTEM_TABLE_PK_NAME), null, columns, null, Collections.<PTable>emptyList(), 
                         isImmutableRows, Collections.<PName>emptyList(),
-                        defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), null, Boolean.TRUE.equals(disableWAL), false, null, viewIndexId);
+                        defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), null, Boolean.TRUE.equals(disableWAL), false, null, indexId, indexType);
                 connection.addTable(table);
-            } else if (tableType == PTableType.INDEX && viewIndexId == null) {
+            } else if (tableType == PTableType.INDEX && indexId == null) {
                 if (tableProps.get(HTableDescriptor.MAX_FILESIZE) == null) {
                     int nIndexRowKeyColumns = isPK ? 1 : pkColumnsNames.size();
                     int nIndexKeyValueColumns = columns.size() - nIndexRowKeyColumns;
@@ -1147,10 +1161,15 @@ public class MetaDataClient {
             } else {
                 tableUpsert.setByte(16, viewType.getSerializedValue());
             }
-            if (viewIndexId == null) {
+            if (indexId == null) {
                 tableUpsert.setNull(17, Types.SMALLINT);
             } else {
-                tableUpsert.setShort(17, viewIndexId);
+                tableUpsert.setShort(17, indexId);
+            }
+            if (indexType == null) {
+                tableUpsert.setNull(18, Types.TINYINT);
+            } else {
+                tableUpsert.setByte(18, indexType.getSerializedValue());
             }
             tableUpsert.execute();
             
@@ -1169,7 +1188,7 @@ public class MetaDataClient {
                     QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, QueryServicesOptions.DEFAULT_ROW_KEY_ORDER_SALTED_TABLE));
             MetaDataMutationResult result = connection.getQueryServices().createTable(
                     tableMetaData, 
-                    viewType == ViewType.MAPPED || viewIndexId != null ? physicalNames.get(0).getBytes() : null,
+                    viewType == ViewType.MAPPED || indexId != null ? physicalNames.get(0).getBytes() : null,
                     tableType, tableProps, familyPropList, splits);
             MutationCode code = result.getMutationCode();
             switch(code) {
@@ -1194,7 +1213,7 @@ public class MetaDataClient {
                         tenantId, PNameFactory.newName(schemaName), PNameFactory.newName(tableName), tableType, indexState, result.getMutationTime(), 
                         PTable.INITIAL_SEQ_NUM, pkName == null ? null : PNameFactory.newName(pkName), saltBucketNum, columns, 
                         dataTableName == null ? null : PNameFactory.newName(dataTableName), Collections.<PTable>emptyList(), isImmutableRows, physicalNames,
-                        defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, viewType, viewIndexId);
+                        defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, viewType, indexId, indexType);
                 connection.addTable(table);
                 return table;
             }
@@ -1275,12 +1294,10 @@ public class MetaDataClient {
             Long scn = connection.getSCN();
             long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
             List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize(2);
-            @SuppressWarnings("deprecation") // FIXME: Remove when unintentionally deprecated method is fixed (HBASE-7870).
             Delete tableDelete = new Delete(key, clientTimeStamp);
             tableMetaData.add(tableDelete);
             if (parentTableName != null) {
                 byte[] linkKey = MetaDataUtil.getParentLinkKey(tenantIdStr, schemaName, parentTableName, tableName);
-                @SuppressWarnings("deprecation") // FIXME: Remove when unintentionally deprecated method is fixed (HBASE-7870).
                 Delete linkDelete = new Delete(linkKey, clientTimeStamp);
                 tableMetaData.add(linkDelete);
             }

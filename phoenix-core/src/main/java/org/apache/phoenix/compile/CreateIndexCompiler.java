@@ -32,6 +32,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PTable.IndexType;
 
 public class CreateIndexCompiler {
     private final PhoenixStatement statement;
@@ -47,6 +48,10 @@ public class CreateIndexCompiler {
         final StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         List<ParseNode> splitNodes = create.getSplitNodes();
+        if (!splitNodes.isEmpty() && create.getIndexType() == IndexType.LOCAL) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SPLIT_LOCAL_INDEX)
+            .build().buildException();
+        }
         final byte[][] splits = new byte[splitNodes.size()][];
         for (int i = 0; i < splits.length; i++) {
             ParseNode node = splitNodes.get(i);
