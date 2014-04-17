@@ -210,7 +210,7 @@ public enum SQLExceptionCode {
     INSUFFICIENT_MULTI_TENANT_COLUMNS(1040, "42Y96", "A MULTI_TENANT table must have two or more PK columns with the first column being NOT NULL and of type VARCHAR or CHAR."),
     VIEW_WHERE_IS_CONSTANT(1045, "43A02", "WHERE clause in VIEW should not evaluate to a constant."),
     CANNOT_UPDATE_VIEW_COLUMN(1046, "43A03", "Column updated in VIEW may not differ from value specified in WHERE clause."),
-    TOO_MANY_VIEW_INDEXES(1047, "43A04", "Too many indexes have already been created on the physical table."),
+    TOO_MANY_INDEXES(1047, "43A04", "Too many indexes have already been created on the physical table."),
         
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
@@ -249,6 +249,8 @@ public enum SQLExceptionCode {
     SPLIT_POINT_NOT_CONSTANT(1105, "XCL04", "Split points must be constants."),
     BATCH_EXCEPTION(1106, "XCL05", "Exception while executing batch."),
     EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH(1107, "XCL06", "An executeUpdate is prohibited when the batch is not empty. Use clearBatch to empty the batch first."),
+    CANNOT_SPLIT_LOCAL_INDEX(1108,"XCL07", "Local index may not be pre-split"),
+    CANNOT_SALT_LOCAL_INDEX(1109,"XCL08", "Local index may not be salted"),
     
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).

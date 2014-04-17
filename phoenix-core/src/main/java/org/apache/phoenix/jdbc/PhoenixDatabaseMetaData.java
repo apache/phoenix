@@ -38,6 +38,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
+import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
@@ -174,6 +175,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] MULTI_TENANT_BYTES = Bytes.toBytes(MULTI_TENANT);
     public static final String VIEW_TYPE = "VIEW_TYPE";
     public static final byte[] VIEW_TYPE_BYTES = Bytes.toBytes(VIEW_TYPE);
+    public static final String INDEX_TYPE = "INDEX_TYPE";
+    public static final byte[] INDEX_TYPE_BYTES = Bytes.toBytes(INDEX_TYPE);
     public static final String LINK_TYPE = "LINK_TYPE";
     public static final byte[] LINK_TYPE_BYTES = Bytes.toBytes(LINK_TYPE);
     public static final String ARRAY_SIZE = "ARRAY_SIZE";
@@ -205,7 +208,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String KEY_SEQ = "KEY_SEQ";
     public static final byte[] KEY_SEQ_BYTES = Bytes.toBytes(KEY_SEQ);
     public static final String SUPERTABLE_NAME = "SUPERTABLE_NAME";
-    		
+    
     public static final String TYPE_ID = "TYPE_ID";
     
     private final PhoenixConnection connection;
@@ -855,7 +858,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 SALT_BUCKETS + "," +
                 MULTI_TENANT + "," +
                 VIEW_STATEMENT + "," +
-                SQLViewTypeFunction.NAME + "(" + VIEW_TYPE + ") AS " + VIEW_TYPE +
+                SQLViewTypeFunction.NAME + "(" + VIEW_TYPE + ") AS " + VIEW_TYPE + "," +
+                SQLIndexTypeFunction.NAME + "(" + INDEX_TYPE + ") AS " + INDEX_TYPE +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                 " where " + COLUMN_NAME + " is null" +
                 " and " + COLUMN_FAMILY + " is null");
