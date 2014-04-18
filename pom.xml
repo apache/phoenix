@@ -67,8 +67,8 @@
     <test.output.tofile>true</test.output.tofile>
 
     <!-- Hadoop Versions -->
-    <hbase-hadoop1.version>0.99.0-hadoop1-SNAPSHOT</hbase-hadoop1.version>
-    <hbase-hadoop2.version>0.99.0-hadoop2-SNAPSHOT</hbase-hadoop2.version>
+    <hbase-hadoop1.version>0.98.1-hadoop1</hbase-hadoop1.version>
+    <hbase-hadoop2.version>0.98.1-hadoop2</hbase-hadoop2.version>
     <hadoop-one.version>1.0.4</hadoop-one.version>
     <hadoop-two.version>2.2.0</hadoop-two.version>
 
