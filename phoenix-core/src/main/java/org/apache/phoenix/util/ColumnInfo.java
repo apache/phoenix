@@ -12,6 +12,7 @@ package org.apache.phoenix.util;
 
 import java.util.List;
 
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 
 import com.google.common.base.Preconditions;
@@ -46,6 +47,18 @@ public class ColumnInfo {
 
     public PDataType getPDataType() {
         return PDataType.fromTypeId(sqlType);
+    }
+    
+    /**
+     * Returns the column name without the associated Column Family. 
+     * @return
+     */
+    public String getDisplayName() {
+        int index = columnName.indexOf(QueryConstants.NAME_SEPARATOR);
+        if (index < 0) {
+            return columnName; 
+        }
+        return columnName.substring(index+1);
     }
 
     @Override
