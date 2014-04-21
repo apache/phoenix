@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.util.SchemaUtil.getEscapedFullColumnName;
+
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -27,10 +29,11 @@ import javax.annotation.Nullable;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
-public class QueryUtil {
+public final class QueryUtil {
 
     /**
      *  Column family name index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
@@ -53,6 +56,11 @@ public class QueryUtil {
      */
     public static final int DATA_TYPE_NAME_POSITION = 6;
 
+    /**
+     * Private constructor
+     */
+    private QueryUtil() {
+    }
     /**
      * Generate an upsert statement based on a list of {@code ColumnInfo}s with parameter markers. The list of
      * {@code ColumnInfo}s must contain at least one element.
@@ -81,7 +89,7 @@ public class QueryUtil {
                                     @Nullable
                                     @Override
                                     public String apply(@Nullable ColumnInfo columnInfo) {
-                                        return columnInfo.getColumnName();
+                                        return getEscapedFullColumnName(columnInfo.getColumnName());
                                     }
                                 })),
                 Joiner.on(", ").join(parameterList));
@@ -109,6 +117,35 @@ public class QueryUtil {
             parameterList.add("?");
         }
         return String.format("UPSERT INTO %s VALUES (%s)", tableName, Joiner.on(", ").join(parameterList));
+    }
+    
+    /**
+     * 
+     * @param fullTableName name of the table for which the select statement needs to be created.
+     * @param columnInfos  list of columns to be projected in the select statement.
+     * @return Select Query 
+     */
+    public static String constructSelectStatement(String fullTableName, List<ColumnInfo> columnInfos) {
+        Preconditions.checkNotNull(fullTableName,"Table name cannot be null");
+        if(columnInfos == null || columnInfos.isEmpty()) {
+             throw new IllegalArgumentException("At least one column must be provided");
+        }
+        // escape the table name to ensure it is case sensitive.
+        final String escapedFullTableName = SchemaUtil.getEscapedFullTableName(fullTableName);
+        StringBuilder sb = new StringBuilder();
+        sb.append("SELECT ");
+        for (ColumnInfo cinfo : columnInfos) {
+            if (cinfo != null) {
+                String fullColumnName = getEscapedFullColumnName(cinfo.getColumnName());
+                sb.append(fullColumnName);
+                sb.append(",");
+             }
+         }
+        // Remove the trailing comma
+        sb.setLength(sb.length() - 1);
+        sb.append(" FROM ");
+        sb.append(escapedFullTableName);
+        return sb.toString();
     }
 
     public static String getUrl(String server) {

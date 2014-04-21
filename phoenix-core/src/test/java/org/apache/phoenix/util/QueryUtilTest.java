@@ -17,12 +17,13 @@
  */
 package org.apache.phoenix.util;
 
-import com.google.common.collect.ImmutableList;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
 
 import java.sql.Types;
 
-import static org.junit.Assert.assertEquals;
+import org.junit.Test;
+
+import com.google.common.collect.ImmutableList;
 
 public class QueryUtilTest {
 
@@ -32,7 +33,7 @@ public class QueryUtilTest {
     @Test
     public void testConstructUpsertStatement_ColumnInfos() {
         assertEquals(
-                "UPSERT INTO MYTAB (ID, NAME) VALUES (?, ?)",
+                "UPSERT INTO MYTAB (\"ID\", \"NAME\") VALUES (?, ?)",
                 QueryUtil.constructUpsertStatement("MYTAB", ImmutableList.of(ID_COLUMN, NAME_COLUMN)));
 
     }
@@ -52,5 +53,12 @@ public class QueryUtilTest {
     @Test(expected=IllegalArgumentException.class)
     public void testConstructGenericUpsertStatement_NoColumns() {
         QueryUtil.constructGenericUpsertStatement("MYTAB", 0);
+    }
+    
+    @Test
+    public void testConstructSelectStatement() {
+        assertEquals(
+                "SELECT \"ID\",\"NAME\" FROM \"MYTAB\"",
+                QueryUtil.constructSelectStatement("MYTAB", ImmutableList.of(ID_COLUMN,NAME_COLUMN)));
     }
 }

@@ -24,15 +24,13 @@ import java.io.Reader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
-import java.util.StringTokenizer;
+import java.util.Set;
+import java.util.TreeSet;
 
-import com.google.common.base.Splitter;
-import com.google.common.collect.ImmutableList;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -49,14 +47,19 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.AmbiguousColumnException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableNotFoundException;
 
+import com.google.common.base.Splitter;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
 /**
@@ -258,7 +261,7 @@ public class PhoenixRuntime {
         };
     }
     
-    private static PTable getTable(Connection conn, String name) throws SQLException {
+    public static PTable getTable(Connection conn, String name) throws SQLException {
         PTable table = null;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         try {
@@ -273,6 +276,112 @@ public class PhoenixRuntime {
             table = result.getTable();
         }
         return table;
+    }
+    
+    /**
+     * Get list of ColumnInfos that contain Column Name and its associated
+     * PDataType for an import. The supplied list of columns can be null -- if it is non-null,
+     * it represents a user-supplied list of columns to be imported.
+     *
+     * @param conn Phoenix connection from which metadata will be read
+     * @param tableName Phoenix table name whose columns are to be checked. Can include a schema
+     *                  name
+     * @param columns user-supplied list of import columns, can be null
+     */
+    public static List<ColumnInfo> generateColumnInfo(Connection conn,
+            String tableName, List<String> columns)
+            throws SQLException {
+
+        PTable table = PhoenixRuntime.getTable(conn, tableName);
+        List<ColumnInfo> columnInfoList = Lists.newArrayList();
+        Set<String> unresolvedColumnNames = new TreeSet<String>();
+        if (columns == null) {
+            // use all columns in the table
+            for(PColumn pColumn : table.getColumns()) {
+               int sqlType = pColumn.getDataType().getResultSetSqlType();        
+               columnInfoList.add(new ColumnInfo(pColumn.toString(), sqlType));
+            }
+        } else {
+            // Leave "null" as indication to skip b/c it doesn't exist
+            for (int i = 0; i < columns.size(); i++) {
+                String columnName = columns.get(i);
+                try {
+                    ColumnInfo columnInfo = PhoenixRuntime.getColumnInfo(table, columnName);
+                    columnInfoList.add(columnInfo);
+                } catch (ColumnNotFoundException cnfe) {
+                    unresolvedColumnNames.add(columnName.trim());
+                } catch (AmbiguousColumnException ace) {
+                    unresolvedColumnNames.add(columnName.trim());
+                }
+            }
+        }
+        // if there exists columns that cannot be resolved, error out.
+        if (unresolvedColumnNames.size()>0) {
+                StringBuilder exceptionMessage = new StringBuilder();
+                boolean first = true;
+                exceptionMessage.append("Unable to resolve these column names:\n");
+                for (String col : unresolvedColumnNames) {
+                    if (first) first = false;
+                    else exceptionMessage.append(",");
+                    exceptionMessage.append(col);
+                }
+                exceptionMessage.append("\nAvailable columns with column families:\n");
+                first = true;
+                for (PColumn pColumn : table.getColumns()) {
+                    if (first) first = false;
+                    else exceptionMessage.append(",");
+                    exceptionMessage.append(pColumn.toString());
+                }
+                throw new SQLException(exceptionMessage.toString()); 
+      }
+       return columnInfoList;
+    }
+
+    /**
+     * Returns the column info for the given column for the given table.
+     * 
+     * @param table
+     * @param columnName User-specified column name. May be family-qualified or bare.
+     * @return columnInfo associated with the column in the table
+     * @throws SQLException if parameters are null or if column is not found or if column is ambiguous.
+     */
+    public static ColumnInfo getColumnInfo(PTable table, String columnName) throws SQLException {
+        if (table==null) {
+            throw new SQLException("Table must not be null.");
+        }
+        if (columnName==null) {
+            throw new SQLException("columnName must not be null.");
+        }
+        columnName = columnName.trim().toUpperCase(); 
+        PColumn pColumn = null;
+        if (columnName.contains(QueryConstants.NAME_SEPARATOR)) {
+            String[] tokens = columnName.split(QueryConstants.NAME_SEPARATOR_REGEX);
+            if (tokens.length!=2) {
+                throw new SQLException(String.format("Unable to process column %s, expected family-qualified name.",columnName));
+            }
+            String familyName = tokens[0];
+            String familyColumn = tokens[1];
+            PColumnFamily family = table.getColumnFamily(familyName);
+            pColumn = family.getColumn(familyColumn);
+        } else {
+            pColumn = table.getColumn(columnName);
+        }
+        return getColumnInfo(pColumn);
+    }
+    
+    /**
+     * Constructs a column info for the supplied pColumn
+     * @param pColumn
+     * @return columnInfo
+     * @throws SQLException if the parameter is null.
+     */
+    public static ColumnInfo getColumnInfo(PColumn pColumn) throws SQLException {
+        if (pColumn==null) {
+            throw new SQLException("pColumn must not be null.");
+        }
+        int sqlType = pColumn.getDataType().getResultSetSqlType();
+        ColumnInfo columnInfo = new ColumnInfo(pColumn.toString(),sqlType);
+        return columnInfo;
     }
     
     /**

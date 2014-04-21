@@ -18,6 +18,8 @@
 package org.apache.phoenix.pig;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Properties;
 
 import org.apache.commons.cli.CommandLine;
@@ -31,15 +33,14 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.OutputFormat;
 import org.apache.hadoop.mapreduce.RecordWriter;
+import org.apache.phoenix.pig.hadoop.PhoenixOutputFormat;
+import org.apache.phoenix.pig.hadoop.PhoenixRecord;
 import org.apache.pig.ResourceSchema;
 import org.apache.pig.ResourceSchema.ResourceFieldSchema;
 import org.apache.pig.StoreFuncInterface;
 import org.apache.pig.data.Tuple;
 import org.apache.pig.impl.util.ObjectSerializer;
 import org.apache.pig.impl.util.UDFContext;
-
-import org.apache.phoenix.pig.hadoop.PhoenixOutputFormat;
-import org.apache.phoenix.pig.hadoop.PhoenixRecord;
 
 /**
  * StoreFunc that uses Phoenix to store data into HBase.
@@ -52,11 +53,21 @@ import org.apache.phoenix.pig.hadoop.PhoenixRecord;
  * argument to this StoreFunc is the server, the 2nd argument is the batch size
  * for upserts via Phoenix.
  * 
+ * Alternative usage: A = load 'testdata' as (a:chararray, b:chararray, 
+ *  e: datetime); STORE A into 'hbase://CORE.ENTITY_HISTORY/ID,F.B,F.E' using
+ * org.apache.bdaas.PhoenixHBaseStorage('localhost','-batchSize 5000');
+ * 
+ * The above reads a file 'testdata' and writes the elements ID, F.B, and F.E to HBase. 
+ * In this example, ID is the row key, and F is the column family for the data elements.  
+ * First argument to this StoreFunc is the server, the 2nd argument is the batch size
+ * for upserts via Phoenix. In this case, less than the full table row is required.
+ * For configuration message, look in the info log file.
+ *
  * Note that Pig types must be in sync with the target Phoenix data types. This
  * StoreFunc tries best to cast based on input Pig types and target Phoenix data
  * types, but it is recommended to supply appropriate schema.
  * 
- * This is only a STORE implementation. LoadFunc coming soon.
+ * 
  * 
  * 
  * 
@@ -65,7 +76,6 @@ import org.apache.phoenix.pig.hadoop.PhoenixRecord;
 public class PhoenixHBaseStorage implements StoreFuncInterface {
 
 	private PhoenixPigConfiguration config;
-	private String tableName;
 	private RecordWriter<NullWritable, PhoenixRecord> writer;
 	private String contextSignature = null;
 	private ResourceSchema schema;	
@@ -118,17 +128,28 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
 	 */
 	@Override
 	public void setStoreLocation(String location, Job job) throws IOException {
-		String prefix = "hbase://";
-		if (location.startsWith(prefix)) {
-			tableName = location.substring(prefix.length());
-		}
-		config = new PhoenixPigConfiguration(job.getConfiguration());
-		config.configure(server, tableName, batchSize);
-
-		String serializedSchema = getUDFProperties().getProperty(contextSignature + SCHEMA);
-		if (serializedSchema != null) {
-			schema = (ResourceSchema) ObjectSerializer.deserialize(serializedSchema);
-		}
+	    URI locationURI;
+        try {
+            locationURI = new URI(location);
+            if (!"hbase".equals(locationURI.getScheme())) {
+                throw new IOException(String.format("Location must use the hbase protocol, hbase://tableName[/columnList]. Supplied location=%s",location));
+            }
+            String tableName = locationURI.getAuthority();
+            // strip off the leading path token '/'
+            String columns = null;
+            if(!locationURI.getPath().isEmpty()) {
+                columns = locationURI.getPath().substring(1);
+            }
+            config = new PhoenixPigConfiguration(job.getConfiguration());
+            config.configure(server, tableName, batchSize, columns);
+            
+            String serializedSchema = getUDFProperties().getProperty(contextSignature + SCHEMA);
+            if (serializedSchema != null) {
+                schema = (ResourceSchema) ObjectSerializer.deserialize(serializedSchema);
+            }
+        } catch (URISyntaxException e) {
+            throw new IOException(String.format("Location must use the hbase protocol, hbase://tableName[/columnList]. Supplied location=%s",location),e);
+        }
 	}
 
 	@SuppressWarnings("unchecked")
