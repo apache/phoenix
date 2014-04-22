@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.hadoop.hbase.HColumnDescriptor.DEFAULT_TTL;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -27,12 +29,14 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
-import org.junit.Test;
-
+import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.Test;
 
 public class CreateTableIT extends BaseClientManagedTimeIT {
     
@@ -99,4 +103,218 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("DROP TABLE m_interface_job");
     }
+    
+    /**
+     * Test that when the ddl only has PK cols, ttl is set.
+     */
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs1() throws Exception {
+    	String ddl = "create table IF NOT EXISTS TEST1 ("
+    		    + " id char(1) NOT NULL,"
+    		    + " col1 integer NOT NULL,"
+    		    + " col2 bigint NOT NULL,"
+    		    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
+    		    + " ) TTL=86400, SALT_BUCKETS = 4";
+    	long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+    	conn.createStatement().execute(ddl);
+    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST1")).getColumnFamilies();
+    	assertEquals(1, columnFamilies.length);
+    	assertEquals(86400, columnFamilies[0].getTimeToLive());
+    }
+    
+    /**
+     * Tests that when:
+     * 1) DDL has both pk as well as key value columns
+     * 2) Key value columns have different column family names
+     * 3) TTL specifier doesn't have column family name.
+     * 
+     * Then:
+     * 1)TTL is set.
+     * 2)All column families have the same TTL.  
+     */
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs2() throws Exception {
+    	String ddl = "create table IF NOT EXISTS TEST2 ("
+    			+ " id char(1) NOT NULL,"
+    			+ " col1 integer NOT NULL,"
+    			+ " b.col2 bigint,"
+    			+ " c.col3 bigint, "
+    			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+    			+ " ) TTL=86400, SALT_BUCKETS = 4";
+    	long ts = nextTimestamp();
+    	Properties props = new Properties();
+    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+    	Connection conn = DriverManager.getConnection(getUrl(), props);
+    	conn.createStatement().execute(ddl);
+    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST2")).getColumnFamilies();
+    	assertEquals(2, columnFamilies.length);
+    	assertEquals(86400, columnFamilies[0].getTimeToLive());
+    	assertEquals("B", columnFamilies[0].getNameAsString());
+    	assertEquals(86400, columnFamilies[1].getTimeToLive());
+    	assertEquals("C", columnFamilies[1].getNameAsString());
+    }
+    
+    /**
+     * Tests that when:
+     * 1) DDL has both pk as well as key value columns
+     * 2) Key value columns have both default and explicit column family names
+     * 3) TTL specifier doesn't have column family name.
+     * 
+     * Then:
+     * 1)TTL is set.
+     * 2)All column families have the same TTL.  
+     */
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs3() throws Exception {
+    	String ddl = "create table IF NOT EXISTS TEST3 ("
+    			+ " id char(1) NOT NULL,"
+    			+ " col1 integer NOT NULL,"
+    			+ " b.col2 bigint,"
+    			+ " col3 bigint, "
+    			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+    			+ " ) TTL=86400, SALT_BUCKETS = 4";
+    	long ts = nextTimestamp();
+    	Properties props = new Properties();
+    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+    	Connection conn = DriverManager.getConnection(getUrl(), props);
+    	conn.createStatement().execute(ddl);
+    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST3")).getColumnFamilies();
+    	assertEquals(2, columnFamilies.length);
+    	assertEquals("0", columnFamilies[0].getNameAsString());
+    	assertEquals(86400, columnFamilies[0].getTimeToLive());
+    	assertEquals("B", columnFamilies[1].getNameAsString());
+    	assertEquals(86400, columnFamilies[1].getTimeToLive());
+    }
+    
+    /**
+     * Tests that when:
+     * 1) DDL has both pk as well as key value columns
+     * 2) Key value columns have both default and explicit column family names
+     * 3) TTL specifier has the explicit column family name.
+     * 
+     * Then:
+     * 1)TTL is set.
+     * 2)The default column family has DEFAULT_TTL.
+     * 3)The explicit column family has the TTL specified in DDL.  
+     */
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs4() throws Exception {
+    	String ddl = "create table IF NOT EXISTS TEST4 ("
+    			+ " id char(1) NOT NULL,"
+    			+ " col1 integer NOT NULL,"
+    			+ " b.col2 bigint,"
+    			+ " col3 bigint, "
+    			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+    			+ " ) b.TTL=86400, SALT_BUCKETS = 4";
+    	long ts = nextTimestamp();
+    	Properties props = new Properties();
+    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+    	Connection conn = DriverManager.getConnection(getUrl(), props);
+    	conn.createStatement().execute(ddl);
+    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST4")).getColumnFamilies();
+    	assertEquals(2, columnFamilies.length);
+    	assertEquals("0", columnFamilies[0].getNameAsString());
+    	assertEquals(DEFAULT_TTL, columnFamilies[0].getTimeToLive());
+    	assertEquals("B", columnFamilies[1].getNameAsString());
+    	assertEquals(86400, columnFamilies[1].getTimeToLive());
+    }
+    
+    /**
+     * Tests that when:
+     * 1) DDL has both pk as well as key value columns
+     * 2) Key value columns have explicit column family names
+     * 3) Different TTL specifiers for different column family names.
+     * 
+     * Then:
+     * 1)TTL is set.
+     * 2)Each explicit column family has the TTL as specified in DDL.  
+     */
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs5() throws Exception {
+    	String ddl = "create table IF NOT EXISTS TEST5 ("
+    			+ " id char(1) NOT NULL,"
+    			+ " col1 integer NOT NULL,"
+    			+ " b.col2 bigint,"
+    			+ " c.col3 bigint, "
+    			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+    			+ " ) b.TTL=86400, c.TTL=10000, SALT_BUCKETS = 4";
+    	long ts = nextTimestamp();
+    	Properties props = new Properties();
+    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+    	Connection conn = DriverManager.getConnection(getUrl(), props);
+    	conn.createStatement().execute(ddl);
+    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST5")).getColumnFamilies();
+    	assertEquals(2, columnFamilies.length);
+    	assertEquals("B", columnFamilies[0].getNameAsString());
+    	assertEquals(86400, columnFamilies[0].getTimeToLive());
+    	assertEquals("C", columnFamilies[1].getNameAsString());
+    	assertEquals(10000, columnFamilies[1].getTimeToLive());
+    }
+    
+    /**
+     * Tests that when:
+     * 1) DDL has both pk as well as key value columns
+     * 2) There is a default column family specified.
+     *  
+     * Then:
+     * 1)TTL is set for the specified default column family.
+     * 
+     */
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs6() throws Exception {
+    	String ddl = "create table IF NOT EXISTS TEST6 ("
+    			+ " id char(1) NOT NULL,"
+    			+ " col1 integer NOT NULL,"
+    			+ " col2 bigint,"
+    			+ " col3 bigint, "
+    			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+    			+ " ) DEFAULT_COLUMN_FAMILY='a', TTL=10000, SALT_BUCKETS = 4";
+    	long ts = nextTimestamp();
+    	Properties props = new Properties();
+    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+    	Connection conn = DriverManager.getConnection(getUrl(), props);
+    	conn.createStatement().execute(ddl);
+    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST6")).getColumnFamilies();
+    	assertEquals(1, columnFamilies.length);
+    	assertEquals("a", columnFamilies[0].getNameAsString());
+    	assertEquals(10000, columnFamilies[0].getTimeToLive());
+    }
+    
+    /**
+     * Tests that when:
+     * 1) DDL has only pk columns
+     * 2) There is a default column family specified.
+     *  
+     * Then:
+     * 1)TTL is set for the specified default column family.
+     * 
+     */
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs7() throws Exception {
+    	String ddl = "create table IF NOT EXISTS TEST7 ("
+    			+ " id char(1) NOT NULL,"
+    			+ " col1 integer NOT NULL,"
+    			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+    			+ " ) DEFAULT_COLUMN_FAMILY='a', TTL=10000, SALT_BUCKETS = 4";
+    	long ts = nextTimestamp();
+    	Properties props = new Properties();
+    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+    	Connection conn = DriverManager.getConnection(getUrl(), props);
+    	conn.createStatement().execute(ddl);
+    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST7")).getColumnFamilies();
+    	assertEquals(1, columnFamilies.length);
+    	assertEquals("a", columnFamilies[0].getNameAsString());
+    	assertEquals(10000, columnFamilies[0].getTimeToLive());
+    }
+
 }
