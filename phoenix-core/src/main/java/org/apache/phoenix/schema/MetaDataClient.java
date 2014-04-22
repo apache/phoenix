@@ -1040,6 +1040,12 @@ public class MetaDataClient {
                 }
             }
             
+            if (familyNames.isEmpty()) {
+            	//if there are no family names, use the default column family name. This also takes care of the case when
+            	//the table ddl has only PK cols present (which means familyNames is empty). 
+                byte[] cf = defaultFamilyName == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : Bytes.toBytes(defaultFamilyName);
+                familyPropList.add(new Pair<byte[],Map<String,Object>>(cf, commonFamilyProps));
+            }
             
             // Bootstrapping for our SYSTEM.TABLE that creates itself before it exists 
             if (SchemaUtil.isMetaTable(schemaName,tableName)) {
