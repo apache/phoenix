@@ -106,6 +106,12 @@ public class HintNode {
         return new HintNode(hints);
     }
     
+    public static HintNode combine(HintNode hintNode, HintNode override) {
+        Map<Hint,String> hints = new HashMap<Hint,String>(hintNode.hints);
+        hints.putAll(override.hints);
+        return new HintNode(hints);
+    }
+    
     private HintNode() {
         hints = new HashMap<Hint,String>();
     }

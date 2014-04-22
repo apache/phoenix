@@ -98,6 +98,10 @@ public class LimitCompiler {
     
         @Override
         public Void visit(BindParseNode node) throws SQLException {
+            // This is for static evaluation in SubselectRewriter.
+            if (context == null)
+                return null;
+                        
             Object value = context.getBindManager().getBindValue(node);
             context.getBindManager().addParamMetaData(node, LIMIT_DATUM);
             // Resolve the bind value, create a LiteralParseNode, and call the visit method for it.

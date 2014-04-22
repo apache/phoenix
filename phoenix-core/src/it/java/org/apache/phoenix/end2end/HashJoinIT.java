@@ -374,7 +374,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 /*
                  * testNestedSubqueries()
                  *     SELECT * FROM (SELECT customer_id cid, name, phone, address, loc_id, date FROM joinCustomerTable) AS c 
-                 *     INNER JOIN (SELECT o.oid ooid, o.cid ocid, o.iid oiid, o.price oprice, o.quantity oquantity, o.date odate, 
+                 *     INNER JOIN (SELECT o.oid ooid, o.cid ocid, o.iid oiid, o.price * o.quantity, o.date odate, 
                  *     qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, 
                  *     qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id 
                  *         FROM (SELECT item_id iid, customer_id cid, order_id oid, price, quantity, date FROM joinOrderTable) AS o 
@@ -680,7 +680,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 /*
                  * testNestedSubqueries()
                  *     SELECT * FROM (SELECT customer_id cid, name, phone, address, loc_id, date FROM joinCustomerTable) AS c 
-                 *     INNER JOIN (SELECT o.oid ooid, o.cid ocid, o.iid oiid, o.price oprice, o.quantity oquantity, o.date odate, 
+                 *     INNER JOIN (SELECT o.oid ooid, o.cid ocid, o.iid oiid, o.price * o.quantity, o.date odate, 
                  *     qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, 
                  *     qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id 
                  *         FROM (SELECT item_id iid, customer_id cid, order_id oid, price, quantity, date FROM joinOrderTable) AS o 
@@ -2727,8 +2727,8 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testJoinWithSubquery() throws Exception {
-        String query1 = "SELECT item.\"item_id\", item.name, supp.sid, supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item INNER JOIN (SELECT \"supplier_id\" sid, name FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + " WHERE name BETWEEN 'S1' AND 'S5') AS supp ON item.\"supplier_id\" = supp.sid";
-        String query2 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item INNER JOIN (SELECT \"supplier_id\", name FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + ") AS supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.name = 'S1' OR supp.name = 'S5')";
+        String query1 = "SELECT item.\"item_id\", item.name, supp.sid, supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item INNER JOIN (SELECT reverse(loc_id), \"supplier_id\" sid, name FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + " WHERE name BETWEEN 'S1' AND 'S5') AS supp ON item.\"supplier_id\" = supp.sid";
+        String query2 = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item INNER JOIN (SELECT reverse(loc_id), \"supplier_id\", name FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + ") AS supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.name = 'S1' OR supp.name = 'S5')";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -2900,7 +2900,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 + " ON o.iid = q.iid LEFT JOIN (SELECT \"customer_id\" cid, name FROM " 
                 + JOIN_CUSTOMER_TABLE_FULL_NAME + ") AS c ON c.cid = o.cid GROUP BY q.iname ORDER BY q.iname";
         String query2 = "SELECT * FROM (SELECT \"customer_id\" cid, name, phone, address, loc_id, date FROM " + JOIN_CUSTOMER_TABLE_FULL_NAME + ") AS c INNER JOIN " 
-                + "(SELECT o.oid ooid, o.cid ocid, o.iid oiid, o.price oprice, o.quantity oquantity, o.date odate, qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id FROM (SELECT \"item_id\" iid, \"customer_id\" cid, \"order_id\" oid, price, quantity, date FROM " + JOIN_ORDER_TABLE_FULL_NAME + ") AS o INNER JOIN " 
+                + "(SELECT o.oid ooid, o.cid ocid, o.iid oiid, o.price * o.quantity, o.date odate, qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id FROM (SELECT \"item_id\" iid, \"customer_id\" cid, \"order_id\" oid, price, quantity, date FROM " + JOIN_ORDER_TABLE_FULL_NAME + ") AS o INNER JOIN " 
                 + "(SELECT i.iid iiid, i.name iname, i.price iprice, i.discount1 idiscount1, i.discount2 idiscount2, i.sid isid, i.description idescription, s.sid ssid, s.name sname, s.phone sphone, s.address saddress, s.loc_id sloc_id FROM (SELECT \"supplier_id\" sid, name, phone, address, loc_id FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + ") AS s RIGHT JOIN (SELECT \"item_id\" iid, name, price, discount1, discount2, \"supplier_id\" sid, description FROM " + JOIN_ITEM_TABLE_FULL_NAME + ") AS i ON i.sid = s.sid) as qi" 
                 + " ON o.iid = qi.iiid) as qo ON c.cid = qo.ocid" 
                 + " WHERE c.cid <= '0000000005' AND qo.ooid != '000000000000003' AND qo.iname != 'T3' ORDER BY c.cid, qo.iname";
@@ -2944,8 +2944,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             assertEquals(rs.getString("qo.ooid"), "000000000000002");
             assertEquals(rs.getString("qo.ocid"), "0000000003");
             assertEquals(rs.getString("qo.oiid"), "0000000006");
-            assertEquals(rs.getInt("qo.oprice"), 552);
-            assertEquals(rs.getInt("qo.oquantity"), 2000);
+            assertEquals(rs.getInt(10), 1104000);
             assertEquals(rs.getTimestamp("qo.odate"), new Timestamp(format.parse("2013-11-25 10:06:29").getTime()));
             assertEquals(rs.getString("qo.iiid"), "0000000006");
             assertEquals(rs.getString("qo.iname"), "T6");
@@ -2969,8 +2968,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             assertEquals(rs.getString("qo.ooid"), "000000000000001");
             assertEquals(rs.getString("qo.ocid"), "0000000004");
             assertEquals(rs.getString("qo.oiid"), "0000000001");
-            assertEquals(rs.getInt("qo.oprice"), 100);
-            assertEquals(rs.getInt("qo.oquantity"), 1000);
+            assertEquals(rs.getInt(10), 100000);
             assertEquals(rs.getTimestamp("qo.odate"), new Timestamp(format.parse("2013-11-22 14:22:56").getTime()));
             assertEquals(rs.getString("qo.iiid"), "0000000001");
             assertEquals(rs.getString("qo.iname"), "T1");
@@ -2994,8 +2992,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             assertEquals(rs.getString("qo.ooid"), "000000000000004");
             assertEquals(rs.getString("qo.ocid"), "0000000004");
             assertEquals(rs.getString("qo.oiid"), "0000000006");
-            assertEquals(rs.getInt("qo.oprice"), 510);
-            assertEquals(rs.getInt("qo.oquantity"), 4000);
+            assertEquals(rs.getInt(10), 2040000);
             assertEquals(rs.getTimestamp("qo.odate"), new Timestamp(format.parse("2013-11-26 13:26:04").getTime()));
             assertEquals(rs.getString("qo.iiid"), "0000000006");
             assertEquals(rs.getString("qo.iname"), "T6");

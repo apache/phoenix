@@ -551,7 +551,6 @@ select_node returns [SelectStatement ret]
 
 // Parse a full select expression structure.
 hinted_select_node returns [SelectStatement ret]
-@init{ contextStack.push(new ParseContext()); }
     :   (hint=hintClause)? 
         s=select_node
         { $ret = factory.select(s, hint); }

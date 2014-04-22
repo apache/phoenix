@@ -43,6 +43,7 @@ import org.apache.phoenix.compile.DropSequenceCompiler;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExpressionProjector;
 import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.SubselectRewriter;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -259,8 +260,9 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         @SuppressWarnings("unchecked")
         @Override
         public QueryPlan compilePlan(PhoenixStatement stmt) throws SQLException {
-            ColumnResolver resolver = FromCompiler.getResolverForQuery(this, stmt.getConnection());
-            SelectStatement select = StatementNormalizer.normalize(this, resolver);
+            SelectStatement select = SubselectRewriter.flatten(this, stmt.getConnection());
+            ColumnResolver resolver = FromCompiler.getResolverForQuery(select, stmt.getConnection());
+            select = StatementNormalizer.normalize(select, resolver);
             return new QueryCompiler(stmt, select, resolver).compile();
         }
     }

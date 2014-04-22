@@ -204,10 +204,6 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         this.nodeCount = 0;
     }
     
-    protected boolean visitDerivedTableNode() {
-        return true;
-    }
-    
     private static interface CompoundNodeFactory {
         ParseNode createNode(List<ParseNode> children);
     }
@@ -532,15 +528,7 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
 
         @Override
         public TableNode visit(DerivedTableNode subselectNode) throws SQLException {
-            if (!parseNodeRewriter.visitDerivedTableNode())
-                return subselectNode;
-            
-            SelectStatement select = subselectNode.getSelect();
-            SelectStatement normSelect = rewrite(select, parseNodeRewriter);
-            if (select == normSelect)
-                return subselectNode;
-            
-            return NODE_FACTORY.derivedTable(subselectNode.getAlias(), normSelect);
+            return subselectNode;
         }
 	    
 	}
