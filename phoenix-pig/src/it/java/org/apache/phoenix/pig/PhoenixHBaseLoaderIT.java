@@ -75,7 +75,7 @@ public class PhoenixHBaseLoaderIT {
     private static Configuration conf;
 
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void setUpBeforeClass() throws Exception {
         hbaseTestUtil = new HBaseTestingUtility();
         hbaseTestUtil.getConfiguration().set(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         hbaseTestUtil.startMiniCluster();
@@ -91,7 +91,7 @@ public class PhoenixHBaseLoaderIT {
      }
     
     @Before
-    public void beforeTest() throws Exception {
+    public void setUp() throws Exception {
         pigServer = new PigServer(ExecType.LOCAL,
                 ConfigurationUtil.toProperties(conf));
     }
@@ -434,7 +434,6 @@ public class PhoenixHBaseLoaderIT {
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
         conn.close();
-        PhoenixDriver.INSTANCE.close();
         hbaseTestUtil.shutdownMiniCluster();
     }
 }
