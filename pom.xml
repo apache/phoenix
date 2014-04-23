@@ -170,9 +170,11 @@
           <version>${maven.rat.version}</version>
           <configuration>
             <excludes>
-              <exclude>CHANGES.txt</exclude>
+              <exclude>CHANGES</exclude>
               <exclude>README.md</exclude>
+              <exclude>README</exclude>
 	      <exclude>dev/phoenix.importorder</exclude>
+              <exclude>dev/release_files/**</exclude>
               <exclude>**/target/**</exclude>
               <exclude>**/*.versionsBackup</exclude>
               <!-- exclude docs -->

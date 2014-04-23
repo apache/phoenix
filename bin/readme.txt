@@ -5,31 +5,31 @@ https://github.com/julianhyde/sqlline
 Execute SQL from command line. Sqlline manual is available at http://www.hydromatic.net/sqlline/manual.html
 	
 	Usage: 
-	$ sqlline.sh <zookeeper> <optional_sql_file> 
+	$ sqlline.py <zookeeper> <optional_sql_file> 
 	Example: 
-	$ sqlline.sh localhost
-	$ sqlline.sh localhost ../examples/STOCK_SYMBOL.sql
+	$ sqlline.py localhost
+	$ sqlline.py localhost <examples dir>/STOCK_SYMBOL.sql
 
-psql.sh
+psql.py
 =======
 
 Usage: psql [-t table-name] [-h comma-separated-column-names | in-line] <zookeeper>  <path-to-sql-or-csv-file>...
 
 Example 1. Create table, upsert row and run query using single .sql file
-./psql localhost ../examples/STOCK_SYMBOL.sql
+./psql.py localhost <examples dir>/STOCK_SYMBOL.sql
 
 Example 2. Create table, load CSV data and run queries using .csv and .sql files:
-./psql.sh localhost ../examples/WEB_STAT.sql ../examples/WEB_STAT.csv ../examples/WEB_STAT_QUERIES.sql
+./psql.py localhost <examples dir>/WEB_STAT.sql <examples dir>/WEB_STAT.csv <examples dir>/WEB_STAT_QUERIES.sql
 
 Note: Please see comments in WEB_STAT_QUERIES.sql for the sample queries being executed
 
-performance.sh
+performance.py
 ==============
 
 Usage: performance <zookeeper> <row count>
 
 Example: Generates and upserts 1000000 rows and time basic queries on this data
-./performance.sh localhost 1000000
+./performance.py localhost 1000000
 
 CSV MapReduce Loader
 ====================
