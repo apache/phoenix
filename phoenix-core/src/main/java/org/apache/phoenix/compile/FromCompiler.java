@@ -146,16 +146,16 @@ public class FromCompiler {
      * @return the column resolver
      * @throws SQLException
      * @throws SQLFeatureNotSupportedException
-     *             if unsupported constructs appear in the FROM clause. Currently only a single table name is supported.
+     *             if unsupported constructs appear in the FROM clause
      * @throws TableNotFoundException
      *             if table name not found in schema
      */
     public static ColumnResolver getResolverForQuery(SelectStatement statement, PhoenixConnection connection)
     		throws SQLException {
     	List<TableNode> fromNodes = statement.getFrom();
-        if (!statement.isJoin())
-            return new SingleTableColumnResolver(connection, (NamedTableNode)fromNodes.get(0), true);
-
+        if (!statement.isJoin() && fromNodes.get(0) instanceof NamedTableNode)
+            return new SingleTableColumnResolver(connection, (NamedTableNode) fromNodes.get(0), true);
+        
         MultiTableColumnResolver visitor = new MultiTableColumnResolver(connection);
         for (TableNode node : fromNodes) {
             node.accept(visitor);
@@ -406,12 +406,15 @@ public class FromCompiler {
                     
                     alias = SchemaUtil.normalizeIdentifier(node.getAlias());
                 }
-                if (alias != null) {
-                    PColumnImpl column = new PColumnImpl(PNameFactory.newName(alias), 
-                            PNameFactory.newName(QueryConstants.DEFAULT_COLUMN_FAMILY), 
-                            null, 0, 0, true, position++, SortOrder.ASC, null, null, false);
-                    columns.add(column);
+                if (alias == null) {
+                    // Use position as column name for anonymous columns, which can be 
+                    // referenced by an outer wild-card select.
+                    alias = String.valueOf(position);
                 }
+                PColumnImpl column = new PColumnImpl(PNameFactory.newName(alias), 
+                        PNameFactory.newName(QueryConstants.DEFAULT_COLUMN_FAMILY), 
+                        null, 0, 0, true, position++, SortOrder.ASC, null, null, false);
+                columns.add(column);
             }
             PTable t = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME, 
                     PTableType.SUBQUERY, null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM, 

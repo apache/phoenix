@@ -33,7 +33,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.JoinCompiler.JoinTable;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -129,13 +128,12 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
     }
     
     private static JoinTable getJoinTable(String query, PhoenixConnection connection) throws SQLException {
-        Scan scan = new Scan();
         SQLParser parser = new SQLParser(query);
-        SelectStatement select = parser.parseQuery();
+        SelectStatement select = SubselectRewriter.flatten(parser.parseQuery(), connection);
         ColumnResolver resolver = FromCompiler.getResolverForQuery(select, connection);
         select = StatementNormalizer.normalize(select, resolver);
-        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, scan);
-        return JoinCompiler.compile(select, context.getResolver());        
+        PhoenixStatement stmt = connection.createStatement().unwrap(PhoenixStatement.class);
+        return JoinCompiler.compile(stmt, select, resolver);        
     }
 }
 
