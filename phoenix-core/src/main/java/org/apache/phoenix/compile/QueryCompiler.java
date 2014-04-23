@@ -54,6 +54,7 @@ import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ScanUtil;
 
@@ -118,12 +119,12 @@ public class QueryCompiler {
         List<Object> binds = statement.getParameters();
         StatementContext context = new StatementContext(statement, resolver, scan);
         if (select.isJoin()) {
-            select = JoinCompiler.optimize(context, select, statement);
+            select = JoinCompiler.optimize(statement, select, resolver);
             if (this.select != select) {
                 ColumnResolver resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
                 context = new StatementContext(statement, resolver, scan);
             }
-            JoinTable joinTable = JoinCompiler.compile(select, context.getResolver());
+            JoinTable joinTable = JoinCompiler.compile(statement, select, context.getResolver());
             return compileJoinQuery(context, binds, joinTable, false);
         } else {
             return compileSingleQuery(context, select, binds, parallelIteratorFactory);
@@ -281,6 +282,7 @@ public class QueryCompiler {
     
     protected QueryPlan compileSubquery(SelectStatement subquery) throws SQLException {
         ColumnResolver resolver = FromCompiler.getResolverForQuery(subquery, this.statement.getConnection());
+        subquery = StatementNormalizer.normalize(subquery, resolver);
         QueryPlan plan = new QueryCompiler(this.statement, subquery, resolver).compile();
         return statement.getConnection().getQueryServices().getOptimizer().optimize(statement, plan);
     }
@@ -290,6 +292,11 @@ public class QueryCompiler {
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
+        
+        // TODO PHOENIX-944. See DerivedTableIT for a list of unsupported cases.
+        if (table.getType() == PTableType.SUBQUERY)
+            throw new SQLFeatureNotSupportedException("Complex nested queries not supported.");
+        
         ParseNode viewWhere = null;
         if (table.getViewStatement() != null) {
             viewWhere = new SQLParser(table.getViewStatement()).parseQuery().getWhere();

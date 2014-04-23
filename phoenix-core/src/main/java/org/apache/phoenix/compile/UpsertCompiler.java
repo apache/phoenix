@@ -352,6 +352,7 @@ public class UpsertCompiler {
         if (valueNodes == null) {
             SelectStatement select = upsert.getSelect();
             assert(select != null);
+            select = SubselectRewriter.flatten(select, connection);
             ColumnResolver selectResolver = FromCompiler.getResolverForQuery(select, connection);
             select = StatementNormalizer.normalize(select, selectResolver);
             select = prependTenantAndViewConstants(table, select, tenantId, addViewColumnsToBe);
