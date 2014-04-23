@@ -21,7 +21,7 @@
 -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.phoenix</groupId>
@@ -37,7 +37,7 @@
       <artifactId>phoenix-core</artifactId>
     </dependency>
     <dependency>
-	  <groupId>org.apache.phoenix</groupId>
+      <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
       <classifier>tests</classifier>
       <scope>test</scope>
@@ -50,13 +50,26 @@
       <groupId>org.mockito</groupId>
       <artifactId>mockito-all</artifactId>
     </dependency>
-     <!-- Test Dependencies -->
+    <!-- Test Dependencies -->
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
     </dependency>
   </dependencies>
-  
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+
   <profiles>
     <!-- Profile for building against Hadoop 1. Active by default. Not used if another 
       Hadoop profile is specified with mvn -Dhadoop.profile=foo -->
@@ -127,7 +140,7 @@
           <version>${hbase-hadoop2.version}</version>
           <type>test-jar</type>
           <scope>test</scope>
-        </dependency>        
+        </dependency>
         <dependency>
           <groupId>org.apache.hbase</groupId>
           <artifactId>hbase-common</artifactId>
@@ -168,7 +181,7 @@
           <version>${hbase-hadoop2.version}</version>
           <type>test-jar</type>
           <scope>test</scope>
-        </dependency>        
+        </dependency>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-common</artifactId>
