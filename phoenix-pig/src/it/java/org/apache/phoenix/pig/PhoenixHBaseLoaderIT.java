@@ -38,6 +38,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -75,8 +76,9 @@ public class PhoenixHBaseLoaderIT {
     private static Configuration conf;
 
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void setUpBeforeClass() throws Exception {
         hbaseTestUtil = new HBaseTestingUtility();
+        ConfigUtil.setReplicationConfigIfAbsent(hbaseTestUtil.getConfiguration());
         hbaseTestUtil.getConfiguration().set(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         hbaseTestUtil.startMiniCluster();
 
@@ -91,7 +93,7 @@ public class PhoenixHBaseLoaderIT {
      }
     
     @Before
-    public void beforeTest() throws Exception {
+    public void setUp() throws Exception {
         pigServer = new PigServer(ExecType.LOCAL,
                 ConfigurationUtil.toProperties(conf));
     }
@@ -434,7 +436,6 @@ public class PhoenixHBaseLoaderIT {
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
         conn.close();
-        PhoenixDriver.INSTANCE.close();
         hbaseTestUtil.shutdownMiniCluster();
     }
 }

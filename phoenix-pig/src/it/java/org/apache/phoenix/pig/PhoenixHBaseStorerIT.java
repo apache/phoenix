@@ -31,6 +31,7 @@ import java.util.Collection;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.pig.ExecType;
 import org.apache.pig.PigServer;
@@ -58,8 +59,9 @@ public class PhoenixHBaseStorerIT {
     private static Configuration conf;
 
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void setUpBeforeClass() throws Exception {
         hbaseTestUtil = new HBaseTestingUtility();
+        ConfigUtil.setReplicationConfigIfAbsent(hbaseTestUtil.getConfiguration());
         hbaseTestUtil.startMiniCluster();
 
         Class.forName(PhoenixDriver.class.getName());
@@ -72,7 +74,7 @@ public class PhoenixHBaseStorerIT {
     }
     
     @Before
-    public void beforeTest() throws Exception {
+    public void setUp() throws Exception {
         pigServer = new PigServer(ExecType.LOCAL,
                 ConfigurationUtil.toProperties(conf));
     }
@@ -85,7 +87,6 @@ public class PhoenixHBaseStorerIT {
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
         conn.close();
-        PhoenixDriver.INSTANCE.close();
         hbaseTestUtil.shutdownMiniCluster();
     }
 
@@ -183,7 +184,7 @@ public class PhoenixHBaseStorerIT {
 
         // Compare data in Phoenix table to the expected
         final ResultSet rs = stmt
-                .executeQuery("SELECT id, name,age FROM " + tableName + "ORDER BY id");
+                .executeQuery("SELECT id, name,age FROM " + tableName + " ORDER BY id");
 
         for (int i = 0; i < rows; i++) {
             assertTrue(rs.next());
