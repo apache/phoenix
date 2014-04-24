@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -43,7 +44,8 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryConstants;
 
 /**
- * When selecting specific columns in a SELECT query, this filter passes only selected columns back to client.
+ * When selecting specific columns in a SELECT query, this filter passes only selected columns
+ * back to client.
  *
  * @since 3.0
  */
@@ -58,7 +60,8 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
     }
 
     public ColumnProjectionFilter(byte[] emptyCFName,
-            Map<ImmutableBytesPtr, NavigableSet<ImmutableBytesPtr>> columnsTracker, Set<byte[]> conditionOnlyCfs) {
+            Map<ImmutableBytesPtr, NavigableSet<ImmutableBytesPtr>> columnsTracker,
+            Set<byte[]> conditionOnlyCfs) {
         this.emptyCFName = emptyCFName;
         this.columnsTracker = columnsTracker;
         this.conditionOnlyCfs = conditionOnlyCfs;
@@ -127,16 +130,18 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
     }
     
     @Override
-    public void filterRow(List<KeyValue> kvs) {
+    public void filterRowCells(List<Cell> kvs) throws IOException {
         if (kvs.isEmpty()) return;
-        KeyValue firstKV = kvs.get(0);
-        Iterator<KeyValue> itr = kvs.iterator();
+        KeyValue firstKV = KeyValueUtil.ensureKeyValue(kvs.get(0));
+        Iterator<Cell> itr = kvs.iterator();
         while (itr.hasNext()) {
-            KeyValue kv = itr.next();
-            ImmutableBytesPtr f = new ImmutableBytesPtr(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength());
+            KeyValue kv = KeyValueUtil.ensureKeyValue(itr.next());
+            ImmutableBytesPtr f = new ImmutableBytesPtr(kv.getFamilyArray(),
+              kv.getFamilyOffset(), kv.getFamilyLength());
             if (this.columnsTracker.containsKey(f)) {
                 Set<ImmutableBytesPtr> cols = this.columnsTracker.get(f);
-                ImmutableBytesPtr q = new ImmutableBytesPtr(kv.getQualifierArray(), kv.getQualifierOffset(),
+                ImmutableBytesPtr q = new ImmutableBytesPtr(kv.getQualifierArray(),
+                  kv.getQualifierOffset(),
                         kv.getQualifierLength());
                 if (cols != null && !(cols.contains(q))) {
                     itr.remove();
@@ -146,7 +151,7 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
             }
         }
         if (kvs.isEmpty()) {
-            kvs.add(new KeyValue(firstKV.getRowArray(), firstKV.getRowOffset(), firstKV.getRowLength(), this.emptyCFName,
+            kvs.add(new KeyValue(firstKV.getRowArray(), firstKV.getRowOffset(),firstKV.getRowLength(), this.emptyCFName,
                     0, this.emptyCFName.length, QueryConstants.EMPTY_COLUMN_BYTES, 0,
                     QueryConstants.EMPTY_COLUMN_BYTES.length, HConstants.LATEST_TIMESTAMP, Type.Maximum, null, 0, 0));
         }
