@@ -77,6 +77,7 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -764,8 +765,13 @@ public class MetaDataClient {
                     saltBucketNum = parent.getBucketNum();
                     addSaltColumn = (saltBucketNum != null && indexType != IndexType.LOCAL);
                     defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
-                    // Set physical name of view index table
-                    physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(physicalName.getBytes())));
+                    if (indexType == IndexType.LOCAL) {
+                        // Set physical name of local index table
+                        physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getLocalIndexPhysicalName(physicalName.getBytes())));
+                    } else {
+                        // Set physical name of view index table
+                        physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(physicalName.getBytes())));
+                    }
                 }
                 
                 multiTenant = parent.isMultiTenant();
@@ -1184,8 +1190,14 @@ public class MetaDataClient {
              */
             Collections.reverse(tableMetaData);
             
-            splits = SchemaUtil.processSplits(splits, pkColumns, saltBucketNum, connection.getQueryServices().getProps().getBoolean(
+            if (parent != null && tableType == PTableType.INDEX && indexType == IndexType.LOCAL) {
+                tableProps.put(MetaDataUtil.PARENT_TABLE_KEY, parent.getPhysicalName().getString());
+                tableProps.put(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME, Boolean.TRUE);
+                splits = getSplitKeys(connection.getQueryServices().getAllTableRegions(parent.getPhysicalName().getBytes()));
+            } else {
+                splits = SchemaUtil.processSplits(splits, pkColumns, saltBucketNum, connection.getQueryServices().getProps().getBoolean(
                     QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, QueryServicesOptions.DEFAULT_ROW_KEY_ORDER_SALTED_TABLE));
+            }
             MetaDataMutationResult result = connection.getQueryServices().createTable(
                     tableMetaData, 
                     viewType == ViewType.MAPPED || indexId != null ? physicalNames.get(0).getBytes() : null,
@@ -1221,7 +1233,20 @@ public class MetaDataClient {
             connection.setAutoCommit(wasAutoCommit);
         }
     }
-    
+
+    private byte[][] getSplitKeys(List<HRegionLocation> allTableRegions) {
+        if(allTableRegions.size() == 1) return null;
+        byte[][] splitKeys = new byte[allTableRegions.size()-1][];
+        int i = 0;
+        for (HRegionLocation region : allTableRegions) {
+            if (region.getRegionInfo().getStartKey().length != 0) {
+                splitKeys[i] = region.getRegionInfo().getStartKey();
+                i++;
+            }
+        }
+        return splitKeys;
+    }
+
     private static boolean hasColumnWithSameNameAndFamily(Collection<PColumn> columns, PColumn column) {
         for (PColumn currColumn : columns) {
            if (Objects.equal(currColumn.getFamilyName(), column.getFamilyName()) &&
@@ -1331,7 +1356,7 @@ public class MetaDataClient {
                         // PName name, PTableType type, long timeStamp, long sequenceNumber, List<PColumn> columns
                         List<TableRef> tableRefs = Lists.newArrayListWithExpectedSize(2 + table.getIndexes().size());
                         // All multi-tenant tables have a view index table, so no need to check in that case
-                        if (tableType == PTableType.TABLE && (table.isMultiTenant() || MetaDataUtil.hasViewIndexTable(connection, table.getPhysicalName()))) {
+                        if (tableType == PTableType.TABLE && (table.isMultiTenant() || MetaDataUtil.hasViewIndexTable(connection, table.getPhysicalName()) || MetaDataUtil.hasLocalIndexTable(connection, table.getPhysicalName()))) {
                             MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName());
                             // TODO: consider removing this, as the DROP INDEX done for each DROP VIEW command
                             // would have deleted all the rows already

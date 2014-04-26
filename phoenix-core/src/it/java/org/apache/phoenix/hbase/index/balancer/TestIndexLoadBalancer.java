@@ -39,10 +39,7 @@ import org.apache.hadoop.hbase.catalog.MetaReader;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.coprocessor.BaseMasterObserver;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
-import org.apache.hadoop.hbase.coprocessor.MasterCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.master.HMaster;
 import org.apache.hadoop.hbase.master.LoadBalancer;
 import org.apache.hadoop.hbase.master.RegionStates;
@@ -55,6 +52,7 @@ import org.apache.hadoop.hbase.zookeeper.ZKAssign;
 import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
+import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
 import org.apache.phoenix.util.ConfigUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -75,7 +73,7 @@ public class TestIndexLoadBalancer {
         final int NUM_RS = 4;
         Configuration conf = UTIL.getConfiguration();
         conf.setBoolean(HConstants.REGIONSERVER_INFO_PORT_AUTO, true);
-        conf.set(CoprocessorHost.MASTER_COPROCESSOR_CONF_KEY, MockedMasterObserver.class.getName());
+        conf.set(CoprocessorHost.MASTER_COPROCESSOR_CONF_KEY, IndexMasterObserver.class.getName());
         conf.setClass(HConstants.HBASE_MASTER_LOADBALANCER_CLASS, IndexLoadBalancer.class,
             LoadBalancer.class);
         IndexTestingUtils.setupConfig(conf);
@@ -491,41 +489,4 @@ public class TestIndexLoadBalancer {
         }
         return regionsColocated;
     }
-
-    public static class MockedMasterObserver extends BaseMasterObserver {
-        IndexLoadBalancer balancer = null;
-
-        @Override
-        public void preMasterInitialization(ObserverContext<MasterCoprocessorEnvironment> ctx)
-                throws IOException {
-            LoadBalancer loadBalancer =
-                    ctx.getEnvironment().getMasterServices().getAssignmentManager().getBalancer();
-            if (loadBalancer instanceof IndexLoadBalancer) {
-                balancer = (IndexLoadBalancer) loadBalancer;
-            }
-            super.preMasterInitialization(ctx);
-        }
-
-        @Override
-        public void preCreateTableHandler(ObserverContext<MasterCoprocessorEnvironment> ctx,
-                HTableDescriptor desc, HRegionInfo[] regions) throws IOException {
-            TableName userTableName = null;
-            if (balancer != null && desc.getValue(IndexLoadBalancer.PARENT_TABLE_KEY) != null) {
-                userTableName =
-                        TableName.valueOf(desc.getValue(IndexLoadBalancer.PARENT_TABLE_KEY));
-                balancer.addTablesToColocate(userTableName, desc.getTableName());
-            }
-            if (userTableName != null) balancer.populateRegionLocations(userTableName);
-            super.preCreateTableHandler(ctx, desc, regions);
-        }
-
-        @Override
-        public void postDeleteTableHandler(ObserverContext<MasterCoprocessorEnvironment> ctx,
-                TableName tableName) throws IOException {
-            if (balancer.isTableColocated(tableName)) {
-                balancer.removeTablesFromColocation(tableName);
-            }
-        }
-    }
-
 }
