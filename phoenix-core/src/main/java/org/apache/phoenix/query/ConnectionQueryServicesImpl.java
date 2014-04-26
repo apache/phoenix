@@ -120,6 +120,7 @@ import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -788,6 +789,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (isMetaTable) {
                     newDesc.remove(HTableDescriptor.SPLIT_POLICY);
                 }
+                if (newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+                    newDesc.setValue(HTableDescriptor.SPLIT_POLICY, IndexRegionSplitPolicy.class.getName());
+                }
                 try {
                     if (splits == null) {
                         admin.createTable(newDesc);
@@ -1004,6 +1008,40 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    private void ensureLocalIndexTableCreated(byte[] physicalTableName, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits, long timestamp) throws SQLException {
+        PTable table;
+        String parentTableName = Bytes.toString(physicalTableName, MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX_BYTES.length, 
+            physicalTableName.length - MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX_BYTES.length);
+        try {
+            table = latestMetaData.getTable(new PTableKey(PName.EMPTY_NAME, parentTableName));
+            if (table.getTimeStamp() >= timestamp) { // Table in cache is newer than client timestamp which shouldn't be the case
+                throw new TableNotFoundException(table.getSchemaName().getString(), table.getTableName().getString());
+            }
+        } catch (TableNotFoundException e) {
+            byte[] schemaName = Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(parentTableName));
+            byte[] tableName = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(parentTableName));
+            MetaDataMutationResult result = this.getTable(null, schemaName, tableName, HConstants.LATEST_TIMESTAMP, timestamp);
+            table = result.getTable();
+            if (table == null) {
+                throw e;
+            }
+        }
+        ensureLocalIndexTableCreated(physicalTableName, tableProps, families, splits);
+    }
+
+    private void ensureLocalIndexTableCreated(byte[] physicalTableName, Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits) throws SQLException, TableAlreadyExistsException {
+        tableProps.put(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME, TRUE_BYTES_AS_STRING);
+        HTableDescriptor desc = ensureTableCreated(physicalTableName, PTableType.TABLE, tableProps, families, splits, false);
+        if (desc != null) {
+            if (!Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+                String fullTableName = Bytes.toString(physicalTableName);
+                throw new TableAlreadyExistsException(
+                        "Unable to create shared physical table for local indexes.",
+                        SchemaUtil.getSchemaNameFromFullName(fullTableName),
+                        SchemaUtil.getTableNameFromFullName(fullTableName));
+            }
+        }
+    }
 
     private boolean ensureViewIndexTableDropped(byte[] physicalTableName, long timestamp) throws SQLException {
         byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
@@ -1049,6 +1087,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] schemaBytes = rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
         byte[] tableBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
         byte[] tableName = physicalTableName != null ? physicalTableName : SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
+        boolean localIndexTable = Boolean.TRUE.equals(tableProps.remove(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME));
+
         if ((tableType == PTableType.VIEW && physicalTableName != null) || (tableType != PTableType.VIEW && physicalTableName == null)) {
             // For views this will ensure that metadata already exists
             // For tables and indexes, this will create the metadata if it doesn't already exist
@@ -1059,7 +1099,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Physical index table created up front for multi tenant
             // TODO: if viewIndexId is Short.MIN_VALUE, then we don't need to attempt to create it
             if (physicalTableName != null && !MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) {
-                ensureViewIndexTableCreated(tenantIdBytes.length == 0 ? null : PNameFactory.newName(tenantIdBytes), physicalTableName, MetaDataUtil.getClientTimeStamp(m));
+                if (localIndexTable) {
+                    ensureLocalIndexTableCreated(tableName, tableProps, families, splits, MetaDataUtil.getClientTimeStamp(m));
+                } else {
+                    ensureViewIndexTableCreated(tenantIdBytes.length == 0 ? null : PNameFactory.newName(tenantIdBytes), physicalTableName, MetaDataUtil.getClientTimeStamp(m));
+                }
             }
         } else if (tableType == PTableType.TABLE && MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) { // Create view index table up front for multi tenant tables
             ptr.set(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
@@ -1081,6 +1125,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 familiesPlusDefault.add(new Pair<byte[],Map<String,Object>>(defaultCF,Collections.<String,Object>emptyMap()));
             }
             ensureViewIndexTableCreated(tableName, tableProps, familiesPlusDefault, MetaDataUtil.isSalted(m, kvBuilder, ptr) ? splits : null, MetaDataUtil.getClientTimeStamp(m));
+            ensureLocalIndexTableCreated(MetaDataUtil.getLocalIndexPhysicalName(tableName), tableProps, families, splits);
         }
         
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);

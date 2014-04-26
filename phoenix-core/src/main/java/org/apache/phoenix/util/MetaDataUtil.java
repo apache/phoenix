@@ -48,9 +48,13 @@ import org.apache.phoenix.schema.TableNotFoundException;
 public class MetaDataUtil {
     public static final String VIEW_INDEX_TABLE_PREFIX = "_IDX_";
     public static final byte[] VIEW_INDEX_TABLE_PREFIX_BYTES = Bytes.toBytes(VIEW_INDEX_TABLE_PREFIX);
+    public static final String LOCAL_INDEX_TABLE_PREFIX = "_LOCAL_IDX_";
+    public static final byte[] LOCAL_INDEX_TABLE_PREFIX_BYTES = Bytes.toBytes(LOCAL_INDEX_TABLE_PREFIX);
     public static final String VIEW_INDEX_SEQUENCE_PREFIX = "_SEQ_";
     public static final byte[] VIEW_INDEX_SEQUENCE_PREFIX_BYTES = Bytes.toBytes(VIEW_INDEX_SEQUENCE_PREFIX);
     public static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
+    public static final String PARENT_TABLE_KEY = "PARENT_TABLE";
+    public static final byte[] PARENT_TABLE_KEY_BYTES = Bytes.toBytes("PARENT_TABLE");
     
     public static boolean areClientAndServerCompatible(long version) {
         // As of 3.0, we allow a client and server to differ for the minor version.
@@ -246,6 +250,18 @@ public class MetaDataUtil {
         return schemaName;
     }
 
+    public static byte[] getLocalIndexPhysicalName(byte[] physicalTableName) {
+        return ByteUtil.concat(LOCAL_INDEX_TABLE_PREFIX_BYTES, physicalTableName);
+    }
+    
+    public static String getLocalIndexTableName(String tableName) {
+        return LOCAL_INDEX_TABLE_PREFIX + tableName;
+    }
+    
+    public static String getLocalIndexSchemaName(String schemaName) {
+        return schemaName;
+    }  
+
     public static SequenceKey getViewIndexSequenceKey(String tenantId, PName physicalName) {
         // Create global sequence of the form: <prefixed base table name><tenant id>
         // rather than tenant-specific sequence, as it makes it much easier
@@ -274,6 +290,16 @@ public class MetaDataUtil {
         }
     }
     
+    public static boolean hasLocalIndexTable(PhoenixConnection connection, PName name) throws SQLException {
+        byte[] physicalIndexName = MetaDataUtil.getLocalIndexPhysicalName(name.getBytes());
+        try {
+            HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalIndexName);
+            return desc != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(IS_LOCAL_INDEX_TABLE_PROP_BYTES)));
+        } catch (TableNotFoundException e) {
+            return false;
+        }
+    }
+
     public static void deleteViewIndexSequences(PhoenixConnection connection, PName name) throws SQLException {
         SequenceKey key = getViewIndexSequenceKey(null, name);
         connection.createStatement().executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME + 
@@ -284,4 +310,7 @@ public class MetaDataUtil {
 
     public static final String IS_VIEW_INDEX_TABLE_PROP_NAME = "IS_VIEW_INDEX_TABLE";
     public static final byte[] IS_VIEW_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_VIEW_INDEX_TABLE_PROP_NAME);
+
+    public static final String IS_LOCAL_INDEX_TABLE_PROP_NAME = "IS_LOCAL_INDEX_TABLE";
+    public static final byte[] IS_LOCAL_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_LOCAL_INDEX_TABLE_PROP_NAME);
 }
