@@ -35,6 +35,7 @@ import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
@@ -130,6 +131,8 @@ public abstract class BasicQueryPlan implements QueryPlan {
             return ResultIterator.EMPTY_ITERATOR;
         }
         
+        // Set miscellaneous scan attributes. This is the last chance to set them before we
+        // clone the scan for each parallelized chunk.
         Scan scan = context.getScan();
         // Set producer on scan so HBase server does round robin processing
         //setProducer(scan);
@@ -141,6 +144,9 @@ public abstract class BasicQueryPlan implements QueryPlan {
         Long scn = connection.getSCN();
         ScanUtil.setTimeRange(scan, scn == null ? context.getCurrentTime() : scn);
         ScanUtil.setTenantId(scan, connection.getTenantId() == null ? null : connection.getTenantId().getBytes());
+        if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
+            ScanUtil.setLocalIndex(scan);
+        }
         ResultIterator iterator = newIterator();
         return dependencies.isEmpty() ? 
                 iterator : new DelegateResultIterator(iterator) {

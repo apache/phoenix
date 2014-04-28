@@ -29,6 +29,9 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.expression.visitor.RowKeyExpressionVisitor;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -182,7 +185,7 @@ public class IndexUtil {
                         }
                         
                     };
-                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts));
+                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, null));
                 } else {
                     // We can only generate the correct Delete if we have no KV columns in our index.
                     // Perhaps it'd be best to ignore Delete mutations all together here, as this
@@ -210,5 +213,24 @@ public class IndexUtil {
             return true;
         }
         return false;
+    }
+    
+    /**
+     * Traverse the expression tree and set the offset of every RowKeyColumnExpression
+     * to the offset provided. This is used for local indexing on the server-side to
+     * skip over the region start key that prefixes index rows.
+     * @param rootExpression the root expression from which to begin traversal
+     * @param offset the offset to set on each RowKeyColumnExpression
+     */
+    public static void setRowKeyExpressionOffset(Expression rootExpression, final int offset) {
+        rootExpression.accept(new RowKeyExpressionVisitor() {
+
+            @Override
+            public Void visit(RowKeyColumnExpression node) {
+                node.setOffset(offset);
+                return null;
+            }
+            
+        });
     }
 }

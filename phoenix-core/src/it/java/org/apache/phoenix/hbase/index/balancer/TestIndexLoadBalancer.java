@@ -23,8 +23,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -61,8 +59,6 @@ import org.junit.experimental.categories.Category;
 
 @Category(LargeTests.class)
 public class TestIndexLoadBalancer {
-
-    private static final Log LOG = LogFactory.getLog(TestIndexLoadBalancer.class);
 
     private static HBaseTestingUtility UTIL = new HBaseTestingUtility();
 

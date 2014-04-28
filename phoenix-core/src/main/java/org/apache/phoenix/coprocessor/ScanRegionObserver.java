@@ -25,8 +25,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
@@ -57,6 +57,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
@@ -100,7 +101,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         }
     }
     
-    public static OrderedResultIterator deserializeFromScan(Scan scan, RegionScanner s) {
+    public static OrderedResultIterator deserializeFromScan(Scan scan, RegionScanner s, int offset) {
         byte[] topN = scan.getAttribute(BaseScannerRegionObserver.TOPN);
         if (topN == null) {
             return null;
@@ -116,6 +117,9 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             for (int i = 0; i < size; i++) {
                 OrderByExpression orderByExpression = new OrderByExpression();
                 orderByExpression.readFields(input);
+                if (offset != 0) {
+                    IndexUtil.setRowKeyExpressionOffset(orderByExpression.getExpression(), offset);
+                }
                 orderByExpressions.add(orderByExpression);
             }
             ResultIterator inner = new RegionScannerResultIterator(s);
@@ -176,6 +180,15 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         if (isScanQuery == null || Bytes.compareTo(PDataType.FALSE_BYTES, isScanQuery) == 0) {
             return s;
         }
+        int offset = 0;
+        if (ScanUtil.isLocalIndex(scan)) {
+            /*
+             * For local indexes, we need to set an offset on row key expressions to skip
+             * the region start key.
+             */
+            offset = c.getEnvironment().getRegion().getStartKey().length;
+            ScanUtil.setRowKeyOffset(scan, offset);
+        }
         
         final ScanProjector p = ScanProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
@@ -186,7 +199,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             innerScanner = new HashJoinRegionScanner(s, p, j, tenantId, c.getEnvironment());
         }
         
-        final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner);
+        final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner, offset);
         List<KeyValueColumnExpression> arrayKVRefs = new ArrayList<KeyValueColumnExpression>();
         Expression[] arrayFuncRefs = deserializeArrayPostionalExpressionInfoFromScan(
                 scan, innerScanner, arrayKVRefs);
