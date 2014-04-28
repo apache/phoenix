@@ -281,7 +281,15 @@ public class MetaDataUtil {
     }
 
     public static boolean hasViewIndexTable(PhoenixConnection connection, PName name) throws SQLException {
-        byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(name.getBytes());
+        return hasViewIndexTable(connection, name.getBytes());
+    }
+    
+    public static boolean hasViewIndexTable(PhoenixConnection connection, String schemaName, String tableName) throws SQLException {
+        return hasViewIndexTable(connection, SchemaUtil.getTableNameAsBytes(schemaName, tableName));
+    }
+    
+    public static boolean hasViewIndexTable(PhoenixConnection connection, byte[] physicalTableName) throws SQLException {
+        byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
         try {
             HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalIndexName);
             return desc != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(IS_VIEW_INDEX_TABLE_PROP_BYTES)));
@@ -289,9 +297,17 @@ public class MetaDataUtil {
             return false;
         }
     }
-    
+
     public static boolean hasLocalIndexTable(PhoenixConnection connection, PName name) throws SQLException {
-        byte[] physicalIndexName = MetaDataUtil.getLocalIndexPhysicalName(name.getBytes());
+        return hasLocalIndexTable(connection, name.getBytes());
+    }
+
+    public static boolean hasLocalIndexTable(PhoenixConnection connection, String schemaName, String tableName) throws SQLException {
+        return hasLocalIndexTable(connection, SchemaUtil.getTableNameAsBytes(schemaName, tableName));
+    }
+
+    public static boolean hasLocalIndexTable(PhoenixConnection connection, byte[] physicalTableName) throws SQLException {
+        byte[] physicalIndexName = MetaDataUtil.getLocalIndexPhysicalName(physicalTableName);
         try {
             HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalIndexName);
             return desc != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(IS_LOCAL_INDEX_TABLE_PROP_BYTES)));

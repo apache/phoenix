@@ -1090,7 +1090,40 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         return wasDeleted;
     }
-    
+
+    private boolean ensureLocalIndexTableDropped(byte[] physicalTableName, long timestamp) throws SQLException {
+        byte[] physicalIndexName = MetaDataUtil.getLocalIndexPhysicalName(physicalTableName);
+        HTableDescriptor desc = null;
+        HBaseAdmin admin = null;
+        boolean wasDeleted = false;
+        try {
+            admin = new HBaseAdmin(config);
+            try {
+                desc = admin.getTableDescriptor(physicalIndexName);
+                if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+                    final ReadOnlyProps props = this.getProps();
+                    final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
+                    if (dropMetadata) {
+                        admin.disableTable(physicalIndexName);
+                        admin.deleteTable(physicalIndexName);
+                        wasDeleted = true;
+                    }
+                }
+            } catch (org.apache.hadoop.hbase.TableNotFoundException ignore) {
+                // Ignore, as we may never have created a view index table
+            }
+        } catch (IOException e) {
+            throw ServerUtil.parseServerException(e); 
+        } finally {
+            try {
+                if (admin != null) admin.close();
+            } catch (IOException e) {
+                logger.warn("",e);
+            }
+        }
+        return wasDeleted;
+    }
+
     @Override
     public MetaDataMutationResult createTable(final List<Mutation> tableMetaData, byte[] physicalTableName, PTableType tableType,
             Map<String,Object> tableProps, final List<Pair<byte[],Map<String,Object>>> families, byte[][] splits) throws SQLException {
@@ -1236,6 +1269,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 byte[] physicalTableName = SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
                 long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
                 ensureViewIndexTableDropped(physicalTableName, timestamp);
+                ensureLocalIndexTableDropped(physicalTableName, timestamp);
             }
             break;
         default:

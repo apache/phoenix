@@ -23,14 +23,17 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.PropertyName;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTable.IndexType;
 
@@ -48,9 +51,20 @@ public class CreateIndexCompiler {
         final StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         List<ParseNode> splitNodes = create.getSplitNodes();
-        if (!splitNodes.isEmpty() && create.getIndexType() == IndexType.LOCAL) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SPLIT_LOCAL_INDEX)
-            .build().buildException();
+        if (create.getIndexType() == IndexType.LOCAL) {
+            if (!splitNodes.isEmpty()) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SPLIT_LOCAL_INDEX)
+                .build().buildException();
+            } 
+            if (create.getProps() != null && create.getProps().get("") != null) {
+                List<Pair<String, Object>> list = create.getProps().get("");
+                for (Pair<String, Object> pair : list) {
+                    if (pair.getFirst().equals(PhoenixDatabaseMetaData.SALT_BUCKETS)) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SALT_LOCAL_INDEX)
+                        .build().buildException();
+                    }
+                }
+            }
         }
         final byte[][] splits = new byte[splitNodes.size()][];
         for (int i = 0; i < splits.length; i++) {

@@ -18,12 +18,16 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
@@ -31,15 +35,31 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
+import com.google.common.collect.Maps;
+
 public class LocalIndexIT extends BaseIndexIT {
+
+    @BeforeClass 
+    public static void doSetup() throws Exception {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        // Drop the HBase table metadata for this test
+        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
+        // Must update config before starting server
+        startServer(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+    }
+
     private void createBaseTable(String tableName, Integer saltBuckets, String splits) throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" +
@@ -110,5 +130,24 @@ public class LocalIndexIT extends BaseIndexIT {
         HTable userTable = new HTable(admin.getConfiguration(),TableName.valueOf(DATA_TABLE_NAME));
         HTable indexTable = new HTable(admin.getConfiguration(),TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
         assertEquals("Both user region and index table should have same split keys.", userTable.getStartKeys(), indexTable.getStartKeys());
+    }
+
+    @Test
+    public void testDropLocalIndexTable() throws Exception {
+        createBaseTable(DATA_TABLE_NAME, null, null);
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        Connection conn2 = DriverManager.getConnection(getUrl());
+        conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
+        conn2.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_FULL_NAME).next();
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        assertTrue("Local index table should be present.", admin.tableExists(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME))));
+        conn1.createStatement().execute("DROP TABLE "+ DATA_TABLE_NAME);
+        admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        assertFalse("Local index table should be deleted.", admin.tableExists(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME))));
+        ResultSet rs = conn2.createStatement().executeQuery("SELECT "
+                + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
+                + PhoenixDatabaseMetaData.SEQUENCE_NAME
+                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME);
+        assertFalse("View index sequences should be deleted.", rs.next());
     }
 }
