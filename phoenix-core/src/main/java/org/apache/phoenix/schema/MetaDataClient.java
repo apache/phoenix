@@ -875,10 +875,6 @@ public class MetaDataClient {
             }
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
             if ((statement.getTableType() == PTableType.VIEW || indexId != null) && !tableProps.isEmpty()) {
-                // TODO: do this check in CreateIndexCompiler
-                if (indexType == IndexType.LOCAL && saltBucketNum != null) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SALT_LOCAL_INDEX).build().buildException();
-                }
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WITH_PROPERTIES).build().buildException();
             }
             if (removedProp) {
@@ -1307,10 +1303,15 @@ public class MetaDataClient {
             List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize(2);
             Delete tableDelete = new Delete(key, clientTimeStamp);
             tableMetaData.add(tableDelete);
+            boolean hasViewIndexTable = false;
+            boolean hasLocalIndexTable = false;
             if (parentTableName != null) {
                 byte[] linkKey = MetaDataUtil.getParentLinkKey(tenantIdStr, schemaName, parentTableName, tableName);
                 Delete linkDelete = new Delete(linkKey, clientTimeStamp);
                 tableMetaData.add(linkDelete);
+            } else {
+                hasViewIndexTable = MetaDataUtil.hasViewIndexTable(connection, schemaName, tableName);
+                hasLocalIndexTable = MetaDataUtil.hasLocalIndexTable(connection, schemaName, tableName);
             }
 
             MetaDataMutationResult result = connection.getQueryServices().dropTable(tableMetaData, tableType);
@@ -1342,7 +1343,7 @@ public class MetaDataClient {
                         // PName name, PTableType type, long timeStamp, long sequenceNumber, List<PColumn> columns
                         List<TableRef> tableRefs = Lists.newArrayListWithExpectedSize(2 + table.getIndexes().size());
                         // All multi-tenant tables have a view index table, so no need to check in that case
-                        if (tableType == PTableType.TABLE && (table.isMultiTenant() || MetaDataUtil.hasViewIndexTable(connection, table.getPhysicalName()) || MetaDataUtil.hasLocalIndexTable(connection, table.getPhysicalName()))) {
+                        if (tableType == PTableType.TABLE && (table.isMultiTenant() || hasViewIndexTable || hasLocalIndexTable)) {
                             MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName());
                             // TODO: consider removing this, as the DROP INDEX done for each DROP VIEW command
                             // would have deleted all the rows already
@@ -1351,6 +1352,10 @@ public class MetaDataClient {
                                 String viewIndexTableName = MetaDataUtil.getViewIndexTableName(tableName);
                                 PTable viewIndexTable = new PTableImpl(null, viewIndexSchemaName, viewIndexTableName, ts, table.getColumnFamilies());
                                 tableRefs.add(new TableRef(null, viewIndexTable, ts, false));
+                                String localIndexSchemaName = MetaDataUtil.getLocalIndexSchemaName(schemaName);
+                                String localIndexTableName = MetaDataUtil.getLocalIndexTableName(tableName);
+                                PTable localIndexTable = new PTableImpl(null, localIndexSchemaName, localIndexTableName, ts, table.getColumnFamilies());
+                                tableRefs.add(new TableRef(null, localIndexTable, ts, false));
                             }
                         }
                         if (!dropMetaData) {
