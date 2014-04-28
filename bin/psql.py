@@ -24,20 +24,13 @@ import subprocess
 import sys
 import phoenix_utils
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-phoenix_jar_path = os.getenv('PHOENIX_LIB_DIR',
-                             os.path.join(current_dir, "..", "phoenix-assembly",
-                                "target"))
-phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", phoenix_jar_path)
-
-if phoenix_client_jar == "":
-    phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", os.path.join(current_dir, ".."))
+phoenix_utils.setPath()
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
-java_cmd = 'java -cp ".' + os.pathsep + current_dir + os.pathsep + phoenix_client_jar + \
+java_cmd = 'java -cp ".' + os.pathsep + phoenix_utils.current_dir + os.pathsep + phoenix_utils.phoenix_client_jar + \
     '" -Dlog4j.configuration=file:' + \
-    os.path.join(current_dir, "log4j.properties") + \
+    os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " org.apache.phoenix.util.PhoenixRuntime " + ' '.join(sys.argv[1:])
 
 subprocess.call(java_cmd, shell=True)

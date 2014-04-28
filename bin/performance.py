@@ -60,25 +60,16 @@ data = "data.csv"
 qry = "query.sql"
 statements = ""
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-phoenix_jar_path = os.getenv('PHOENIX_LIB_DIR',
-                             os.path.join(current_dir, "..", "phoenix-assembly",
-                                "target"))
-phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", phoenix_jar_path)
-phoenix_test_jar_path = os.getenv('PHOENIX_LIB_DIR',
-                                os.path.join(current_dir, "..", "phoenix-core",
-                                     "target"))
-testjar = phoenix_utils.find("phoenix-*-tests.jar", phoenix_test_jar_path)
-
+phoenix_utils.setPath()
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
-hbase_config_path = os.getenv('HBASE_CONF_DIR', current_dir)
+hbase_config_path = os.getenv('HBASE_CONF_DIR', phoenix_utils.current_dir)
 
 execute = ('java -cp "%s%s%s" -Dlog4j.configuration=file:' +
-           os.path.join(current_dir, "log4j.properties") +
+           os.path.join(phoenix_utils.current_dir, "log4j.properties") +
            ' org.apache.phoenix.util.PhoenixRuntime -t %s %s ') % \
-    (hbase_config_path, os.pathsep, phoenix_client_jar, table, zookeeper)
+    (hbase_config_path, os.pathsep, phoenix_utils.phoenix_client_jar, table, zookeeper)
 
 # Create Table DDL
 createtable = "CREATE TABLE IF NOT EXISTS %s (HOST CHAR(2) NOT NULL,\
@@ -109,7 +100,7 @@ queryex(statements, "5 - Filter + Count", "SELECT COUNT(1) FROM %s WHERE \
 CORE<10;" % (table))
 
 print "\nGenerating and upserting data..."
-subprocess.call('java -jar %s %s' % (testjar, rowcount), shell=True)
+subprocess.call('java -jar %s %s' % (phoenix_utils.testjar, rowcount), shell=True)
 print "\n"
 createFileWithContent(qry, statements)
 
