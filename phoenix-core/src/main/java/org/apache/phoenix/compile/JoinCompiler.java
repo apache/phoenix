@@ -225,6 +225,7 @@ public class JoinCompiler {
         private final List<ParseNode> postFilters;
         private final List<Table> tables;
         private final List<TableRef> tableRefs;
+        private final boolean allLeftJoin;
         private final boolean hasRightJoin;
         private final List<JoinTable> prefilterAcceptedTables;
         
@@ -234,6 +235,7 @@ public class JoinCompiler {
             this.postFilters = Collections.<ParseNode>emptyList();
             this.tables = Collections.<Table>singletonList(table);
             this.tableRefs = Collections.<TableRef>singletonList(table.getTableRef());
+            this.allLeftJoin = false;
             this.hasRightJoin = false;
             this.prefilterAcceptedTables = Collections.<JoinTable>emptyList();
         }
@@ -245,16 +247,20 @@ public class JoinCompiler {
             this.tables = new ArrayList<Table>();
             this.tableRefs = new ArrayList<TableRef>();
             this.tables.add(table);
+            boolean allLeftJoin = true;
             int lastRightJoinIndex = -1;
             for (int i = 0; i < joinSpecs.size(); i++) {
-                this.tables.addAll(joinSpecs.get(i).getJoinTable().getTables());
-                if (joinSpecs.get(i).getType() == JoinType.Right) {
+                JoinSpec joinSpec = joinSpecs.get(i);
+                this.tables.addAll(joinSpec.getJoinTable().getTables());
+                allLeftJoin = allLeftJoin && joinSpec.getType() == JoinType.Left;
+                if (joinSpec.getType() == JoinType.Right) {
                     lastRightJoinIndex = i;
                 }
             }
             for (Table t : this.tables) {
                 this.tableRefs.add(t.getTableRef());
             }
+            this.allLeftJoin = allLeftJoin;
             this.hasRightJoin = lastRightJoinIndex > -1;
             this.prefilterAcceptedTables = new ArrayList<JoinTable>();
             for (int i = lastRightJoinIndex == -1 ? 0 : lastRightJoinIndex; i < joinSpecs.size(); i++) {
@@ -279,6 +285,10 @@ public class JoinCompiler {
         
         public List<TableRef> getTableRefs() {
             return tableRefs;
+        }
+        
+        public boolean isAllLeftJoin() {
+            return allLeftJoin;
         }
         
         public SelectStatement getStatement() {
@@ -351,7 +361,6 @@ public class JoinCompiler {
          * Returns a boolean vector indicating whether the evaluation of join expressions
          * can be evaluated at an early stage if the input JoinSpec can be taken as a
          * star join. Otherwise returns null.  
-         * @param join the JoinSpec
          * @return a boolean vector for a star join; or null for non star join.
          */
         public boolean[] getStarJoinVector() {

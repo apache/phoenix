@@ -54,6 +54,8 @@ public class HashJoinRegionScanner implements RegionScanner {
     private final HashJoinInfo joinInfo;
     private Queue<Tuple> resultQueue;
     private boolean hasMore;
+    private long count;
+    private long limit;
     private HashCache[] hashCaches;
     private List<Tuple>[] tempTuples;
     private ValueBitSet tempDestBitSet;
@@ -66,10 +68,15 @@ public class HashJoinRegionScanner implements RegionScanner {
         this.joinInfo = joinInfo;
         this.resultQueue = new LinkedList<Tuple>();
         this.hasMore = true;
+        this.count = 0;
+        this.limit = Long.MAX_VALUE;
         if (joinInfo != null) {
             for (JoinType type : joinInfo.getJoinTypes()) {
                 if (type != JoinType.Inner && type != JoinType.Left)
                     throw new DoNotRetryIOException("Got join type '" + type + "'. Expect only INNER or LEFT with hash-joins.");
+            }
+            if (joinInfo.getLimit() != null) {
+                this.limit = joinInfo.getLimit();
             }
             int count = joinInfo.getJoinIds().length;
             this.tempTuples = new List[count];
@@ -93,7 +100,7 @@ public class HashJoinRegionScanner implements RegionScanner {
         }
     }
     
-    private void processResults(List<Cell> result, boolean hasLimit) throws IOException {
+    private void processResults(List<Cell> result, boolean hasBatchLimit) throws IOException {
         if (result.isEmpty())
             return;
         
@@ -106,7 +113,7 @@ public class HashJoinRegionScanner implements RegionScanner {
             return;
         }
         
-        if (hasLimit)
+        if (hasBatchLimit)
             throw new UnsupportedOperationException("Cannot support join operations in scans with limit");
 
         int count = joinInfo.getJoinIds().length;
@@ -204,7 +211,7 @@ public class HashJoinRegionScanner implements RegionScanner {
         for (int i = 0; i < tuple.size(); i++) {
             results.add(tuple.getValue(i));
         }
-        return resultQueue.isEmpty() ? hasMore : true;
+        return (count++ < limit) && (resultQueue.isEmpty() ? hasMore : true);
     }
 
     @Override

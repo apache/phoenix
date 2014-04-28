@@ -57,14 +57,14 @@ import com.google.common.collect.Lists;
 
 public class HashJoinPlan implements QueryPlan {
     private static final Log LOG = LogFactory.getLog(HashJoinPlan.class);
-    
+
     private final FilterableStatement statement;
     private final BasicQueryPlan plan;
     private final HashJoinInfo joinInfo;
     private final List<Expression>[] hashExpressions;
     private final QueryPlan[] hashPlans;
     private final TupleProjector[] clientProjectors;
-    
+
     public HashJoinPlan(FilterableStatement statement, 
             BasicQueryPlan plan, HashJoinInfo joinInfo,
             List<Expression>[] hashExpressions, QueryPlan[] hashPlans, 
@@ -96,11 +96,11 @@ public class HashJoinPlan implements QueryPlan {
     public ResultIterator iterator() throws SQLException {
         ImmutableBytesPtr[] joinIds = joinInfo.getJoinIds();
         assert (joinIds.length == hashExpressions.length && joinIds.length == hashPlans.length);
-        
+
         final HashCacheClient hashClient = new HashCacheClient(plan.getContext().getConnection());
         Scan scan = plan.getContext().getScan();
         final ScanRanges ranges = plan.getContext().getScanRanges();
-        
+
         int count = joinIds.length;
         ConnectionQueryServices services = getContext().getConnection().getQueryServices();
         ExecutorService executor = services.getExecutor();
@@ -144,7 +144,7 @@ public class HashJoinPlan implements QueryPlan {
             } catch (ExecutionException e) {
                 if (firstException == null) {
                     firstException = new SQLException("Encountered exception in hash plan [" + i + "] execution.", 
-                        e.getCause());
+                            e.getCause());
                 }
             }
         }
@@ -152,12 +152,12 @@ public class HashJoinPlan implements QueryPlan {
             SQLCloseables.closeAllQuietly(dependencies);
             throw firstException;
         }
-        
+
         HashJoinInfo.serializeHashJoinIntoScan(scan, joinInfo);
-        
+
         return plan.iterator(dependencies);
     }
-    
+
     @Override
     public long getEstimatedSize() {
         return plan.getEstimatedSize();
@@ -177,16 +177,19 @@ public class HashJoinPlan implements QueryPlan {
         for (int i = 0; i < count; i++) {
             boolean earlyEvaluation = joinInfo.earlyEvaluation()[i];
             boolean skipMerge = joinInfo.getSchemas()[i].getFieldCount() == 0;
-        	planSteps.add("    BUILD HASH TABLE " + i + (earlyEvaluation ? "" : "(DELAYED EVALUATION)") + (skipMerge ? " (SKIP MERGE)" : ""));
-        	List<String> steps = hashPlans[i].getExplainPlan().getPlanSteps();
-        	for (String step : steps) {
-        		planSteps.add("        " + step);
-        	}
+            planSteps.add("    BUILD HASH TABLE " + i + (earlyEvaluation ? "" : "(DELAYED EVALUATION)") + (skipMerge ? " (SKIP MERGE)" : ""));
+            List<String> steps = hashPlans[i].getExplainPlan().getPlanSteps();
+            for (String step : steps) {
+                planSteps.add("        " + step);
+            }
         }
         if (joinInfo.getPostJoinFilterExpression() != null) {
-        	planSteps.add("    AFTER-JOIN SERVER FILTER BY " + joinInfo.getPostJoinFilterExpression().toString());
+            planSteps.add("    AFTER-JOIN SERVER FILTER BY " + joinInfo.getPostJoinFilterExpression().toString());
         }
-        
+        if (joinInfo.getLimit() != null) {
+            planSteps.add("    JOIN-SCANNER " + joinInfo.getLimit() + " ROW LIMIT");
+        }
+
         return new ExplainPlan(planSteps);
     }
 
@@ -217,7 +220,6 @@ public class HashJoinPlan implements QueryPlan {
 
     @Override
     public boolean isDegenerate() {
-        // TODO can we determine this won't return anything?
         return false;
     }
 
