@@ -132,7 +132,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
             ImmutableBytesWritable indexKeyPtr = new ImmutableBytesWritable(indexMutation.getRow());
             
             ptr.set(rowKeyPtr.get(), rowKeyPtr.getOffset(), rowKeyPtr.getLength());
-            byte[] mutablelndexRowKey = im1.buildRowKey(valueGetter, ptr);
+            byte[] mutablelndexRowKey = im1.buildRowKey(valueGetter, ptr, null);
             byte[] immutableIndexRowKey = indexKeyPtr.copyBytes();
             assertArrayEquals(immutableIndexRowKey, mutablelndexRowKey);
             

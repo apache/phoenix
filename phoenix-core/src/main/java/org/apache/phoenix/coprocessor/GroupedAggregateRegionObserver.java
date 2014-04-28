@@ -46,7 +46,6 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.MultiVersionConsistencyControl;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
@@ -60,12 +59,12 @@ import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.TupleProjector;
-import org.apache.phoenix.memory.GlobalMemoryManager;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SizedUtil;
@@ -107,7 +106,17 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             }
             keyOrdered = true;
         }
-        List<Expression> expressions = deserializeGroupByExpressions(expressionBytes);
+        int offset = 0;
+        if (ScanUtil.isLocalIndex(scan)) {
+            /*
+             * For local indexes, we need to set an offset on row key expressions to skip
+             * the region start key.
+             */
+            offset = c.getEnvironment().getRegion().getStartKey().length;
+            ScanUtil.setRowKeyOffset(scan, offset);
+        }
+        
+        List<Expression> expressions = deserializeGroupByExpressions(expressionBytes, offset);
         ServerAggregators aggregators =
                 ServerAggregators.deserialize(scan
                         .getAttribute(BaseScannerRegionObserver.AGGREGATORS), c
@@ -167,7 +176,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
 
     }
 
-    private List<Expression> deserializeGroupByExpressions(byte[] expressionBytes)
+    private List<Expression> deserializeGroupByExpressions(byte[] expressionBytes, int offset)
             throws IOException {
         List<Expression> expressions = new ArrayList<Expression>(3);
         ByteArrayInputStream stream = new ByteArrayInputStream(expressionBytes);
@@ -179,6 +188,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                     Expression expression =
                             ExpressionType.values()[expressionOrdinal].newInstance();
                     expression.readFields(input);
+                    if (offset != 0) {
+                        IndexUtil.setRowKeyExpressionOffset(expression, offset);
+                    }
                     expressions.add(expression);
                 } catch (EOFException e) {
                     break;
