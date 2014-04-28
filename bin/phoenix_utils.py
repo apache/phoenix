@@ -39,3 +39,23 @@ def find(pattern, classPaths):
                 
     return ""
 
+
+def setPath():
+ global current_dir
+ current_dir = os.path.dirname(os.path.abspath(__file__))
+ global phoenix_jar_path
+ phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target")
+ global phoenix_client_jar
+ phoenix_client_jar = find("phoenix-*-client.jar", phoenix_jar_path)
+ global phoenix_test_jar_path
+ phoenix_test_jar_path = os.path.join(current_dir, "..", "phoenix-core", "target")
+ global testjar
+ testjar = find("phoenix-*-tests.jar", phoenix_test_jar_path)
+
+ if phoenix_client_jar == "":
+    phoenix_client_jar = find("phoenix-*-client*", os.path.join(current_dir, ".."))
+
+ if testjar == "":
+    testjar = find("phoenix-*-test*", os.path.join(current_dir, ".."))
+
+ return ""
