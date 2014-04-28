@@ -127,7 +127,7 @@ public class QueryCompiler {
             JoinTable joinTable = JoinCompiler.compile(statement, select, context.getResolver());
             return compileJoinQuery(context, binds, joinTable, false);
         } else {
-            return compileSingleQuery(context, select, binds, parallelIteratorFactory);
+            return compileSingleQuery(context, select, binds, parallelIteratorFactory, true);
         }
     }
     
@@ -144,7 +144,7 @@ public class QueryCompiler {
                 context.setCurrentTable(table.getTableRef());
                 context.setResolver(projectedTable.createColumnResolver());
                 table.projectColumns(context.getScan());
-                return compileSingleQuery(context, subquery, binds, null);
+                return compileSingleQuery(context, subquery, binds, null, true);
             }
             QueryPlan plan = compileSubquery(subquery);
             ProjectedPTableWrapper projectedTable = table.createProjectedTable(plan.getProjector());
@@ -219,9 +219,13 @@ public class QueryCompiler {
             }
             context.setCurrentTable(tableRef);
             context.setResolver(needsProject ? projectedTable.createColumnResolver() : joinTable.getOriginalResolver());
-            BasicQueryPlan plan = compileSingleQuery(context, query, binds, parallelIteratorFactory);
+            BasicQueryPlan plan = compileSingleQuery(context, query, binds, parallelIteratorFactory, joinTable.isAllLeftJoin());
             Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context);
-            HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, joinExpressions, joinTypes, starJoinVector, tables, fieldPositions, postJoinFilterExpression, forceProjection);
+            Integer limit = null;
+            if (query.getLimit() != null && !query.isAggregate() && !query.isDistinct() && query.getOrderBy().isEmpty()) {
+                limit = LimitCompiler.compile(context, query);
+            }
+            HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, joinExpressions, joinTypes, starJoinVector, tables, fieldPositions, postJoinFilterExpression, limit, forceProjection);
             return new HashJoinPlan(joinTable.getStatement(), plan, joinInfo, hashExpressions, joinPlans, clientProjectors);
         }
         
@@ -270,9 +274,13 @@ public class QueryCompiler {
             TupleProjector.serializeProjectorIntoScan(context.getScan(), rhsProjTable.createTupleProjector());
             context.setCurrentTable(rhsTableRef);
             context.setResolver(projectedTable.createColumnResolver());
-            BasicQueryPlan rhsPlan = compileSingleQuery(context, rhs, binds, parallelIteratorFactory);
+            BasicQueryPlan rhsPlan = compileSingleQuery(context, rhs, binds, parallelIteratorFactory, type == JoinType.Right);
             Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context);
-            HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, new List[] {joinExpressions}, new JoinType[] {type == JoinType.Inner ? type : JoinType.Left}, new boolean[] {true}, new PTable[] {lhsProjTable.getTable()}, new int[] {fieldPosition}, postJoinFilterExpression, forceProjection);
+            Integer limit = null;
+            if (rhs.getLimit() != null && !rhs.isAggregate() && !rhs.isDistinct() && rhs.getOrderBy().isEmpty()) {
+                limit = LimitCompiler.compile(context, rhs);
+            }
+            HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, new List[] {joinExpressions}, new JoinType[] {type == JoinType.Inner ? type : JoinType.Left}, new boolean[] {true}, new PTable[] {lhsProjTable.getTable()}, new int[] {fieldPosition}, postJoinFilterExpression, limit, forceProjection);
             return new HashJoinPlan(joinTable.getStatement(), rhsPlan, joinInfo, new List[] {hashExpressions}, new QueryPlan[] {lhsPlan}, new TupleProjector[] {clientProjector});
         }
         
@@ -287,7 +295,7 @@ public class QueryCompiler {
         return statement.getConnection().getQueryServices().getOptimizer().optimize(statement, plan);
     }
     
-    protected BasicQueryPlan compileSingleQuery(StatementContext context, SelectStatement select, List<Object> binds, ParallelIteratorFactory parallelIteratorFactory) throws SQLException{
+    protected BasicQueryPlan compileSingleQuery(StatementContext context, SelectStatement select, List<Object> binds, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) throws SQLException{
         PhoenixConnection connection = statement.getConnection();
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
@@ -328,7 +336,7 @@ public class QueryCompiler {
         if (select.isAggregate() || select.isDistinct()) {
             return new AggregatePlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, groupBy, having);
         } else {
-            return new ScanPlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory);
+            return new ScanPlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, allowPageFilter);
         }
     }
 }
