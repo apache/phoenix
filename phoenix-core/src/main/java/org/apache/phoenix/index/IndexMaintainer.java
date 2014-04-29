@@ -34,6 +34,7 @@ import java.util.Set;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Put;
@@ -448,21 +449,29 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             newState.put(new ColumnReference(CellUtil.cloneFamily(kv), CellUtil.cloneQualifier(kv)), kv);
         }
         for (ColumnReference ref : indexedColumns) {
-            KeyValue newValue = newState.get(ref);
-            if (newValue != null) { // Indexed column was potentially changed
-                ImmutableBytesPtr oldValue = oldState.getLatestValue(ref);
-                // If there was no old value or the old value is different than the new value, the index row needs to be deleted
-                if (oldValue == null || 
-                        Bytes.compareTo(oldValue.get(), oldValue.getOffset(), oldValue.getLength(), 
-                          newValue.getValueArray(), newValue.getValueOffset(), newValue.getValueLength()) != 0){
-                    return true;
-                }
-            }
+        	KeyValue newValue = newState.get(ref);
+        	if (newValue != null) { // Indexed column has potentially changed
+        		ImmutableBytesPtr oldValue = oldState.getLatestValue(ref);
+        		boolean newValueSetAsNull = newValue.getTypeByte() == Type.DeleteColumn.getCode();
+        		//If the new column value has to be set as null and the older value is null too,
+        		//then just skip to the next indexed column.
+        		if (newValueSetAsNull && oldValue == null) {
+        			continue;
+        		}
+        		if ((oldValue == null && !newValueSetAsNull) || (oldValue != null && newValueSetAsNull)) {
+        			return true;
+        		}
+        		// If the old value is different than the new value, the index row needs to be deleted
+        		if (Bytes.compareTo(oldValue.get(), oldValue.getOffset(), oldValue.getLength(), 
+        				newValue.getValueArray(), newValue.getValueOffset(), newValue.getValueLength()) != 0) {
+        			return true;
+        		}
+        	}
         }
         return false;
     }
-
-    /**
+    
+   /**
      * Used for immutable indexes that only index PK column values. In that case, we can handle a data row deletion,
      * since we can build the corresponding index row key.
      */
