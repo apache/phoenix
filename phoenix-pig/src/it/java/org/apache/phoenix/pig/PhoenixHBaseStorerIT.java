@@ -31,6 +31,7 @@ import java.util.Collection;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.pig.ExecType;
@@ -61,14 +62,16 @@ public class PhoenixHBaseStorerIT {
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
         hbaseTestUtil = new HBaseTestingUtility();
-        ConfigUtil.setReplicationConfigIfAbsent(hbaseTestUtil.getConfiguration());
+        conf = hbaseTestUtil.getConfiguration();
+        ConfigUtil.setReplicationConfigIfAbsent(conf);
+        conf.setInt(QueryServices.MASTER_INFO_PORT_ATTRIB, -1);
+        conf.setInt(QueryServices.REGIONSERVER_INFO_PORT_ATTRIB, -1);
         hbaseTestUtil.startMiniCluster();
 
         Class.forName(PhoenixDriver.class.getName());
         zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
         conn = DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL +
                  PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum);
-        conf = hbaseTestUtil.getConfiguration();
         // Pig variables
         tupleFactory = TupleFactory.getInstance();
     }
