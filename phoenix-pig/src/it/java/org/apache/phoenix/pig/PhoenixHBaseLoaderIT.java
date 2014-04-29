@@ -77,7 +77,10 @@ public class PhoenixHBaseLoaderIT {
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
         hbaseTestUtil = new HBaseTestingUtility();
-        hbaseTestUtil.getConfiguration().set(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
+        conf = hbaseTestUtil.getConfiguration();
+        conf.set(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
+        conf.setInt(QueryServices.MASTER_INFO_PORT_ATTRIB, -1);
+        conf.setInt(QueryServices.REGIONSERVER_INFO_PORT_ATTRIB, -1);
         hbaseTestUtil.startMiniCluster();
 
         Class.forName(PhoenixDriver.class.getName());
@@ -86,8 +89,6 @@ public class PhoenixHBaseLoaderIT {
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         conn = DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL +
                  PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum,props);
-
-        conf = hbaseTestUtil.getConfiguration();
      }
     
     @Before

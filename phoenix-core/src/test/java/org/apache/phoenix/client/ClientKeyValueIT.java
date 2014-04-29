@@ -22,6 +22,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
@@ -34,6 +35,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ClientKeyValue;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.MinVersionTestRunner;
 import org.apache.phoenix.util.MinVersionTestRunner.MinVersion;
 import org.junit.AfterClass;
@@ -54,7 +56,10 @@ public class ClientKeyValueIT {
    */
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
-    TEST_UTIL.startMiniCluster();
+      Configuration conf = TEST_UTIL.getConfiguration();
+      conf.setInt(QueryServices.MASTER_INFO_PORT_ATTRIB, -1);
+      conf.setInt(QueryServices.REGIONSERVER_INFO_PORT_ATTRIB, -1);
+      TEST_UTIL.startMiniCluster();
   }
 
   /**
