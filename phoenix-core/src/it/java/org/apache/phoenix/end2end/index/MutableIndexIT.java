@@ -29,6 +29,7 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 
@@ -38,10 +39,10 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
+import com.google.common.primitives.Doubles;
 
 public class MutableIndexIT extends BaseMutableIndexIT {
     @BeforeClass 
@@ -822,34 +823,73 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         }
     }
 
-    @Ignore("PHOENIX-63")
-    @Test
-    public void testNullValueIndexKey() throws Exception {
+    public void testUpsertingNullForIndexedColumns() throws Exception {
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "CREATE TABLE DEMO(R VARCHAR PRIMARY KEY, A DOUBLE, C VARCHAR)";
-            conn.createStatement().execute(ddl);
-            ddl = "CREATE INDEX IDX_DEMO ON DEMO (A) INCLUDE (C)";
-            conn.createStatement().execute(ddl);
-    
-            PreparedStatement stmt = conn.prepareStatement("upsert into DEMO values(?, ?, ?)");
-            stmt.setString(1, "r1");
-            stmt.setString(2, null);
-            stmt.setString(3, "c1");
-            stmt.executeUpdate();
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE DEMO(v1 VARCHAR PRIMARY KEY, v2 DOUBLE, v3 VARCHAR)");
+            stmt.execute("CREATE INDEX DEMO_idx ON DEMO (v2) INCLUDE(v3)");
+
+            //create a row with value null for indexed column v2
+            stmt.executeUpdate("upsert into DEMO values('cc1', null, 'abc')");
             conn.commit();
-            
-            String query = "select * from DEMO"; 
-            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER IDX_DEMO", QueryUtil.getExplainPlan(rs));
-            
-            rs = conn.createStatement().executeQuery(query);
+
+            //assert values in index table 
+            ResultSet rs = stmt.executeQuery("select * from DEMO_IDX");
             assertTrue(rs.next());
-            assertEquals("r1", rs.getString(1));
-            assertNull(rs.getString(2));
-            assertEquals("c1", rs.getString(3));
+            assertEquals(0, Doubles.compare(0, rs.getDouble(1)));
+            assertEquals("cc1", rs.getString(2));
+            assertEquals("abc", rs.getString(3));
+            assertFalse(rs.next());
+
+            //assert values in data table
+            rs = stmt.executeQuery("select v1, v2, v3 from DEMO");
+            assertTrue(rs.next());
+            assertEquals("cc1", rs.getString(1));
+            assertEquals(0, Doubles.compare(0, rs.getDouble(2)));
+            assertEquals("abc", rs.getString(3));
+            assertFalse(rs.next());
+
+            //update the previously null value for indexed column v2 to a non-null value 1.23
+            stmt.executeUpdate("upsert into DEMO values('cc1', 1.23, 'abc')");
+            conn.commit();
+
+            //assert values in index table 
+            rs = stmt.executeQuery("select * from DEMO_IDX");
+            assertTrue(rs.next());
+            assertEquals(0, Doubles.compare(1.23, rs.getDouble(1)));
+            assertEquals("cc1", rs.getString(2));
+            assertEquals("abc", rs.getString(3));
+            assertFalse(rs.next());
+
+            //assert values in data table
+            rs = stmt.executeQuery("select v1, v2, v3 from DEMO");
+            assertTrue(rs.next());
+            assertEquals("cc1", rs.getString(1));
+            assertEquals(0, Doubles.compare(1.23, rs.getDouble(2)));
+            assertEquals("abc", rs.getString(3));
+            assertFalse(rs.next());
+
+            //update the value for indexed column v2 back to null
+            stmt.executeUpdate("upsert into DEMO values('cc1', null, 'abc')");
+            conn.commit();
+
+            //assert values in index table 
+            rs = stmt.executeQuery("select * from DEMO_IDX");
+            assertTrue(rs.next());
+            assertEquals(0, Doubles.compare(0, rs.getDouble(1)));
+            assertEquals("cc1", rs.getString(2));
+            assertEquals("abc", rs.getString(3));
+            assertFalse(rs.next());
+
+            //assert values in data table
+            rs = stmt.executeQuery("select v1, v2, v3 from DEMO");
+            assertTrue(rs.next());
+            assertEquals("cc1", rs.getString(1));
+            assertEquals(0, Doubles.compare(0, rs.getDouble(2)));
+            assertEquals("abc", rs.getString(3));
             assertFalse(rs.next());
         } finally {
             conn.close();

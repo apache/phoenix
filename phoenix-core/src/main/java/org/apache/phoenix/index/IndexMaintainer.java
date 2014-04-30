@@ -33,6 +33,7 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -449,10 +450,19 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             KeyValue newValue = newState.get(ref);
             if (newValue != null) { // Indexed column was potentially changed
                 ImmutableBytesPtr oldValue = oldState.getLatestValue(ref);
+                boolean  newValueSetAsNull = newValue.getType() == Type.DeleteColumn.getCode();
+                //If the new column value has to be set as null and the older value is null too,
+                //then just skip to the next indexed column.
+                if (newValueSetAsNull && oldValue == null) {
+                    continue;
+                }
+                if ((oldValue == null && !newValueSetAsNull) || (oldValue != null && newValueSetAsNull)) {
+                    return true;
+                }
                 // If there was no old value or the old value is different than the new value, the index row needs to be deleted
                 if (oldValue == null || 
                         Bytes.compareTo(oldValue.get(), oldValue.getOffset(), oldValue.getLength(), 
-                                                   newValue.getBuffer(), newValue.getValueOffset(), newValue.getValueLength()) != 0){
+                                newValue.getBuffer(), newValue.getValueOffset(), newValue.getValueLength()) != 0){
                     return true;
                 }
             }
