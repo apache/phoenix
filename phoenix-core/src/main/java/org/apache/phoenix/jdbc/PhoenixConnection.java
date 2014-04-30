@@ -47,6 +47,7 @@ import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -110,7 +111,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final String datePattern;
     
     private boolean isClosed = false;
-    
+
     private static Properties newPropsWithSCN(long scn, Properties props) {
         props = new Properties(props);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
@@ -701,5 +702,21 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     public KeyValueBuilder getKeyValueBuilder() {
         return this.services.getKeyValueBuilder();
+    }
+
+    // We create a FilterList while manipulating the context classloader here to get around the
+    // fact that the FilterList class calls HBaseConfiguration.create, which is in turn reliant
+    // on the current thread's context classloader. Some JDBC clients do questionable things with
+    // the context classloader, so by ensuring that we create a FilterList here with a context
+    // classloader that is under our control, we avoid these kinds of errors in client tools.
+    // Note: this is only needed when using HBase 0.94.x.
+    static {
+        ClassLoader saveContextClassloader = Thread.currentThread().getContextClassLoader();
+        try {
+            Thread.currentThread().setContextClassLoader(PhoenixConnection.class.getClassLoader());
+            new FilterList();
+        } finally {
+            Thread.currentThread().setContextClassLoader(saveContextClassloader);
+        }
     }
 }
