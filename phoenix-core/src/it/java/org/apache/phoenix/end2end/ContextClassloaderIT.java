@@ -33,6 +33,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class ContextClassloaderIT  {
 
@@ -58,8 +59,7 @@ public class ContextClassloaderIT  {
     }
 
     private static String getUrl() {
-        return "jdbc:phoenix:localhost:" + hbaseTestUtil.getZkCluster
-                ().getClientPort();
+        return "jdbc:phoenix:localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
     }
 
     @AfterClass
@@ -107,6 +107,34 @@ public class ContextClassloaderIT  {
                         // Just make sure we run over all records
                     }
                     tablesRs.close();
+                    conn.close();
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        };
+        BadContextClassloaderThread t = new BadContextClassloaderThread(target);
+        t.start();
+        t.join();
+        assertFalse(t.failed);
+    }
+
+    @Test
+    public void testExecuteDdlWithDifferentContextClassloader() throws InterruptedException {
+        Runnable target = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Connection conn = DriverManager.getConnection(getUrl());
+                    Statement stmt = conn.createStatement();
+                    stmt.execute("CREATE TABLE T2 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR)");
+                    stmt.execute("UPSERT INTO T2 VALUES (1, 'name1')");
+                    conn.commit();
+                    ResultSet rs = stmt.executeQuery("SELECT * FROM T2");
+                    assertTrue(rs.next());
+                    assertFalse(rs.next());
+                    rs.close();
+                    stmt.close();
                     conn.close();
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
