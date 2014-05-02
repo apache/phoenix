@@ -18,14 +18,17 @@
 package org.apache.phoenix.jdbc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 
@@ -36,6 +39,25 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
     public void testFirstConnectionWhenPropsHasTenantId() throws Exception {
         final String url = getUrl();
         verifyConnectionValid(url);
+    }
+    
+    @Test
+    public void testMaxMutationSizeSetCorrectly() throws Exception {
+        Properties connectionProperties = new Properties();
+        connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB,"100");
+        connectionProperties.setProperty(QueryServices.IMMUTABLE_ROWS_ATTRIB,"100");
+        Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
+
+        PreparedStatement stmt = connection.prepareStatement("upsert into " + ATABLE + " (organization_id, entity_id, a_integer) values (?,?,?)");
+        try {
+            for (int i = 0; i < 200; i++) {
+                stmt.setString(1, "AAAA" + i);
+                stmt.setString(2, "BBBB" + i);
+                stmt.setInt(3, 1);
+                stmt.execute();
+            }
+            fail("Upsert should have failed since the number of upserts (200) is greater than the MAX_MUTATION_SIZE_ATTRIB (100)");
+        } catch (IllegalArgumentException expected) {}
     }
 
     private void verifyConnectionValid(String url) throws SQLException {
