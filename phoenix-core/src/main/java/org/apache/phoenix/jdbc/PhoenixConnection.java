@@ -71,6 +71,7 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.NumberUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
@@ -134,7 +135,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData) throws SQLException {
         this.url = url;
         // Copy so client cannot change
-        this.info = info == null ? new Properties() : new Properties(info);
+        this.info = info == null ? new Properties() : PropertiesUtil.deepCopy(info);
         final PName tenantId = JDBCUtil.getTenantId(url, info);
         if (this.info.isEmpty() && tenantId == null) {
             this.services = services;
