@@ -17,8 +17,11 @@
  */
 package org.apache.phoenix.query;
 
+import java.util.concurrent.Callable;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.util.PhoenixContextExecutor;
 
 /**
  * Creates {@link Configuration} instances that contain HBase/Hadoop settings.
@@ -32,13 +35,30 @@ public interface ConfigurationFactory {
      */
     Configuration getConfiguration();
 
+    Configuration getConfiguration(Configuration conf);
+
     /**
      * Default implementation uses {@link org.apache.hadoop.hbase.HBaseConfiguration#create()}.
      */
     static class ConfigurationFactoryImpl implements ConfigurationFactory {
         @Override
         public Configuration getConfiguration() {
-            return HBaseConfiguration.create();
+            return PhoenixContextExecutor.callWithoutPropagation(new Callable<Configuration>() {
+                @Override
+                public Configuration call() throws Exception {
+                    return HBaseConfiguration.create();
+                }
+            });
+        }
+
+        @Override
+        public Configuration getConfiguration(final Configuration conf) {
+            return PhoenixContextExecutor.callWithoutPropagation(new Callable<Configuration>() {
+                @Override
+                public Configuration call() throws Exception {
+                    return HBaseConfiguration.create(conf);
+                }
+            });
         }
     }
 }
