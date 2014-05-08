@@ -21,6 +21,7 @@ import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
+import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_BYTES_PTR;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 
 import java.io.ByteArrayInputStream;
@@ -31,6 +32,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -38,6 +40,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -56,8 +59,12 @@ import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
+import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.TupleProjector;
@@ -73,6 +80,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
@@ -130,6 +138,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (isUngroupedAgg == null) {
             return s;
         }
+
+        byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
+        List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
+        List<Mutation> indexMutations = localIndexBytes == null ? Collections.<Mutation>emptyList() : Lists.<Mutation>newArrayListWithExpectedSize(1024);
         
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
@@ -165,6 +177,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
             emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_CF);
         }
+        if(localIndexBytes != null) {
+            ptr = new ImmutableBytesWritable();
+        }
         
         int batchSize = 0;
         long ts = scan.getTimeRange().getMax();
@@ -197,7 +212,26 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     rowCount++;
                     result.setKeyValues(results);
                     try {
-                        if (isDelete) {
+                        if (indexMaintainers != null) {
+                            for (IndexMaintainer maintainer : indexMaintainers) {
+                                ImmutableBytesPtr emptyKeyValueFamily = maintainer.getEmptyKeyValueFamily();
+                                Iterator<Cell> iterator = results.iterator();
+                                while (iterator.hasNext()) {
+                                    Cell cell = iterator.next();
+                                    if (Bytes.compareTo(cell.getRowArray(), cell.getFamilyOffset(), cell.getFamilyLength(), emptyKeyValueFamily.get(), emptyKeyValueFamily.getOffset(), emptyKeyValueFamily.getLength()) == 0
+                                            && Bytes.compareTo(cell.getRowArray(), cell.getQualifierOffset(), cell.getQualifierLength(), EMPTY_COLUMN_BYTES_PTR.get(), EMPTY_COLUMN_BYTES_PTR.getOffset(), EMPTY_COLUMN_BYTES_PTR.getLength()) == 0) {
+                                        iterator.remove();
+                                    }
+                                }
+                                if (!results.isEmpty()) {
+                                    result.getKey(ptr);
+                                    ValueGetter valueGetter = IndexManagementUtil.createGetterFromKeyValues(results);
+                                    Put put = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, c.getEnvironment().getRegion().getStartKey());
+                                    indexMutations.add(put);
+                                }
+                            }
+                            result.setKeyValues(results);
+                        } else if (isDelete) {
                             // FIXME: the version of the Delete constructor without the lock args was introduced
                             // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version
                             // of the client.
@@ -278,6 +312,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             commitBatch(region, mutations, indexUUID);
                             mutations.clear();
                         }
+                        // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
+                        if (!indexMutations.isEmpty() && batchSize > 0 && indexMutations.size() % batchSize == 0) {
+                            HRegion indexRegion = getIndexRegion(c.getEnvironment());
+                            // Get indexRegion corresponding to data region
+                            commitBatch(indexRegion, indexMutations, null);
+                            indexMutations.clear();
+                        }
+
                     } catch (ConstraintViolationException e) {
                         // Log and ignore in count
                         logger.error("Failed to create row in " + region.getRegionNameAsString() + " with values " + SchemaUtil.toString(values), e);
@@ -301,6 +343,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
         if (!mutations.isEmpty()) {
             commitBatch(region,mutations, indexUUID);
+        }
+
+        if (!indexMutations.isEmpty()) {
+            HRegion indexRegion = getIndexRegion(c.getEnvironment());
+            // Get indexRegion corresponding to data region
+            commitBatch(indexRegion, indexMutations, null);
+            indexMutations.clear();
         }
 
         final boolean hadAny = hasAny;
@@ -344,7 +393,19 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         };
         return scanner;
     }
-    
+
+    private HRegion getIndexRegion(RegionCoprocessorEnvironment environment) throws IOException {
+        HRegion userRegion = environment.getRegion();
+        TableName indexTableName = TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(userRegion.getTableDesc().getName()));
+        List<HRegion> onlineRegions = environment.getRegionServerServices().getOnlineRegions(indexTableName);
+        for(HRegion indexRegion : onlineRegions) {
+            if (Bytes.compareTo(userRegion.getStartKey(), indexRegion.getStartKey()) == 0) {
+                return indexRegion;
+            }
+        }
+        return null;
+    }
+
     private static PTable deserializeTable(byte[] b) {
         try {
             PTableProtos.PTable ptableProto = PTableProtos.PTable.parseFrom(b);

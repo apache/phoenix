@@ -45,6 +45,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String SPECIFIC_ARRAY_INDEX = "_SpecificArrayIndex";
     public static final String GROUP_BY_LIMIT = "_GroupByLimit";
     public static final String LOCAL_INDEX = "_LocalIndex";
+    public static final String LOCAL_INDEX_BUILD = "_LocalIndexBuild";
 
     /**
      * Used by logger to identify coprocessor
