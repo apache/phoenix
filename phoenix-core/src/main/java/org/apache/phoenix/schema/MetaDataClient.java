@@ -75,6 +75,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -82,6 +83,8 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -89,14 +92,20 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.PostDDLCompiler;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ColumnDef;
@@ -489,9 +498,43 @@ public class MetaDataClient {
         connection.rollback();
         try {
             connection.setAutoCommit(true);
-            PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(connection, dataTableRef);
-            MutationPlan plan = compiler.compile(index);
-            MutationState state = connection.getQueryServices().updateData(plan);
+            MutationState state;
+            // For local indexes, we optimize the initial index population by *not* sending Puts over
+            // the wire for the index rows, as we don't need to do that. Instead, we tap into our
+            // region observer to generate the index rows based on the data rows as we scan
+            if (index.getIndexType() == IndexType.LOCAL) {
+                final PhoenixStatement statement = new PhoenixStatement(connection);
+                String query = "SELECT count(*) FROM \"" + dataTableRef.getTable().getName().getString() + "\"";
+                QueryPlan plan = statement.compileQuery(query);
+                // Set attribute on scan that UngroupedAggregateRegionObserver will switch on.
+                // We'll detect that this attribute was set the server-side and write the index
+                // rows per region as a result. The value of the attribute will be our persisted
+                // index maintainers.
+                // Define the LOCAL_INDEX_BUILD as a new static in BaseScannerRegionObserver
+                Scan scan = plan.getContext().getScan();
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                PTable dataTable = dataTableRef.getTable();
+                dataTable.getIndexMaintainers(ptr);
+                scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
+                // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
+                // However, in this case, we need to project all of the data columns that contribute to the index.
+                IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable);
+                for (ColumnReference columnRef : indexMaintainer.getAllColumns()) {
+                    scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
+                }
+                Cell kv = plan.iterator().next().getValue(0);
+                ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
+                // A single Cell will be returned with the count(*) - we decode that here
+                long rowCount = PDataType.LONG.getCodec().decodeLong(tmpPtr, SortOrder.getDefault());
+                // The contract is to return a MutationState that contains the number of rows modified. In this
+                // case, it's the number of rows in the data table which corresponds to the number of index
+                // rows that were added.
+                state = new MutationState(0, connection, rowCount);
+            } else {
+                PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(connection, dataTableRef);
+                MutationPlan plan = compiler.compile(index);
+                state = connection.getQueryServices().updateData(plan);
+            }
             AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null, 
                     TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
                     dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
@@ -685,7 +728,10 @@ public class MetaDataClient {
         if (connection.getSCN() != null) {
             return buildIndexAtTimeStamp(table, statement.getTable());
         }
-        
+        if (statement.getIndexType() == IndexType.LOCAL) {
+            ColumnResolver resolver = FromCompiler.getResolverForMutation(statement, connection);
+            tableRef = resolver.getTables().get(0);
+        }
         return buildIndex(table, tableRef);
     }
 

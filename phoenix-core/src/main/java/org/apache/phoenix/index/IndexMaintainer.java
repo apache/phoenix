@@ -511,7 +511,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return allColumns;
     }
     
-    private ImmutableBytesPtr getEmptyKeyValueFamily() {
+    public ImmutableBytesPtr getEmptyKeyValueFamily() {
         // Since the metadata of an index table will never change,
         // we can infer this based on the family of the first covered column
         // If if there are no covered columns, we know it's our default name
@@ -697,7 +697,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
 
     private int getIndexPkColumnCount() {
-        return dataRowKeySchema.getFieldCount() + indexedColumns.size() - (isDataTableSalted ? 1 : 0) - (isMultiTenant ? 1 : 0) - (viewIndexId == null ? 0 : 1);
+        return dataRowKeySchema.getFieldCount() + indexedColumns.size() - (isDataTableSalted ? 1 : 0) - (isMultiTenant ? 1 : 0) /*+ (viewIndexId == null ? 0 : 1)*/;
     }
     
     private RowKeyMetaData newRowKeyMetaData() {

@@ -33,6 +33,10 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -67,8 +71,8 @@ public class LocalIndexIT extends BaseIndexIT {
                 "k2 INTEGER NOT NULL,\n" +
                 "v1 VARCHAR,\n" +
                 "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))\n"
-                        + (saltBuckets == null || splits != null ? "" : (",salt_buckets=" + saltBuckets)
-                        + (saltBuckets != null || splits == null ? "" : ",splits=" + splits));
+                        + (saltBuckets != null && splits == null ? (",salt_buckets=" + saltBuckets) : "" 
+                        + (saltBuckets == null && splits != null ? (" split on " + splits) : ""));
         conn.createStatement().execute(ddl);
         conn.close();
     }
@@ -91,13 +95,13 @@ public class LocalIndexIT extends BaseIndexIT {
         Connection conn1 = DriverManager.getConnection(getUrl());
         Connection conn2 = DriverManager.getConnection(getUrl());
         try {
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)"+" splits={1,2,3}");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)"+" split on (1,2,3)");
             fail("Local index cannot be pre-split");
         } catch (SQLException e) { }
         try {
             conn2.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_FULL_NAME).next();
             conn2.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,INDEX_TABLE_NAME));
-            fail("Local index should be created.");
+            fail("Local index should not be created.");
         } catch (TableNotFoundException e) { }
     }
 
@@ -119,7 +123,7 @@ public class LocalIndexIT extends BaseIndexIT {
 
     @Test
     public void testLocalIndexTableRegionSplitPolicyAndSplitKeys() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null,"{1,2,3}");
+        createBaseTable(DATA_TABLE_NAME, null,"('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         Connection conn2 = DriverManager.getConnection(getUrl());
         conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
@@ -149,5 +153,71 @@ public class LocalIndexIT extends BaseIndexIT {
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
                 + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME);
         assertFalse("View index sequences should be deleted.", rs.next());
+    }
+    
+    @Test
+    public void testPutsToLocalIndexTable() throws Exception {
+        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
+        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('b',1,2,'z')");
+        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('f',1,2,'z')");
+        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('j',2,4,'a')");
+        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('q',3,1,'c')");
+        conn1.commit();
+        ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + INDEX_TABLE_NAME);
+        assertTrue(rs.next());
+        assertEquals(4, rs.getInt(1));
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        HTable indexTable = new HTable(admin.getConfiguration() ,TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
+        Pair<byte[][], byte[][]> startEndKeys = indexTable.getStartEndKeys();
+        byte[][] startKeys = startEndKeys.getFirst();
+        byte[][] endKeys = startEndKeys.getSecond();
+        for (int i = 0; i < startKeys.length; i++) {
+            Scan s = new Scan();
+            s.setStartRow(startKeys[i]);
+            s.setStopRow(endKeys[i]);
+            ResultScanner scanner = indexTable.getScanner(s);
+            int count = 0;
+            for(Result r:scanner){
+                count++;
+            }
+            scanner.close();
+            assertEquals(1, count);
+        }
+        indexTable.close();
+    }
+    
+    @Test
+    public void testBuildIndexWhenUserTableAlreadyHasData() throws Exception {
+        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('b',1,2,'z')");
+        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('f',1,2,'z')");
+        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('j',2,4,'a')");
+        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('q',3,1,'c')");
+        conn1.commit();
+        conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
+        ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + INDEX_TABLE_NAME);
+        assertTrue(rs.next());
+        assertEquals(4, rs.getInt(1));
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        HTable indexTable = new HTable(admin.getConfiguration() ,TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
+        Pair<byte[][], byte[][]> startEndKeys = indexTable.getStartEndKeys();
+        byte[][] startKeys = startEndKeys.getFirst();
+        byte[][] endKeys = startEndKeys.getSecond();
+        for (int i = 0; i < startKeys.length; i++) {
+            Scan s = new Scan();
+            s.setStartRow(startKeys[i]);
+            s.setStopRow(endKeys[i]);
+            ResultScanner scanner = indexTable.getScanner(s);
+            int count = 0;
+            for(Result r:scanner){
+                count++;
+            }
+            scanner.close();
+            assertEquals(1, count);
+        }
+        indexTable.close();
     }
 }
