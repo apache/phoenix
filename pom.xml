@@ -110,10 +110,6 @@
     <maven.assembly.version>2.4</maven.assembly.version>
     <maven.rat.version>0.8</maven.rat.version>
     
-    <!--  Plugin options -->
-    <numForkedIT>3</numForkedIT>
-    <numForkedUT>3</numForkedUT>
-
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
@@ -240,8 +236,6 @@
           <version>${maven-failsafe-plugin.version}</version>
           <configuration>
             <encoding>UTF-8</encoding>
-            <forkCount>${numForkedIT}</forkCount>
-            <reuseForks>true</reuseForks>
             <argLine>-enableassertions -Xmx3000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
             <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
             <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
@@ -298,8 +292,6 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <version>${maven-surefire-plugin.version}</version>
         <configuration>
-          <forkCount>${numForkedUT}</forkCount>
-          <reuseForks>true</reuseForks>
           <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m 
             -Djava.security.egd=file:/dev/./urandom</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
