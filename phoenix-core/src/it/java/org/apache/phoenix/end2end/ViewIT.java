@@ -30,7 +30,9 @@ import java.sql.SQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(HBaseManagedTimeTest.class)
 public class ViewIT extends BaseViewIT {
     
     @Test

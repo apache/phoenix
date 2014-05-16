@@ -57,8 +57,8 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
         this(ReadOnlyProps.EMPTY_PROPS);
     }
     
-    public QueryServicesTestImpl(ReadOnlyProps overrideProps) {
-        super(withDefaults()
+    public static QueryServicesOptions getDefaultTestServicesOptions() {
+    	return withDefaults()
                 .setThreadPoolSize(DEFAULT_THREAD_POOL_SIZE)
                 .setQueueSize(DEFAULT_QUEUE_SIZE)
                 .setMaxMemoryPerc(DEFAULT_MAX_MEMORY_PERC)
@@ -78,8 +78,10 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setWALEditCodec(DEFAULT_WAL_EDIT_CODEC)
                 .setDropMetaData(DEFAULT_DROP_METADATA)
                 .setMaxClientMetaDataCacheSize(DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE)
-                .setMaxServerMetaDataCacheSize(DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE)
-                .setAll(overrideProps)
-        );
+                .setMaxServerMetaDataCacheSize(DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE);
+    }
+    
+    public QueryServicesTestImpl(ReadOnlyProps overrideProps) {
+        super(getDefaultTestServicesOptions().setAll(overrideProps));
     }    
 }

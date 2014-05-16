@@ -30,13 +30,15 @@ import org.apache.flume.lifecycle.LifecycleState;
 import org.apache.flume.sink.DefaultSinkFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
-import org.junit.Assert;
-import org.junit.Test;
-
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.flume.serializer.EventSerializers;
 import org.apache.phoenix.flume.sink.PhoenixSink;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assert;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(HBaseManagedTimeTest.class)
 public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
 
     private Context sinkContext;

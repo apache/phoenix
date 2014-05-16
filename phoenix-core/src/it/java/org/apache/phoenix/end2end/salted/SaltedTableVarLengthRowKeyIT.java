@@ -19,7 +19,9 @@
 package org.apache.phoenix.end2end.salted;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -28,9 +30,11 @@ import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
+import org.apache.phoenix.end2end.ClientManagedTimeTest;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(ClientManagedTimeTest.class)
 public class SaltedTableVarLengthRowKeyIT extends BaseClientManagedTimeIT {
 
     private static void initTableValues() throws Exception {

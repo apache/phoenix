@@ -35,6 +35,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.TimeKeeper;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
 /**
@@ -45,6 +46,8 @@ import org.junit.Test;
  * cleared between test runs.
  *
  */
+
+@Category(ClientManagedTimeTest.class)
 public class StatsManagerIT extends BaseParallelIteratorsRegionSplitterIT {
     
     private static class ManualTimeKeeper implements TimeKeeper {

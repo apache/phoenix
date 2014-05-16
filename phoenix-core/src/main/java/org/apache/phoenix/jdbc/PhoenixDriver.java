@@ -174,12 +174,15 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                     SQLCloseables.closeAll(connectionQueryServices);
                 } finally {
                     // We know there's a services object if any connections were made
-                    services.getExecutor().shutdownNow();
+                    services.close();
                 }
             } finally {
+                //even if something wrong happened while closing services above, we still
+                //want to set it to null. Otherwise, we will end up having a possibly non-working
+                //services instance. 
+                services = null;
                 connectionQueryServices.clear();
             }
         }
-        services = null;
     }
 }

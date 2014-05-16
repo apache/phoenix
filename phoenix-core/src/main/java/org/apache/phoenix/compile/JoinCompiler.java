@@ -865,6 +865,7 @@ public class JoinCompiler {
             this.prefilterAcceptedTables = prefilterAcceptedTables;
         }
         
+        @Override
         protected Void leaveBooleanNode(ParseNode node,
                 List<Void> l) throws SQLException {
             ColumnParseNodeVisitor visitor = new ColumnParseNodeVisitor(resolver);
@@ -915,6 +916,7 @@ public class JoinCompiler {
             this.joinTable = joinTable;
         }
         
+        @Override
         protected Void leaveBooleanNode(ParseNode node,
                 List<Void> l) throws SQLException {
             ColumnParseNodeVisitor visitor = new ColumnParseNodeVisitor(resolver);

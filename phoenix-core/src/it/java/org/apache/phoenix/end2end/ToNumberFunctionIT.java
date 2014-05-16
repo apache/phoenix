@@ -33,13 +33,14 @@ import java.sql.Timestamp;
 import java.util.Locale;
 import java.util.Properties;
 
+import org.apache.phoenix.expression.function.ToNumberFunction;
+import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.experimental.categories.Category;
 
 /**
  * Tests for the TO_NUMBER built-in function.
@@ -48,6 +49,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
  * 
  * @since 0.1
  */
+@Category(ClientManagedTimeTest.class)
 public class ToNumberFunctionIT extends BaseClientManagedTimeIT {
 
     // This test changes to locale to en_US, and saves the previous locale here

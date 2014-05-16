@@ -17,25 +17,104 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.junit.Assert.assertTrue;
+
+import java.sql.Date;
+
+import javax.annotation.concurrent.NotThreadSafe;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
+import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.experimental.categories.Category;
 
 /**
- * 
  * Base class for tests that manage their own time stamps
- * We need to separate these from tests that manged the time stamp
- * themselves, because we create/destroy the Phoenix tables
+ * We need to separate these from tests that rely on hbase to set
+ * timestamps, because we create/destroy the Phoenix tables
  * between tests and only allow a table time stamp to increase.
- * If we let HBase set the time stamps, then our client time stamps
- * will usually be smaller than these time stamps and the table
- * deletion/creation would fail.
+ * Without this separation table deletion/creation would fail.
  * 
+ * All tests extending this class use the mini cluster that is
+ * different from the mini cluster used by test classes extending 
+ * {@link BaseHBaseManagedTimeIT}.
  * 
  * @since 0.1
  */
-public abstract class BaseClientManagedTimeIT extends BaseConnectedQueryIT {
-    @Before
-    public void doTestSetup() throws Exception {
-        long ts = nextTimestamp();
-        deletePriorTables(ts-1);    
+@NotThreadSafe
+@Category(ClientManagedTimeTest.class)
+public abstract class BaseClientManagedTimeIT extends BaseTest {
+    private static String url;
+    protected static PhoenixTestDriver driver;
+    private static final Configuration config = HBaseConfiguration.create(); 
+    private static boolean clusterInitialized = false;
+    
+    protected final static String getUrl() {
+        return checkClusterInitialized();
     }
+    
+    protected static Configuration getTestClusterConfig() {
+        // don't want callers to modify config.
+        return new Configuration(config);
+    }
+    
+    @Before
+    public void cleanUpBeforeTest() throws Exception {
+        long ts = nextTimestamp();
+        deletePriorTables(ts - 1, getUrl());    
+    }
+    
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        setUpTestDriver(getUrl(), ReadOnlyProps.EMPTY_PROPS);
+    }
+    
+    protected static void setUpTestDriver(String url, ReadOnlyProps props) throws Exception {
+        if (PhoenixEmbeddedDriver.isTestUrl(url)) {
+            checkClusterInitialized();
+            if (driver == null) {
+                driver = initAndRegisterDriver(url, props);
+            }
+        }
+    }
+
+    private static String checkClusterInitialized() {
+        if (!clusterInitialized) {
+            url = setUpTestCluster(config);
+            clusterInitialized = true;
+        }
+        return url;
+    }
+    
+    @AfterClass
+    public static void dropTables() throws Exception {
+        try {
+            disableAndDropNonSystemTables(driver);
+        } finally {
+            try {
+                assertTrue(destroyDriver(driver));
+            } finally {
+                driver = null;
+            }
+        }
+    }
+    
+    protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        BaseTest.initATableValues(tenantId, splits, date, ts, getUrl());
+    }
+    
+    protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        BaseTest.initEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
+    }
+    
+    protected static void initSaltedEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        BaseTest.initSaltedEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
+    }
+        
 }

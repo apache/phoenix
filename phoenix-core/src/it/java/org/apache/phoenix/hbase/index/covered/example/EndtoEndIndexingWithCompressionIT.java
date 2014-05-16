@@ -17,14 +17,15 @@
  */
 package org.apache.phoenix.hbase.index.covered.example;
 
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
 import org.apache.hadoop.hbase.regionserver.wal.WALEditCodec;
-import org.junit.BeforeClass;
-
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
+import org.junit.BeforeClass;
 
 /**
  * Test secondary indexing from an end-to-end perspective (client to server to index table).
@@ -35,6 +36,7 @@ public class EndtoEndIndexingWithCompressionIT extends EndToEndCoveredIndexingIT
   public static void setupCluster() throws Exception {
     //add our codec and enable WAL compression
     Configuration conf = UTIL.getConfiguration();
+    setUpConfigForMiniCluster(conf);
     IndexTestingUtils.setupConfig(conf);
     // disable version checking, so we can test against whatever version of HBase happens to be
     // installed (right now, its generally going to be SNAPSHOT versions).

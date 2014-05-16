@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.mapreduce;
 
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -28,16 +29,20 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class CsvBulkLoadToolIT {
 
     // We use HBaseTestUtil because we need to start up a MapReduce cluster as well
@@ -48,20 +53,22 @@ public class CsvBulkLoadToolIT {
     @BeforeClass
     public static void setUp() throws Exception {
         hbaseTestUtil = new HBaseTestingUtility();
-        hbaseTestUtil.getConfiguration();
+        Configuration conf = hbaseTestUtil.getConfiguration();
+        setUpConfigForMiniCluster(conf);
         hbaseTestUtil.startMiniCluster();
         hbaseTestUtil.startMiniMapReduceCluster();
 
         Class.forName(PhoenixDriver.class.getName());
         zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
         conn = DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL
-                        + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum);
+                + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum);
     }
 
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
         conn.close();
         PhoenixDriver.INSTANCE.close();
+        hbaseTestUtil.shutdownMiniMapReduceCluster();
         hbaseTestUtil.shutdownMiniCluster();
     }
 
