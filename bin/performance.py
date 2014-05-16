@@ -24,15 +24,14 @@ import subprocess
 import sys
 import phoenix_utils
 
-def queryex(statments, description, statment):
-    print "Query # %s - %s" % (description, statment)
-    statements = statments + statment
-
+def queryex(description, statement):
+    global statements
+    print "Query # %s - %s" % (description, statement)
+    statements = statements + statement
 
 def delfile(filename):
     if os.path.exists(filename):
         os.remove(filename)
-
 
 def usage():
     print "Performance script arguments not specified. Usage: performance.sh \
@@ -89,15 +88,11 @@ createFileWithContent(ddl, createtable)
 subprocess.call(execute + ddl, shell=True)
 
 # Write real,user,sys time on console for the following queries
-queryex(statements, "1 - Count", "SELECT COUNT(1) FROM %s;" % (table))
-queryex(statements, "2 - Group By First PK", "SELECT HOST FROM %s GROUP \
-BY HOST;" % (table))
-queryex(statements, "3 - Group By Second PK", "SELECT DOMAIN FROM %s GROUP \
-BY DOMAIN;" % (table))
-queryex(statements, "4 - Truncate + Group By", "SELECT TRUNC(DATE,'DAY') DAY \
-FROM %s GROUP BY TRUNC(DATE,'DAY');" % (table))
-queryex(statements, "5 - Filter + Count", "SELECT COUNT(1) FROM %s WHERE \
-CORE<10;" % (table))
+queryex("1 - Count", "SELECT COUNT(1) FROM %s;" % (table))
+queryex("2 - Group By First PK", "SELECT HOST FROM %s GROUP BY HOST;" % (table))
+queryex("3 - Group By Second PK", "SELECT DOMAIN FROM %s GROUP BY DOMAIN;" % (table))
+queryex("4 - Truncate + Group By", "SELECT TRUNC(DATE,'DAY') DAY FROM %s GROUP BY TRUNC(DATE,'DAY');" % (table))
+queryex("5 - Filter + Count", "SELECT COUNT(1) FROM %s WHERE CORE<10;" % (table))
 
 print "\nGenerating and upserting data..."
 subprocess.call('java -jar %s %s' % (phoenix_utils.testjar, rowcount), shell=True)
