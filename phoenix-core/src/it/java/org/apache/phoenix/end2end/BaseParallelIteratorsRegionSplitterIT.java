@@ -34,10 +34,11 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-
+@Category(ClientManagedTimeTest.class)
 public class BaseParallelIteratorsRegionSplitterIT extends BaseClientManagedTimeIT {
 
     protected static final byte[] KMIN  = new byte[] {'!'};
@@ -54,6 +55,7 @@ public class BaseParallelIteratorsRegionSplitterIT extends BaseClientManagedTime
     protected static final byte[] KMAX2  = new byte[] {'z'};
     
     @BeforeClass
+    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
         int targetQueryConcurrency = 3;
         int maxQueryConcurrency = 5;
@@ -62,7 +64,7 @@ public class BaseParallelIteratorsRegionSplitterIT extends BaseClientManagedTime
         props.put(QueryServices.TARGET_QUERY_CONCURRENCY_ATTRIB, Integer.toString(targetQueryConcurrency));
         props.put(QueryServices.MAX_INTRA_REGION_PARALLELIZATION_ATTRIB, Integer.toString(Integer.MAX_VALUE));
         // Must update config before starting server
-        startServer(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
     
     protected void initTableValues(long ts) throws Exception {

@@ -37,10 +37,12 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-public class SpillableGroupByIT extends BaseConnectedQueryIT {
+@Category(HBaseManagedTimeTest.class)
+public class SpillableGroupByIT extends BaseHBaseManagedTimeIT {
 
     private static final int NUM_ROWS_INSERTED = 1000;
     
@@ -52,6 +54,7 @@ public class SpillableGroupByIT extends BaseConnectedQueryIT {
     private int id;
 
     @BeforeClass
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // Set a very small cache size to force plenty of spilling
@@ -62,9 +65,7 @@ public class SpillableGroupByIT extends BaseConnectedQueryIT {
                 Integer.toString(1));
         // Large enough to not run out of memory, but small enough to spill
         props.put(QueryServices.MAX_MEMORY_SIZE_ATTRIB, Integer.toString(40000));
-
-        // Must update config before starting server
-        startServer(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     private long createTable() throws Exception {

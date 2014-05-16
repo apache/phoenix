@@ -45,6 +45,7 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Basic tests for Phoenix dynamic upserting
@@ -53,6 +54,7 @@ import org.junit.Test;
  * @since 1.3
  */
 
+@Category(ClientManagedTimeTest.class)
 public class DynamicColumnIT extends BaseClientManagedTimeIT {
     private static final byte[] HBASE_DYNAMIC_COLUMNS_BYTES = SchemaUtil.getTableNameAsBytes(null, HBASE_DYNAMIC_COLUMNS);
     private static final byte[] FAMILY_NAME = Bytes.toBytes(SchemaUtil.normalizeIdentifier("A"));

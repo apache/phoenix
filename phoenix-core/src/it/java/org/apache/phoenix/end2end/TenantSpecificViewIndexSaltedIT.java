@@ -18,7 +18,9 @@
 package org.apache.phoenix.end2end;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(HBaseManagedTimeTest.class)
 public class TenantSpecificViewIndexSaltedIT extends BaseTenantSpecificViewIndexIT {
     private static final Integer SALT_BUCKETS = 3;
     

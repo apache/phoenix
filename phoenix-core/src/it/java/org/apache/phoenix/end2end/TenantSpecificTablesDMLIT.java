@@ -32,7 +32,9 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ClientManagedTimeTest.class)
 public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
     
     @Test

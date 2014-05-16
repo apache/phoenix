@@ -34,18 +34,21 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-public class QueryPlanIT extends BaseConnectedQueryIT {
+@Category(HBaseManagedTimeTest.class)
+public class QueryPlanIT extends BaseHBaseManagedTimeIT {
     
     @BeforeClass
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         // Override date format so we don't have a bunch of zeros
         props.put(QueryServices.DATE_FORMAT_ATTRIB, "yyyy-MM-dd");
         // Must update config before starting server
-        startServer(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
     
     @Test

@@ -34,11 +34,12 @@ import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Floats;
 
-
+@Category(HBaseManagedTimeTest.class)
 public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
 
     @Test
@@ -524,7 +525,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     }
     @Test
     public void testSumDouble() throws Exception {
-        initSumDoubleValues(null);
+        initSumDoubleValues(null, getUrl());
         String query = "SELECT SUM(d) FROM SumDoubleTest";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -541,7 +542,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testSumUnsignedDouble() throws Exception {
-        initSumDoubleValues(null);
+        initSumDoubleValues(null, getUrl());
         String query = "SELECT SUM(ud) FROM SumDoubleTest";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -558,7 +559,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testSumFloat() throws Exception {
-        initSumDoubleValues(null);
+        initSumDoubleValues(null, getUrl());
         String query = "SELECT SUM(f) FROM SumDoubleTest";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -575,7 +576,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testSumUnsignedFloat() throws Exception {
-        initSumDoubleValues(null);
+        initSumDoubleValues(null, getUrl());
         String query = "SELECT SUM(uf) FROM SumDoubleTest";
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);

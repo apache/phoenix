@@ -19,6 +19,7 @@
  */
 package org.apache.phoenix.pig;
 
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -36,9 +37,9 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -56,6 +57,7 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.base.Preconditions;
 
@@ -63,6 +65,7 @@ import com.google.common.base.Preconditions;
  * 
  * Test class to run all the integration tests against a virtual map reduce cluster.
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixHBaseLoaderIT {
     
     private static final Log LOG = LogFactory.getLog(PhoenixHBaseLoaderIT.class);
@@ -79,10 +82,8 @@ public class PhoenixHBaseLoaderIT {
     public static void setUpBeforeClass() throws Exception {
         hbaseTestUtil = new HBaseTestingUtility();
         conf = hbaseTestUtil.getConfiguration();
-        ConfigUtil.setReplicationConfigIfAbsent(conf);
+        setUpConfigForMiniCluster(conf);
         conf.set(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        conf.setInt(QueryServices.MASTER_INFO_PORT_ATTRIB, -1);
-        conf.setInt(QueryServices.REGIONSERVER_INFO_PORT_ATTRIB, -1);
         hbaseTestUtil.startMiniCluster();
 
         Class.forName(PhoenixDriver.class.getName());

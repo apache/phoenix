@@ -17,14 +17,20 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(HBaseManagedTimeTest.class)
 public class UpsertBigValuesIT extends BaseHBaseManagedTimeIT {
 
     private static final long INTEGER_MIN_MINUS_ONE = (long)Integer.MIN_VALUE - 1;

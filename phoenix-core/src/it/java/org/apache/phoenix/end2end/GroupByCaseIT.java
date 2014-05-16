@@ -32,11 +32,11 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 
-import org.junit.Test;
-
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(ClientManagedTimeTest.class)
 public class GroupByCaseIT extends BaseClientManagedTimeIT {
 
     private static String GROUPBY1 = "select " +

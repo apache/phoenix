@@ -29,6 +29,9 @@ import java.sql.ResultSet;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
+import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
@@ -36,15 +39,17 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-
+@Category(HBaseManagedTimeTest.class)
 public class SaltedIndexIT extends BaseIndexIT {
     private static final int TABLE_SPLITS = 3;
     private static final int INDEX_SPLITS = 4;
     
-    @BeforeClass 
+    @BeforeClass
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Don't split intra region so we can more easily know that the n-way parallelization is for the explain plan
@@ -54,7 +59,7 @@ public class SaltedIndexIT extends BaseIndexIT {
         // Drop the HBase table metadata for this test
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         // Must update config before starting server
-        startServer(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
     
     private static void makeImmutableAndDeleteData() throws Exception {

@@ -40,10 +40,6 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.Test;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Ordering;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
@@ -53,7 +49,13 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Ordering;
+
+@Category(ClientManagedTimeTest.class)
 public class ProductMetricsIT extends BaseClientManagedTimeIT {
     private static Format format = DateUtil.getDateParser(DateUtil.DEFAULT_DATE_FORMAT);
     private static final String PRODUCT_METRICS_NAME = "PRODUCT_METRICS";

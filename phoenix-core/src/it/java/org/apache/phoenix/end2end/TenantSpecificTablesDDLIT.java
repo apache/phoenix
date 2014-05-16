@@ -53,7 +53,9 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ClientManagedTimeTest.class)
 public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test

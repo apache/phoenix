@@ -17,17 +17,11 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.phoenix.jdbc.PhoenixDriver;
-import org.apache.phoenix.util.ConfigUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
 import java.sql.Connection;
@@ -35,11 +29,20 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class CsvBulkLoadToolIT {
 
     // We use HBaseTestUtil because we need to start up a MapReduce cluster as well
@@ -51,7 +54,7 @@ public class CsvBulkLoadToolIT {
     public static void setUp() throws Exception {
         hbaseTestUtil = new HBaseTestingUtility();
         Configuration conf = hbaseTestUtil.getConfiguration();
-        ConfigUtil.setReplicationConfigIfAbsent(conf);
+        setUpConfigForMiniCluster(conf);
         hbaseTestUtil.startMiniCluster();
         hbaseTestUtil.startMiniMapReduceCluster();
 

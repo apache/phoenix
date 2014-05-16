@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.hbase.index.covered.example;
 
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
@@ -34,24 +35,26 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
+import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
 import org.apache.phoenix.hbase.index.covered.TableState;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.BaseIndexCodec;
-import org.apache.phoenix.util.ConfigUtil;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * If {@link DoNotRetryIOException} is not subclassed correctly (with the {@link String}
  * constructor), {@link MultiResponse#readFields(java.io.DataInput)} will not correctly deserialize
  * the exception, and just return <tt>null</tt> to the client, which then just goes and retries.
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class FailWithoutRetriesIT {
 
   private static final Log LOG = LogFactory.getLog(FailWithoutRetriesIT.class);
@@ -84,10 +87,9 @@ public class FailWithoutRetriesIT {
   public static void setupCluster() throws Exception {
     // setup and verify the config
     Configuration conf = UTIL.getConfiguration();
+    setUpConfigForMiniCluster(conf);
     IndexTestingUtils.setupConfig(conf);
     IndexManagementUtil.ensureMutableIndexingCorrectlyConfigured(conf);
-    // set replication required parameter
-    ConfigUtil.setReplicationConfigIfAbsent(conf);
     // start the cluster
     UTIL.startMiniCluster();
   }

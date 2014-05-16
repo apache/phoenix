@@ -33,7 +33,9 @@ import java.util.List;
 
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(HBaseManagedTimeTest.class)
 public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     
     private void initIntInTable(Connection conn, List<Integer> data) throws SQLException {

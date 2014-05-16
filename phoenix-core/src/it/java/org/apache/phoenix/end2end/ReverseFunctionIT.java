@@ -28,7 +28,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(HBaseManagedTimeTest.class)
 public class ReverseFunctionIT extends BaseHBaseManagedTimeIT {
     private void initTable(Connection conn, String sortOrder, String s) throws Exception {
         String ddl = "CREATE TABLE REVERSE_TEST (pk VARCHAR NOT NULL PRIMARY KEY " + sortOrder + ", kv VARCHAR)";

@@ -40,7 +40,9 @@ import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(HBaseManagedTimeTest.class)
 public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
 
     private static final String DATATYPE_TABLE = "DATATYPE";

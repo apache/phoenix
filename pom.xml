@@ -114,8 +114,8 @@
     <maven.rat.version>0.8</maven.rat.version>
 	
     <!--  Plugin options -->
-    <numForkedIT>3</numForkedIT>
-    <numForkedUT>3</numForkedUT>
+    <numForkedIT>4</numForkedIT>
+    <numForkedUT>4</numForkedUT>
     
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -243,20 +243,54 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-failsafe-plugin</artifactId>
           <version>${maven-failsafe-plugin.version}</version>
-          <configuration>
-            <encoding>UTF-8</encoding>
-            <forkCount>${numForkedIT}</forkCount>
-            <reuseForks>true</reuseForks>
-            <argLine>-enableassertions -Xmx3000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
-            <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-            <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-          </configuration>
           <executions>
             <execution>
-              <goals>
-                <goal>integration-test</goal>
-                <goal>verify</goal>
-              </goals>
+               <id>ClientManagedTimeTests</id>
+                 <configuration>
+                 <encoding>UTF-8</encoding>
+                 <forkCount>${numForkedIT}</forkCount>
+                 <reuseForks>true</reuseForks>
+                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
+                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                 <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
+               </configuration>
+               <goals>
+                 <goal>integration-test</goal>
+                 <goal>verify</goal>
+               </goals>
+            </execution>
+            <execution>
+               <id>HBaseManagedTimeTests</id>
+                 <configuration>
+                 <encoding>UTF-8</encoding>
+                 <forkCount>${numForkedIT}</forkCount>
+                 <reuseForks>true</reuseForks>
+                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
+                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                 <groups>org.apache.phoenix.end2end.HBaseManagedTimeTest</groups>
+               </configuration>
+               <goals>
+                 <goal>integration-test</goal>
+                 <goal>verify</goal>
+               </goals>
+            </execution>
+	        <execution>
+               <id>NeedTheirOwnClusterTests</id>
+                 <configuration>
+                 <encoding>UTF-8</encoding>
+                 <forkCount>${numForkedIT}</forkCount>
+                 <reuseForks>true</reuseForks>
+                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
+                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                 <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
+               </configuration>
+               <goals>
+                 <goal>integration-test</goal>
+                 <goal>verify</goal>
+               </goals>
             </execution>
           </executions>
         </plugin>

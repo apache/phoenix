@@ -37,11 +37,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
 
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-import org.apache.phoenix.util.PhoenixRuntime;
-
+@Category(ClientManagedTimeTest.class)
 public class OrderByIT extends BaseClientManagedTimeIT {
 
     @Test

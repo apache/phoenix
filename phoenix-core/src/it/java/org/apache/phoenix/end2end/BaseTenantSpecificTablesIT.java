@@ -22,6 +22,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import java.sql.SQLException;
 
 import org.junit.Before;
+import org.junit.experimental.categories.Category;
 
 /**
  * Describe your class here.
@@ -29,6 +30,8 @@ import org.junit.Before;
  * 
  * @since 2.2
  */
+
+@Category(ClientManagedTimeTest.class)
 public abstract class BaseTenantSpecificTablesIT extends BaseClientManagedTimeIT {
     protected static final String TENANT_ID = "ZZTop";
     protected static final String TENANT_TYPE_ID = "abc";

@@ -57,6 +57,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -70,6 +71,7 @@ import com.google.common.collect.Maps;
  * Tests for {@link SkipRangeParallelIteratorRegionSplitter}.
  */
 @RunWith(Parameterized.class)
+@Category(ClientManagedTimeTest.class)
 public class SkipRangeParallelIteratorRegionSplitterIT extends BaseClientManagedTimeIT {
 
     private static final String TABLE_NAME = "TEST_SKIP_RANGE_PARALLEL_ITERATOR";
@@ -319,6 +321,7 @@ public class SkipRangeParallelIteratorRegionSplitterIT extends BaseClientManaged
      }
     
     @BeforeClass
+    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
         int targetQueryConcurrency = 3;
         int maxQueryConcurrency = 5;
@@ -327,7 +330,7 @@ public class SkipRangeParallelIteratorRegionSplitterIT extends BaseClientManaged
         props.put(QueryServices.TARGET_QUERY_CONCURRENCY_ATTRIB, Integer.toString(targetQueryConcurrency));
         props.put(QueryServices.MAX_INTRA_REGION_PARALLELIZATION_ATTRIB, Integer.toString(Integer.MAX_VALUE));
         // Must update config before starting server
-        startServer(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     private static List<KeyRange> getSplits(TableRef tableRef, final Scan scan, final List<HRegionLocation> regions,

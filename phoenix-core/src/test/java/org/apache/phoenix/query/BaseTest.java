@@ -17,11 +17,29 @@
  */
 package org.apache.phoenix.query;
 
+import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
+import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.BTABLE_NAME;
+import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.CUSTOM_ENTITY_DATA_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.C_VALUE;
+import static org.apache.phoenix.util.TestUtil.ENTITYHISTID1;
+import static org.apache.phoenix.util.TestUtil.ENTITYHISTID2;
+import static org.apache.phoenix.util.TestUtil.ENTITYHISTID3;
+import static org.apache.phoenix.util.TestUtil.ENTITYHISTID4;
+import static org.apache.phoenix.util.TestUtil.ENTITYHISTID5;
+import static org.apache.phoenix.util.TestUtil.ENTITYHISTID6;
+import static org.apache.phoenix.util.TestUtil.ENTITYHISTID7;
+import static org.apache.phoenix.util.TestUtil.ENTITYHISTID8;
+import static org.apache.phoenix.util.TestUtil.ENTITYHISTID9;
 import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_SALTED_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_TABLE_NAME;
+import static org.apache.phoenix.util.TestUtil.E_VALUE;
 import static org.apache.phoenix.util.TestUtil.FUNKY_NAME;
 import static org.apache.phoenix.util.TestUtil.GROUPBYTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.HBASE_DYNAMIC_COLUMNS;
@@ -33,42 +51,104 @@ import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.KEYONLY_NAME;
+import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.apache.phoenix.util.TestUtil.MDTEST_NAME;
+import static org.apache.phoenix.util.TestUtil.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.MULTI_CF_NAME;
 import static org.apache.phoenix.util.TestUtil.MUTABLE_INDEX_DATA_TABLE;
+import static org.apache.phoenix.util.TestUtil.PARENTID1;
+import static org.apache.phoenix.util.TestUtil.PARENTID2;
+import static org.apache.phoenix.util.TestUtil.PARENTID3;
+import static org.apache.phoenix.util.TestUtil.PARENTID4;
+import static org.apache.phoenix.util.TestUtil.PARENTID5;
+import static org.apache.phoenix.util.TestUtil.PARENTID6;
+import static org.apache.phoenix.util.TestUtil.PARENTID7;
+import static org.apache.phoenix.util.TestUtil.PARENTID8;
+import static org.apache.phoenix.util.TestUtil.PARENTID9;
 import static org.apache.phoenix.util.TestUtil.PRODUCT_METRICS_NAME;
 import static org.apache.phoenix.util.TestUtil.PTSDB2_NAME;
 import static org.apache.phoenix.util.TestUtil.PTSDB3_NAME;
 import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
+import static org.apache.phoenix.util.TestUtil.ROW1;
+import static org.apache.phoenix.util.TestUtil.ROW2;
+import static org.apache.phoenix.util.TestUtil.ROW3;
+import static org.apache.phoenix.util.TestUtil.ROW4;
+import static org.apache.phoenix.util.TestUtil.ROW5;
+import static org.apache.phoenix.util.TestUtil.ROW6;
+import static org.apache.phoenix.util.TestUtil.ROW7;
+import static org.apache.phoenix.util.TestUtil.ROW8;
+import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 
+import java.math.BigDecimal;
+import java.sql.Array;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
+import javax.annotation.Nonnull;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
+import org.apache.phoenix.schema.PMetaData;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
+import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.AfterClass;
+import org.junit.Assert;
 
 import com.google.common.collect.ImmutableMap;
 
+/**
+ * 
+ * Base class that contains all the methods needed by
+ * client-time and hbase-time managed tests.
+ * 
+ * For tests needing connectivity to a cluster, please use
+ * {@link BaseHBaseManagedTimeIT} or {@link BaseClientManagedTimeIT}. 
+ * 
+ * In the rare case when a test can't share the same mini cluster as the 
+ * ones used by {@link BaseHBaseManagedTimeIT} or {@link BaseClientManagedTimeIT}
+ * one could extend this class and spin up your own mini cluster. Please 
+ * make sure to shutdown the mini cluster in a method annotated by @AfterClass.  
+ *
+ */
 public abstract class BaseTest {
     private static final Map<String,String> tableDDLMap;
+    private static Logger logger = Logger.getLogger("BaseTest.class");
+    
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
         builder.put(ENTITY_HISTORY_TABLE_NAME,"create table " + ENTITY_HISTORY_TABLE_NAME +
@@ -350,9 +430,151 @@ public abstract class BaseTest {
                 "    loc_id char(5))");
         tableDDLMap = builder.build();
     }
-
+    
     private static final String ORG_ID = "00D300000000XHP";
+    private static final int NUM_SLAVES_BASE = 1;
+    
+    protected static String getZKClientPort(Configuration conf) {
+        return conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
+    }
+    
+    /**
+     * Set up the test hbase cluster. 
+     * @return url to be used by clients to connect to the cluster.
+     */
+    protected static String setUpTestCluster(@Nonnull Configuration conf) {
+        boolean isDistributedCluster = isDistributedClusterModeEnabled(conf);
+        if (!isDistributedCluster) {
+            return initMiniCluster(conf);
+       } else {
+            return initClusterDistributedMode(conf);
+        }
+    }
+    
+    private static boolean isDistributedClusterModeEnabled(Configuration conf) {
+        boolean isDistributedCluster = false;
+        //check if the distributed mode was specified as a system property.
+        isDistributedCluster = Boolean.parseBoolean(System.getProperty(IntegrationTestingUtility.IS_DISTRIBUTED_CLUSTER, "false"));
+        if (!isDistributedCluster) {
+           //fall back on hbase-default.xml or hbase-site.xml to check for distributed mode              
+           isDistributedCluster = conf.getBoolean(IntegrationTestingUtility.IS_DISTRIBUTED_CLUSTER, false);
+        }
+        return isDistributedCluster;
+    }
+    
+    /**
+     * Initialize the mini cluster using phoenix-test specific configuration.
+     * @return url to be used by clients to connect to the mini cluster.
+     */
+    private static String initMiniCluster(Configuration conf) {
+        setUpConfigForMiniCluster(conf);
+        final HBaseTestingUtility utility = new HBaseTestingUtility(conf);
+        try {
+            utility.startMiniCluster();
+            String clientPort = utility.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
 
+            // add shutdown hook to kill the mini cluster
+            Runtime.getRuntime().addShutdownHook(new Thread() {
+                @Override
+                public void run() {
+                    try {
+                        utility.shutdownMiniCluster();
+                    } catch (Exception e) {
+                        logger.log(Level.WARNING, "Exception caught when shutting down mini cluster: " + e.getMessage());
+                    }
+                }
+            });
+            return JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_SEPARATOR + clientPort
+                    + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
+        }
+    }
+    
+    /**
+     * Initialize the cluster in distributed mode
+     * @return url to be used by clients to connect to the mini cluster.
+     */
+    private static String initClusterDistributedMode(Configuration conf) {
+        setTestConfigForDistribuedCluster(conf);
+        try {
+            IntegrationTestingUtility util =  new IntegrationTestingUtility(conf);
+            util.initializeCluster(NUM_SLAVES_BASE);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return JDBC_PROTOCOL + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+    }
+
+    private static void setTestConfigForDistribuedCluster(Configuration conf) {
+        setDefaultTestConfig(conf);
+    }
+    
+    private static void setDefaultTestConfig(Configuration conf) {
+        ConfigUtil.setReplicationConfigIfAbsent(conf);
+        QueryServicesOptions options = QueryServicesTestImpl.getDefaultTestServicesOptions();
+        for (Entry<String,String> entry : options.getProps()) {
+            conf.set(entry.getKey(), entry.getValue());
+        }
+        //no point doing sanity checks when running tests.
+        conf.setBoolean("hbase.table.sanity.checks", false);
+    }
+    
+    public static Configuration setUpConfigForMiniCluster(Configuration conf) {
+        assertNotNull(conf);
+        setDefaultTestConfig(conf);
+        /*
+         * The default configuration of mini cluster ends up spawning a lot of threads
+         * that are not really needed by phoenix for test purposes. Limiting these threads
+         * helps us in running several mini clusters at the same time without hitting 
+         * the threads limit imposed by the OS. 
+         */
+        conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
+        conf.setInt(HConstants.REGION_SERVER_META_HANDLER_COUNT, 2);
+        conf.setInt(HConstants.MASTER_HANDLER_COUNT, 2);
+        conf.setInt("dfs.namenode.handler.count", 1);
+        conf.setInt("dfs.namenode.service.handler.count", 1);
+        conf.setInt("dfs.datanode.handler.count", 1);
+        conf.setInt("hadoop.http.max.threads", 1);
+        conf.setInt("ipc.server.read.threadpool.size", 2);
+        conf.setInt("ipc.server.handler.threadpool.size", 2);
+        conf.setInt("hbase.hconnection.threads.max", 2);
+        conf.setInt("hbase.hconnection.threads.core", 2);
+        conf.setInt("hbase.htable.threads.max", 2);
+        conf.setInt("hbase.regionserver.hlog.syncer.count", 2);
+        conf.setInt("hbase.hlog.asyncer.number", 2);
+        conf.setInt("hbase.assignment.zkevent.workers", 5);
+        conf.setInt("hbase.assignment.threads.max", 5);
+        return conf;
+    }
+
+    /**
+     * Create a {@link PhoenixTestDriver} and register it.
+     * @return an initialized and registered {@link PhoenixTestDriver} 
+     */
+    protected static PhoenixTestDriver initAndRegisterDriver(String url, ReadOnlyProps props) throws Exception {
+        PhoenixTestDriver driver = new PhoenixTestDriver(props);
+        DriverManager.registerDriver(driver);
+        Assert.assertTrue(DriverManager.getDriver(url) == driver);
+        driver.connect(url, TestUtil.TEST_PROPERTIES);
+        return driver;
+    }
+    
+    //Close and unregister the driver.
+    protected static boolean destroyDriver(PhoenixTestDriver driver) {
+        if (driver != null) {
+            try {
+                try {
+                    driver.close();
+                    return true;
+                } finally {
+                    DriverManager.deregisterDriver(driver);
+                }
+            } catch (Exception ignored) {}
+        }
+        return false;
+    }
+    
     protected static String getOrganizationId() {
         return ORG_ID;
     }
@@ -362,67 +584,6 @@ public abstract class BaseTest {
     public static long nextTimestamp() {
         timestamp += 100;
         return timestamp;
-    }
-
-    protected static PhoenixTestDriver driver;
-    private static int driverRefCount = 0;
-
-    protected static synchronized PhoenixTestDriver initDriver(ReadOnlyProps props) throws Exception {
-        if (driver == null) {
-            if (driverRefCount == 0) {
-                BaseTest.driver = new PhoenixTestDriver(props);
-                DriverManager.registerDriver(driver);
-                driverRefCount++;
-            }
-        }
-        return BaseTest.driver;
-    }
-
-    // We need to deregister an already existing driver in order
-    // to register a new one. We need to create a new one so that
-    // we register the new one with the new Configuration instance.
-    // Otherwise, we get connection errors because the prior one
-    // is no longer associated with the miniCluster.
-    protected static synchronized boolean destroyDriver() {
-        if (driver != null) {
-            driverRefCount--;
-            if (driverRefCount == 0) {
-                try {
-                    try {
-                        driver.close();
-                        return true;
-                    } finally {
-                        try {
-                            DriverManager.deregisterDriver(driver);
-                        } finally {
-                            driver = null;
-                        }
-                    }
-                } catch (SQLException e) {
-                }
-            }
-        }
-        return false;
-    }
-
-    protected static void startServer(String url, ReadOnlyProps props) throws Exception {
-        assertNull(BaseTest.driver);
-        // only load the test driver if we are testing locally - for integration tests, we want to
-        // test on a wider scale
-        if (PhoenixEmbeddedDriver.isTestUrl(url)) {
-            PhoenixTestDriver driver = initDriver(props);
-            assertTrue(DriverManager.getDriver(url) == driver);
-            driver.connect(url, TestUtil.TEST_PROPERTIES);
-        }
-    }
-    
-    protected static void startServer(String url) throws Exception {
-        startServer(url, ReadOnlyProps.EMPTY_PROPS);
-    }
-
-    @AfterClass
-    public static void stopServer() throws Exception {
-        assertTrue(destroyDriver());
     }
 
     protected static void ensureTableCreated(String url, String tableName) throws SQLException {
@@ -480,6 +641,675 @@ public abstract class BaseTest {
             }
         } finally {
             conn.close();
+        }
+    }
+    
+    protected static byte[][] getDefaultSplits(String tenantId) {
+        return new byte[][] { 
+            Bytes.toBytes(tenantId + "00A"),
+            Bytes.toBytes(tenantId + "00B"),
+            Bytes.toBytes(tenantId + "00C"),
+            };
+    }
+    
+    protected static void deletePriorTables(long ts, String url) throws Exception {
+        deletePriorTables(ts, (String)null, url);
+    }
+    
+    protected static void deletePriorTables(long ts, String tenantId, String url) throws Exception {
+        Properties props = new Properties();
+        if (ts != HConstants.LATEST_TIMESTAMP) {
+            props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
+        }
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            deletePriorTables(ts, conn, url);
+            deletePriorSequences(ts, conn);
+        }
+        finally {
+            conn.close();
+        }
+    }
+    
+    private static void deletePriorTables(long ts, Connection globalConn, String url) throws Exception {
+        DatabaseMetaData dbmd = globalConn.getMetaData();
+        PMetaData cache = globalConn.unwrap(PhoenixConnection.class).getMetaDataCache();
+        cache.getTables();
+        // Drop VIEWs first, as we don't allow a TABLE with views to be dropped
+        // Tables are sorted by TENANT_ID
+        List<String[]> tableTypesList = Arrays.asList(new String[] {PTableType.VIEW.toString()}, new String[] {PTableType.TABLE.toString()});
+        for (String[] tableTypes: tableTypesList) {
+            ResultSet rs = dbmd.getTables(null, null, null, tableTypes);
+            String lastTenantId = null;
+            Connection conn = globalConn;
+            while (rs.next()) {
+                String fullTableName = SchemaUtil.getEscapedTableName(
+                        rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
+                        rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+                String ddl = "DROP " + rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE) + " " + fullTableName;
+                String tenantId = rs.getString(1);
+                if (tenantId != null && !tenantId.equals(lastTenantId))  {
+                    if (lastTenantId != null) {
+                        conn.close();
+                    }
+                    // Open tenant-specific connection when we find a new one
+                    Properties props = new Properties(globalConn.getClientInfo());
+                    props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                    conn = DriverManager.getConnection(url, props);
+                    lastTenantId = tenantId;
+                }
+                try {
+                    conn.createStatement().executeUpdate(ddl);
+                } catch (NewerTableAlreadyExistsException ex) {
+                    logger.info("Newer table " + fullTableName + " or its delete marker exists. Ignore current deletion");
+                } catch (TableNotFoundException ex) {
+                    logger.info("Table " + fullTableName + " is already deleted.");
+                }
+            }
+            if (lastTenantId != null) {
+                conn.close();
+            }
+        }
+    }
+    
+    private static void deletePriorSequences(long ts, Connection conn) throws Exception {
+        // TODO: drop tenant-specific sequences too
+        ResultSet rs = conn.createStatement().executeQuery("SELECT " 
+                + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + "," 
+                + PhoenixDatabaseMetaData.SEQUENCE_NAME 
+                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME);
+        while (rs.next()) {
+            try {
+                conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getTableName(rs.getString(1), rs.getString(2)));
+            } catch (Exception e) {
+                //FIXME: see https://issues.apache.org/jira/browse/PHOENIX-973
+            }
+        }
+    }
+    
+    protected static void initSumDoubleValues(byte[][] splits, String url) throws Exception {
+        ensureTableCreated(url, "SumDoubleTest", splits);
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            // Insert all rows at ts
+            PreparedStatement stmt = conn.prepareStatement(
+                    "upsert into " +
+                    "SumDoubleTest(" +
+                    "    id, " +
+                    "    d, " +
+                    "    f, " +
+                    "    ud, " +
+                    "    uf) " +
+                    "VALUES (?, ?, ?, ?, ?)");
+            stmt.setString(1, "1");
+            stmt.setDouble(2, 0.001);
+            stmt.setFloat(3, 0.01f);
+            stmt.setDouble(4, 0.001);
+            stmt.setFloat(5, 0.01f);
+            stmt.execute();
+                
+            stmt.setString(1, "2");
+            stmt.setDouble(2, 0.002);
+            stmt.setFloat(3, 0.02f);
+            stmt.setDouble(4, 0.002);
+            stmt.setFloat(5, 0.02f);
+            stmt.execute();
+                
+            stmt.setString(1, "3");
+            stmt.setDouble(2, 0.003);
+            stmt.setFloat(3, 0.03f);
+            stmt.setDouble(4, 0.003);
+            stmt.setFloat(5, 0.03f);
+            stmt.execute();
+                
+            stmt.setString(1, "4");
+            stmt.setDouble(2, 0.004);
+            stmt.setFloat(3, 0.04f);
+            stmt.setDouble(4, 0.004);
+            stmt.setFloat(5, 0.04f);
+            stmt.execute();
+                
+            stmt.setString(1, "5");
+            stmt.setDouble(2, 0.005);
+            stmt.setFloat(3, 0.05f);
+            stmt.setDouble(4, 0.005);
+            stmt.setFloat(5, 0.05f);
+            stmt.execute();
+                
+            conn.commit();
+        } finally {
+            conn.close();
+        }
+    }
+    
+    protected static void initATableValues(String tenantId, byte[][] splits, String url) throws Exception {
+        initATableValues(tenantId, splits, null, url);
+    }
+    
+    protected static void initATableValues(String tenantId, byte[][] splits, Date date, String url) throws Exception {
+        initATableValues(tenantId, splits, date, null, url);
+    }
+    
+    
+    
+    protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+        if (ts == null) {
+            ensureTableCreated(url, ATABLE_NAME, splits);
+        } else {
+            ensureTableCreated(url, ATABLE_NAME, splits, ts-5);
+        }
+        
+        Properties props = new Properties();
+        if (ts != null) {
+            props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts-3));
+        }
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            // Insert all rows at ts
+            PreparedStatement stmt = conn.prepareStatement(
+                    "upsert into " +
+                    "ATABLE(" +
+                    "    ORGANIZATION_ID, " +
+                    "    ENTITY_ID, " +
+                    "    A_STRING, " +
+                    "    B_STRING, " +
+                    "    A_INTEGER, " +
+                    "    A_DATE, " +
+                    "    X_DECIMAL, " +
+                    "    X_LONG, " +
+                    "    X_INTEGER," +
+                    "    Y_INTEGER," +
+                    "    A_BYTE," +
+                    "    A_SHORT," +
+                    "    A_FLOAT," +
+                    "    A_DOUBLE," +
+                    "    A_UNSIGNED_FLOAT," +
+                    "    A_UNSIGNED_DOUBLE)" +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW1);
+            stmt.setString(3, A_VALUE);
+            stmt.setString(4, B_VALUE);
+            stmt.setInt(5, 1);
+            stmt.setDate(6, date);
+            stmt.setBigDecimal(7, null);
+            stmt.setNull(8, Types.BIGINT);
+            stmt.setNull(9, Types.INTEGER);
+            stmt.setNull(10, Types.INTEGER);
+            stmt.setByte(11, (byte)1);
+            stmt.setShort(12, (short) 128);
+            stmt.setFloat(13, 0.01f);
+            stmt.setDouble(14, 0.0001);
+            stmt.setFloat(15, 0.01f);
+            stmt.setDouble(16, 0.0001);
+            stmt.execute();
+                
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW2);
+            stmt.setString(3, A_VALUE);
+            stmt.setString(4, C_VALUE);
+            stmt.setInt(5, 2);
+            stmt.setDate(6, date == null ? null : new Date(date.getTime() + MILLIS_IN_DAY * 1));
+            stmt.setBigDecimal(7, null);
+            stmt.setNull(8, Types.BIGINT);
+            stmt.setNull(9, Types.INTEGER);
+            stmt.setNull(10, Types.INTEGER);
+            stmt.setByte(11, (byte)2);
+            stmt.setShort(12, (short) 129);
+            stmt.setFloat(13, 0.02f);
+            stmt.setDouble(14, 0.0002);
+            stmt.setFloat(15, 0.02f);
+            stmt.setDouble(16, 0.0002);
+            stmt.execute();
+                
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW3);
+            stmt.setString(3, A_VALUE);
+            stmt.setString(4, E_VALUE);
+            stmt.setInt(5, 3);
+            stmt.setDate(6, date == null ? null : new Date(date.getTime() + MILLIS_IN_DAY * 2));
+            stmt.setBigDecimal(7, null);
+            stmt.setNull(8, Types.BIGINT);
+            stmt.setNull(9, Types.INTEGER);
+            stmt.setNull(10, Types.INTEGER);
+            stmt.setByte(11, (byte)3);
+            stmt.setShort(12, (short) 130);
+            stmt.setFloat(13, 0.03f);
+            stmt.setDouble(14, 0.0003);
+            stmt.setFloat(15, 0.03f);
+            stmt.setDouble(16, 0.0003);
+            stmt.execute();
+                
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW4);
+            stmt.setString(3, A_VALUE);
+            stmt.setString(4, B_VALUE);
+            stmt.setInt(5, 4);
+            stmt.setDate(6, date == null ? null : date);
+            stmt.setBigDecimal(7, null);
+            stmt.setNull(8, Types.BIGINT);
+            stmt.setNull(9, Types.INTEGER);
+            stmt.setNull(10, Types.INTEGER);
+            stmt.setByte(11, (byte)4);
+            stmt.setShort(12, (short) 131);
+            stmt.setFloat(13, 0.04f);
+            stmt.setDouble(14, 0.0004);
+            stmt.setFloat(15, 0.04f);
+            stmt.setDouble(16, 0.0004);
+            stmt.execute();
+                
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW5);
+            stmt.setString(3, B_VALUE);
+            stmt.setString(4, C_VALUE);
+            stmt.setInt(5, 5);
+            stmt.setDate(6, date == null ? null : new Date(date.getTime() + MILLIS_IN_DAY * 1));
+            stmt.setBigDecimal(7, null);
+            stmt.setNull(8, Types.BIGINT);
+            stmt.setNull(9, Types.INTEGER);
+            stmt.setNull(10, Types.INTEGER);
+            stmt.setByte(11, (byte)5);
+            stmt.setShort(12, (short) 132);
+            stmt.setFloat(13, 0.05f);
+            stmt.setDouble(14, 0.0005);
+            stmt.setFloat(15, 0.05f);
+            stmt.setDouble(16, 0.0005);
+            stmt.execute();
+                
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW6);
+            stmt.setString(3, B_VALUE);
+            stmt.setString(4, E_VALUE);
+            stmt.setInt(5, 6);
+            stmt.setDate(6, date == null ? null : new Date(date.getTime() + MILLIS_IN_DAY * 2));
+            stmt.setBigDecimal(7, null);
+            stmt.setNull(8, Types.BIGINT);
+            stmt.setNull(9, Types.INTEGER);
+            stmt.setNull(10, Types.INTEGER);
+            stmt.setByte(11, (byte)6);
+            stmt.setShort(12, (short) 133);
+            stmt.setFloat(13, 0.06f);
+            stmt.setDouble(14, 0.0006);
+            stmt.setFloat(15, 0.06f);
+            stmt.setDouble(16, 0.0006);
+            stmt.execute();
+                
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW7);
+            stmt.setString(3, B_VALUE);
+            stmt.setString(4, B_VALUE);
+            stmt.setInt(5, 7);
+            stmt.setDate(6, date == null ? null : date);
+            stmt.setBigDecimal(7, BigDecimal.valueOf(0.1));
+            stmt.setLong(8, 5L);
+            stmt.setInt(9, 5);
+            stmt.setNull(10, Types.INTEGER);
+            stmt.setByte(11, (byte)7);
+            stmt.setShort(12, (short) 134);
+            stmt.setFloat(13, 0.07f);
+            stmt.setDouble(14, 0.0007);
+            stmt.setFloat(15, 0.07f);
+            stmt.setDouble(16, 0.0007);
+            stmt.execute();
+                
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW8);
+            stmt.setString(3, B_VALUE);
+            stmt.setString(4, C_VALUE);
+            stmt.setInt(5, 8);
+            stmt.setDate(6, date == null ? null : new Date(date.getTime() + MILLIS_IN_DAY * 1));
+            stmt.setBigDecimal(7, BigDecimal.valueOf(3.9));
+            long l = Integer.MIN_VALUE - 1L;
+            assert(l < Integer.MIN_VALUE);
+            stmt.setLong(8, l);
+            stmt.setInt(9, 4);
+            stmt.setNull(10, Types.INTEGER);
+            stmt.setByte(11, (byte)8);
+            stmt.setShort(12, (short) 135);
+            stmt.setFloat(13, 0.08f);
+            stmt.setDouble(14, 0.0008);
+            stmt.setFloat(15, 0.08f);
+            stmt.setDouble(16, 0.0008);
+            stmt.execute();
+                
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW9);
+            stmt.setString(3, C_VALUE);
+            stmt.setString(4, E_VALUE);
+            stmt.setInt(5, 9);
+            stmt.setDate(6, date == null ? null : new Date(date.getTime() + MILLIS_IN_DAY * 2));
+            stmt.setBigDecimal(7, BigDecimal.valueOf(3.3));
+            l = Integer.MAX_VALUE + 1L;
+            assert(l > Integer.MAX_VALUE);
+            stmt.setLong(8, l);
+            stmt.setInt(9, 3);
+            stmt.setInt(10, 300);
+            stmt.setByte(11, (byte)9);
+            stmt.setShort(12, (short) 0);
+            stmt.setFloat(13, 0.09f);
+            stmt.setDouble(14, 0.0009);
+            stmt.setFloat(15, 0.09f);
+            stmt.setDouble(16, 0.0009);
+            stmt.execute();
+                
+            conn.commit();
+        } finally {
+            conn.close();
+        }
+    }
+    
+    protected static void initTablesWithArrays(String tenantId, Date date, Long ts, boolean useNull, String url) throws Exception {
+        Properties props = new Properties();
+        if (ts != null) {
+            props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
+        }
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            // Insert all rows at ts
+            PreparedStatement stmt = conn.prepareStatement(
+                    "upsert into " +
+                            "TABLE_WITH_ARRAY(" +
+                            "    ORGANIZATION_ID, " +
+                            "    ENTITY_ID, " +
+                            "    a_string_array, " +
+                            "    B_STRING, " +
+                            "    A_INTEGER, " +
+                            "    A_DATE, " +
+                            "    X_DECIMAL, " +
+                            "    x_long_array, " +
+                            "    X_INTEGER," +
+                            "    a_byte_array," +
+                            "    A_SHORT," +
+                            "    A_FLOAT," +
+                            "    a_double_array," +
+                            "    A_UNSIGNED_FLOAT," +
+                            "    A_UNSIGNED_DOUBLE)" +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW1);
+            // Need to support primitive
+            String[] strArr =  new String[4];
+            strArr[0] = "ABC";
+            if (useNull) {
+                strArr[1] = null;
+            } else {
+                strArr[1] = "CEDF";
+            }
+            strArr[2] = "XYZWER";
+            strArr[3] = "AB";
+            Array array = conn.createArrayOf("VARCHAR", strArr);
+            stmt.setArray(3, array);
+            stmt.setString(4, B_VALUE);
+            stmt.setInt(5, 1);
+            stmt.setDate(6, date);
+            stmt.setBigDecimal(7, null);
+            // Need to support primitive
+            Long[] longArr =  new Long[2];
+            longArr[0] = 25l;
+            longArr[1] = 36l;
+            array = conn.createArrayOf("BIGINT", longArr);
+            stmt.setArray(8, array);
+            stmt.setNull(9, Types.INTEGER);
+            // Need to support primitive
+            Byte[] byteArr =  new Byte[2];
+            byteArr[0] = 25;
+            byteArr[1] = 36;
+            array = conn.createArrayOf("TINYINT", byteArr);
+            stmt.setArray(10, array);
+            stmt.setShort(11, (short) 128);
+            stmt.setFloat(12, 0.01f);
+            // Need to support primitive
+            Double[] doubleArr =  new Double[4];
+            doubleArr[0] = 25.343;
+            doubleArr[1] = 36.763;
+            doubleArr[2] = 37.56;
+            doubleArr[3] = 386.63;
+            array = conn.createArrayOf("DOUBLE", doubleArr);
+            stmt.setArray(13, array);
+            stmt.setFloat(14, 0.01f);
+            stmt.setDouble(15, 0.0001);
+            stmt.execute();
+
+            conn.commit();
+        } finally {
+            conn.close();
+        }
+    }
+    
+    protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, String url) throws Exception {
+        initEntityHistoryTableValues(tenantId, splits, null);
+    }
+    
+    protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, String url) throws Exception {
+        initEntityHistoryTableValues(tenantId, splits, date, null);
+    }
+    
+    protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+        if (ts == null) {
+            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, splits);
+        } else {
+            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, splits, ts-2);
+        }
+        
+        Properties props = new Properties();
+        if (ts != null) {
+            props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
+        }
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            // Insert all rows at ts
+            PreparedStatement stmt = conn.prepareStatement(
+                    "upsert into " +
+                    ENTITY_HISTORY_TABLE_NAME+
+                    "(" +
+                    "    ORGANIZATION_ID, " +
+                    "    PARENT_ID, " +
+                    "    CREATED_DATE, " +
+                    "    ENTITY_HISTORY_ID, " +
+                    "    OLD_VALUE, " +
+                    "    NEW_VALUE) " +
+                    "VALUES (?, ?, ?, ?, ?, ?)");
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID1);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID1);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+                
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID2);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID2);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+                
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID3);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID3);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID4);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID4);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID5);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID5);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID6);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID6);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID7);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID7);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID8);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID8);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID9);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID9);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            conn.commit();
+        } finally {
+            conn.close();
+        }
+    }
+    
+    protected static void initSaltedEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+        if (ts == null) {
+            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, splits);
+        } else {
+            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, ts-2);
+        }
+        
+        Properties props = new Properties();
+        if (ts != null) {
+            props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
+        }
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            // Insert all rows at ts
+            PreparedStatement stmt = conn.prepareStatement(
+                    "upsert into " +
+                    ENTITY_HISTORY_SALTED_TABLE_NAME+
+                    "(" +
+                    "    ORGANIZATION_ID, " +
+                    "    PARENT_ID, " +
+                    "    CREATED_DATE, " +
+                    "    ENTITY_HISTORY_ID, " +
+                    "    OLD_VALUE, " +
+                    "    NEW_VALUE) " +
+                    "VALUES (?, ?, ?, ?, ?, ?)");
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID1);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID1);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+                
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID2);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID2);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+                
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID3);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID3);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID4);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID4);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID5);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID5);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID6);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID6);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID7);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID7);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID8);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID8);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            stmt.setString(1, tenantId);
+            stmt.setString(2, PARENTID9);
+            stmt.setDate(3, date);
+            stmt.setString(4, ENTITYHISTID9);
+            stmt.setString(5,  A_VALUE);
+            stmt.setString(6,  B_VALUE);
+            stmt.execute();
+            
+            conn.commit();
+        } finally {
+            conn.close();
+        }
+    }
+    
+    /**
+     * Disable and drop all the tables except SYSTEM.CATALOG and SYSTEM.SEQUENCE
+     */
+    protected static void disableAndDropNonSystemTables(PhoenixTestDriver driver) throws Exception {
+        HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+        try {
+            HTableDescriptor[] tables = admin.listTables();
+            for (HTableDescriptor table : tables) {
+                boolean isCatalogTable = (Bytes.compareTo(table.getName(), PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES) == 0);
+                boolean isSequenceTable = (Bytes.compareTo(table.getName(), PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES) == 0);
+                if (!isCatalogTable && !isSequenceTable) {
+                    admin.disableTable(table.getName());
+                    admin.deleteTable(table.getName());
+                }
+            }    
+        } finally {
+            admin.close();
         }
     }
 }

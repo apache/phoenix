@@ -29,8 +29,9 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(HBaseManagedTimeTest.class)
 public class ServerExceptionIT extends BaseHBaseManagedTimeIT {
 
     @Test

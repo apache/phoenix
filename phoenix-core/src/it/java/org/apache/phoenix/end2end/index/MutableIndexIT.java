@@ -34,19 +34,25 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
+import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Doubles;
 
+@Category(HBaseManagedTimeTest.class)
 public class MutableIndexIT extends BaseMutableIndexIT {
-    @BeforeClass 
+    
+    @BeforeClass
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         // Don't split intra region so we can more easily know that the n-way parallelization is for the explain plan
@@ -54,7 +60,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         // Forces server cache to be used
         props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
         // Must update config before starting server
-        startServer(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
     
     @Test

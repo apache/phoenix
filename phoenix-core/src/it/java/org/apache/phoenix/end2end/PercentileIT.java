@@ -17,18 +17,44 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.*;
-import static org.junit.Assert.*;
+import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
+import static org.apache.phoenix.util.TestUtil.A_VALUE;
+import static org.apache.phoenix.util.TestUtil.B_VALUE;
+import static org.apache.phoenix.util.TestUtil.C_VALUE;
+import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
+import static org.apache.phoenix.util.TestUtil.INDEX_DATA_TABLE;
+import static org.apache.phoenix.util.TestUtil.MILLIS_IN_DAY;
+import static org.apache.phoenix.util.TestUtil.ROW1;
+import static org.apache.phoenix.util.TestUtil.ROW2;
+import static org.apache.phoenix.util.TestUtil.ROW3;
+import static org.apache.phoenix.util.TestUtil.ROW4;
+import static org.apache.phoenix.util.TestUtil.ROW5;
+import static org.apache.phoenix.util.TestUtil.ROW6;
+import static org.apache.phoenix.util.TestUtil.ROW7;
+import static org.apache.phoenix.util.TestUtil.ROW8;
+import static org.apache.phoenix.util.TestUtil.ROW9;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Types;
 import java.util.Properties;
 
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ClientManagedTimeTest.class)
 public class PercentileIT extends BaseClientManagedTimeIT {
 
     @Test

@@ -19,20 +19,23 @@ package org.apache.phoenix.end2end;
 
 import java.util.Map;
 
-import org.junit.BeforeClass;
-
-import com.google.common.collect.Maps;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
+import org.junit.experimental.categories.Category;
 
+import com.google.common.collect.Maps;
+
+@Category(ClientManagedTimeTest.class)
 public class SpooledOrderByIT extends OrderByIT {
 
     @BeforeClass
+    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         props.put(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(100));
         // Must update config before starting server
-        startServer(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
 
 }

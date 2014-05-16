@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.hbase.index.covered;
 
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -43,23 +44,24 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdge;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.ConfigUtil;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * End-to-End test of just the {@link CoveredColumnsIndexBuilder}, but with a simple
  * {@link IndexCodec} and BatchCache implementation.
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class EndToEndCoveredColumnsIndexBuilderIT {
 
   public class TestState {
@@ -96,12 +98,11 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
   @BeforeClass
   public static void setupCluster() throws Exception {
     Configuration conf = UTIL.getConfiguration();
+    setUpConfigForMiniCluster(conf);
     IndexTestingUtils.setupConfig(conf);
     // disable version checking, so we can test against whatever version of HBase happens to be
     // installed (right now, its generally going to be SNAPSHOT versions).
     conf.setBoolean(Indexer.CHECK_VERSION_CONF_KEY, false);
-    // set replication required parameter
-    ConfigUtil.setReplicationConfigIfAbsent(conf);
     UTIL.startMiniCluster();
   }
 
