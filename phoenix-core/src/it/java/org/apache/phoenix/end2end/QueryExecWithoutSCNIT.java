@@ -17,20 +17,28 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.*;
-import static org.junit.Assert.*;
+import static org.apache.phoenix.util.TestUtil.B_VALUE;
+import static org.apache.phoenix.util.TestUtil.C_VALUE;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(HBaseManagedTimeTest.class)
 public class QueryExecWithoutSCNIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testScanNoSCN() throws Exception {
         long ts = System.currentTimeMillis();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         String query = "SELECT a_string, b_string FROM aTable WHERE organization_id=? and a_integer = 5";
         Properties props = new Properties(); // Test with no CurrentSCN property set
         Connection conn = DriverManager.getConnection(getUrl(), props);

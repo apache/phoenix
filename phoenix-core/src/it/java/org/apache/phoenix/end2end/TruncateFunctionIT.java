@@ -39,7 +39,9 @@ import java.util.Properties;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.DateUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ClientManagedTimeTest.class)
 public class TruncateFunctionIT extends BaseClientManagedTimeIT {
     private static Format format = DateUtil.getDateParser(DateUtil.DEFAULT_MS_DATE_FORMAT);
     private static final String DS1 = "1970-01-10 00:58:01.587";

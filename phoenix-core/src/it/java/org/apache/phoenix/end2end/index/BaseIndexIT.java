@@ -18,8 +18,11 @@
 package org.apache.phoenix.end2end.index;
 
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.experimental.categories.Category;
 
+@Category(HBaseManagedTimeTest.class)
 public class BaseIndexIT extends BaseHBaseManagedTimeIT {
     public static final String SCHEMA_NAME = "";
     public static final String DATA_TABLE_NAME = "T";

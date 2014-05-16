@@ -40,15 +40,18 @@ import org.apache.flume.conf.Configurables;
 import org.apache.flume.event.EventBuilder;
 import org.apache.flume.lifecycle.LifecycleState;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
+import org.apache.phoenix.flume.serializer.EventSerializers;
+import org.apache.phoenix.flume.sink.PhoenixSink;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
-import org.apache.phoenix.flume.serializer.EventSerializers;
-import org.apache.phoenix.flume.sink.PhoenixSink;
 
+@Category(HBaseManagedTimeTest.class)
 public class RegexEventSerializerIT extends BaseHBaseManagedTimeIT {
 
     private Context sinkContext;

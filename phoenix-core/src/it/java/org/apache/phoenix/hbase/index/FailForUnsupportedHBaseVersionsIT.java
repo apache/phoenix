@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.hbase.index;
 
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -33,15 +34,18 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.covered.example.ColumnGroup;
 import org.apache.phoenix.hbase.index.covered.example.CoveredColumn;
 import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexSpecifierBuilder;
 import org.apache.phoenix.util.ConfigUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Test that we correctly fail for versions of HBase that don't support current properties
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class FailForUnsupportedHBaseVersionsIT {
   private static final Log LOG = LogFactory.getLog(FailForUnsupportedHBaseVersionsIT.class);
 
@@ -100,59 +104,62 @@ public class FailForUnsupportedHBaseVersionsIT {
    */
   @Test(timeout = 300000 /* 5 mins */)
   public void testDoesNotStartRegionServerForUnsupportedCompressionAndVersion() throws Exception {
-    Configuration conf = HBaseConfiguration.create();
-    IndexTestingUtils.setupConfig(conf);
-    // enable WAL Compression
-    conf.setBoolean(HConstants.ENABLE_WAL_COMPRESSION, true);
+      Configuration conf = HBaseConfiguration.create();
+      setUpConfigForMiniCluster(conf);
+      IndexTestingUtils.setupConfig(conf);
+      // enable WAL Compression
+      conf.setBoolean(HConstants.ENABLE_WAL_COMPRESSION, true);
 
-    // check the version to see if it isn't supported
-    String version = VersionInfo.getVersion();
-    boolean supported = false;
-    if (Indexer.validateVersion(version, conf) == null) {
-      supported = true;
-    }
-
-    // start the minicluster
-    HBaseTestingUtility util = new HBaseTestingUtility(conf);
-    // set replication required parameter
-    ConfigUtil.setReplicationConfigIfAbsent(conf);
-    util.startMiniCluster();
-
-    // setup the primary table
-    @SuppressWarnings("deprecation")
-    HTableDescriptor desc = new HTableDescriptor(
-        "testDoesNotStartRegionServerForUnsupportedCompressionAndVersion");
-    byte[] family = Bytes.toBytes("f");
-    desc.addFamily(new HColumnDescriptor(family));
-
-    // enable indexing to a non-existant index table
-    String indexTableName = "INDEX_TABLE";
-    ColumnGroup fam1 = new ColumnGroup(indexTableName);
-    fam1.add(new CoveredColumn(family, CoveredColumn.ALL_QUALIFIERS));
-    CoveredColumnIndexSpecifierBuilder builder = new CoveredColumnIndexSpecifierBuilder();
-    builder.addIndexGroup(fam1);
-    builder.build(desc);
-
-    // get a reference to the regionserver, so we can ensure it aborts
-    HRegionServer server = util.getMiniHBaseCluster().getRegionServer(0);
-
-    // create the primary table
-    HBaseAdmin admin = util.getHBaseAdmin();
-    if (supported) {
-      admin.createTable(desc);
-      assertFalse("Hosting regeion server failed, even the HBase version (" + version
-          + ") supports WAL Compression.", server.isAborted());
-    } else {
-      admin.createTableAsync(desc, null);
-
-      // wait for the regionserver to abort - if this doesn't occur in the timeout, assume its
-      // broken.
-      while (!server.isAborted()) {
-        LOG.debug("Waiting on regionserver to abort..");
+      // check the version to see if it isn't supported
+      String version = VersionInfo.getVersion();
+      boolean supported = false;
+      if (Indexer.validateVersion(version, conf) == null) {
+          supported = true;
       }
-    }
 
-    // cleanup
-    util.shutdownMiniCluster();
+      // start the minicluster
+      HBaseTestingUtility util = new HBaseTestingUtility(conf);
+      // set replication required parameter
+      ConfigUtil.setReplicationConfigIfAbsent(conf);
+      try {
+          util.startMiniCluster();
+
+          // setup the primary table
+          @SuppressWarnings("deprecation")
+          HTableDescriptor desc = new HTableDescriptor(
+                  "testDoesNotStartRegionServerForUnsupportedCompressionAndVersion");
+          byte[] family = Bytes.toBytes("f");
+          desc.addFamily(new HColumnDescriptor(family));
+
+          // enable indexing to a non-existant index table
+          String indexTableName = "INDEX_TABLE";
+          ColumnGroup fam1 = new ColumnGroup(indexTableName);
+          fam1.add(new CoveredColumn(family, CoveredColumn.ALL_QUALIFIERS));
+          CoveredColumnIndexSpecifierBuilder builder = new CoveredColumnIndexSpecifierBuilder();
+          builder.addIndexGroup(fam1);
+          builder.build(desc);
+
+          // get a reference to the regionserver, so we can ensure it aborts
+          HRegionServer server = util.getMiniHBaseCluster().getRegionServer(0);
+
+          // create the primary table
+          HBaseAdmin admin = util.getHBaseAdmin();
+          if (supported) {
+              admin.createTable(desc);
+              assertFalse("Hosting regeion server failed, even the HBase version (" + version
+                      + ") supports WAL Compression.", server.isAborted());
+          } else {
+              admin.createTableAsync(desc, null);
+
+              // wait for the regionserver to abort - if this doesn't occur in the timeout, assume its
+              // broken.
+              while (!server.isAborted()) {
+                  LOG.debug("Waiting on regionserver to abort..");
+              }
+          }
+      } finally {
+          // cleanup
+          util.shutdownMiniCluster();
+      }
   }
 }

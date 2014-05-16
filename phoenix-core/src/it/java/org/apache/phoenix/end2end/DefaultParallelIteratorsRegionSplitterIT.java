@@ -43,6 +43,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
 /**
@@ -51,6 +52,8 @@ import org.junit.Test;
  * 
  * @since 0.1
  */
+
+@Category(ClientManagedTimeTest.class)
 public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIteratorsRegionSplitterIT {
     
     private static List<KeyRange> getSplits(Connection conn, long ts, final Scan scan)

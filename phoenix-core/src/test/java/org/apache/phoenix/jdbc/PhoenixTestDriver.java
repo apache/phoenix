@@ -20,6 +20,8 @@ package org.apache.phoenix.jdbc;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import javax.annotation.concurrent.ThreadSafe;
+
 import org.apache.phoenix.end2end.ConnectionQueryServicesTestImpl;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
@@ -37,26 +39,27 @@ import org.apache.phoenix.util.ReadOnlyProps;
  * 
  * @since 0.1
  */
+@ThreadSafe
 public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
-    private ConnectionQueryServices queryServices;
+    
+    private ConnectionQueryServices connectionQueryServices;
     private final ReadOnlyProps overrideProps;
-    private QueryServices services;
+    private final QueryServices queryServices;
 
     public PhoenixTestDriver() {
         this.overrideProps = ReadOnlyProps.EMPTY_PROPS;
+        queryServices = new QueryServicesTestImpl();
     }
 
     // For tests to override the default configuration
-    public PhoenixTestDriver(ReadOnlyProps overrideProps) {
-        this.overrideProps = overrideProps;
+    public PhoenixTestDriver(ReadOnlyProps props) {
+        overrideProps = props;
+        queryServices = new QueryServicesTestImpl(overrideProps);
     }
 
     @Override
-    public synchronized QueryServices getQueryServices() {
-        if (services == null) {
-            services = new QueryServicesTestImpl(overrideProps);
-        }
-        return services;
+    public QueryServices getQueryServices() {
+        return queryServices;
     }
 
     @Override
@@ -66,27 +69,22 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     }
 
     @Override // public for testing
-    public ConnectionQueryServices getConnectionQueryServices(String url, Properties info) throws SQLException {
-        if (queryServices != null) {
-            return queryServices;
-        }
-        QueryServices services = getQueryServices();
+    public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties info) throws SQLException {
+        if (connectionQueryServices != null) { return connectionQueryServices; }
         ConnectionInfo connInfo = ConnectionInfo.create(url);
         if (connInfo.isConnectionless()) {
-            queryServices =  new ConnectionlessQueryServicesImpl(services);
+            connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices);
         } else {
-            queryServices =  new ConnectionQueryServicesTestImpl(services, connInfo);
+            connectionQueryServices = new ConnectionQueryServicesTestImpl(queryServices, connInfo);
         }
-        queryServices.init(url, info);
-        return queryServices;
+        connectionQueryServices.init(url, info);
+        return connectionQueryServices;
     }
     
     @Override
-    public void close() throws SQLException {
-        try {
-            queryServices.close();
-        } finally {
-            queryServices = null;
-        }
+    public synchronized void close() throws SQLException {
+        connectionQueryServices.close();
+        queryServices.close();
     }
+
 }

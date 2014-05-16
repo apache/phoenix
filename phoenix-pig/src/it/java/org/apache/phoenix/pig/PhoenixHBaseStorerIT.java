@@ -19,6 +19,8 @@
  */
 package org.apache.phoenix.pig;
 
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -28,16 +30,11 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Collection;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.phoenix.jdbc.PhoenixDriver;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.ConfigUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.pig.ExecType;
 import org.apache.pig.PigServer;
 import org.apache.pig.backend.executionengine.ExecJob.JOB_STATUS;
-import org.apache.pig.backend.hadoop.datastorage.ConfigurationUtil;
 import org.apache.pig.builtin.mock.Storage;
 import org.apache.pig.builtin.mock.Storage.Data;
 import org.apache.pig.data.Tuple;
@@ -47,39 +44,29 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Lists;
 
-public class PhoenixHBaseStorerIT {
+@Category(HBaseManagedTimeTest.class)
+public class PhoenixHBaseStorerIT extends BaseHBaseManagedTimeIT {
 
     private static TupleFactory tupleFactory;
-    private static HBaseTestingUtility hbaseTestUtil;
-    private static String zkQuorum;
     private static Connection conn;
     private static PigServer pigServer;
-    private static Configuration conf;
-
+    private static String zkQuorum;
+    
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
-        hbaseTestUtil = new HBaseTestingUtility();
-        conf = hbaseTestUtil.getConfiguration();
-        ConfigUtil.setReplicationConfigIfAbsent(conf);
-        conf.setInt(QueryServices.MASTER_INFO_PORT_ATTRIB, -1);
-        conf.setInt(QueryServices.REGIONSERVER_INFO_PORT_ATTRIB, -1);
-        hbaseTestUtil.startMiniCluster();
-
-        Class.forName(PhoenixDriver.class.getName());
-        zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        conn = DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL +
-                 PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum);
+        conn = DriverManager.getConnection(getUrl());
+        zkQuorum = LOCALHOST + JDBC_PROTOCOL_SEPARATOR + getZKClientPort(getTestClusterConfig());
         // Pig variables
         tupleFactory = TupleFactory.getInstance();
     }
     
     @Before
     public void setUp() throws Exception {
-        pigServer = new PigServer(ExecType.LOCAL,
-                ConfigurationUtil.toProperties(conf));
+        pigServer = new PigServer(ExecType.LOCAL, getTestClusterConfig());
     }
     
     @After
@@ -90,7 +77,6 @@ public class PhoenixHBaseStorerIT {
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
         conn.close();
-        hbaseTestUtil.shutdownMiniCluster();
     }
 
     /**

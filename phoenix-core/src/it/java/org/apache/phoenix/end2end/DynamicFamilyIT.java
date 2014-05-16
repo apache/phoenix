@@ -48,6 +48,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Basic tests for Phoenix dynamic family querying "cf.*"
@@ -59,6 +60,7 @@ import org.junit.Test;
 @edu.umd.cs.findbugs.annotations.SuppressWarnings(
         value="RV_RETURN_VALUE_IGNORED", 
         justification="Designed to ignore.")
+@Category(HBaseManagedTimeTest.class)
 public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
     private static final String WEB_STATS = "WEB_STATS";
     private static final String WEB_STATS_SCHEMA_NAME = "";

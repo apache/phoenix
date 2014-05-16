@@ -46,14 +46,15 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(HBaseManagedTimeTest.class)
 public class ExecuteStatementsIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testExecuteStatements() throws Exception {
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId));
+        initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
         String statements = 
             "create table if not exists " + ATABLE_NAME + // Shouldn't error out b/c of if not exists clause
             "   (organization_id char(15) not null, \n" + 
@@ -197,7 +198,7 @@ public class ExecuteStatementsIT extends BaseHBaseManagedTimeIT {
             
             // test upsert statement with padding
             String tenantId = getOrganizationId();
-            initATableValues(tenantId, getDefaultSplits(tenantId), null, nextTimestamp()-1);
+            initATableValues(tenantId, getDefaultSplits(tenantId), null, nextTimestamp()-1, getUrl());
             
             upsert = "UPSERT INTO " + tableName + "(a_id, a_string, b_string) " +
                     "SELECT A_INTEGER, A_STRING, B_STRING FROM ATABLE WHERE a_string = ?";

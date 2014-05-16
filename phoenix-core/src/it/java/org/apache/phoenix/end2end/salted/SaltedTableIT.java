@@ -31,16 +31,18 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.junit.Test;
-
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
+import org.apache.phoenix.end2end.ClientManagedTimeTest;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
 /**
  * Tests for table with transparent salting.
  */
+@Category(ClientManagedTimeTest.class)
 public class SaltedTableIT extends BaseClientManagedTimeIT {
 
     private static void initTableValues(byte[][] splits, long ts) throws Exception {

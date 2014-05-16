@@ -29,8 +29,9 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(ClientManagedTimeTest.class)
 public class IsNullIT extends BaseClientManagedTimeIT {
     @Test
     public void testIsNullInPk() throws Exception {
