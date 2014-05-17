@@ -600,4 +600,25 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
         }
     }
 
+    @Test
+    public void testCSVCommonsUpsert_NonExistentTable() throws Exception {
+        PhoenixConnection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl()).unwrap(
+                    PhoenixConnection.class);
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, "NONEXISTENTTABLE",
+                    null, true, Collections.<String>emptyList(), "!");
+            csvUtil.upsert(
+                    new StringReader("ID,VALARRAY\n"
+                            + "1,2!3!4\n"));
+            fail("Trying to load a non-existent table should fail");
+        } catch (IllegalArgumentException e) {
+            assertEquals("Table NONEXISTENTTABLE not found", e.getMessage());
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+
+    }
 }
