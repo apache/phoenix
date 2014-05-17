@@ -305,6 +305,9 @@ public class CSVCommonsLoader {
                         rs.getString(QueryUtil.COLUMN_NAME_POSITION),
                         PDataType.fromSqlTypeName(sqlTypeName).getSqlType());
             }
+            if (columnNameToTypeMap.isEmpty()) {
+                throw new IllegalArgumentException("Table " + tableName + " not found");
+            }
         } finally {
             if (rs != null) {
                 rs.close();
