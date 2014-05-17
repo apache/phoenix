@@ -31,10 +31,12 @@ import org.apache.phoenix.query.QueryServices;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class ContextClassloaderIT  {
 
     private static HBaseTestingUtility hbaseTestUtil;
