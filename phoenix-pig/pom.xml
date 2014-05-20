@@ -111,10 +111,36 @@
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-core</artifactId>
+          <version>${hadoop-one.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>hsqldb</groupId>
+              <artifactId>hsqldb</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>net.sf.kosmosfs</groupId>
+              <artifactId>kfs</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.eclipse.jdt</groupId>
+              <artifactId>core</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>net.java.dev.jets3t</groupId>
+              <artifactId>jets3t</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>oro</groupId>
+              <artifactId>oro</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-test</artifactId>
+          <version>${hadoop-one.version}</version>
+          <optional>true</optional>
+          <scope>test</scope>
         </dependency>
       </dependencies>
     </profile>
