@@ -38,6 +38,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
@@ -227,9 +228,11 @@ public class DeleteCompiler {
         final StatementContext context = plan.getContext();
         // If we're doing a query for a set of rows with no where clause, then we don't need to contact the server at all.
         // A simple check of the none existence of a where clause in the parse node is not sufficient, as the where clause
-        // may have been optimized out. Instead, we check that there's a single filter which must be the SkipScanFilter
-        // in this case.
-        if (noQueryReqd && ! (context.getScan().getFilter() instanceof FilterList) && context.getScanRanges().isPointLookup()) {
+        // may have been optimized out. Instead, we check that there's a single SkipScanFilter
+        if (noQueryReqd
+                && (!context.getScan().hasFilter()
+                    || context.getScan().getFilter() instanceof SkipScanFilter)
+                && context.getScanRanges().isPointLookup()) {
             return new MutationPlan() {
 
                 @Override
