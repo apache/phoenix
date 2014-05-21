@@ -111,6 +111,12 @@
           <groupId>org.apache.hbase</groupId>
           <artifactId>hbase-testing-util</artifactId>
           <version>${hbase-hadoop1.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.jruby</groupId>
+              <artifactId>jruby-complete</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
         <dependency>
           <groupId>org.apache.hbase</groupId>
@@ -118,6 +124,12 @@
           <version>${hbase-hadoop1.version}</version>
           <type>test-jar</type>
           <scope>test</scope>
+          <exclusions>
+            <exclusion>
+              <groupId>org.jruby</groupId>
+              <artifactId>jruby-complete</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
         <dependency>
           <groupId>org.apache.hbase</groupId>
@@ -185,6 +197,12 @@
           <groupId>org.apache.hbase</groupId>
           <artifactId>hbase-testing-util</artifactId>
           <version>${hbase-hadoop2.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.jruby</groupId>
+              <artifactId>jruby-complete</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
         <dependency>
           <groupId>org.apache.hbase</groupId>
@@ -192,6 +210,12 @@
           <version>${hbase-hadoop2.version}</version>
           <type>test-jar</type>
           <scope>test</scope>
+          <exclusions>
+            <exclusion>
+              <groupId>org.jruby</groupId>
+              <artifactId>jruby-complete</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>        
         <dependency>
           <groupId>org.apache.hbase</groupId>
