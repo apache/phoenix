@@ -93,15 +93,19 @@ public class StatsManagerImpl implements StatsManager {
             } finally {
                 scanner.close();
             }
-            int maxPossibleKeyLength = SchemaUtil.estimateKeyLength(tableRef.getTable());
-            byte[] maxPossibleKey = new byte[maxPossibleKeyLength];
-            Arrays.fill(maxPossibleKey, (byte)255);
-            // Use this deprecated method to get the key "before" the max possible key value,
-            // which is the max key for a table.
-            @SuppressWarnings("deprecation")
-            Result r = hTable.getRowOrBefore(maxPossibleKey, tableRef.getTable().getColumnFamilies().iterator().next().getName().getBytes());
-            if (r != null) {
-                maxKey = r.getRow();
+            
+            // Get max possible key value
+            scan = new Scan();
+            scan.setFilter(new KeyOnlyFilter());
+            scan.setReversed(true);
+            scanner = hTable.getScanner(scan);
+            try {
+                Result r = scanner.next(); 
+                if (r != null) {
+                    maxKey = r.getRow();
+                }
+            } finally {
+                scanner.close();
             }
             tableStatsMap.put(tableRef.getTable().getName().getString(), new PTableStats(timeKeeper.getCurrentTime(),minKey,maxKey));
         } catch (IOException e) {

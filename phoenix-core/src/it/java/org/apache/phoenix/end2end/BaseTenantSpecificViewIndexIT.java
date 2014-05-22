@@ -102,10 +102,12 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
         conn.createStatement().execute("UPSERT INTO v(k2,v1,v2) VALUES (-1, 'blah', 'superblah')"); // sanity check that we can upsert after index is there
         conn.commit();
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT k1, k2, v2 FROM v WHERE v2='" + valuePrefix + "v2-1'");
-        assertEquals(saltBuckets == null ? 
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T ['" + tenantId + "',-32768,'" + valuePrefix + "v2-1']" :
-                "CLIENT PARALLEL 4-WAY SKIP SCAN ON 3 KEYS OVER _IDX_T [0,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1'] - [2,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1']\n" + 
-                "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+        
+        String expected = saltBuckets == null ? 
+                "RANGE SCAN OVER _IDX_T ['" + tenantId + "',-32768,'" + valuePrefix + "v2-1']" :
+                "SKIP SCAN ON 3 KEYS OVER _IDX_T [0,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1'] - [2,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1']\n" + 
+                "CLIENT MERGE SORT";
+        assertTrue(QueryUtil.getExplainPlan(rs).contains(expected));
     }
     
     private Connection createTenantConnection(String tenantId) throws SQLException {

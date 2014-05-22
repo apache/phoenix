@@ -96,7 +96,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         assertEquals("f",rs.getString(2));
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("explain select pk2,col1 from acme where col1='f'");
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_MT_BASE ['a',-32768,'f']",QueryUtil.getExplainPlan(rs));
+        assertEquals("CLIENT PARALLEL 4-WAY RANGE SCAN OVER _IDX_MT_BASE ['a',-32768,'f']",QueryUtil.getExplainPlan(rs));
         
         try {
             // Cannot reference tenant_id column in tenant specific connection
