@@ -199,11 +199,11 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             innerScanner = new HashJoinRegionScanner(s, p, j, tenantId, c.getEnvironment());
         }
         
-        final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner, offset);
         List<KeyValueColumnExpression> arrayKVRefs = new ArrayList<KeyValueColumnExpression>();
         Expression[] arrayFuncRefs = deserializeArrayPostionalExpressionInfoFromScan(
                 scan, innerScanner, arrayKVRefs);
-        innerScanner = getWrappedScanner(c, innerScanner, arrayKVRefs, arrayFuncRefs);
+        innerScanner = getWrappedScanner(c, innerScanner, arrayKVRefs, arrayFuncRefs, offset);
+        final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner, offset);
         if (iterator == null) {
             return innerScanner;
         }
@@ -291,9 +291,10 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
      * the same from a custom filter.
      * @param arrayFuncRefs 
      * @param arrayKVRefs 
+     * @param offset starting position in the rowkey.
      */
     private RegionScanner getWrappedScanner(final ObserverContext<RegionCoprocessorEnvironment> c, final RegionScanner s, 
-           final List<KeyValueColumnExpression> arrayKVRefs, final Expression[] arrayFuncRefs) {
+           final List<KeyValueColumnExpression> arrayKVRefs, final Expression[] arrayFuncRefs, final int offset) {
         return new RegionScanner() {
 
             @Override
@@ -345,12 +346,16 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             public boolean nextRaw(List<Cell> result) throws IOException {
                 try {
                     boolean next = s.nextRaw(result);
-                    if(result.size() == 0) {
+                    if (result.size() == 0) {
                         return next;
-                    } else if((arrayFuncRefs != null && arrayFuncRefs.length == 0) || arrayKVRefs.size() == 0) {
-                        return next;
+                    } 
+                    if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
+                        replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
                     }
-                    replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                    if (offset > 0) {
+                        wrapResultUsingOffset(result,offset);
+                    }
+                    // There is a scanattribute set to retrieve the specific array element
                     return next;
                 } catch (Throwable t) {
                     ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
@@ -364,11 +369,14 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                     boolean next = s.nextRaw(result, limit);
                     if (result.size() == 0) {
                         return next;
-                    } else if ((arrayFuncRefs != null && arrayFuncRefs.length == 0) || arrayKVRefs.size() == 0) { 
-                        return next; 
+                    } 
+                    if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) { 
+                        replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                    }
+                    if (offset > 0) {
+                        wrapResultUsingOffset(result,offset);
                     }
                     // There is a scanattribute set to retrieve the specific array element
-                    replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
                     return next;
                 } catch (Throwable t) {
                     ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
@@ -408,7 +416,128 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                         QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER.length, HConstants.LATEST_TIMESTAMP,
                         Type.codeToType(rowKv.getTypeByte()), value, 0, value.length));
             }
-            
+
+            private void wrapResultUsingOffset(List<Cell> result, final int offset) {
+                for (int i = 0; i < result.size(); i++) {
+                    final Cell cell = result.get(i);
+                    // TODO: Create DelegateCell class instead
+                    Cell newCell = new Cell() {
+
+                        @Override
+                        public byte[] getRowArray() {
+                            return cell.getRowArray();
+                        }
+
+                        @Override
+                        public int getRowOffset() {
+                            return cell.getRowOffset() + offset;
+                        }
+
+                        @Override
+                        public short getRowLength() {
+                            return (short)(cell.getRowLength() - offset);
+                        }
+
+                        @Override
+                        public byte[] getFamilyArray() {
+                            return cell.getFamilyArray();
+                        }
+
+                        @Override
+                        public int getFamilyOffset() {
+                            return cell.getFamilyOffset();
+                        }
+
+                        @Override
+                        public byte getFamilyLength() {
+                            return cell.getFamilyLength();
+                        }
+
+                        @Override
+                        public byte[] getQualifierArray() {
+                            return cell.getQualifierArray();
+                        }
+
+                        @Override
+                        public int getQualifierOffset() {
+                            return cell.getQualifierOffset();
+                        }
+
+                        @Override
+                        public int getQualifierLength() {
+                            return cell.getQualifierLength();
+                        }
+
+                        @Override
+                        public long getTimestamp() {
+                            return cell.getTimestamp();
+                        }
+
+                        @Override
+                        public byte getTypeByte() {
+                            return cell.getTypeByte();
+                        }
+
+                        @Override
+                        public long getMvccVersion() {
+                            return cell.getMvccVersion();
+                        }
+
+                        @Override
+                        public byte[] getValueArray() {
+                            return cell.getValueArray();
+                        }
+
+                        @Override
+                        public int getValueOffset() {
+                            return cell.getValueOffset();
+                        }
+
+                        @Override
+                        public int getValueLength() {
+                            return cell.getValueLength();
+                        }
+
+                        @Override
+                        public byte[] getTagsArray() {
+                            return cell.getTagsArray();
+                        }
+
+                        @Override
+                        public int getTagsOffset() {
+                            return cell.getTagsOffset();
+                        }
+
+                        @Override
+                        public short getTagsLength() {
+                            return cell.getTagsLength();
+                        }
+
+                        @Override
+                        public byte[] getValue() {
+                            return cell.getValue();
+                        }
+
+                        @Override
+                        public byte[] getFamily() {
+                            return cell.getFamily();
+                        }
+
+                        @Override
+                        public byte[] getQualifier() {
+                            return cell.getQualifier();
+                        }
+
+                        @Override
+                        public byte[] getRow() {
+                            return cell.getRow();
+                        }
+                    };
+                    // Wrap cell in cell that offsets row key
+                    result.set(i, newCell);
+                }
+            }
+
             @Override
             public long getMaxResultSize() {
                 return s.getMaxResultSize();

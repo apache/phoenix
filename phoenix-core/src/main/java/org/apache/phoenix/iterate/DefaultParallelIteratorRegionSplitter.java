@@ -41,7 +41,9 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.query.StatsManager;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.ReadOnlyProps;
 
 
@@ -84,6 +86,10 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         Scan scan = context.getScan();
         PTable table = tableRef.getTable();
         List<HRegionLocation> allTableRegions = context.getConnection().getQueryServices().getAllTableRegions(table.getPhysicalName().getBytes());
+
+        if (table.getType().equals(PTableType.INDEX) && table.getIndexType().equals(IndexType.LOCAL)) {
+            return filterRegions(allTableRegions, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW);
+        }
         // If we're not salting, then we've already intersected the minMaxRange with the scan range
         // so there's nothing to do here.
         return filterRegions(allTableRegions, scan.getStartRow(), scan.getStopRow());
@@ -140,7 +146,14 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         // distributed across regions, using this scheme compensates for regions that
         // have more rows than others, by applying tighter splits and therefore spawning
         // off more scans over the overloaded regions.
-        int splitsPerRegion = regions.size() >= targetConcurrency ? 1 : (regions.size() > targetConcurrency / 2 ? maxConcurrency : targetConcurrency) / regions.size();
+        PTable table = tableRef.getTable();
+        boolean localIndex = table.getType().equals(PTableType.INDEX) && table.getIndexType().equals(IndexType.LOCAL);
+        int splitsPerRegion;
+        if (localIndex) {
+            splitsPerRegion = 1;
+        } else {
+            splitsPerRegion = regions.size() >= targetConcurrency ? 1 : (regions.size() > targetConcurrency / 2 ? maxConcurrency : targetConcurrency) / regions.size();
+        }
         splitsPerRegion = Math.min(splitsPerRegion, maxIntraRegionParallelization);
         // Create a multi-map of ServerName to List<KeyRange> which we'll use to round robin from to ensure
         // that we keep each region server busy for each query.

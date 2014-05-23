@@ -43,6 +43,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 
 import com.google.common.collect.Lists;
@@ -283,11 +284,11 @@ public class QueryOptimizer {
                 int c = plan2.getContext().getScanRanges().getRanges().size() - plan1.getContext().getScanRanges().getRanges().size();
                 // Account for potential view constants which are always bound
                 if (plan1 == dataPlan) { // plan2 is index plan. Ignore the viewIndexId if present
-                    c += boundRanges - (table2.getViewIndexId() == null ? 0 : 1);
+                    c += boundRanges - (table2.getViewIndexId() == null || table2.getIndexType() == IndexType.LOCAL ? 0 : 1);
                 } else { // plan1 is index plan. Ignore the viewIndexId if present
-                    c -= boundRanges - (table1.getViewIndexId() == null ? 0 : 1);
+                    c -= boundRanges - (table1.getViewIndexId() == null || table1.getIndexType() == IndexType.LOCAL ? 0 : 1);
                 }
-                if (c != 0) return c;
+                if (c != 0 && table1.getIndexType() != IndexType.LOCAL && table2.getIndexType() != IndexType.LOCAL) return c;
                 if (plan1.getGroupBy()!=null && plan2.getGroupBy()!=null) {
                     if (plan1.getGroupBy().isOrderPreserving() != plan2.getGroupBy().isOrderPreserving()) {
                         return plan1.getGroupBy().isOrderPreserving() ? -1 : 1;
@@ -297,11 +298,20 @@ public class QueryOptimizer {
                 c = (table1.getColumns().size() - table1.getPKColumns().size()) - (table2.getColumns().size() - table2.getPKColumns().size());
                 if (c != 0) return c;
                 
+                // If all things are equal, don't choose local index as it forces scan
+                // on every region.
+                if (table1.getIndexType() == IndexType.LOCAL) {
+                    return 1;
+                }
+                if (table2.getIndexType() == IndexType.LOCAL) {
+                    return -1;
+                }
+
                 // All things being equal, just use the table based on the Hint.USE_DATA_OVER_INDEX_TABLE
-                if (plan1.getTableRef().getTable().getType() == PTableType.INDEX) {
+                if (table1.getType() == PTableType.INDEX) {
                     return comparisonOfDataVersusIndexTable;
                 }
-                if (plan2.getTableRef().getTable().getType() == PTableType.INDEX) {
+                if (table2.getType() == PTableType.INDEX) {
                     return -comparisonOfDataVersusIndexTable;
                 }
                 

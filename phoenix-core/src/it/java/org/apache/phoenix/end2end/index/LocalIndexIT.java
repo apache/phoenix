@@ -46,6 +46,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
@@ -219,5 +220,94 @@ public class LocalIndexIT extends BaseIndexIT {
             assertEquals(1, count);
         }
         indexTable.close();
+    }
+
+    @Test
+    public void testLocalIndexScan() throws Exception {
+        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try{
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('b',1,2,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('f',1,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('j',2,4,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('q',3,1,'c')");
+            conn1.commit();
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
+            
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + INDEX_TABLE_NAME);
+            assertTrue(rs.next());
+            
+            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            int numRegions = admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME)).size();
+            
+            String query = "SELECT t_id, k1, k2,V1 FROM " + DATA_TABLE_NAME +" where v1='a'";
+            rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
+            
+            assertEquals(
+                "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
+                        + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME) + " [-32768,'a']",
+                        QueryUtil.getExplainPlan(rs));
+            
+            rs = conn1.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("f", rs.getString("t_id"));
+            assertEquals(1, rs.getInt("k1"));
+            assertEquals(2, rs.getInt("k2"));
+            assertTrue(rs.next());
+            assertEquals("j", rs.getString("t_id"));
+            assertEquals(2, rs.getInt("k1"));
+            assertEquals(4, rs.getInt("k2"));
+            
+            query = "SELECT t_id, k1, k2,V1 from " + DATA_TABLE_FULL_NAME + " order by V1,t_id";
+            rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
+            
+            assertEquals(
+                "CLIENT PARALLEL " + numRegions + "-WAY FULL SCAN OVER "
+                        + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)+"\n"
+                        + "    SERVER SORTED BY [V1, T_ID]\n" + "CLIENT MERGE SORT",
+                QueryUtil.getExplainPlan(rs));
+            
+            rs = conn1.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("f", rs.getString("t_id"));
+            assertEquals(1, rs.getInt("k1"));
+            assertEquals(2, rs.getInt("k2"));
+            assertEquals("a", rs.getString("V1"));
+            assertTrue(rs.next());
+            assertEquals("j", rs.getString("t_id"));
+            assertEquals(2, rs.getInt("k1"));
+            assertEquals(4, rs.getInt("k2"));
+            assertEquals("a", rs.getString("V1"));
+            assertTrue(rs.next());
+            assertEquals("q", rs.getString("t_id"));
+            assertEquals(3, rs.getInt("k1"));
+            assertEquals(1, rs.getInt("k2"));
+            assertEquals("c", rs.getString("V1"));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString("t_id"));
+            assertEquals(1, rs.getInt("k1"));
+            assertEquals(2, rs.getInt("k2"));
+            assertEquals("z", rs.getString("V1"));
+        } finally {
+            conn1.close();
+        }
+        
+    }
+
+    @Test
+    public void testIndexPlanSelectionIfBothGlobalAndLocalIndexesHasSameColumnsAndOrder() throws Exception {
+        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('b',1,2,'z')");
+        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('f',1,2,'a')");
+        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('j',2,4,'a')");
+        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('q',3,1,'c')");
+        conn1.commit();
+        conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
+        conn1.createStatement().execute("CREATE INDEX " + INDEX_TABLE_NAME + "2" + " ON " + DATA_TABLE_NAME + "(v1)");
+        String query = "SELECT t_id, k1, k2,V1 FROM " + DATA_TABLE_NAME +" where v1='a'";
+        ResultSet rs1 = conn1.createStatement().executeQuery("EXPLAIN "+ query);
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + INDEX_TABLE_NAME + "2" + " ['a']",QueryUtil.getExplainPlan(rs1));
+        conn1.close();
     }
 }
