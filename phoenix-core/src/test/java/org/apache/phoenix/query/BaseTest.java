@@ -532,18 +532,6 @@ public abstract class BaseTest {
         conf.setInt("hbase.regionserver.handler.count", 5);
         conf.setInt("hbase.regionserver.metahandler.count", 2);
         conf.setInt("hbase.master.handler.count", 2);
-        conf.setInt("dfs.namenode.handler.count", 1);
-        conf.setInt("dfs.namenode.service.handler.count", 1);
-        conf.setInt("dfs.datanode.handler.count", 1);
-        conf.setInt("ipc.server.read.threadpool.size", 2);
-        conf.setInt("ipc.server.handler.threadpool.size", 2);
-        conf.setInt("hbase.hconnection.threads.max", 2);
-        conf.setInt("hbase.hconnection.threads.core", 2);
-        conf.setInt("hbase.htable.threads.max", 2);
-        conf.setInt("hbase.regionserver.hlog.syncer.count", 2);
-        conf.setInt("hbase.hlog.asyncer.number", 2);
-        conf.setInt("hbase.assignment.zkevent.workers", 5);
-        conf.setInt("hbase.assignment.threads.max", 5);
         return conf;
     }
 
