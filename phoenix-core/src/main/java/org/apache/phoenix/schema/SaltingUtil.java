@@ -19,6 +19,7 @@ package org.apache.phoenix.schema;
 
 import java.util.List;
 
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
@@ -104,5 +105,16 @@ public class SaltingUtil {
             upperRange = newUpperRange;
         }
         return KeyRange.getKeyRange(lowerRange, upperRange);
+    }
+
+    public static void addRegionStartKeyToScanStartAndStopRows(byte[] startKey, Scan scan) {
+        byte[] newStartRow = new byte[scan.getStartRow().length + startKey.length];
+        System.arraycopy(startKey, 0, newStartRow, 0, startKey.length);
+        System.arraycopy(scan.getStartRow(), 0, newStartRow, startKey.length, scan.getStartRow().length);
+        scan.setStartRow(newStartRow);
+        byte[] newStopRow = new byte[scan.getStopRow().length + startKey.length];
+        System.arraycopy(startKey, 0, newStopRow, 0, startKey.length);
+        System.arraycopy(scan.getStopRow(), 0, newStopRow, startKey.length, scan.getStopRow().length);
+        scan.setStopRow(newStopRow);
     }
 }

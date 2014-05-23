@@ -36,6 +36,7 @@ import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
@@ -69,6 +70,7 @@ public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
         boolean isSharedViewIndex = table.getViewIndexId() != null;
         // TODO: util for this offset, as it's computed in numerous places
         positionOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
+        this.isOrderPreserving &= table.getIndexType() != IndexType.LOCAL;
         entries = Lists.newArrayListWithExpectedSize(expectedEntrySize);
         this.ordering = ordering;
     }
