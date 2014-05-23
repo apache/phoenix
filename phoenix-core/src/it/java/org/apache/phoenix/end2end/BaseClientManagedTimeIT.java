@@ -29,8 +29,8 @@ import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.After;
 import org.junit.AfterClass;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
@@ -64,8 +64,8 @@ public abstract class BaseClientManagedTimeIT extends BaseTest {
         return new Configuration(config);
     }
     
-    @Before
-    public void cleanUpBeforeTest() throws Exception {
+    @After
+    public void cleanUpAfterTest() throws Exception {
         long ts = nextTimestamp();
         deletePriorTables(ts - 1, getUrl());    
     }

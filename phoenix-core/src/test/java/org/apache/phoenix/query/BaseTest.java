@@ -532,9 +532,9 @@ public abstract class BaseTest {
         conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
         conf.setInt(HConstants.REGION_SERVER_META_HANDLER_COUNT, 2);
         conf.setInt(HConstants.MASTER_HANDLER_COUNT, 2);
-        conf.setInt("dfs.namenode.handler.count", 1);
-        conf.setInt("dfs.namenode.service.handler.count", 1);
-        conf.setInt("dfs.datanode.handler.count", 1);
+        conf.setInt("dfs.namenode.handler.count", 2);
+        conf.setInt("dfs.namenode.service.handler.count", 2);
+        conf.setInt("dfs.datanode.handler.count", 2);
         conf.setInt("ipc.server.read.threadpool.size", 2);
         conf.setInt("ipc.server.handler.threadpool.size", 2);
         conf.setInt("hbase.hconnection.threads.max", 2);
