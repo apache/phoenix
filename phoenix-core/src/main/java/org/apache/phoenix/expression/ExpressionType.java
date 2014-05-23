@@ -65,11 +65,12 @@ import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.TruncFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
 import org.apache.phoenix.expression.function.TimezoneOffsetFunction;
+import org.apache.phoenix.expression.function.DecodeFunction;
 
 import com.google.common.collect.Maps;
 
 /**
- * 
+ *
  * Enumeration of all Expression types that may be evaluated on the server-side.
  * Used during serialization and deserialization to pass Expression between client
  * and server.
@@ -155,6 +156,7 @@ public enum ExpressionType {
     ArrayConstructorExpression(ArrayConstructorExpression.class),
     SQLViewTypeFunction(SQLViewTypeFunction.class),
     ExternalSqlTypeIdFunction(ExternalSqlTypeIdFunction.class),
+    DecodeFunction(DecodeFunction.class),
     TimezoneOffsetFunction(TimezoneOffsetFunction.class);
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
