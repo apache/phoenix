@@ -197,6 +197,7 @@ public class PArrayDataType {
 	public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value,
 			PDataType srcType, Integer maxLength, Integer scale,
 			Integer desiredMaxLength, Integer desiredScale) {
+        if (value == null) return true;
 		PhoenixArray pArr = (PhoenixArray) value;
 		Object[] arr = (Object[]) pArr.array;
 		PDataType baseType = PDataType.fromTypeId(srcType.getSqlType()
