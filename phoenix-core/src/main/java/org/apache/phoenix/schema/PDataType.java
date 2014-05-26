@@ -3293,6 +3293,7 @@ public enum PDataType {
 		
 		@Override
 		public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
 		   PhoenixArray pArr = (PhoenixArray)value;
 		   int[] intArr = (int[])pArr.array;
            for (int i : intArr) {
@@ -3368,7 +3369,7 @@ public enum PDataType {
 		
 		@Override
 		public boolean isCoercibleTo(PDataType targetType, Object value) {
-		   
+           if (value == null) { return true; }
 		   PhoenixArray pArr = (PhoenixArray)value;
 		   boolean[] booleanArr = (boolean[])pArr.array;
            for (boolean i : booleanArr) {
@@ -3451,6 +3452,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            Object[] charArr = (Object[])pArr.array;
            for (Object i : charArr) {
@@ -3540,6 +3542,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            Object[] charArr = (Object[])pArr.array;
            for (Object i : charArr) {
@@ -3629,6 +3632,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            Object[] charArr = (Object[])pArr.array;
            for (Object i : charArr) {
@@ -3719,6 +3723,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            Object[] charArr = (Object[])pArr.array;
            for (Object i : charArr) {
@@ -3808,6 +3813,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            long[] longArr = (long[])pArr.array;
            for (long i : longArr) {
@@ -3890,6 +3896,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            short[] shortArr = (short[])pArr.array;
            for (short i : shortArr) {
@@ -3980,6 +3987,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            byte[] byteArr = (byte[])pArr.array;
            for (byte i : byteArr) {
@@ -4055,6 +4063,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            float[] floatArr = (float[])pArr.array;
            for (float i : floatArr) {
@@ -4138,6 +4147,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            double[] doubleArr = (double[])pArr.array;
            for (double i : doubleArr) {
@@ -4229,6 +4239,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            Object[] decimalArr = (Object[])pArr.array;
            for (Object i : decimalArr) {
@@ -4312,6 +4323,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            Object[] timeStampArr = (Object[])pArr.array;
            for (Object i : timeStampArr) {
@@ -4395,6 +4407,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            Object[] timeStampArr = (Object[])pArr.array;
            for (Object i : timeStampArr) {
@@ -4477,6 +4490,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            Object[] timeArr = (Object[])pArr.array;
            for (Object i : timeArr) {
@@ -4559,6 +4573,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            Object[] timeArr = (Object[])pArr.array;
            for (Object i : timeArr) {
@@ -4641,6 +4656,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; }
            PhoenixArray pArr = (PhoenixArray)value;
            Object[] dateArr = (Object[])pArr.array;
            for (Object i : dateArr) {
@@ -4723,6 +4739,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; } 
            PhoenixArray pArr = (PhoenixArray)value;
            Object[] dateArr = (Object[])pArr.array;
            for (Object i : dateArr) {
@@ -4805,6 +4822,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; } 
            PhoenixArray pArr = (PhoenixArray)value;
            long[] longArr = (long[])pArr.array;
            for (long i : longArr) {
@@ -4887,6 +4905,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; } 
            PhoenixArray pArr = (PhoenixArray)value;
            int[] intArr = (int[])pArr.array;
            for (int i : intArr) {
@@ -4970,6 +4989,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; } 
            PhoenixArray pArr = (PhoenixArray)value;
            short[] shortArr = (short[])pArr.array;
            for (short i : shortArr) {
@@ -5053,6 +5073,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; } 
            PhoenixArray pArr = (PhoenixArray)value;
            byte[] byteArr = (byte[])pArr.array;
            for (byte i : byteArr) {
@@ -5134,6 +5155,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; } 
            PhoenixArray pArr = (PhoenixArray)value;
            float[] floatArr = (float[])pArr.array;
            for (float i : floatArr) {
@@ -5225,6 +5247,7 @@ public enum PDataType {
 		
 		@Override
         public boolean isCoercibleTo(PDataType targetType, Object value) {
+           if (value == null) { return true; } 
            PhoenixArray pArr = (PhoenixArray)value;
            double[] doubleArr = (double[])pArr.array;
            for (double i : doubleArr) {
