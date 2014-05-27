@@ -137,16 +137,28 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * @param ptr bytes pointer to hold returned serialized value
      */
     public static void serialize(PTable dataTable, ImmutableBytesWritable ptr) {
-        Iterator<PTable> indexes = nonDisabledIndexIterator(dataTable.getIndexes().iterator());
-        if (dataTable.isImmutableRows() || !indexes.hasNext()) {
+        List<PTable> indexes = dataTable.getIndexes();
+        serialize(dataTable, ptr, indexes);
+    }
+
+    /**
+     * For client-side to serialize all IndexMaintainers for a given table
+     * @param dataTable data table
+     * @param ptr bytes pointer to hold returned serialized value
+     * @param indexes indexes to serialize
+     */
+    public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
+            List<PTable> indexes) {
+        Iterator<PTable> indexesItr = nonDisabledIndexIterator(indexes.iterator());
+        if (dataTable.isImmutableRows() || !indexesItr.hasNext()) {
             ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             return;
         }
         int nIndexes = 0;
         int estimatedSize = dataTable.getRowKeySchema().getEstimatedByteSize() + 2;
-        while (indexes.hasNext()) {
+        while (indexesItr.hasNext()) {
             nIndexes++;
-            PTable index = indexes.next();
+            PTable index = indexesItr.next();
             estimatedSize += index.getIndexMaintainer(dataTable).getEstimatedByteSize();
         }
         TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(estimatedSize + 1);
@@ -156,9 +168,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             WritableUtils.writeVInt(output, nIndexes * (dataTable.getBucketNum() == null ? 1 : -1));
             // Write out data row key schema once, since it's the same for all index maintainers
             dataTable.getRowKeySchema().write(output);
-            indexes = nonDisabledIndexIterator(dataTable.getIndexes().iterator());
-            while (indexes.hasNext()) {
-                    indexes.next().getIndexMaintainer(dataTable).write(output);
+            indexesItr = nonDisabledIndexIterator(indexes.iterator());
+            while (indexesItr.hasNext()) {
+                    indexesItr.next().getIndexMaintainer(dataTable).write(output);
             }
         } catch (IOException e) {
             throw new RuntimeException(e); // Impossible

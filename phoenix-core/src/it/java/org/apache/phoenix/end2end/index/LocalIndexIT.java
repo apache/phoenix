@@ -310,4 +310,40 @@ public class LocalIndexIT extends BaseIndexIT {
         assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + INDEX_TABLE_NAME + "2" + " ['a']",QueryUtil.getExplainPlan(rs1));
         conn1.close();
     }
+
+    @Test
+    public void testDropLocalIndexShouldDeleteDataFromLocalIndexTable() throws Exception {
+        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try {
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('b',1,2,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('f',1,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('j',2,4,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('q',3,1,'c')");
+            conn1.commit();
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("DROP INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME);
+            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            HTable indexTable = new HTable(admin.getConfiguration() ,TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
+            Pair<byte[][], byte[][]> startEndKeys = indexTable.getStartEndKeys();
+            byte[][] startKeys = startEndKeys.getFirst();
+            byte[][] endKeys = startEndKeys.getSecond();
+            // No entry should be present in local index table after drop index.
+            for (int i = 0; i < startKeys.length; i++) {
+                Scan s = new Scan();
+                s.setStartRow(startKeys[i]);
+                s.setStopRow(endKeys[i]);
+                ResultScanner scanner = indexTable.getScanner(s);
+                int count = 0;
+                for(Result r:scanner){
+                    count++;
+                }
+                scanner.close();
+                assertEquals(0, count);
+            }
+            indexTable.close();
+        } finally {
+            conn1.close();
+        }
+    }
 }

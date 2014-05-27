@@ -101,7 +101,6 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -514,7 +513,10 @@ public class MetaDataClient {
                 Scan scan = plan.getContext().getScan();
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 PTable dataTable = dataTableRef.getTable();
-                dataTable.getIndexMaintainers(ptr);
+                List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
+                // Only build newly created index.
+                indexes.add(index);
+                IndexMaintainer.serialize(dataTable, ptr, indexes);
                 scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
                 // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
                 // However, in this case, we need to project all of the data columns that contribute to the index.
@@ -1379,11 +1381,11 @@ public class MetaDataClient {
                         connection.removeTable(tenantId, tableName);
                     } catch (TableNotFoundException ignore) { } // Ignore - just means wasn't cached
                     
-                    // TODO: we need to drop the index data when a view is dropped
-                    boolean dropMetaData = connection.getQueryServices().getProps().getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     if (result.getTable() != null && tableType != PTableType.VIEW) {
                         connection.setAutoCommit(true);
                         PTable table = result.getTable();
+                        boolean dropMetaData = result.getTable().getViewIndexId() == null && 
+                                connection.getQueryServices().getProps().getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                         long ts = (scn == null ? result.getMutationTime() : scn);
                         // Create empty table and schema - they're only used to get the name from
                         // PName name, PTableType type, long timeStamp, long sequenceNumber, List<PColumn> columns
