@@ -112,8 +112,8 @@
     <maven.rat.version>0.8</maven.rat.version>
     
     <!-- Plugin options -->
-    <numForkedUT>1</numForkedUT>
-    <numForkedIT>1</numForkedIT>
+    <numForkedUT>2</numForkedUT>
+    <numForkedIT>2</numForkedIT>
     
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
