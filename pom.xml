@@ -112,8 +112,8 @@
     <maven.rat.version>0.8</maven.rat.version>
     
     <!-- Plugin options -->
-    <numForkedUT>2</numForkedUT>
-    <numForkedIT>2</numForkedIT>
+    <numForkedUT>1</numForkedUT>
+    <numForkedIT>1</numForkedIT>
     
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -250,7 +250,7 @@
                   <encoding>UTF-8</encoding>
                   <forkCount>${numForkedIT}</forkCount>
                   <reuseForks>true</reuseForks>
-                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
+                  <argLine>-enableassertions -Xmx3000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
                   <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                   <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                   <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
@@ -262,7 +262,7 @@
                   <encoding>UTF-8</encoding>
                   <forkCount>${numForkedIT}</forkCount>
                   <reuseForks>true</reuseForks>
-                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
+                  <argLine>-enableassertions -Xmx3000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
                   <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                   <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                   <groups>org.apache.phoenix.end2end.HBaseManagedTimeTest</groups>
@@ -278,7 +278,7 @@
                   <encoding>UTF-8</encoding>
                   <forkCount>${numForkedIT}</forkCount>
                   <reuseForks>true</reuseForks>
-                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
+                  <argLine>-enableassertions -Xmx3000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
                   <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                   <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                   <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
