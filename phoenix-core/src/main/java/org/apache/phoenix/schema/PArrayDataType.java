@@ -224,13 +224,15 @@ public class PArrayDataType {
                 && baseType.isFixedWidth() == desiredBaseType.isFixedWidth() && actualModifer == expectedModifier) { 
             return; 
         }
-        if (value == null && actualType != desiredType) {
+        if (value == null || actualType != desiredType) {
             value = toObject(ptr.get(), ptr.getOffset(), ptr.getLength(), baseType, actualModifer, maxLength,
                     desiredScale, desiredBaseType);
             PhoenixArray pArr = (PhoenixArray)value;
             // VARCHAR <=> CHAR
             if(baseType.isFixedWidth() != desiredBaseType.isFixedWidth()) {
-                pArr = new PhoenixArray(pArr, desiredMaxLength);
+                if (!pArr.isPrimitiveType()) {
+                    pArr = new PhoenixArray(pArr, desiredMaxLength);
+                }
             }
             baseType = desiredBaseType;
             ptr.set(toBytes(pArr, baseType, expectedModifier));

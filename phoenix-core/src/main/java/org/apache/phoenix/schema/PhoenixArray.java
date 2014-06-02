@@ -33,7 +33,6 @@ public class PhoenixArray implements Array,SQLCloseable {
 	Object array;
 	int numElements;
 	Integer maxLength;
-	
 	public PhoenixArray() {
 		// empty constructor
 	}
@@ -41,6 +40,10 @@ public class PhoenixArray implements Array,SQLCloseable {
 	public Integer getMaxLength() {
 	    return maxLength;
 	}
+
+    public boolean isPrimitiveType() {
+        return this.baseType.getCodec() != null;
+    }
 
 	private static Object[] coerceToNewLength(PDataType baseType, Object[] elements, int maxLength) {
         Object[] resizedElements = new Object[elements.length];
