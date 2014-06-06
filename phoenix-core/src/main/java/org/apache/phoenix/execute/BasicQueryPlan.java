@@ -58,9 +58,12 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.trace.TracingIterator;
+import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
+import org.cloudera.htrace.TraceScope;
 
 import com.google.common.collect.Lists;
 
@@ -203,7 +206,7 @@ public abstract class BasicQueryPlan implements QueryPlan {
             }
         }
         ResultIterator iterator = newIterator();
-        return dependencies.isEmpty() ? 
+        iterator = dependencies.isEmpty() ?
                 iterator : new DelegateResultIterator(iterator) {
             @Override
             public void close() throws SQLException {
@@ -214,6 +217,12 @@ public abstract class BasicQueryPlan implements QueryPlan {
                 }
             }
         };
+
+        // wrap the iterator so we start/end tracing as we expect
+        TraceScope scope =
+                Tracing.startNewSpan(context.getConnection(), "Creating basic query for "
+                        + getPlanSteps(iterator));
+        return (scope.getSpan() != null) ? new TracingIterator(scope, iterator) : iterator;
     }
 
     private void serializeIndexMaintainerIntoScan(Scan scan, PTable dataTable) {
@@ -349,8 +358,12 @@ public abstract class BasicQueryPlan implements QueryPlan {
         // Optimize here when getting explain plan, as queries don't get optimized until after compilation
         QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(context.getStatement(), this);
         ResultIterator iterator = plan.iterator();
+        return new ExplainPlan(getPlanSteps(iterator));
+    }
+
+    private List<String> getPlanSteps(ResultIterator iterator){
         List<String> planSteps = Lists.newArrayListWithExpectedSize(5);
         iterator.explain(planSteps);
-        return new ExplainPlan(planSteps);
+        return planSteps;
     }
 }

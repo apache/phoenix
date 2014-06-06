@@ -31,9 +31,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.CreateIndexCompiler;
@@ -110,6 +110,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
@@ -186,7 +187,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         return new PhoenixResultSet(iterator, projector, this);
     }
     
-    protected boolean execute(CompilableStatement stmt) throws SQLException {
+    protected boolean execute(final CompilableStatement stmt) throws SQLException {
         if (stmt.getOperation().isMutation()) {
             executeMutation(stmt);
             return false;
@@ -202,13 +203,16 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt) throws SQLException {
         try {
-            return PhoenixContextExecutor.call(new Callable<PhoenixResultSet>() {
+            return CallRunner.run(
+                new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
                 @Override
-                public PhoenixResultSet call() throws Exception {
+                    public PhoenixResultSet call() throws SQLException {
                     try {
                         QueryPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.RESERVE_SEQUENCE);
                         plan = connection.getQueryServices().getOptimizer().optimize(
                                 PhoenixStatement.this, plan);
+                         // this will create its own trace internally, so we don't wrap this
+                         // whole thing in tracing
                         PhoenixResultSet rs = newResultSet(plan.iterator(), plan.getProjector());
                         resultSets.add(rs);
                         setLastQueryPlan(plan);
@@ -225,7 +229,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                         throw e;
                     }
                 }
-            });
+                }, PhoenixContextExecutor.inContext());
         } catch (Exception e) {
             Throwables.propagateIfInstanceOf(e, SQLException.class);
             throw Throwables.propagate(e);
@@ -234,11 +238,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     protected int executeMutation(final CompilableStatement stmt) throws SQLException {
         try {
-            return PhoenixContextExecutor.call(
-                    new Callable<Integer>() {
+            return CallRunner
+                    .run(
+                        new CallRunner.CallableThrowable<Integer, SQLException>() {
                         @Override
-                        public Integer call() throws Exception {
-
+                            public Integer call() throws SQLException {
                             // Note that the upsert select statements will need to commit any open transaction here,
                             // since they'd update data directly from coprocessors, and should thus operate on
                             // the latest state
@@ -266,7 +270,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                                 throw e;
                             }
                         }
-                    });
+                    }, PhoenixContextExecutor.inContext(),
+                        Tracing.withTracing(connection, this.toString()));
         } catch (Exception e) {
             Throwables.propagateIfInstanceOf(e, SQLException.class);
             throw Throwables.propagate(e);

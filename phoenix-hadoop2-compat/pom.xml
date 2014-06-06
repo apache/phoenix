@@ -29,4 +29,49 @@
   </parent>
   <artifactId>phoenix-hadoop2-compat</artifactId>
   <name>Phoenix Hadoop2 Compatibility</name>
+
+  <dependencies>
+    <!-- Intra-project dependencies -->
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hadoop-compat</artifactId>
+    </dependency>
+    <!-- HBase -->
+    <dependency>
+    <groupId>org.apache.hbase</groupId>
+    <artifactId>hbase-common</artifactId>
+    <exclusions>
+      <exclusion>
+        <artifactId>hadoop-core</artifactId>
+        <groupId>org.apache.hadoop</groupId>
+      </exclusion>
+    </exclusions>
+    </dependency>
+    <!-- Hadoop -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-core</artifactId>
+      <version>${hadoop-two.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-annotations</artifactId>
+      <version>${hadoop-two.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
+      <version>${hadoop-two.version}</version>
+    </dependency>
+    <!-- Other -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+    </dependency>
+    <!-- Test -->
+     <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-all</artifactId>
+    </dependency>
+  </dependencies>
 </project>

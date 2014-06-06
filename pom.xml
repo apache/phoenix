@@ -557,7 +557,8 @@
       <id>hadoop-1</id>
       <activation>
         <property>
-          <name>!hadoop.profile</name>
+          <name>hadoop.profile</name>
+          <value>1</value>
         </property>
       </activation>
       <modules>
@@ -631,6 +632,11 @@
               </exclusion>
             </exclusions>
           </dependency>
+           <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-hadoop-compat</artifactId>
+            <version>${hbase-hadoop1.version}</version>
+          </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-test</artifactId>
@@ -647,8 +653,7 @@
       <id>hadoop-2</id>
       <activation>
         <property>
-          <name>hadoop.profile</name>
-          <value>2</value>
+          <name>!hadoop.profile</name>
         </property>
       </activation>
       <modules>
@@ -668,7 +673,7 @@
             <version>${project.version}</version>
           </dependency>
 
-          <!-- Hadoop dependencies -->
+          <!-- HBase dependencies -->
           <dependency>
             <groupId>org.apache.hbase</groupId>
             <artifactId>hbase-testing-util</artifactId>
@@ -687,6 +692,11 @@
           </dependency>
           <dependency>
             <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-common</artifactId>
+            <version>${hbase-hadoop2.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hbase</groupId>
             <artifactId>hbase-protocol</artifactId>
             <version>${hbase-hadoop2.version}</version>
           </dependency>
@@ -696,24 +706,38 @@
             <version>${hbase-hadoop2.version}</version>
           </dependency>
           <dependency>
+		    <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-hadoop-compat</artifactId>
+            <version>${hbase-hadoop2.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-hadoop-compat</artifactId>
+            <version>${hbase-hadoop2.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+          </dependency>
+
+          <!-- Hadoop Dependencies -->
+          <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
-            <version>${hadoop.version}</version>
+            <version>${hadoop-two.version}</version>
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-annotations</artifactId>
-            <version>${hadoop.version}</version>
+            <version>${hadoop-two.version}</version>
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-mapreduce-client-core</artifactId>
-            <version>${hadoop.version}</version>
+            <version>${hadoop-two.version}</version>
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-minicluster</artifactId>
-            <version>${hadoop.version}</version>
+            <version>${hadoop-two.version}</version>
             <optional>true</optional>
             <scope>test</scope>
           </dependency>
