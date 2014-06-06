@@ -19,6 +19,8 @@ package org.apache.phoenix.util;
 
 import java.util.concurrent.Callable;
 
+import org.apache.phoenix.call.CallWrapper;
+
 import com.google.common.base.Throwables;
 
 /**
@@ -33,6 +35,27 @@ import com.google.common.base.Throwables;
  * classes is set as the context classloader for specific calls.
  */
 public class PhoenixContextExecutor {
+
+    private static class CurrentContextWrapper implements CallWrapper {
+        private ClassLoader saveCcl;
+
+        @Override
+        public void before() {
+            saveCcl = Thread.currentThread().getContextClassLoader();
+            Thread.currentThread().setContextClassLoader(
+                PhoenixContextExecutor.class.getClassLoader());
+        }
+
+        @Override
+        public void after() {
+            Thread.currentThread().setContextClassLoader(saveCcl);
+
+        };
+    }
+
+    public static CallWrapper inContext() {
+        return new CurrentContextWrapper();
+    }
 
     /**
      * Execute an operation (synchronously) using the context classloader used to load this class,
