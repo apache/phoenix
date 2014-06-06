@@ -278,6 +278,19 @@ public class PMetaDataImpl implements PMetaData {
                     throw new TableNotFoundException(index.getName().getString());
                 }
             }
+            // also remove its reference from parent table
+            PName parent = table.getParentName();
+            PTable parentTable = null;
+            if(parent != null && (parentTable=tables.get(new PTableKey(tenantId, parent.getString()))) != null) {
+                List<PTable> oldIndexes = parentTable.getIndexes();
+                if(oldIndexes != null && !oldIndexes.isEmpty()) {
+	                List<PTable> newIndexes = Lists.newArrayListWithExpectedSize(oldIndexes.size());
+	                newIndexes.addAll(oldIndexes);
+	                newIndexes.remove(table);
+	                parentTable = PTableImpl.makePTable(parentTable, table.getTimeStamp(), newIndexes);
+	                tables.put(parentTable.getKey(), parentTable);
+                }
+            }
         }
         return new PMetaDataImpl(tables);
     }
