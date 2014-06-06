@@ -20,12 +20,21 @@ package org.apache.phoenix.util;
 
 import static org.apache.phoenix.util.SchemaUtil.getEscapedFullColumnName;
 
+import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 
 import javax.annotation.Nullable;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.zookeeper.ZKConfig;
+import org.apache.phoenix.jdbc.PhoenixDriver;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
@@ -34,6 +43,8 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
 public final class QueryUtil {
+
+    private static final Log LOG = LogFactory.getLog(QueryUtil.class);
 
     /**
      *  Column family name index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
@@ -152,6 +163,12 @@ public final class QueryUtil {
         return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + server;
     }
 
+    public static String getUrl(String server, long port) {
+        String serverUrl = getUrl(server);
+        return serverUrl + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + port
+                + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+    }
+
     public static String getExplainPlan(ResultSet rs) throws SQLException {
         StringBuilder buf = new StringBuilder();
         while (rs.next()) {
@@ -163,4 +180,16 @@ public final class QueryUtil {
         }
         return buf.toString();
     }
+    public static Connection getConnection(Configuration conf) throws ClassNotFoundException,
+          SQLException {
+        // read the hbase properties from the configuration
+        String server = ZKConfig.getZKQuorumServersString(conf);
+        // make sure we load the phoenix driver
+        Class.forName(PhoenixDriver.class.getName());
+        int port =
+            conf.getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT);
+        String jdbcUrl = getUrl(server, port);
+        LOG.info("Creating connection with the jdbc url:" + jdbcUrl);
+        return DriverManager.getConnection(jdbcUrl);
+      }
 }
