@@ -36,6 +36,7 @@ import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.expression.function.LTrimFunction;
 import org.apache.phoenix.expression.function.LengthFunction;
 import org.apache.phoenix.expression.function.LowerFunction;
+import org.apache.phoenix.expression.function.LpadFunction;
 import org.apache.phoenix.expression.function.RTrimFunction;
 import org.apache.phoenix.expression.function.RegexpReplaceFunction;
 import org.apache.phoenix.expression.function.RegexpSubstrFunction;
@@ -146,6 +147,12 @@ public class SortOrderExpressionTest {
     public void trim() throws Exception {
         List<Expression> args = Lists.newArrayList(getInvertedLiteral("   blah    ", PDataType.CHAR));
         evaluateAndAssertResult(new TrimFunction(args), "blah");
+    }
+    
+    @Test
+    public void lpad() throws Exception {
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("ABCD", PDataType.CHAR), getLiteral(7), getLiteral("12"));
+        evaluateAndAssertResult(new LpadFunction(args), "121ABCD");
     }
     
     @Test

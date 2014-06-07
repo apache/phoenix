@@ -177,6 +177,14 @@ public class SortOrderFIT extends BaseHBaseManagedTimeIT {
         Object[][] expectedRows = new Object[][]{{"  o2", 2}};
         runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, new WhereCondition("LTRIM(oid)", "=", "'o2'"));
     }
+    
+    @Test
+    public void lPadDescCompositePK() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (oid VARCHAR NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
+        Object[][] insertedRows = new Object[][]{{"aaaa", 1}, {"bbbb", 2}, {"cccc", 3}};
+        Object[][] expectedRows = new Object[][]{{"bbbb", 2}};
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, new WhereCondition("LPAD(oid, 8, '123')", "=", "'1231bbbb'"));
+    }
 
     @Test
     public void countDescCompositePK() throws Exception {

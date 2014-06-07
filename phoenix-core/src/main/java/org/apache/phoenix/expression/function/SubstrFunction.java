@@ -114,30 +114,26 @@ public class SubstrFunction extends PrefixFunction {
         if (!getStrExpression().evaluate(tuple, ptr)) {
             return false;
         }
+    
+        boolean isCharType = getStrExpression().getDataType() == PDataType.CHAR;
+        SortOrder sortOrder = getStrExpression().getSortOrder();
+        int strlen = isCharType ? ptr.getLength() : StringUtil.calculateUTF8Length(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder);
         
-        try {
-            boolean isCharType = getStrExpression().getDataType() == PDataType.CHAR;
-            SortOrder sortOrder = getStrExpression().getSortOrder();
-            int strlen = isCharType ? ptr.getLength() : StringUtil.calculateUTF8Length(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder);
-            
-            // Account for 1 versus 0-based offset
-            offset = offset - (offset <= 0 ? 0 : 1);
-            if (offset < 0) { // Offset < 0 means get from end
-                offset = strlen + offset;
-            }
-            if (offset < 0 || offset >= strlen) {
-                return false;
-            }
-            int maxLength = strlen - offset;
-            length = length == -1 ? maxLength : Math.min(length,maxLength);
-            
-            int byteOffset = isCharType ? offset : StringUtil.getByteLengthForUtf8SubStr(ptr.get(), ptr.getOffset(), offset, sortOrder);
-            int byteLength = isCharType ? length : StringUtil.getByteLengthForUtf8SubStr(ptr.get(), ptr.getOffset() + byteOffset, length, sortOrder);
-            ptr.set(ptr.get(), ptr.getOffset() + byteOffset, byteLength);
-            return true;
-        } catch (UnsupportedEncodingException e) {
+        // Account for 1 versus 0-based offset
+        offset = offset - (offset <= 0 ? 0 : 1);
+        if (offset < 0) { // Offset < 0 means get from end
+            offset = strlen + offset;
+        }
+        if (offset < 0 || offset >= strlen) {
             return false;
         }
+        int maxLength = strlen - offset;
+        length = length == -1 ? maxLength : Math.min(length,maxLength);
+        
+        int byteOffset = isCharType ? offset : StringUtil.getByteLengthForUtf8SubStr(ptr.get(), ptr.getOffset(), offset, sortOrder);
+        int byteLength = isCharType ? length : StringUtil.getByteLengthForUtf8SubStr(ptr.get(), ptr.getOffset() + byteOffset, length, sortOrder);
+        ptr.set(ptr.get(), ptr.getOffset() + byteOffset, byteLength);
+        return true;
     }
 
     @Override

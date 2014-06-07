@@ -31,6 +31,7 @@ import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -366,6 +367,67 @@ public class TestUtil {
     public static void bindParams(PhoenixPreparedStatement stmt, List<Object> binds) throws SQLException {
         for (int i = 0; i < binds.size(); i++) {
             stmt.setObject(i+1, binds.get(i));
+        }
+    }
+    
+    /**
+     * @param conn
+     *            connection to be used
+     * @param sortOrder
+     *            sort order of column contain input values
+     * @param id
+     *            id of the row being inserted
+     * @param input
+     *            input to be inserted
+     */
+    public static void upsertRow(Connection conn, String sortOrder, int id, Object input) throws SQLException {
+        String dml = String.format("UPSERT INTO TEST_TABLE_%s VALUES(?,?)", sortOrder);
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, id);
+        if (input instanceof String)
+            stmt.setString(2, (String) input);
+        else if (input instanceof Integer)
+            stmt.setInt(2, (Integer) input);
+        else if (input instanceof Double)
+            stmt.setDouble(2, (Double) input);
+        else if (input instanceof Float)
+            stmt.setFloat(2, (Float) input);
+        else if (input instanceof Boolean)
+            stmt.setBoolean(2, (Boolean) input);
+        else if (input instanceof Long)
+            stmt.setLong(2, (Long) input);
+        else
+            throw new UnsupportedOperationException("" + input.getClass() + " is not supported by upsertRow");
+        stmt.execute();
+        conn.commit();
+    }
+
+    private static void createTable(Connection conn, String inputSqlType, String sortOrder) throws SQLException {
+        String dmlFormat =
+            "CREATE TABLE TEST_TABLE_%s" + "(id INTEGER NOT NULL, pk %s NOT NULL, " + "kv %s "
+                + "CONSTRAINT PK_CONSTRAINT PRIMARY KEY (id, pk %s))";
+        String ddl = String.format(dmlFormat, sortOrder, inputSqlType, inputSqlType, sortOrder);
+        conn.createStatement().execute(ddl);
+        conn.commit();
+    }
+
+    /**
+     * Creates a table to be used for testing. It contains one id column, one varchar column to be used as input, and
+     * one column which will contain null values
+     * 
+     * @param conn
+     *            connection to be used
+     * @param inputSqlType
+     *            sql type of input
+     * @param inputList
+     *            list of values to be inserted into the pk column
+     */
+    public static void initTables(Connection conn, String inputSqlType, List<Object> inputList) throws Exception {
+        createTable(conn, inputSqlType, "ASC");
+        createTable(conn, inputSqlType, "DESC");
+        for (int i = 0; i < inputList.size(); ++i) {
+            upsertRow(conn, "ASC", i, inputList.get(i));
+            upsertRow(conn, "DESC", i, inputList.get(i));
         }
     }
 }
