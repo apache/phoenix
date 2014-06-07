@@ -17,12 +17,11 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.io.UnsupportedEncodingException;
 import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
+import org.apache.phoenix.exception.UndecodableByteException;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
@@ -73,7 +72,7 @@ public class LengthFunction extends ScalarFunction {
         } else {
             try {
                 len = StringUtil.calculateUTF8Length(ptr.get(), ptr.getOffset(), ptr.getLength(), child.getSortOrder());
-            } catch (UnsupportedEncodingException e) {
+            } catch (UndecodableByteException e) {
                 return false;
             }
         }
