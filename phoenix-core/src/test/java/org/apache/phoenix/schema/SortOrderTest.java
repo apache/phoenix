@@ -30,7 +30,6 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.junit.Test;
 
 /**
- * @author stoens
  * @since 3.0
  */
 public class SortOrderTest {

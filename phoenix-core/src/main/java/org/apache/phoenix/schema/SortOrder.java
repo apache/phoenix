@@ -46,7 +46,6 @@ import com.google.common.base.Preconditions;
  * CREATE TABLE Events(event_type INTEGER NOT NULL, event_date DATE NOT NULL, event_name VARCHAR NOT NULL 
  * CONSTRAINT PK PRIMARY KEY (event_type, event_date DESC))</p>
  * 
- * @author stoens
  * @since 1.2
  */
 
