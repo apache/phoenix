@@ -27,13 +27,16 @@ import org.apache.phoenix.expression.function.CeilFunction;
 import org.apache.phoenix.expression.function.CeilTimestampExpression;
 import org.apache.phoenix.expression.function.CoalesceFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.expression.function.DecodeFunction;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
+import org.apache.phoenix.expression.function.EncodeFunction;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
 import org.apache.phoenix.expression.function.InvertFunction;
+import org.apache.phoenix.expression.function.LpadFunction;
 import org.apache.phoenix.expression.function.LTrimFunction;
 import org.apache.phoenix.expression.function.LengthFunction;
 import org.apache.phoenix.expression.function.LowerFunction;
@@ -58,14 +61,13 @@ import org.apache.phoenix.expression.function.StddevPopFunction;
 import org.apache.phoenix.expression.function.StddevSampFunction;
 import org.apache.phoenix.expression.function.SubstrFunction;
 import org.apache.phoenix.expression.function.SumAggregateFunction;
+import org.apache.phoenix.expression.function.TimezoneOffsetFunction;
 import org.apache.phoenix.expression.function.ToCharFunction;
 import org.apache.phoenix.expression.function.ToDateFunction;
 import org.apache.phoenix.expression.function.ToNumberFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.TruncFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
-import org.apache.phoenix.expression.function.TimezoneOffsetFunction;
-import org.apache.phoenix.expression.function.DecodeFunction;
 
 import com.google.common.collect.Maps;
 
@@ -157,7 +159,9 @@ public enum ExpressionType {
     SQLViewTypeFunction(SQLViewTypeFunction.class),
     ExternalSqlTypeIdFunction(ExternalSqlTypeIdFunction.class),
     DecodeFunction(DecodeFunction.class),
-    TimezoneOffsetFunction(TimezoneOffsetFunction.class);
+    TimezoneOffsetFunction(TimezoneOffsetFunction.class),
+    EncodeFunction(EncodeFunction.class),
+    LpadFunction(LpadFunction.class);
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }

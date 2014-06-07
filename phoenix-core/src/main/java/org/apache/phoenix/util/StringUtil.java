@@ -17,10 +17,10 @@
  */
 package org.apache.phoenix.util;
 
-import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.exception.UndecodableByteException;
 import org.apache.phoenix.schema.SortOrder;
 
 import com.google.common.base.Preconditions;
@@ -128,10 +128,10 @@ public class StringUtil {
         if ((c & BYTES_4_MASK) == 0xF0)
             return 4;
         // Any thing else in the first byte is invalid
-        throw new RuntimeException("Undecodable byte: " + b);
+        throw new UndecodableByteException(b);
     }
 
-    public static int calculateUTF8Length(byte[] bytes, int offset, int length, SortOrder sortOrder) throws UnsupportedEncodingException {
+    public static int calculateUTF8Length(byte[] bytes, int offset, int length, SortOrder sortOrder) {
         int i = offset, endOffset = offset + length;
         length = 0;
         while (i < endOffset) {
@@ -146,7 +146,7 @@ public class StringUtil {
     // parameter, return the actual index into the byte array which would represent a substring
     // of <length> starting from the character at <offset>. We assume the <offset> is the start
     // byte of an UTF-8 character.
-    public static int getByteLengthForUtf8SubStr(byte[] bytes, int offset, int length, SortOrder sortOrder) throws UnsupportedEncodingException {
+    public static int getByteLengthForUtf8SubStr(byte[] bytes, int offset, int length, SortOrder sortOrder)  {
         int byteLength = 0;
         while(length > 0 && offset + byteLength < bytes.length) {
             int charLength = getBytesInChar(bytes[offset + byteLength], sortOrder);
@@ -237,4 +237,93 @@ public class StringUtil {
         }
         return true;
     }
+    
+    /**
+     * LPAD implementation
+     * 
+     * @param str
+     *            array containing string to be left padded
+     * @param strOffset
+     *            byte offset of string
+     * @param strLength
+     *            byte length of string
+     * @param fill
+     *            array containing fill values
+     * @param fillOffset
+     *            byte offset of fill
+     * @param fillLength
+     *            byte length of fill
+     * @param invertFill
+     *            if true inverts the bits in fill before filling the array
+     * @param strWithPaddingLen
+     *            length of the string that is returned with fill values left padded
+     * @return byte[] containing left padded string
+     */
+    public static byte[] lpad(byte[] str, int strOffset, int strLength, byte[] fill, int fillOffset, int fillLength,
+        boolean invertFill, int strWithPaddingLen) {
+        byte[] paddedStr = new byte[strWithPaddingLen];
+        int fillStopIdx = strWithPaddingLen - strLength;
+        // copy fill into the start of paddedStr
+        fill(paddedStr, 0, fillStopIdx, fill, fillOffset, fillOffset + fillLength, invertFill);
+        // fill remaining characters with original string
+        System.arraycopy(str, strOffset, paddedStr, fillStopIdx, strLength);
+        return paddedStr;
+    }
+    
+    /**
+     * Assigns the specified byte values to elements of the specified range of the specified array of bytes. The range
+     * to be filled extends from index fromIndex, inclusive, to index toIndex, exclusive. (If
+     * fromIndex==toIndex, the range to be filled is empty.)
+     * 
+     * @param str
+     *            the array to be filled
+     * @param strFromIdx
+     *            the index of the first element (inclusive) to be filled with the fill values
+     * @param strToIdx
+     *            the index of the last element (exclusive) to be filled with the fill values
+     * @param fillArray
+     *            the values to be stored in all elements of the array
+     * @param fillFromIdx
+     *            the index of the first element (inclusive) to be used as fill values
+     * @param filToIdx
+     *            the index of the last element (exclusive) to be used as fill value
+     * @param invertFill
+     *            if true inverts the bits in fill before filling the array
+     */
+    public static void fill(byte[] str, int strFromIdx, int strToIdx, byte[] fillArray, int fillFromIdx, int fillToIdx,
+        boolean invertFill) {
+        rangeCheck(str.length, strFromIdx, strToIdx);
+        rangeCheck(fillArray.length, fillFromIdx, fillToIdx);
+        int strIdx = strFromIdx;
+        byte[] fill = fillArray;
+        int fillLen = fillToIdx - fillFromIdx;
+        if (invertFill)
+            fill = SortOrder.invert(fillArray, fillFromIdx, fillLen);
+        while (strIdx < strToIdx) {
+            int fillIdx = fillFromIdx;
+            while (fillIdx < fillToIdx && strIdx < strToIdx) {
+                if (strIdx + fillLen < fillToIdx) {
+                    System.arraycopy(fill, fillFromIdx, str, strIdx, fillLen);
+                } else {
+                    str[strIdx++] = fill[fillIdx++];
+                }
+            }
+        }
+    }
+    
+    /**
+     * Checks that fromIndex and toIndex are in the range and throws an appropriate exception, if they
+     * are not
+     */
+    private static void rangeCheck(int length, int fromIndex, int toIndex) {
+        if (fromIndex > toIndex) {
+            throw new IllegalArgumentException("fromIndex(" + fromIndex + ") > toIndex(" + toIndex + ")");
+        }
+        if (fromIndex < 0) {
+            throw new ArrayIndexOutOfBoundsException(fromIndex);
+        }
+        if (toIndex > length) {
+            throw new ArrayIndexOutOfBoundsException(toIndex);
+        }
+    }   
 }
