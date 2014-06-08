@@ -36,6 +36,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ExpressionUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -93,12 +94,8 @@ public class InListExpression extends BaseSingleExpression {
         if (isNegate) { 
             expression = NotExpression.create(expression, ptr);
         }
-        if (expression.isStateless()) {
-            if (!expression.evaluate(null, ptr) || ptr.getLength() == 0) {
-                return LiteralExpression.newConstant(null,expression.getDataType(), expression.isDeterministic());
-            }
-            Object value = expression.getDataType().toObject(ptr);
-            return LiteralExpression.newConstant(value, expression.getDataType(), expression.isDeterministic());
+        if (ExpressionUtil.isConstant(expression)) {
+            return ExpressionUtil.getConstantExpression(expression, ptr);
         }
         return expression;
     }

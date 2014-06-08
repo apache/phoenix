@@ -21,6 +21,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.io.WritableUtils;
@@ -37,6 +38,7 @@ public abstract class BaseCompoundExpression extends BaseExpression {
     private boolean requiresFinalEvaluation;
    
     public BaseCompoundExpression() {
+        init(Collections.<Expression>emptyList());
     }
     
     public BaseCompoundExpression(List<Expression> children) {

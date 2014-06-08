@@ -35,6 +35,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.collect.Lists;
@@ -59,8 +60,8 @@ public class ComparisonExpression extends BaseCompoundExpression {
     }
     
     private static void addEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr) throws SQLException {
-        boolean isLHSNull = lhs.isStateless() && (!lhs.evaluate(null, ptr) || ptr.getLength()==0);
-        boolean isRHSNull = rhs.isStateless() && (!rhs.evaluate(null, ptr) || ptr.getLength()==0);
+        boolean isLHSNull = ExpressionUtil.isNull(lhs, ptr);
+        boolean isRHSNull = ExpressionUtil.isNull(rhs, ptr);
         if (isLHSNull && isRHSNull) { // null == null will end up making the query degenerate
             andNodes.add(LiteralExpression.newConstant(false, PDataType.BOOLEAN));
         } else if (isLHSNull) { // AND rhs IS NULL
