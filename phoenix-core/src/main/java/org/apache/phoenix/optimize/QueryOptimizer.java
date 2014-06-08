@@ -29,6 +29,7 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexStatementRewriter;
 import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.HintNode;
@@ -70,7 +71,7 @@ public class QueryOptimizer {
     }
 
     public QueryPlan optimize(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
-        QueryCompiler compiler = new QueryCompiler(statement, select, resolver, targetColumns, parallelIteratorFactory);
+        QueryCompiler compiler = new QueryCompiler(statement, select, resolver, targetColumns, parallelIteratorFactory, new SequenceManager(statement));
         QueryPlan dataPlan = compiler.compile();
         return optimize(dataPlan, statement, targetColumns, parallelIteratorFactory);
     }
@@ -193,7 +194,7 @@ public class QueryOptimizer {
             ColumnResolver resolver = FromCompiler.getResolverForQuery(indexSelect, statement.getConnection());
             // Check index state of now potentially updated index table to make sure it's active
             if (PIndexState.ACTIVE.equals(resolver.getTables().get(0).getTable().getIndexState())) {
-                QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory);
+                QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager());
                 QueryPlan plan = compiler.compile();
                 // Checking number of columns handles the wildcard cases correctly, as in that case the index
                 // must contain all columns from the data table to be able to be used.

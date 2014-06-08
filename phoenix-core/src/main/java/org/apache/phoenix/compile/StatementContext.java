@@ -28,9 +28,15 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.join.TupleProjector;
-import org.apache.phoenix.query.*;
-import org.apache.phoenix.schema.*;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.NumberUtil;
+import org.apache.phoenix.util.ScanUtil;
 
 
 /**
@@ -64,13 +70,14 @@ public class StatementContext {
     private TupleProjector clientTupleProjector;
     
     public StatementContext(PhoenixStatement statement) {
-        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan());
+        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan(), new SequenceManager(statement));
     }
     
-    public StatementContext(PhoenixStatement statement, ColumnResolver resolver, Scan scan) {
+    public StatementContext(PhoenixStatement statement, ColumnResolver resolver, Scan scan, SequenceManager seqManager) {
         this.statement = statement;
         this.resolver = resolver;
         this.scan = scan;
+        this.sequences = seqManager;
         this.binds = new BindManager(statement.getParameters());
         this.aggregates = new AggregationManager();
         this.expressions = new ExpressionManager();
@@ -81,7 +88,6 @@ public class StatementContext {
         this.numberFormat = connection.getQueryServices().getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;
-        this.sequences = new SequenceManager(statement);
         this.whereConditionColumns = new ArrayList<Pair<byte[],byte[]>>();
     }
 
