@@ -23,15 +23,15 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import java.io.File;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.util.Arrays;
 
-import com.google.common.collect.ImmutableList;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.junit.Test;
+
+import com.google.common.collect.ImmutableList;
 
 public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
     @Test
