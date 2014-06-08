@@ -44,6 +44,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String QUEUE_SIZE_ATTRIB = "phoenix.query.queueSize";
     public static final String THREAD_TIMEOUT_MS_ATTRIB = "phoenix.query.timeoutMs";
     public static final String SPOOL_THRESHOLD_BYTES_ATTRIB = "phoenix.query.spoolThresholdBytes";
+    public static final String HBASE_CLIENT_KEYTAB = "hbase.myclient.keytab";
+    public static final String HBASE_CLIENT_PRINCIPAL = "hbase.myclient.principal";
+
     
     /**
 	 * max size to spool the the result into

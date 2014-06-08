@@ -47,6 +47,10 @@ public class PhoenixEmbeddedDriverTest {
             "jdbc:phoenix:v1,v2,v3:/hbase;test=true",
             "jdbc:phoenix:v1,v2,v3:123:/hbase",
             "jdbc:phoenix:v1,v2,v3:123:/hbase;test=false",
+            "jdbc:phoenix:v1,v2,v3:123:/hbase:/user.keytab:user/principal;test=false",
+            "jdbc:phoenix:v1,v2,v3:123:/user.keytab:user/principal;test=false",
+            "jdbc:phoenix:v1,v2,v3:/user.keytab:user/principal;test=false",
+            "jdbc:phoenix:v1,v2,v3:/hbase:/user.keytab:user/principal;test=false"
         };
         ConnectionInfo[] infos = new ConnectionInfo[] {
             new ConnectionInfo(null,null,null),
@@ -65,6 +69,10 @@ public class PhoenixEmbeddedDriverTest {
             new ConnectionInfo("v1,v2,v3",null,"/hbase"),
             new ConnectionInfo("v1,v2,v3",123,"/hbase"),
             new ConnectionInfo("v1,v2,v3",123,"/hbase"),
+            new ConnectionInfo("v1,v2,v3",123,"/hbase", "/user.keytab","user/principal" ),
+            new ConnectionInfo("v1,v2,v3",123, null, "/user.keytab","user/principal" ),
+            new ConnectionInfo("v1,v2,v3", null, null, "/user.keytab","user/principal" ),
+            new ConnectionInfo("v1,v2,v3",null,"/hbase", "/user.keytab","user/principal" )
         };
         assertEquals(urls.length,infos.length);
         for (int i = 0; i < urls.length; i++) {
@@ -92,6 +100,7 @@ public class PhoenixEmbeddedDriverTest {
             "jdbc:phoenix:v1,v2,v3:123a:/hbase;test=true",
             "jdbc:phoenix:v1,v2,v3:123::/hbase",
             "jdbc:phoenix:v1,v2,v3:123::/hbase;test=false",
+            "jdbc:phoenix:v1,v2,v3:123:/hbase:user;test=false"
         };
         for (String url : urls) {
             try {
