@@ -169,7 +169,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             StringTokenizer tokenizer = new StringTokenizer(url == null ? "" : url.substring(PhoenixRuntime.JDBC_PROTOCOL.length()),DELIMITERS, true);
             int i = 0;
             boolean isMalformedUrl = false;
-            String[] tokens = new String[3];
+            String[] tokens = new String[5];
             String token = null;
             while (tokenizer.hasMoreTokens() && !(token=tokenizer.nextToken()).equals(TERMINATOR) && tokenizer.hasMoreTokens() && i < tokens.length) {
                 token = tokenizer.nextToken();
@@ -188,14 +188,41 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
                     try {
                         port = Integer.parseInt(tokens[1]);
                         isMalformedUrl = port < 0;
+                        if(i == 4){
+                        	if(!tokens[2].endsWith(".keytab")){
+                        		isMalformedUrl = true;
+                        	}
+                        	tokens[4] = tokens[3];
+                        	tokens[3] = tokens[2];
+                        	tokens[2] = null;
+                        }
                     } catch (NumberFormatException e) {
                         // If we have 3 tokens, then the second one must be a port.
                         // If we only have 2 tokens, the second one might be the root node:
                         // Assume that is the case if we get a NumberFormatException
-                        if (! (isMalformedUrl = i == 3) ) {
+                        if (!tokens[1].startsWith("/")) {
+                            isMalformedUrl = true;
+                        }
+                        if (i == 2) {
+                            tokens[4] = null;
+                            tokens[3] = null;
+                            tokens[2] = tokens[1];
+                            tokens[1] = null;
+                        } else if (i == 3) {
+                            tokens[4] = tokens[2];
+                            tokens[3] = tokens[1];
+                            tokens[2] = null;
+                            tokens[1] = null;
+                        } else if (i == 4) {
+                            tokens[4] = tokens[3];
+                            tokens[3] = tokens[2];
+                            tokens[2] = tokens[1];
+                            tokens[1] = null;
+                        } else if (i == 5) {
+                            tokens[4] = tokens[3];
+                            tokens[3] = tokens[2];
                             tokens[2] = tokens[1];
                         }
-                        
                     }
                 }
             }
@@ -203,13 +230,15 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
                 .setMessage(url).build().buildException();
             }
-            return new ConnectionInfo(tokens[0],port,tokens[2]);
+            return new ConnectionInfo(tokens[0],port,tokens[2], tokens[3], tokens[4]);
         }
         
         public ConnectionInfo normalize(ReadOnlyProps props) throws SQLException {
             String zookeeperQuorum = this.getZookeeperQuorum();
             Integer port = this.getPort();
             String rootNode = this.getRootNode();
+            String keytab = this.getKeytab();
+            String principal = this.getPrincipal();
             // Normalize connInfo so that a url explicitly specifying versus implicitly inheriting
             // the default values will both share the same ConnectionQueryServices.
             if (zookeeperQuorum == null) {
@@ -244,24 +273,45 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
                 .setMessage("Root node may not be specified when using the connectionless url \"" + this.toString() + "\"").build().buildException();
             }
-            return new ConnectionInfo(zookeeperQuorum, port, rootNode);
+            if(keytab == null){
+            	 if (!isConnectionless) {
+            		 keytab = props.get(QueryServices.HBASE_CLIENT_KEYTAB);
+            	 }
+            }
+            if(principal == null){
+              	 if (!isConnectionless) {
+              		principal = props.get(QueryServices.HBASE_CLIENT_PRINCIPAL);
+              	 }
+              }
+            if (keytab == null || keytab.equals("")) return new ConnectionInfo(zookeeperQuorum,
+                    port, rootNode);
+            else return new ConnectionInfo(zookeeperQuorum, port, rootNode, keytab, principal);
         }
         
         private final Integer port;
         private final String rootNode;
         private final String zookeeperQuorum;
         private final boolean isConnectionless;
+        private final String principal;
+        private final String keytab;
         
         // used for testing
-        ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
+        ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String keytab, String principal) {
             this.zookeeperQuorum = zookeeperQuorum;
             this.port = port;
             this.rootNode = rootNode;
             this.isConnectionless = PhoenixRuntime.CONNECTIONLESS.equals(zookeeperQuorum);
+            this.principal = principal;
+            this.keytab = keytab;
+        }
+        
+        // used for testing
+        ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
+        	this(zookeeperQuorum, port, rootNode, null, null);
         }
 
         public ReadOnlyProps asProps() {
-            Map<String,String> connectionProps = Maps.newHashMapWithExpectedSize(3);
+            Map<String, String> connectionProps = Maps.newHashMapWithExpectedSize(3);
             if (getZookeeperQuorum() != null) {
                 connectionProps.put(QueryServices.ZOOKEEPER_QUARUM_ATTRIB, getZookeeperQuorum());
             }
@@ -271,7 +321,14 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             if (getRootNode() != null) {
                 connectionProps.put(QueryServices.ZOOKEEPER_ROOT_NODE_ATTRIB, getRootNode());
             }
-            return connectionProps.isEmpty() ? ReadOnlyProps.EMPTY_PROPS : new ReadOnlyProps(connectionProps.entrySet().iterator());
+            if (getKeytab() != null) {
+                connectionProps.put(QueryServices.HBASE_CLIENT_KEYTAB, getKeytab());
+            }
+            if (getPrincipal() != null) {
+                connectionProps.put(QueryServices.HBASE_CLIENT_PRINCIPAL, getPrincipal());
+            }
+            return connectionProps.isEmpty() ? ReadOnlyProps.EMPTY_PROPS : new ReadOnlyProps(
+                    connectionProps.entrySet().iterator());
         }
         
         public boolean isConnectionless() {
@@ -289,6 +346,14 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
         public String getRootNode() {
             return rootNode;
         }
+        
+        public String getKeytab() {
+            return keytab;
+        }
+
+        public String getPrincipal() {
+            return principal;
+        }
 
         @Override
         public int hashCode() {
@@ -297,6 +362,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             result = prime * result + ((zookeeperQuorum == null) ? 0 : zookeeperQuorum.hashCode());
             result = prime * result + ((port == null) ? 0 : port.hashCode());
             result = prime * result + ((rootNode == null) ? 0 : rootNode.hashCode());
+            result = prime * result + ((keytab == null) ? 0 : keytab.hashCode());
+            result = prime * result + ((principal == null) ? 0 : keytab.hashCode());
             return result;
         }
 
@@ -305,7 +372,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             if (this == obj) return true;
             if (obj == null) return false;
             if (getClass() != obj.getClass()) return false;
-            ConnectionInfo other = (ConnectionInfo)obj;
+            ConnectionInfo other = (ConnectionInfo) obj;
             if (zookeeperQuorum == null) {
                 if (other.zookeeperQuorum != null) return false;
             } else if (!zookeeperQuorum.equals(other.zookeeperQuorum)) return false;
@@ -315,13 +382,22 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             if (rootNode == null) {
                 if (other.rootNode != null) return false;
             } else if (!rootNode.equals(other.rootNode)) return false;
+            if (keytab == null) {
+                if (other.keytab != null) return false;
+            } else if (!keytab.equals(other.keytab)) return false;
+            if (principal == null) {
+                if (other.principal != null) return false;
+            } else if (!principal.equals(other.principal)) return false;
             return true;
         }
         
         @Override
-        public String toString() {
-            return zookeeperQuorum + (port == null ? "" : ":" + port) + (rootNode == null ? "" : ":" + rootNode);
-        }
+		public String toString() {
+			return zookeeperQuorum + (port == null ? "" : ":" + port)
+					+ (rootNode == null ? "" : ":" + rootNode)
+					+ (keytab == null ? "" : ":" + keytab)
+					+ (principal == null ? "" : ":" + principal);
+		}
     }
 
     public static boolean isTestUrl(String url) {

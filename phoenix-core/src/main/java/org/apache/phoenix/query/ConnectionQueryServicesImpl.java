@@ -64,7 +64,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import com.google.protobuf.HBaseZeroCopyByteString;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -89,10 +88,12 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
@@ -171,6 +172,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.io.Closeables;
+import com.google.protobuf.HBaseZeroCopyByteString;
 
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
@@ -252,6 +254,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     private void openConnection() throws SQLException {
         try {
+            // check if we need to authenticate with kerberos
+            String clientKeytab = config.get(HBASE_CLIENT_KEYTAB);
+            String clientPrincipal = config.get(HBASE_CLIENT_PRINCIPAL);
+            if (clientKeytab != null && clientPrincipal != null) {
+                logger.info("Trying to connect to a secure cluster with keytab:" + clientKeytab);
+                UserGroupInformation.setConfiguration(config);
+                User.login(config, HBASE_CLIENT_KEYTAB, HBASE_CLIENT_PRINCIPAL, null);
+                logger.info("Successfull login to secure cluster!!");
+            }
             this.connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(this.config);
         } catch (IOException e) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
@@ -410,7 +421,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 byte[] currentKey = HConstants.EMPTY_START_ROW;
                 do {
                   HRegionLocation regionLocation = connection.getRegionLocation(
-                    TableName.valueOf(tableName), currentKey, reload);
+                      TableName.valueOf(tableName), currentKey, reload);
                   locations.add(regionLocation);
                   currentKey = regionLocation.getRegionInfo().getEndKey();
                 } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW));
@@ -1711,6 +1722,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 1, Sequence.Action.RESERVE);
     }
 
+    @SuppressWarnings("deprecation")
     private void incrementSequenceValues(List<SequenceKey> keys, long timestamp, long[] values, SQLException[] exceptions, int factor, Sequence.Action action) throws SQLException {
         List<Sequence> sequences = Lists.newArrayListWithExpectedSize(keys.size());
         for (SequenceKey key : keys) {
@@ -1783,6 +1795,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public void returnSequences(List<SequenceKey> keys, long timestamp, SQLException[] exceptions) throws SQLException {
         List<Sequence> sequences = Lists.newArrayListWithExpectedSize(keys.size());
@@ -1856,6 +1869,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     // Take no locks, as this only gets run when there are no open connections
     // so there's no danger of contention.
+    @SuppressWarnings("deprecation")
     private void returnAllSequences(ConcurrentMap<SequenceKey,Sequence> sequenceMap) throws SQLException {
         List<Append> mutations = Lists.newArrayListWithExpectedSize(sequenceMap.size());
         for (Sequence sequence : sequenceMap.values()) {
@@ -2271,6 +2285,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @throws IOException
      * @throws SQLException
      */
+    @SuppressWarnings("deprecation")
     private WhiteList upgradeCoprocessorsTo3_0(HBaseAdmin admin, boolean forceUpgrade) throws IOException, SQLException {
         String files = config.get(QueryServices.AUTO_UPGRADE_WHITELIST_ATTRIB);
         WhiteList coprocUpgradeWhiteList = new WhiteList(files);
