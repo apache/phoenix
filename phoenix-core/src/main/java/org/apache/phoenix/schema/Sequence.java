@@ -52,7 +52,8 @@ import com.google.common.collect.Lists;
 public class Sequence {
     public static final int SUCCESS = 0;
     
-    public enum Action {VALIDATE, RESERVE};
+    public enum ValueOp {VALIDATE_SEQUENCE, RESERVE_SEQUENCE};
+    public enum MetaOp {CREATE_SEQUENCE, DROP_SEQUENCE, RETURN_SEQUENCE};
     
     // Pre-compute index of sequence key values to prevent binary search
     private static final KeyValue CURRENT_VALUE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SEQUENCE_FAMILY_BYTES, CURRENT_VALUE_BYTES);
@@ -119,13 +120,13 @@ public class Sequence {
         return value.isDeleted() ? null : value;
     }
     
-    public long incrementValue(long timestamp, int factor, Action action) throws EmptySequenceCacheException {
+    public long incrementValue(long timestamp, int factor, ValueOp action) throws EmptySequenceCacheException {
         SequenceValue value = findSequenceValue(timestamp);
         if (value == null) {
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }
         if (value.currentValue == value.nextValue) {
-            if (action == Action.VALIDATE) {
+            if (action == ValueOp.VALIDATE_SEQUENCE) {
                 return value.currentValue;
             }
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
@@ -162,7 +163,7 @@ public class Sequence {
     private Append newReturn(SequenceValue value) {
         byte[] key = SchemaUtil.getSequenceKey(this.key.getTenantId(), this.key.getSchemaName(), this.key.getSequenceName());
         Append append = new Append(key);
-        byte[] opBuf = new byte[] {(byte)SequenceRegionObserver.Op.RETURN_SEQUENCE.ordinal()};
+        byte[] opBuf = new byte[] {(byte)MetaOp.RETURN_SEQUENCE.ordinal()};
         append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, opBuf);
         append.setAttribute(SequenceRegionObserver.CURRENT_VALUE_ATTRIB, PDataType.LONG.toBytes(value.nextValue));
         Map<byte[], List<KeyValue>> familyMap = append.getFamilyMap();
@@ -216,7 +217,7 @@ public class Sequence {
         return currentValue;
     }
 
-    public Increment newIncrement(long timestamp, Sequence.Action action) {
+    public Increment newIncrement(long timestamp, Sequence.ValueOp action) {
         Increment inc = new Increment(SchemaUtil.getSequenceKey(key.getTenantId(), key.getSchemaName(), key.getSequenceName()));
         // It doesn't matter what we set the amount too - we always use the values we get
         // from the Get we do to prevent any race conditions. All columns that get added
@@ -345,7 +346,7 @@ public class Sequence {
     public Append createSequence(long startWith, long incrementBy, long cacheSize, long timestamp) {
         byte[] key = SchemaUtil.getSequenceKey(this.key.getTenantId(), this.key.getSchemaName(), this.key.getSequenceName());
         Append append = new Append(key);
-        append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, new byte[] {(byte)SequenceRegionObserver.Op.CREATE_SEQUENCE.ordinal()});
+        append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, new byte[] {(byte)MetaOp.CREATE_SEQUENCE.ordinal()});
         if (timestamp != HConstants.LATEST_TIMESTAMP) {
             append.setAttribute(SequenceRegionObserver.MAX_TIMERANGE_ATTRIB, Bytes.toBytes(timestamp));
         }
@@ -380,7 +381,7 @@ public class Sequence {
     public Append dropSequence(long timestamp) {
         byte[] key = SchemaUtil.getSequenceKey(this.key.getTenantId(), this.key.getSchemaName(), this.key.getSequenceName());
         Append append = new Append(key);
-        append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, new byte[] {(byte)SequenceRegionObserver.Op.DROP_SEQUENCE.ordinal()});
+        append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, new byte[] {(byte)MetaOp.DROP_SEQUENCE.ordinal()});
         if (timestamp != HConstants.LATEST_TIMESTAMP) {
             append.setAttribute(SequenceRegionObserver.MAX_TIMERANGE_ATTRIB, Bytes.toBytes(timestamp));
         }

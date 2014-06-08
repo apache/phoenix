@@ -1583,7 +1583,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * Verifies that sequences exist and reserves values for them if reserveValues is true
      */
     @Override
-    public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions, Sequence.Action action) throws SQLException {
+    public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions, Sequence.ValueOp action) throws SQLException {
         incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 0, action);
     }
     
@@ -1600,10 +1600,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      */
     @Override
     public void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException {
-        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 1, Sequence.Action.RESERVE);
+        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 1, Sequence.ValueOp.RESERVE_SEQUENCE);
     }
 
-    private void incrementSequenceValues(List<SequenceKey> keys, long timestamp, long[] values, SQLException[] exceptions, int factor, Sequence.Action action) throws SQLException {
+    private void incrementSequenceValues(List<SequenceKey> keys, long timestamp, long[] values, SQLException[] exceptions, int factor, Sequence.ValueOp action) throws SQLException {
         List<Sequence> sequences = Lists.newArrayListWithExpectedSize(keys.size());
         for (SequenceKey key : keys) {
             Sequence newSequences = new Sequence(key);

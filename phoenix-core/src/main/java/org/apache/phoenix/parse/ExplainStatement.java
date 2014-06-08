@@ -18,7 +18,6 @@
 package org.apache.phoenix.parse;
 
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
-import org.apache.phoenix.schema.Sequence.Action;
 
 public class ExplainStatement implements BindableStatement {
     private final BindableStatement statement;
@@ -39,10 +38,5 @@ public class ExplainStatement implements BindableStatement {
     @Override
     public Operation getOperation() {
         return Operation.QUERY;
-    }
-
-    @Override
-    public Action getSequenceAction() {
-        return Action.VALIDATE;
     }
 }

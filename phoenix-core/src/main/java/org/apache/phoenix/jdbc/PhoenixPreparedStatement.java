@@ -53,6 +53,7 @@ import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
 
@@ -188,7 +189,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         }
         try {
             // Just compile top level query without optimizing to get ResultSetMetaData
-            QueryPlan plan = statement.compilePlan(this);
+            QueryPlan plan = statement.compilePlan(this, Sequence.ValueOp.VALIDATE_SEQUENCE);
             return new PhoenixResultSetMetaData(this.getConnection(), plan.getProjector());
         } finally {
             int lastSetBit = 0;
@@ -211,7 +212,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
             }
         }
         try {
-            StatementPlan plan = statement.compilePlan(this);
+            StatementPlan plan = statement.compilePlan(this, Sequence.ValueOp.VALIDATE_SEQUENCE);
             return plan.getParameterMetaData();
         } finally {
             int lastSetBit = 0;

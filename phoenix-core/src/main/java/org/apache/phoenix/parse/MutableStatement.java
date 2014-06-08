@@ -18,17 +18,11 @@
 package org.apache.phoenix.parse;
 
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
-import org.apache.phoenix.schema.Sequence.Action;
 
 public abstract class MutableStatement implements BindableStatement {
 
     @Override
     public Operation getOperation() {
         return Operation.UPSERT;
-    }
-
-    @Override
-    public Action getSequenceAction() {
-        return Action.RESERVE;
     }
 }
