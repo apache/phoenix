@@ -422,6 +422,90 @@ public class PhoenixHBaseLoaderIT {
         assertEquals(0, rs.getInt("MIN_SAL"));
         assertEquals(270, rs.getInt("MAX_SAL"));
     }
+	
+	/**
+     * Test for Sequence
+     * @throws Exception
+     */
+    @Test
+    public void testDataForSQLQueryWithSequences() throws Exception {
+        
+         //create the table
+         String ddl = "CREATE TABLE " + TABLE_FULL_NAME
+                + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, AGE INTEGER) ";
+                
+        conn.createStatement().execute(ddl);
+        
+        String sequenceDdl = "CREATE SEQUENCE my_sequence";
+                
+        conn.createStatement().execute(sequenceDdl);
+           
+        //prepare data with 10 rows having age 25 and the other 30.
+        final String dml = "UPSERT INTO " + TABLE_FULL_NAME + " VALUES(?,?,?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        int rows = 20;
+        for(int i = 0 ; i < rows; i++) {
+            stmt.setInt(1, i);
+            stmt.setString(2, "a"+i);
+            stmt.setInt(3, (i % 2 == 0) ? 25 : 30);
+            stmt.execute();
+        }
+        conn.commit();
+        
+        //sql query load data and filter rows whose age is > 25
+        final String sqlQuery = " SELECT NEXT VALUE FOR my_sequence AS my_seq,ID,NAME,AGE FROM " + TABLE_FULL_NAME + " WHERE AGE > 25";
+        pigServer.registerQuery(String.format(
+                "A = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", sqlQuery,
+                zkQuorum));
+        
+        
+        Iterator<Tuple> iterator = pigServer.openIterator("A");
+        int recordsRead = 0;
+        while (iterator.hasNext()) {
+            Tuple tuple = iterator.next();
+            System.out.println(" the field value is "+tuple.get(1));
+            recordsRead++;
+        }
+        assertEquals(rows/2, recordsRead);
+    }
+	
+	 @Test
+    public void testDataForSQLQueryWithFunctions() throws Exception {
+        
+         //create the table
+         String ddl = "CREATE TABLE " + TABLE_FULL_NAME
+                + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR) ";
+                
+        conn.createStatement().execute(ddl);
+        
+        final String dml = "UPSERT INTO " + TABLE_FULL_NAME + " VALUES(?,?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        int rows = 20;
+        for(int i = 0 ; i < rows; i++) {
+            stmt.setInt(1, i);
+            stmt.setString(2, "a"+i);
+            stmt.execute();
+        }
+        conn.commit();
+        
+        //sql query
+        final String sqlQuery = " SELECT UPPER(NAME) AS n FROM " + TABLE_FULL_NAME + " ORDER BY ID" ;
+
+        pigServer.registerQuery(String.format(
+                "A = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", sqlQuery,
+                zkQuorum));
+        
+        
+        Iterator<Tuple> iterator = pigServer.openIterator("A");
+        int i = 0;
+        while (iterator.hasNext()) {
+            Tuple tuple = iterator.next();
+            String name = (String)tuple.get(0);
+            assertEquals("A" + i, name);
+            i++;
+        }
+    
+    }
     
     @After
     public void tearDown() throws Exception {
