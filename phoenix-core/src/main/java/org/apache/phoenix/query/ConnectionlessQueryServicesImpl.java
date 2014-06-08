@@ -337,7 +337,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
-            SQLException[] exceptions, Sequence.Action action) throws SQLException {
+            SQLException[] exceptions, Sequence.ValueOp action) throws SQLException {
         int i = 0;
         for (SequenceKey key : sequenceKeys) {
             Long value = sequenceMap.get(key);

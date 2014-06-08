@@ -138,7 +138,7 @@ public class SequenceManager {
         return expression;
     }
     
-    public void validateSequences(Sequence.Action action) throws SQLException {
+    public void validateSequences(Sequence.ValueOp action) throws SQLException {
         if (sequenceMap == null || sequenceMap.isEmpty()) {
             return;
         }

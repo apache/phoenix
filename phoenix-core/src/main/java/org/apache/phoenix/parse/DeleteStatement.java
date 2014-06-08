@@ -21,7 +21,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
-import org.apache.phoenix.schema.Sequence.Action;
 
 public class DeleteStatement extends SingleTableStatement implements FilterableStatement {
     private final ParseNode whereNode;
@@ -70,10 +69,5 @@ public class DeleteStatement extends SingleTableStatement implements FilterableS
     @Override
     public Operation getOperation() {
         return Operation.DELETE;
-    }
-    
-    @Override
-    public Action getSequenceAction() {
-        return Action.RESERVE;
     }
 }
