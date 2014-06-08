@@ -255,8 +255,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private void openConnection() throws SQLException {
         try {
             // check if we need to authenticate with kerberos
-            String clientKeytab = config.get(HBASE_CLIENT_KEYTAB);
-            String clientPrincipal = config.get(HBASE_CLIENT_PRINCIPAL);
+            String clientKeytab = this.getProps().get(HBASE_CLIENT_KEYTAB);
+            String clientPrincipal = this.getProps().get(HBASE_CLIENT_PRINCIPAL);
             if (clientKeytab != null && clientPrincipal != null) {
                 logger.info("Trying to connect to a secure cluster with keytab:" + clientKeytab);
                 UserGroupInformation.setConfiguration(config);
