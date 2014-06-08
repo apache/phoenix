@@ -76,11 +76,12 @@ public class QueryOptimizer {
     }
     
     public QueryPlan optimize(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
-        // Get the statement as it's been normalized now
-        // TODO: the recompile for the index tables could skip the normalize step
         SelectStatement select = (SelectStatement)dataPlan.getStatement();
-        // TODO: consider not even compiling index plans if we have a point lookup
-        if (!useIndexes || select.isJoin() || dataPlan.getContext().getResolver().getTables().size() > 1) {
+        // Exit early if we have a point lookup as we can't get better than that
+        if (!useIndexes 
+                || select.isJoin() 
+                || dataPlan.getContext().getResolver().getTables().size() > 1
+                || dataPlan.getContext().getScanRanges().isPointLookup()) {
             return dataPlan;
         }
         PTable dataTable = dataPlan.getTableRef().getTable();
