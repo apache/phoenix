@@ -21,7 +21,6 @@ package org.apache.phoenix.pig.hadoop;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -32,11 +31,11 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.pig.PhoenixPigConfiguration;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.util.ColumnInfo;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
@@ -50,7 +49,7 @@ public final class PhoenixRecordReader extends RecordReader<NullWritable,Phoenix
     private static final Log LOG = LogFactory.getLog(PhoenixRecordReader.class);
     private final PhoenixPigConfiguration phoenixConfiguration;
     private final QueryPlan queryPlan;
-    private final List<ColumnInfo> columnInfos;
+    private final int columnsCount;
     private NullWritable key =  NullWritable.get();
     private PhoenixRecord value = null;
     private ResultIterator resultIterator = null;
@@ -62,7 +61,7 @@ public final class PhoenixRecordReader extends RecordReader<NullWritable,Phoenix
         Preconditions.checkNotNull(qPlan);
         this.phoenixConfiguration = pConfiguration;
         this.queryPlan = qPlan;
-        this.columnInfos = phoenixConfiguration.getSelectColumnMetadataList();
+        this.columnsCount = phoenixConfiguration.getSelectColumnsCount();
      }
 
     @Override
@@ -100,7 +99,13 @@ public final class PhoenixRecordReader extends RecordReader<NullWritable,Phoenix
         scan.setStartRow(keyRange.getLowerRange());
         scan.setStopRow(keyRange.getUpperRange());
          try {
-            this.resultIterator = new TableResultIterator(queryPlan.getContext(), queryPlan.getTableRef(),scan);
+            //this.resultIterator = queryPlan.iterator();
+             TableResultIterator tableResultIterator = new TableResultIterator(queryPlan.getContext(), queryPlan.getTableRef(),scan);
+            if(queryPlan.getContext().getSequenceManager().getSequenceCount() > 0) {
+                    this.resultIterator = new SequenceResultIterator(tableResultIterator, queryPlan.getContext().getSequenceManager());
+            } else {
+                this.resultIterator = tableResultIterator;
+            }
             this.resultSet = new PhoenixResultSet(this.resultIterator, queryPlan.getProjector(),queryPlan.getContext().getStatement());
         } catch (SQLException e) {
             LOG.error(String.format(" Error [%s] initializing PhoenixRecordReader. ",e.getMessage()));
@@ -122,7 +127,7 @@ public final class PhoenixRecordReader extends RecordReader<NullWritable,Phoenix
             if(!resultSet.next()) {
                 return false;
             }
-            value.read(resultSet,columnInfos.size());
+            value.read(resultSet,columnsCount);
             return true;
         } catch (SQLException e) {
             LOG.error(String.format(" Error [%s] occurred while iterating over the resultset. ",e.getMessage()));
