@@ -99,6 +99,7 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -272,7 +273,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     protected Expression addExpression(Expression expression) {
         return context.getExpressionManager().addIfAbsent(expression);
     }
-
+   
     @Override
     /**
      * @param node a function expression node
@@ -282,15 +283,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         children = node.validate(children, context);
         Expression expression = node.create(children, context);
         ImmutableBytesWritable ptr = context.getTempPtr();
-        if (node.isStateless()) {
-            Object value = null;
-            PDataType type = expression.getDataType();
-            if (expression.evaluate(null, ptr)) {
-                value = type.toObject(ptr);
-            }
-            return LiteralExpression.newConstant(value, type, expression.isDeterministic());
+        if (ExpressionUtil.isConstant(expression)) {
+            return ExpressionUtil.getConstantExpression(expression, ptr);
         }
-        boolean isDeterministic = true;
         BuiltInFunctionInfo info = node.getInfo();
         for (int i = 0; i < info.getRequiredArgCount(); i++) { 
             // Optimization to catch cases where a required argument is null resulting in the function
@@ -298,9 +293,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             // we can get the proper type to use.
             if (node.evalToNullIfParamIsNull(context, i)) {
                 Expression child = children.get(i);
-                isDeterministic &= child.isDeterministic();
-                if (child.isStateless() && (!child.evaluate(null, ptr) || ptr.getLength() == 0)) {
-                    return LiteralExpression.newConstant(null, expression.getDataType(), isDeterministic);
+                if (ExpressionUtil.isNull(child, ptr)) {
+                    return ExpressionUtil.getNullExpression(expression);
                 }
             }
         }
@@ -411,7 +405,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 context.getBindManager().addParamMetaData((BindParseNode)childNode, new DelegateDatum(caseExpression));
             }
         }
-        if (node.isStateless()) {
+        if (ExpressionUtil.isConstant(caseExpression)) {
             ImmutableBytesWritable ptr = context.getTempPtr();
             int index = caseExpression.evaluateIndexOf(null, ptr);
             if (index < 0) {
@@ -473,7 +467,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             }
         }
         Expression expression = new LikeExpression(children);
-        if (node.isStateless()) {
+        if (ExpressionUtil.isConstant(expression)) {
             ImmutableBytesWritable ptr = context.getTempPtr();
             if (!expression.evaluate(null, ptr)) {
                 return LiteralExpression.newConstant(null, expression.isDeterministic());
@@ -658,12 +652,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ImmutableBytesWritable ptr = context.getTempPtr();
 
         // If all children are literals, just evaluate now
-        if (expression.isStateless()) {
-            if (!expression.evaluate(null,ptr) || ptr.getLength() == 0) {
-                return LiteralExpression.newConstant(null, expression.getDataType(), expression.isDeterministic());
-            }
-            return LiteralExpression.newConstant(expression.getDataType().toObject(ptr), expression.getDataType(), expression.isDeterministic());
-        } else if (isNull) {
+        if (ExpressionUtil.isConstant(expression)) {
+            return ExpressionUtil.getConstantExpression(expression, ptr); 
+        } 
+        else if (isNull) {
             return LiteralExpression.newConstant(null, expression.getDataType(), expression.isDeterministic());
         }
         // Otherwise create and return the expression
@@ -1065,11 +1057,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             }
         }
         ImmutableBytesWritable ptr = context.getTempPtr();
-        if (expression.isStateless()) {
-            if (!expression.evaluate(null,ptr) || ptr.getLength() == 0) {
-                return LiteralExpression.newConstant(null, expression.getDataType(), expression.isDeterministic());
-            }
-            return LiteralExpression.newConstant(expression.getDataType().toObject(ptr), expression.getDataType(), expression.isDeterministic());
+        if (ExpressionUtil.isConstant(expression)) {
+            return ExpressionUtil.getConstantExpression(expression, ptr);
         }
         return wrapGroupByExpression(expression);
     }
@@ -1147,21 +1136,20 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         }
         ImmutableBytesWritable ptr = context.getTempPtr();
         Object[] elements = new Object[children.size()];
-        if (node.isStateless()) {
-            boolean isDeterministic = true;
+        
+        ArrayConstructorExpression arrayExpression = new ArrayConstructorExpression(children, arrayElemDataType);
+        if (ExpressionUtil.isConstant(arrayExpression)) {
             for (int i = 0; i < children.size(); i++) {
                 Expression child = children.get(i);
-                isDeterministic &= child.isDeterministic();
                 child.evaluate(null, ptr);
                 Object value = arrayElemDataType.toObject(ptr, child.getDataType(), child.getSortOrder());
                 elements[i] = LiteralExpression.newConstant(value, child.getDataType(), child.isDeterministic()).getValue();
             }
             Object value = PArrayDataType.instantiatePhoenixArray(arrayElemDataType, elements);
             return LiteralExpression.newConstant(value,
-                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), isDeterministic);
+                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), true);
         }
         
-        ArrayConstructorExpression arrayExpression = new ArrayConstructorExpression(children, arrayElemDataType);
         return wrapGroupByExpression(arrayExpression);
     }
 

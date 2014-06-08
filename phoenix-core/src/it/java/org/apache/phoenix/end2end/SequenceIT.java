@@ -587,6 +587,28 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         conn.close();
     }
     
+    @Test
+    public void testSelectNextValueAsInput() throws Exception {
+        nextConnection();
+        conn.createStatement().execute("CREATE SEQUENCE foo.bar START WITH 3 INCREMENT BY 2");
+        nextConnection();
+        String query = "SELECT COALESCE(NEXT VALUE FOR foo.bar,1) FROM SYSTEM.\"SEQUENCE\"";
+        ResultSet rs = conn.prepareStatement(query).executeQuery();
+        assertTrue(rs.next());
+        assertEquals(3, rs.getInt(1));
+    }
+    
+    @Test
+    public void testSelectNextValueInArithmetic() throws Exception {
+        nextConnection();
+        conn.createStatement().execute("CREATE SEQUENCE foo.bar START WITH 3 INCREMENT BY 2");
+        nextConnection();
+        String query = "SELECT NEXT VALUE FOR foo.bar+1 FROM SYSTEM.\"SEQUENCE\"";
+        ResultSet rs = conn.prepareStatement(query).executeQuery();
+        assertTrue(rs.next());
+        assertEquals(4, rs.getInt(1));
+    }
+    
 	private void nextConnection() throws Exception {
 	    if (conn != null) conn.close();
 	    long ts = nextTimestamp();
