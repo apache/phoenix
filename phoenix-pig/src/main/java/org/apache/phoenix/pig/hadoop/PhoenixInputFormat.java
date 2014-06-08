@@ -157,6 +157,11 @@ public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixR
                 final Statement statement = connection.createStatement();
                 final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
                 this.queryPlan = pstmt.compileQuery(selectStatement);
+                // TODO: absorb this call to validate/reserve sequences into an existing API or
+                // create a new API on QueryPlan called reserveSequences().
+                // We don't want to do it during compile because compile gets called multiple times,
+                // which would reserve sequences more than once.
+                queryPlan.getContext().getSequenceManager().validateSequences(queryPlan.getStatement().getSequenceAction());
             } catch(Exception exception) {
                 LOG.error(String.format("Failed to get the query plan with error [%s]",exception.getMessage()));
                 throw new RuntimeException(exception);

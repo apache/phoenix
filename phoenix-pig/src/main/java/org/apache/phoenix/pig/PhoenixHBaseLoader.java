@@ -33,6 +33,7 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.phoenix.pig.PhoenixPigConfiguration.SchemaType;
 import org.apache.phoenix.pig.hadoop.PhoenixInputFormat;
 import org.apache.phoenix.pig.hadoop.PhoenixRecord;
 import org.apache.phoenix.pig.util.PhoenixPigSchemaUtil;
@@ -127,11 +128,13 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
                 String tableSchema = location.substring(PHOENIX_TABLE_NAME_SCHEME.length());
                 final TableSchemaParserFunction parseFunction = new TableSchemaParserFunction();
                 pair =  parseFunction.apply(tableSchema);
+				this.config.setSchemaType(SchemaType.TABLE);
              } else if (location.startsWith(PHOENIX_QUERY_SCHEME)) {
                 this.selectQuery = location.substring(PHOENIX_QUERY_SCHEME.length());
                 final QuerySchemaParserFunction queryParseFunction = new QuerySchemaParserFunction(this.config);
                 pair = queryParseFunction.apply(this.selectQuery);
                 config.setSelectStatement(this.selectQuery);
+				this.config.setSchemaType(SchemaType.QUERY);
             }
             this.tableName = pair.getFirst();
             final String selectedColumns = pair.getSecond();

@@ -81,6 +81,8 @@ public class PhoenixPigConfiguration {
 	
 	public static final String SELECT_COLUMN_INFO_KEY  = "phoenix.select.columninfos.list";
 	
+	public static final String SCHEMA_TYPE = "phoenix.select.schema.type";
+	
 	// the delimiter supported during LOAD and STORE when projected columns are given.
 	public static final String COLUMN_NAMES_DELIMITER = "phoenix.column.names.delimiter";
 	
@@ -155,6 +157,16 @@ public class PhoenixPigConfiguration {
         return getUtil().getSelectColumnMetadataList(getConfiguration(), getTableName());
     }
 	
+	public int getSelectColumnsCount() throws SQLException {
+		return getUtil().getSelectColumnsCount(getConfiguration(), getTableName());
+	}
+	
+	public SchemaType getSchemaType() {
+		final String schemaTp = conf.get(SCHEMA_TYPE);
+		return SchemaType.valueOf(schemaTp);
+	}
+	
+	
 	public void setServerName(final String zookeeperQuorum) {
 	    this.conf.set(SERVER_NAME, zookeeperQuorum);
 	}
@@ -176,6 +188,15 @@ public class PhoenixPigConfiguration {
 	    return this.util;
 	}
 	
+	public void setSchemaType(final SchemaType schemaType) {
+		this.conf.set(SCHEMA_TYPE, schemaType.name());
+	}
+	
+	public enum SchemaType {
+		TABLE,
+		QUERY;
+	}
+	
 		
 	@VisibleForTesting
 	static class PhoenixPigConfigurationUtil {
@@ -188,7 +209,7 @@ public class PhoenixPigConfiguration {
             return conn;
         }
         
-        public List<ColumnInfo> getUpsertColumnMetadataList(final Configuration configuration,final String tableName) throws SQLException {
+      public List<ColumnInfo> getUpsertColumnMetadataList(final Configuration configuration,final String tableName) throws SQLException {
             Preconditions.checkNotNull(configuration);
             Preconditions.checkNotNull(tableName);
             final String columnInfoStr = configuration.get(UPSERT_COLUMN_INFO_KEY);
@@ -244,7 +265,18 @@ public class PhoenixPigConfiguration {
                 return ColumnInfoToStringEncoderDecoder.decode(columnInfoStr);
             }
             final Connection connection = getConnection(configuration);
-            String selectColumns = configuration.get(SELECT_COLUMNS);
+            final List<String> selectColumnList = getSelectColumnList(configuration);
+            final List<ColumnInfo> columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName, selectColumnList);
+            final String encodedColumnInfos = ColumnInfoToStringEncoderDecoder.encode(columnMetadataList);
+            // we put the encoded column infos in the Configuration for re usability. 
+            configuration.set(SELECT_COLUMN_INFO_KEY, encodedColumnInfos);
+            closeConnection(connection);
+            return columnMetadataList;
+        }
+
+		private List<String> getSelectColumnList(
+				final Configuration configuration) {
+			String selectColumns = configuration.get(SELECT_COLUMNS);
             List<String> selectColumnList = null;
             if(isNotEmpty(selectColumns)) {
                 final String columnNamesDelimiter = configuration.get(COLUMN_NAMES_DELIMITER, DEFAULT_COLUMN_NAMES_DELIMITER);
@@ -253,13 +285,8 @@ public class PhoenixPigConfiguration {
                         ,!selectColumnList.isEmpty(),selectColumns, selectColumnList.size(), Joiner.on(DEFAULT_COLUMN_NAMES_DELIMITER).join(selectColumnList)
                         ));
             }
-           List<ColumnInfo> columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName, selectColumnList);
-           final String encodedColumnInfos = ColumnInfoToStringEncoderDecoder.encode(columnMetadataList);
-           // we put the encoded column infos in the Configuration for re usability. 
-           configuration.set(SELECT_COLUMN_INFO_KEY, encodedColumnInfos);
-           closeConnection(connection);
-           return columnMetadataList;
-        }
+			return selectColumnList;
+		}
         
         public String getSelectStatement(final Configuration configuration,final String tableName) throws SQLException {
             Preconditions.checkNotNull(configuration);
@@ -286,6 +313,22 @@ public class PhoenixPigConfiguration {
             configuration.setLong(UPSERT_BATCH_SIZE, batchSize);
             return batchSize;
         }
+        
+        public int getSelectColumnsCount(Configuration configuration,
+				String tableName) throws SQLException {
+        	Preconditions.checkNotNull(configuration);
+        	final String schemaTp = configuration.get(SCHEMA_TYPE);
+        	final SchemaType schemaType = SchemaType.valueOf(schemaTp);
+        	int count = 0;
+        	if(SchemaType.QUERY.equals(schemaType)) {
+        		List<String> selectedColumnList = getSelectColumnList(configuration);
+        		count = selectedColumnList == null ? 0 : selectedColumnList.size();
+        	} else {
+        		List<ColumnInfo> columnInfos = getSelectColumnMetadataList(configuration,tableName);
+        		count = columnInfos == null ? 0 : columnInfos.size();
+        	}
+			return count;
+		}
         
         private void closeConnection(final Connection connection) throws SQLException {
             if(connection != null) {
