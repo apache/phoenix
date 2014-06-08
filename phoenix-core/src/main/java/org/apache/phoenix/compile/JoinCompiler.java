@@ -1113,7 +1113,7 @@ public class JoinCompiler {
         if (groupByTableRef != null || orderByTableRef != null) {
             QueryCompiler compiler = new QueryCompiler(statement, select, resolver);
             List<Object> binds = statement.getParameters();
-            StatementContext ctx = new StatementContext(statement, resolver, new Scan());
+            StatementContext ctx = new StatementContext(statement, resolver, new Scan(), new SequenceManager(statement));
             QueryPlan plan = compiler.compileJoinQuery(ctx, binds, join, false);
             TableRef table = plan.getTableRef();
             if (groupByTableRef != null && !groupByTableRef.equals(table)) {

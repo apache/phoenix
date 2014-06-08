@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.iterate.DefaultParallelIteratorRegionSplitter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -61,7 +62,8 @@ public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIterat
         TableRef tableRef = getTableRef(conn, ts);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         final List<HRegionLocation> regions =  pconn.getQueryServices().getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
-        StatementContext context = new StatementContext(new PhoenixStatement(pconn), null, scan);
+        PhoenixStatement statement = new PhoenixStatement(pconn);
+        StatementContext context = new StatementContext(statement, null, scan, new SequenceManager(statement));
         DefaultParallelIteratorRegionSplitter splitter = new DefaultParallelIteratorRegionSplitter(context, tableRef, HintNode.EMPTY_HINT_NODE) {
             @Override
             protected List<HRegionLocation> getAllRegions() throws SQLException {

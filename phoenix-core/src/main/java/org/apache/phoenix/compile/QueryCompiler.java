@@ -82,18 +82,20 @@ public class QueryCompiler {
     private final SelectStatement select;
     private final List<? extends PDatum> targetColumns;
     private final ParallelIteratorFactory parallelIteratorFactory;
+    private final SequenceManager sequenceManager;
     
     public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver) throws SQLException {
-        this(statement, select, resolver, Collections.<PDatum>emptyList(), null);
+        this(statement, select, resolver, Collections.<PDatum>emptyList(), null, new SequenceManager(statement));
     }
     
-    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
+    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, SequenceManager sequenceManager) throws SQLException {
         this.statement = statement;
         this.select = select;
         this.resolver = resolver;
         this.scan = new Scan();
         this.targetColumns = targetColumns;
         this.parallelIteratorFactory = parallelIteratorFactory;
+        this.sequenceManager = sequenceManager;
         if (statement.getConnection().getQueryServices().getLowestClusterHBaseVersion() >= PhoenixDatabaseMetaData.ESSENTIAL_FAMILY_VERSION_THRESHOLD) {
             this.scan.setAttribute(LOAD_COLUMN_FAMILIES_ON_DEMAND_ATTR, QueryConstants.TRUE);
         }
@@ -117,12 +119,12 @@ public class QueryCompiler {
     public QueryPlan compile() throws SQLException{
         SelectStatement select = this.select;
         List<Object> binds = statement.getParameters();
-        StatementContext context = new StatementContext(statement, resolver, scan);
+        StatementContext context = new StatementContext(statement, resolver, scan, sequenceManager);
         if (select.isJoin()) {
             select = JoinCompiler.optimize(statement, select, resolver);
             if (this.select != select) {
                 ColumnResolver resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
-                context = new StatementContext(statement, resolver, scan);
+                context = new StatementContext(statement, resolver, scan, sequenceManager);
             }
             JoinTable joinTable = JoinCompiler.compile(statement, select, context.getResolver());
             return compileJoinQuery(context, binds, joinTable, false);
@@ -188,7 +190,7 @@ public class QueryCompiler {
             for (int i = 0; i < count; i++) {
                 JoinSpec joinSpec = joinSpecs.get(i);
                 Scan subScan = ScanUtil.newScan(originalScan);
-                StatementContext subContext = new StatementContext(statement, context.getResolver(), subScan);
+                StatementContext subContext = new StatementContext(statement, context.getResolver(), subScan, new SequenceManager(statement));
                 joinPlans[i] = compileJoinQuery(subContext, binds, joinSpec.getJoinTable(), true);
                 ColumnResolver resolver = subContext.getResolver();
                 clientProjectors[i] = subContext.getClientTupleProjector();
@@ -242,7 +244,7 @@ public class QueryCompiler {
             Table rhsTable = rhsJoinTable.getTable();
             JoinTable lhsJoin = joinTable.getSubJoinTableWithoutPostFilters();
             Scan subScan = ScanUtil.newScan(originalScan);
-            StatementContext lhsCtx = new StatementContext(statement, context.getResolver(), subScan);
+            StatementContext lhsCtx = new StatementContext(statement, context.getResolver(), subScan, new SequenceManager(statement));
             QueryPlan lhsPlan = compileJoinQuery(lhsCtx, binds, lhsJoin, true);
             ColumnResolver lhsResolver = lhsCtx.getResolver();
             TupleProjector clientProjector = lhsCtx.getClientTupleProjector();

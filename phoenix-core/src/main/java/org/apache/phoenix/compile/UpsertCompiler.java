@@ -642,7 +642,7 @@ public class UpsertCompiler {
         final int nodeIndexOffset = nodeIndex;
         // Allocate array based on size of all columns in table,
         // since some values may not be set (if they're nullable).
-        final StatementContext context = new StatementContext(statement, resolver, new Scan());
+        final StatementContext context = new StatementContext(statement, resolver, new Scan(), new SequenceManager(statement));
         UpsertValuesCompiler expressionBuilder = new UpsertValuesCompiler(context);
         final List<Expression> constantExpressions = Lists.newArrayListWithExpectedSize(valueNodes.size());
         // First build all the expressions, as with sequences we want to collect them all first
