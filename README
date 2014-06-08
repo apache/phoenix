@@ -1,4 +1,4 @@
-Apache Phoenix [1] Incubator project is a SQL skin over HBase delivered as a client-embedded 
+Apache Phoenix [1] project is a SQL skin over HBase delivered as a client-embedded 
 JDBC driver targeting low latency queries over HBase data. Apache Phoenix takes your SQL query, 
 compiles it into a series of HBase scans, and orchestrates the running of those scans to produce 
 regular JDBC result sets.
@@ -13,11 +13,11 @@ Apache Phoenix is made available under the Apache License, version 2 [4]
 
 The Phoenix mailing lists and archives are listed here [5]
 
-1. http://phoenix.incubator.apache.org/
-2. http://phoenix.incubator.apache.org/source.html
-3. http://phoenix.incubator.apache.org/issues.html
+1. http://phoenix.apache.org/
+2. http://phoenix.apache.org/source.html
+3. http://phoenix.apache.org/issues.html
 4. http://www.apache.org/licenses/
-5. http://phoenix.incubator.apache.org/mailing_list.html
+5. http://phoenix.apache.org/mailing_list.html
 
 Upgrading from Phoenix 2.2.x to Apache Phoenix 3.0/4.0
 ------------------------------------------------------
