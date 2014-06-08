@@ -60,6 +60,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         // Forces server cache to be used
         props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
         // Must update config before starting server
+        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
     
@@ -583,7 +584,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         assertEquals("1", rs.getString(2));
         assertEquals("a", rs.getString(3));
         assertFalse(rs.next());
-
+      
         // do multiple updates to the same row, in the same batch
         stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + "(k, v1) VALUES(?,?)");
         stmt.setString(1, "a");
@@ -617,6 +618,67 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         assertFalse(rs.next());
     }
 
+    @Test
+    public void testUpsertAfterIndexDrop() throws Exception {
+        String query;
+        ResultSet rs;
+    
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+    
+        // make sure that the tables are empty, but reachable
+        conn.createStatement().execute(
+          "CREATE TABLE " + DATA_TABLE_FULL_NAME
+              + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+        query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertFalse(rs.next());
+    
+        conn.createStatement().execute(
+          "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1, v2)");
+        query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertFalse(rs.next());
+    
+        // load some data into the table
+        PreparedStatement stmt =
+            conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
+        stmt.setString(1, "a");
+        stmt.setString(2, "x");
+        stmt.setString(3, "1");
+        stmt.execute();
+        conn.commit();
+        
+        // make sure the index is working as expected
+        query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("x", rs.getString(1));
+        assertEquals("1", rs.getString(2));
+        assertEquals("a", rs.getString(3));
+        assertFalse(rs.next());
+
+        String ddl = "DROP INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME;
+        stmt = conn.prepareStatement(ddl);
+        stmt.execute();
+        
+        stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + "(k, v1) VALUES(?,?)");
+        stmt.setString(1, "a");
+        stmt.setString(2, "y");
+        stmt.execute();
+        conn.commit();
+    
+        query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
+    
+        // check that the data table matches as expected
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertEquals("y", rs.getString(2));
+        assertFalse(rs.next());
+    }
+    
     @Test
     public void testMultipleUpdatesAcrossRegions() throws Exception {
         String query;
