@@ -129,7 +129,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                     	long value = PDataType.LONG.getCodec().decodeLong(cq.getValueArray(), cq.getValueOffset(), 
                     			SortOrder.getDefault());
                         get.addColumn(cf, CellUtil.cloneQualifier(cq));
-                        validateOnly &= (Sequence.ValueOp.VALIDATE_SEQUENCES.ordinal() == value);
+                        validateOnly &= (Sequence.ValueOp.VALIDATE_SEQUENCE.ordinal() == value);
                     }
                 }
                 Result result = region.get(get);

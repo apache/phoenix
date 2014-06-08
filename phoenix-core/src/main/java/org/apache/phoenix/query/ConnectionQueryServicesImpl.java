@@ -1719,7 +1719,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      */
     @Override
     public void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException {
-        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 1, Sequence.ValueOp.RESERVE_SEQUENCES);
+        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 1, Sequence.ValueOp.RESERVE_SEQUENCE);
     }
 
     @SuppressWarnings("deprecation")

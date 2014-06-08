@@ -53,7 +53,7 @@ import com.google.common.collect.Lists;
 public class Sequence {
     public static final int SUCCESS = 0;
     
-    public enum ValueOp {VALIDATE_SEQUENCES, RESERVE_SEQUENCES};
+    public enum ValueOp {VALIDATE_SEQUENCE, RESERVE_SEQUENCE};
     public enum MetaOp {CREATE_SEQUENCE, DROP_SEQUENCE, RETURN_SEQUENCE};
     
     // Pre-compute index of sequence key values to prevent binary search
@@ -127,7 +127,7 @@ public class Sequence {
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }
         if (value.currentValue == value.nextValue) {
-            if (action == ValueOp.VALIDATE_SEQUENCES) {
+            if (action == ValueOp.VALIDATE_SEQUENCE) {
                 return value.currentValue;
             }
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
