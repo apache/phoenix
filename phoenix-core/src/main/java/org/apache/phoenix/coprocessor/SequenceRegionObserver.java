@@ -70,7 +70,6 @@ import com.google.common.collect.Lists;
  * @since 3.0.0
  */
 public class SequenceRegionObserver extends BaseRegionObserver {
-    public enum Op {CREATE_SEQUENCE, DROP_SEQUENCE, RETURN_SEQUENCE};
     public static final String OPERATION_ATTRIB = "SEQUENCE_OPERATION";
     public static final String MAX_TIMERANGE_ATTRIB = "MAX_TIMERANGE";
     public static final String CURRENT_VALUE_ATTRIB = "CURRENT_VALUE";
@@ -130,7 +129,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                     	long value = PDataType.LONG.getCodec().decodeLong(cq.getValueArray(), cq.getValueOffset(), 
                     			SortOrder.getDefault());
                         get.addColumn(cf, CellUtil.cloneQualifier(cq));
-                        validateOnly &= (Sequence.Action.VALIDATE.ordinal() == value);
+                        validateOnly &= (Sequence.ValueOp.VALIDATE_SEQUENCES.ordinal() == value);
                     }
                 }
                 Result result = region.get(get);
@@ -187,7 +186,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
         if (opBuf == null) {
             return null;
         }
-        Op op = Op.values()[opBuf[0]];
+        Sequence.MetaOp op = Sequence.MetaOp.values()[opBuf[0]];
         Cell keyValue = append.getFamilyCellMap().values().iterator().next().iterator().next();
 
         long clientTimestamp = HConstants.LATEST_TIMESTAMP;
@@ -195,7 +194,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
         long maxGetTimestamp = HConstants.LATEST_TIMESTAMP;
         boolean hadClientTimestamp;
         byte[] clientTimestampBuf = null;
-        if (op == Op.RETURN_SEQUENCE) {
+        if (op == Sequence.MetaOp.RETURN_SEQUENCE) {
             // When returning sequences, this allows us to send the expected timestamp
             // of the sequence to make sure we don't reset any other sequence
             hadClientTimestamp = true;
@@ -211,7 +210,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 // Prevent race condition of creating two sequences at the same timestamp
                 // by looking for a sequence at or after the timestamp at which it'll be
                 // created.
-                if (op == Op.CREATE_SEQUENCE) {
+                if (op == Sequence.MetaOp.CREATE_SEQUENCE) {
                     maxGetTimestamp = clientTimestamp + 1;
                 }            
             } else {
@@ -239,11 +238,11 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 get.addColumn(family, qualifier);
                 Result result = region.get(get);
                 if (result.isEmpty()) {
-                    if (op == Op.DROP_SEQUENCE || op == Op.RETURN_SEQUENCE) {
+                    if (op == Sequence.MetaOp.DROP_SEQUENCE || op == Sequence.MetaOp.RETURN_SEQUENCE) {
                         return getErrorResult(row, clientTimestamp, SQLExceptionCode.SEQUENCE_UNDEFINED.getErrorCode());
                     }
                 } else {
-                    if (op == Op.CREATE_SEQUENCE) {
+                    if (op == Sequence.MetaOp.CREATE_SEQUENCE) {
                         return getErrorResult(row, clientTimestamp, SQLExceptionCode.SEQUENCE_ALREADY_EXIST.getErrorCode());
                     }
                 }

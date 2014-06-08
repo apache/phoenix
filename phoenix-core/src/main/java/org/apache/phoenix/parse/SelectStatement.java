@@ -25,7 +25,6 @@ import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
-import org.apache.phoenix.schema.Sequence.Action;
 
 /**
  * 
@@ -182,11 +181,6 @@ public class SelectStatement implements FilterableStatement {
         return Operation.QUERY;
     }
 
-    @Override
-    public Action getSequenceAction() {
-        return Action.RESERVE;
-    }
-    
     public boolean isJoin() {
         return fromTable.size() > 1 || (fromTable.size() > 0 && fromTable.get(0) instanceof JoinTableNode);
     }
