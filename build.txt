@@ -62,5 +62,5 @@ Findbugs report is generated in /target/site
 
 ## Generate Apache Web Site
 ===========================
-checkout https://svn.apache.org/repos/asf/incubator/phoenix
+checkout https://svn.apache.org/repos/asf/phoenix
         $ build.sh
