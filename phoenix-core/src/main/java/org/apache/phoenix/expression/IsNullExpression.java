@@ -27,6 +27,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ExpressionUtil;
 
 
 /**
@@ -43,7 +44,7 @@ public class IsNullExpression extends BaseSingleExpression {
         if (!child.isNullable()) {
             return LiteralExpression.newConstant(negate, PDataType.BOOLEAN, child.isDeterministic());
         }
-        if (child.isStateless()) {
+        if (ExpressionUtil.isConstant(child)) {
             boolean evaluated = child.evaluate(null, ptr);
             return LiteralExpression.newConstant(negate ^ (!evaluated || ptr.getLength() == 0), PDataType.BOOLEAN, child.isDeterministic());
         }

@@ -48,8 +48,8 @@ import com.google.common.base.Preconditions;
  * @since 0.1
  */
 public class LiteralExpression extends BaseTerminalExpression {
-    public static final LiteralExpression NULL_EXPRESSION = new LiteralExpression(null, false);
-    private static final LiteralExpression ND_NULL_EXPRESSION = new LiteralExpression(null, true);
+    public static final LiteralExpression NULL_EXPRESSION = new LiteralExpression(null, true);
+    private static final LiteralExpression ND_NULL_EXPRESSION = new LiteralExpression(null, false);
     private static final LiteralExpression[] TYPED_NULL_EXPRESSIONS = new LiteralExpression[PDataType.values().length * 2];
     static {
         for (int i = 0; i < PDataType.values().length; i++) {
