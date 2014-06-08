@@ -37,6 +37,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.iterate.SkipRangeParallelIteratorRegionSplitter;
@@ -356,7 +357,8 @@ public class SkipRangeParallelIteratorRegionSplitterIT extends BaseClientManaged
             
         };
         PhoenixConnection connection = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
-        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver, scan);
+        PhoenixStatement statement = new PhoenixStatement(connection);
+        StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));
         context.setScanRanges(scanRanges);
         SkipRangeParallelIteratorRegionSplitter splitter = SkipRangeParallelIteratorRegionSplitter.getInstance(context, tableRef, HintNode.EMPTY_HINT_NODE);
         List<KeyRange> keyRanges = splitter.getSplits();
