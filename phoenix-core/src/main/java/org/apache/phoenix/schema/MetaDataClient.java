@@ -941,6 +941,14 @@ public class MetaDataClient {
                     }
                     isPK = true;
                 }
+                
+               // do not allow setting NOT-NULL constraint on non-primary columns.
+                if (!isPK && pkConstraint != null && !pkConstraint.contains(colDef.getColumnDefName())) {
+                    if(Boolean.FALSE.equals(colDef.isNull())) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT)
+                            .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
+                    }  
+                }
                 PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName, false);
                 if (SchemaUtil.isPKColumn(column)) {
                     // TODO: remove this constraint?

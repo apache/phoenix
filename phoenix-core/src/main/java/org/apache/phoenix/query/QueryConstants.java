@@ -217,10 +217,10 @@ public interface QueryConstants {
             TENANT_ID + " VARCHAR NULL," +
     		SEQUENCE_SCHEMA + " VARCHAR NULL, \n" + 
             SEQUENCE_NAME +  " VARCHAR NOT NULL, \n" +
-            START_WITH + " BIGINT NOT NULL, \n" + 
-    		CURRENT_VALUE + " BIGINT NOT NULL, \n" + 
-            INCREMENT_BY  + " BIGINT NOT NULL, \n" + 
-            CACHE_SIZE  + " BIGINT NOT NULL \n" + 
+            START_WITH + " BIGINT, \n" + 
+    		CURRENT_VALUE + " BIGINT, \n" + 
+            INCREMENT_BY  + " BIGINT, \n" + 
+            CACHE_SIZE  + " BIGINT \n" + 
     		" CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + SEQUENCE_SCHEMA + "," + SEQUENCE_NAME + "))\n" + 
     		HConstants.VERSIONS + "=" + MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS + "\n";
 	
