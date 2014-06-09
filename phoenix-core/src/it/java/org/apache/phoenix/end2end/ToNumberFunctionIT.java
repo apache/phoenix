@@ -60,10 +60,10 @@ public class ToNumberFunctionIT extends BaseClientManagedTimeIT {
     public static final String TO_NUMBER_TABLE_DDL = "create table " + TO_NUMBER_TABLE_NAME +
         "(a_id integer not null, \n" + 
         "a_string char(4) not null, \n" +
-        "b_string char(4) not null, \n" + 
-        "a_date date not null, \n" + 
-        "a_time date not null, \n" + 
-        "a_timestamp timestamp not null \n" + 
+        "b_string char(4), \n" + 
+        "a_date date, \n" + 
+        "a_time date, \n" + 
+        "a_timestamp timestamp \n" + 
         "CONSTRAINT my_pk PRIMARY KEY (a_id, a_string))";
     
     private Date row1Date;
