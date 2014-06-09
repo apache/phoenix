@@ -175,7 +175,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
  
    @Test
     public void testSingleKeyValueIndex() throws Exception {
-        testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER NOT NULL, v VARCHAR", "k1", "v", new Object [] {"a",1,"b"});
+        testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER, v VARCHAR", "k1", "v", new Object [] {"a",1,"b"});
     }
  
     @Test
@@ -190,7 +190,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
  
     @Test
     public void testSingleKeyValueDescIndex() throws Exception {
-        testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER NOT NULL, v VARCHAR", "k1", "v DESC", new Object [] {"a",1,"b"});
+        testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER, v VARCHAR", "k1", "v DESC", new Object [] {"a",1,"b"});
     }
  
     @Test
