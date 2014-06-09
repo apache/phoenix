@@ -22,7 +22,7 @@
 # Building Apache Phoenix
 =========================
 
-Phoenix uses Maven (3.X) to build all its necessary resources. 
+Phoenix uses Maven (3.X) to build all its necessary resources.
 
 ## Building from source
 =======================
