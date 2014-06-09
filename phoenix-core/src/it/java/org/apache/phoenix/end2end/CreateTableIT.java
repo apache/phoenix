@@ -32,6 +32,7 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
@@ -318,5 +319,35 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
     	assertEquals("a", columnFamilies[0].getNameAsString());
     	assertEquals(10000, columnFamilies[0].getTimeToLive());
     }
+    
+    
+    /**
+     * Test to ensure that NOT NULL constraint isn't added to a non primary key column.
+     * @throws Exception
+     */
+    @Test
+    public void testNotNullConstraintForNonPKColumn() throws Exception {
+        
+        String ddl = "CREATE TABLE IF NOT EXISTS EVENT.APEX_LIMIT ( " +
+                " ORGANIZATION_ID CHAR(15) NOT NULL, " +
+                " EVENT_TIME DATE NOT NULL, USER_ID CHAR(15) NOT NULL, " +
+                " ENTRY_POINT_ID CHAR(15) NOT NULL, ENTRY_POINT_TYPE CHAR(2) NOT NULL , " +
+                " APEX_LIMIT_ID CHAR(15) NOT NULL,  USERNAME CHAR(80),  " +
+                " NAMESPACE_PREFIX VARCHAR, ENTRY_POINT_NAME VARCHAR  NOT NULL , " +
+                " EXECUTION_UNIT_NO VARCHAR, LIMIT_TYPE VARCHAR, " +
+                " LIMIT_VALUE DOUBLE  " +
+                " CONSTRAINT PK PRIMARY KEY (" + 
+                "     ORGANIZATION_ID, EVENT_TIME,USER_ID,ENTRY_POINT_ID, ENTRY_POINT_TYPE, APEX_LIMIT_ID " +
+                " ) ) VERSIONS=1";
+                    
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute(ddl);    
+            fail(" Non pk column ENTRY_POINT_NAME has a NOT NULL constraint");
+        } catch( SQLException sqle) {
+            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),sqle.getErrorCode());
+        }
+   }
 
 }
