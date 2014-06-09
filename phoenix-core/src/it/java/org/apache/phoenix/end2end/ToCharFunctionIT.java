@@ -67,11 +67,11 @@ public class ToCharFunctionIT extends BaseClientManagedTimeIT {
     
     public static final String TO_CHAR_TABLE_DDL = "create table " + TO_CHAR_TABLE_NAME +
         "(pk integer not null, \n" + 
-        "col_date date not null, \n" +
-        "col_time date not null, \n" +
-        "col_timestamp timestamp not null, \n" +
-        "col_integer integer not null, \n" + 
-        "col_decimal decimal not null \n" + 
+        "col_date date, \n" +
+        "col_time date, \n" +
+        "col_timestamp timestamp, \n" +
+        "col_integer integer, \n" + 
+        "col_decimal decimal\n" + 
         "CONSTRAINT my_pk PRIMARY KEY (pk))";
 
     @Before
