@@ -1470,7 +1470,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     // Keeping this to use for further upgrades
     protected PhoenixConnection addColumnsIfNotExists(PhoenixConnection oldMetaConnection, long timestamp, String columns) throws SQLException {
-        Properties props = new Properties(oldMetaConnection.getClientInfo());
+        Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
         // Cannot go through DriverManager or you end up in an infinite loop because it'll call init again
         PhoenixConnection metaConnection = new PhoenixConnection(this, oldMetaConnection.getURL(), props, oldMetaConnection.getMetaDataCache());
@@ -1528,8 +1528,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 try {
                     metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
                 } catch (NewerTableAlreadyExistsException ignore) {
-                    // Ignore, as this will happen if the SYSTEM.TABLE already exists at this fixed timestamp.
+                    // Ignore, as this will happen if the SYSTEM.CATALOG already exists at this fixed timestamp.
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
+                } catch (TableAlreadyExistsException ignore) {
+                    // This will occur if we have an older SYSTEM.CATALOG and we need to update it to include
+                    // any new columns we've added.
+                    metaConnection = addColumnsIfNotExists(metaConnection, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP-1, PhoenixDatabaseMetaData.INDEX_TYPE + " " + PDataType.UNSIGNED_TINYINT.getSqlTypeName());
                 }
                 try {
                     metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
