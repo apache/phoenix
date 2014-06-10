@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.*;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.job.JobManager.JobCallable;
@@ -247,12 +248,14 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                         @Override
                         public PeekingResultIterator call() throws Exception {
                             // TODO: different HTableInterfaces for each thread or the same is better?
+
+                            StatementContext scanContext = new StatementContext(context, splitScan);
                         	long startTime = System.currentTimeMillis();
-                            ResultIterator scanner = new TableResultIterator(context, tableRef, splitScan);
+                            ResultIterator scanner = new TableResultIterator(scanContext, tableRef, splitScan);
                             if (logger.isDebugEnabled()) {
                             	logger.debug("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + splitScan);
                             }
-                            return iteratorFactory.newIterator(context, scanner);
+                            return iteratorFactory.newIterator(scanContext, scanner);
                         }
 
                         /**
