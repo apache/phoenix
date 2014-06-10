@@ -36,7 +36,7 @@ import org.apache.phoenix.util.SchemaUtil;
 
 public class HashJoinInfo {
     private static final String HASH_JOIN = "HashJoin";
-    
+
     private KeyValueSchema joinedSchema;
     private ImmutableBytesPtr[] joinIds;
     private List<Expression>[] joinExpressions;
@@ -47,11 +47,11 @@ public class HashJoinInfo {
     private Expression postJoinFilterExpression;
     private Integer limit;
     private boolean forceProjection;
-    
+
     public HashJoinInfo(PTable joinedTable, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, PTable[] tables, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit, boolean forceProjection) {
     	this(buildSchema(joinedTable), joinIds, joinExpressions, joinTypes, earlyEvaluation, buildSchemas(tables), fieldPositions, postJoinFilterExpression, limit, forceProjection);
     }
-    
+
     private static KeyValueSchema[] buildSchemas(PTable[] tables) {
     	KeyValueSchema[] schemas = new KeyValueSchema[tables.length];
     	for (int i = 0; i < tables.length; i++) {
@@ -59,7 +59,7 @@ public class HashJoinInfo {
     	}
     	return schemas;
     }
-    
+
     private static KeyValueSchema buildSchema(PTable table) {
     	KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
     	if (table != null) {
@@ -71,7 +71,7 @@ public class HashJoinInfo {
     	}
         return builder.build();
     }
-    
+
     private HashJoinInfo(KeyValueSchema joinedSchema, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, KeyValueSchema[] schemas, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit, boolean forceProjection) {
     	this.joinedSchema = joinedSchema;
     	this.joinIds = joinIds;
@@ -84,43 +84,43 @@ public class HashJoinInfo {
         this.limit = limit;
         this.forceProjection = forceProjection;
     }
-    
+
     public KeyValueSchema getJoinedSchema() {
     	return joinedSchema;
     }
-    
+
     public ImmutableBytesPtr[] getJoinIds() {
         return joinIds;
     }
-    
+
     public List<Expression>[] getJoinExpressions() {
         return joinExpressions;
     }
-    
+
     public JoinType[] getJoinTypes() {
         return joinTypes;
     }
-    
+
     public boolean[] earlyEvaluation() {
     	return earlyEvaluation;
     }
-    
+
     public KeyValueSchema[] getSchemas() {
     	return schemas;
     }
-    
+
     public int[] getFieldPositions() {
     	return fieldPositions;
     }
-    
+
     public Expression getPostJoinFilterExpression() {
         return postJoinFilterExpression;
     }
-    
+
     public Integer getLimit() {
         return limit;
     }
-    
+
     /*
      * If the LHS table is a sub-select, we always do projection, since
      * the ON expressions reference only projected columns.
@@ -128,7 +128,7 @@ public class HashJoinInfo {
     public boolean forceProjection() {
         return forceProjection;
     }
-    
+
     public static void serializeHashJoinIntoScan(Scan scan, HashJoinInfo joinInfo) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try {
@@ -166,9 +166,9 @@ public class HashJoinInfo {
                 throw new RuntimeException(e);
             }
         }
-        
+
     }
-    
+
     @SuppressWarnings("unchecked")
     public static HashJoinInfo deserializeHashJoinFromScan(Scan scan) {
         byte[] join = scan.getAttribute(HASH_JOIN);
@@ -196,7 +196,7 @@ public class HashJoinInfo {
                     int expressionOrdinal = WritableUtils.readVInt(input);
                     Expression expression = ExpressionType.values()[expressionOrdinal].newInstance();
                     expression.readFields(input);
-                    joinExpressions[i].add(expression);                    
+                    joinExpressions[i].add(expression);
                 }
                 int type = WritableUtils.readVInt(input);
                 joinTypes[i] = JoinType.values()[type];
@@ -223,6 +223,16 @@ public class HashJoinInfo {
                 throw new RuntimeException(e);
             }
         }
+    }
+
+    /**
+     * Check if a scan is intended for completing a HashJoin.
+     *
+     * @param scan the scan to be checked
+     * @return {@code true} if the scan is to be used for a HashJoin, otherwise {@code false}
+     */
+    public static boolean isHashJoin(Scan scan) {
+        return scan.getAttribute(HASH_JOIN) != null;
     }
 
 }

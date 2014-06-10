@@ -59,6 +59,11 @@ public interface QueryServices extends SQLCloseable {
 	 */
 	public static final String MAX_SPOOL_TO_DISK_BYTES_ATTRIB = "phoenix.query.maxSpoolToDiskBytes";
     
+    /**
+     * Number of records to read per chunk when streaming records of a basic scan.
+     */
+    public static final String SCAN_RESULT_CHUNK_SIZE = "phoenix.query.scanResultChunkSize";
+
     public static final String MAX_MEMORY_PERC_ATTRIB = "phoenix.query.maxGlobalMemoryPercentage";
     public static final String MAX_MEMORY_WAIT_MS_ATTRIB = "phoenix.query.maxGlobalMemoryWaitMs";
     public static final String MAX_TENANT_MEMORY_PERC_ATTRIB = "phoenix.query.maxTenantMemoryPercentage";

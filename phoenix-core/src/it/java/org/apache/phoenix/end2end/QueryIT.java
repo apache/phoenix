@@ -861,7 +861,7 @@ public class QueryIT extends BaseClientManagedTimeIT {
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
-            statement.setString(2,ROW4);
+            statement.setString(2, ROW4);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
             assertEquals(A_VALUE, rs.getString(1));
@@ -879,17 +879,17 @@ public class QueryIT extends BaseClientManagedTimeIT {
             
             byte[] tableName = Bytes.toBytes(ATABLE_NAME);
             admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            HTable htable = (HTable)conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName);
+            HTable htable = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName);
             htable.clearRegionCache();
             int nRegions = htable.getRegionLocations().size();
-            admin.split(tableName, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A" + Character.valueOf((char)('3' + nextRunCount()))+ ts))); // vary split point with test run
+            admin.split(tableName, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A" + Character.valueOf((char) ('3' + nextRunCount())) + ts))); // vary split point with test run
             int retryCount = 0;
             do {
                 Thread.sleep(2000);
                 retryCount++;
                 //htable.clearRegionCache();
             } while (retryCount < 10 && htable.getRegionLocations().size() == nRegions);
-            assertNotEquals(nRegions,htable.getRegionLocations().size());
+            assertNotEquals(nRegions, htable.getRegionLocations().size());
             
             statement.setString(1, tenantId);
             rs = statement.executeQuery();
@@ -906,9 +906,10 @@ public class QueryIT extends BaseClientManagedTimeIT {
             assertEquals(E_VALUE, rs.getString(2));
            assertEquals(1, rs.getLong(3));
             assertFalse(rs.next());
-            
         } finally {
+            if (admin != null) {
             admin.close();
+            }
             conn.close();
         }
     }
