@@ -1574,6 +1574,12 @@ public class PDataTypeTest {
         assertEquals(Types.FLOAT, PDataType.UNSIGNED_FLOAT.getResultSetSqlType());
         assertEquals(Types.DOUBLE, PDataType.DOUBLE.getResultSetSqlType());
         assertEquals(Types.DOUBLE, PDataType.UNSIGNED_DOUBLE.getResultSetSqlType());
+        assertEquals(Types.DATE, PDataType.DATE.getResultSetSqlType());
+        assertEquals(Types.DATE, PDataType.UNSIGNED_DATE.getResultSetSqlType());
+        assertEquals(Types.TIME, PDataType.TIME.getResultSetSqlType());
+        assertEquals(Types.TIME, PDataType.UNSIGNED_TIME.getResultSetSqlType());
+        assertEquals(Types.TIMESTAMP, PDataType.TIMESTAMP.getResultSetSqlType());
+        assertEquals(Types.TIMESTAMP, PDataType.UNSIGNED_TIMESTAMP.getResultSetSqlType());
 
         // Check that all array types are defined as java.sql.Types.ARRAY
         for (PDataType dataType : PDataType.values()) {

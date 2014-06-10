@@ -2143,6 +2143,11 @@ public enum PDataType {
             long millis = PDataType.UNSIGNED_LONG.getCodec().decodeLong(ptr.get(),ptr.getOffset(), sortOrder);
             return millis;
         }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.TIMESTAMP;
+        }
     },
     UNSIGNED_TIME("UNSIGNED_TIME", 18, Time.class, new UnsignedDateCodec()) {
 
@@ -2213,6 +2218,11 @@ public enum PDataType {
         @Override
         public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
             return UNSIGNED_DATE.toStringLiteral(b, offset, length, formatter);
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.TIME;
         }
     },
     UNSIGNED_DATE("UNSIGNED_DATE", 19, Date.class, new UnsignedDateCodec()) { // After TIMESTAMP and DATE to ensure toLiteral finds those first
@@ -2311,6 +2321,11 @@ public enum PDataType {
                 return;
             }
             super.coerceBytes(ptr, object, actualType, maxLength, scale, actualModifier, desiredMaxLength, desiredScale, expectedModifier);
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.DATE;
         }
     },
     /**
