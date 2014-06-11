@@ -17,6 +17,14 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
+import static org.apache.phoenix.util.TestUtil.LOCALHOST;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -26,31 +34,38 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.ConfigUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
 @Category(NeedsOwnMiniClusterTest.class)
-public class ContextClassloaderIT  {
+public class ContextClassloaderIT  extends BaseTest {
 
     private static HBaseTestingUtility hbaseTestUtil;
+    private static PhoenixTestDriver driver;
     private static ClassLoader badContextClassloader;
-
+    private static String url;
+    
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
-        hbaseTestUtil = new HBaseTestingUtility();
-        ConfigUtil.setReplicationConfigIfAbsent(hbaseTestUtil.getConfiguration());
-        hbaseTestUtil.getConfiguration().setInt(QueryServices.MASTER_INFO_PORT_ATTRIB, -1);
-        hbaseTestUtil.getConfiguration().setInt(QueryServices.REGIONSERVER_INFO_PORT_ATTRIB, -1);
+        Configuration conf = HBaseConfiguration.create();
+        setUpConfigForMiniCluster(conf);
+        hbaseTestUtil = new HBaseTestingUtility(conf);
         hbaseTestUtil.startMiniCluster();
-        Connection conn = DriverManager.getConnection(getUrl());
+        String clientPort = hbaseTestUtil.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
+        url = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_SEPARATOR + clientPort
+                + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+        driver = initAndRegisterDriver(url, ReadOnlyProps.EMPTY_PROPS);
+        
+        Connection conn = DriverManager.getConnection(url);
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE test (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR)");
         stmt.execute("UPSERT INTO test VALUES (1, 'name1')");
@@ -62,13 +77,13 @@ public class ContextClassloaderIT  {
                 File.createTempFile("invalid", ".jar").toURI().toURL() }, null);
     }
 
-    private static String getUrl() {
-        return "jdbc:phoenix:localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-    }
-
     @AfterClass
-    public static void tearDownAfterClass() throws Exception {
-        hbaseTestUtil.shutdownMiniCluster();
+    public static void tearDown() throws Exception {
+        try {
+            destroyDriver(driver);
+        } finally {
+            hbaseTestUtil.shutdownMiniCluster();
+        }
     }
 
     @Test
@@ -79,7 +94,7 @@ public class ContextClassloaderIT  {
             @Override
             public void run() {
                 try {
-                    Connection conn = DriverManager.getConnection(getUrl());
+                    Connection conn = DriverManager.getConnection(url);
                     Statement stmt = conn.createStatement();
                     ResultSet rs = stmt.executeQuery("select * from test where name = 'name2'");
                     while (rs.next()) {
@@ -105,7 +120,7 @@ public class ContextClassloaderIT  {
             @Override
             public void run() {
                 try {
-                    Connection conn = DriverManager.getConnection(getUrl());
+                    Connection conn = DriverManager.getConnection(url);
                     ResultSet tablesRs = conn.getMetaData().getTables(null, null, null, null);
                     while (tablesRs.next()) {
                         // Just make sure we run over all records
@@ -129,7 +144,7 @@ public class ContextClassloaderIT  {
             @Override
             public void run() {
                 try {
-                    Connection conn = DriverManager.getConnection(getUrl());
+                    Connection conn = DriverManager.getConnection(url);
                     Statement stmt = conn.createStatement();
                     stmt.execute("CREATE TABLE T2 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR)");
                     stmt.execute("UPSERT INTO T2 VALUES (1, 'name1')");
