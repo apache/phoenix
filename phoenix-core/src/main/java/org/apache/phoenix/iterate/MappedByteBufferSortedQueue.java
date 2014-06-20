@@ -175,7 +175,8 @@ public class MappedByteBufferSortedQueue extends AbstractQueue<ResultEntry> {
     }
 
     private static class MappedByteBufferPriorityQueue {
-        private static final long DEFAULT_MAPPING_SIZE = 1024;
+    	// at least create 128 KB MappedByteBuffers
+        private static final long DEFAULT_MAPPING_SIZE = 128 * 1024;
         
         private final int limit;
         private final int thresholdBytes;
