@@ -362,7 +362,7 @@ public class SkipScanFilterTest extends TestCase {
             assertFalse(skipper.filterRowKey(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength()));
 
             assertEquals(ReturnCode.SEEK_NEXT_USING_HINT, skipper.filterKeyValue(kv));
-            assertEquals(KeyValue.createFirstOnRow(hint), skipper.getNextKeyHint(kv));
+            assertEquals(KeyValue.createFirstOnRow(hint), skipper.getNextCellHint(kv));
         }
 
         @Override public String toString() {

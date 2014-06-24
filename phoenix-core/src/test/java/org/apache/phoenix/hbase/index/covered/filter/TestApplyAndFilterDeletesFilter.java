@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
@@ -74,7 +75,7 @@ public class TestApplyAndFilterDeletesFilter {
     assertEquals("Didn't get a hint from a family delete", ReturnCode.SEEK_NEXT_USING_HINT,
       filter.filterKeyValue(next));
     assertEquals("Didn't get END_KEY with no families to match", KeyValue.LOWESTKEY,
-      filter.getNextKeyHint(next));
+      filter.getNextCellHint(next));
 
     // check for a family that comes before our family, so we always seek to the end as well
     filter = new ApplyAndFilterDeletesFilter(asSet(Bytes.toBytes("afamily")));
@@ -83,7 +84,7 @@ public class TestApplyAndFilterDeletesFilter {
     assertEquals("Didn't get a hint from a family delete", ReturnCode.SEEK_NEXT_USING_HINT,
       filter.filterKeyValue(next));
     assertEquals("Didn't get END_KEY with no families to match", KeyValue.LOWESTKEY,
-      filter.getNextKeyHint(next));
+      filter.getNextCellHint(next));
 
     // check that we seek to the correct family that comes after our family
     byte[] laterFamily = Bytes.toBytes("zfamily");
@@ -94,7 +95,7 @@ public class TestApplyAndFilterDeletesFilter {
     assertEquals("Didn't get a hint from a family delete", ReturnCode.SEEK_NEXT_USING_HINT,
       filter.filterKeyValue(next));
     assertEquals("Didn't get correct next key with a next family", expected,
-      filter.getNextKeyHint(next));
+      filter.getNextCellHint(next));
   }
 
   /**
@@ -143,7 +144,7 @@ public class TestApplyAndFilterDeletesFilter {
     assertEquals("Didn't get a seek hint for the deleted column", ReturnCode.SEEK_NEXT_USING_HINT,
       filter.filterKeyValue(put));
     // seek past the given put
-    KeyValue seek = filter.getNextKeyHint(put);
+    Cell seek = filter.getNextCellHint(put);
     assertTrue("Seeked key wasn't past the expected put - didn't skip the column",
       KeyValue.COMPARATOR.compare(seek, put) > 0);
   }
@@ -168,7 +169,7 @@ public class TestApplyAndFilterDeletesFilter {
       ReturnCode.SEEK_NEXT_USING_HINT, filter.filterKeyValue(put));
 
     // next seek should be past the families
-    assertEquals(KeyValue.LOWESTKEY, filter.getNextKeyHint(put));
+    assertEquals(KeyValue.LOWESTKEY, filter.getNextCellHint(put));
   }
 
   /**

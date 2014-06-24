@@ -97,8 +97,8 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
   
   
   @Override
-  public KeyValue getNextKeyHint(KeyValue peeked){
-    return currentHint.getHint(peeked);
+  public Cell getNextCellHint(Cell peeked){
+    return currentHint.getHint(KeyValueUtil.ensureKeyValue(peeked));
   }
 
   @Override
