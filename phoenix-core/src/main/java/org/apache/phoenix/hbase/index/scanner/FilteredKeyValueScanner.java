@@ -22,11 +22,11 @@ import java.io.IOException;
 import java.util.SortedSet;
 
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
-
 import org.apache.phoenix.hbase.index.covered.KeyValueStore;
 
 /**
@@ -96,7 +96,7 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
                 break;
             // use a seek hint to find out where we should go
             case SEEK_NEXT_USING_HINT:
-                delegate.seek(filter.getNextKeyHint(peeked));
+                delegate.seek(KeyValueUtil.ensureKeyValue(filter.getNextCellHint(peeked)));
             }
         }
     }

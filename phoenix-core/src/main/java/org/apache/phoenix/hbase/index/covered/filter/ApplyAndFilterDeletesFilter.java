@@ -17,9 +17,6 @@
  */
 package org.apache.phoenix.hbase.index.covered.filter;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -33,7 +30,6 @@ import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.filter.FilterBase;
-
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
@@ -101,8 +97,8 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
   
   
   @Override
-  public KeyValue getNextKeyHint(KeyValue peeked){
-    return currentHint.getHint(peeked);
+  public Cell getNextCellHint(Cell peeked){
+    return currentHint.getHint(KeyValueUtil.ensureKeyValue(peeked));
   }
 
   @Override

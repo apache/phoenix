@@ -117,7 +117,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     }
 
     @Override
-    public KeyValue getNextKeyHint(KeyValue kv) {
+    public Cell getNextCellHint(Cell kv) {
         // TODO: don't allocate new key value every time here if possible
         return isDone ? null : new KeyValue(startKey, 0, startKeyLength,
                 null, 0, 0, null, 0, 0, HConstants.LATEST_TIMESTAMP, Type.Maximum, null, 0, 0);

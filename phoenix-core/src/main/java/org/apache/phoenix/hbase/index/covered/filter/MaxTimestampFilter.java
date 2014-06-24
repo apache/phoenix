@@ -17,12 +17,9 @@
  */
 package org.apache.phoenix.hbase.index.covered.filter;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.util.Bytes;
 
@@ -40,12 +37,12 @@ public class MaxTimestampFilter extends FilterBase {
   }
 
   @Override
-  public KeyValue getNextKeyHint(KeyValue currentKV) {
+  public Cell getNextCellHint(Cell currentKV) {
     // this might be a little excessive right now - better safe than sorry though, so we don't mess
     // with other filters too much.
     KeyValue kv = null;
     try {
-        kv = currentKV.clone();
+        kv = KeyValueUtil.ensureKeyValue(currentKV).clone();
     } catch (CloneNotSupportedException e) {
         // the exception should not happen at all
         throw new IllegalArgumentException(e);
