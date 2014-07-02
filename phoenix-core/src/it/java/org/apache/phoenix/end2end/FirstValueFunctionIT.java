@@ -53,7 +53,7 @@ public class FirstValueFunctionIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl());
 
         String ddl = "CREATE TABLE IF NOT EXISTS first_value_table "
-                + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG NOT NULL,"
+                + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG,"
                 + " dates BIGINT NOT NULL, \"value\" BIGINT CONSTRAINT pk PRIMARY KEY (id, dates DESC))";
         conn.createStatement().execute(ddl);
 
@@ -77,7 +77,7 @@ public class FirstValueFunctionIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl());
 
         String ddl = "CREATE TABLE IF NOT EXISTS first_value_table "
-                + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG NOT NULL,"
+                + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG,"
                 + " dates BIGINT NOT NULL, \"value\" BIGINT NOT NULL CONSTRAINT pk PRIMARY KEY (id, dates, \"value\" DESC))";
         conn.createStatement().execute(ddl);
 

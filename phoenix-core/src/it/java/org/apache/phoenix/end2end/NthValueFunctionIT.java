@@ -126,7 +126,7 @@ public class NthValueFunctionIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl());
 
         String ddl = "CREATE TABLE IF NOT EXISTS nth_test_table "
-                + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG NOT NULL,"
+                + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG,"
                 + " dates BIGINT NOT NULL, \"value\" BIGINT NOT NULL CONSTRAINT pk PRIMARY KEY (id, dates, \"value\" DESC))";
         conn.createStatement().execute(ddl);
 
