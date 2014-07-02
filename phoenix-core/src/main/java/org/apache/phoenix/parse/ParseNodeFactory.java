@@ -365,17 +365,14 @@ public class ParseNodeFactory {
 
     public FunctionParseNode function(String name, List<ParseNode> valueNodes,
             List<ParseNode> columnNodes, boolean isAscending) {
-        // Right now we support PERCENT functions on only one column
-        if (valueNodes.size() != 1 || columnNodes.size() != 1) {
-            throw new UnsupportedOperationException(name + " not supported on multiple columns");
-        }
-        List<ParseNode> children = new ArrayList<ParseNode>(3);
-        children.add(columnNodes.get(0));
+
+        List<ParseNode> children = new ArrayList<ParseNode>();
+        children.addAll(columnNodes);
         children.add(new LiteralParseNode(Boolean.valueOf(isAscending)));
-        children.add(valueNodes.get(0));
+        children.addAll(valueNodes);
+
         return function(name, children);
     }
-    
 
     public HintNode hint(String hint) {
         return new HintNode(hint);
