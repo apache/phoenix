@@ -68,6 +68,11 @@ import org.apache.phoenix.expression.function.ToNumberFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.TruncFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
+import org.apache.phoenix.expression.function.TimezoneOffsetFunction;
+import org.apache.phoenix.expression.function.DecodeFunction;
+import org.apache.phoenix.expression.function.NthValueFunction;
+import org.apache.phoenix.expression.function.FirstValueFunction;
+import org.apache.phoenix.expression.function.LastValueFunction;
 import org.apache.phoenix.expression.function.ConvertTimezoneFunction;
 
 import com.google.common.collect.Maps;
@@ -78,6 +83,7 @@ import com.google.common.collect.Maps;
  * Used during serialization and deserialization to pass Expression between client
  * and server.
  *  
+ *
  *
  * @since 0.1
  */
@@ -159,6 +165,9 @@ public enum ExpressionType {
     ArrayConstructorExpression(ArrayConstructorExpression.class),
     SQLViewTypeFunction(SQLViewTypeFunction.class),
     ExternalSqlTypeIdFunction(ExternalSqlTypeIdFunction.class),
+    NthValueFunction(NthValueFunction.class),
+    FirstValueFunction(FirstValueFunction.class),
+    LastValueFunction(LastValueFunction.class),
     ConvertTimezoneFunction(ConvertTimezoneFunction.class),
     DecodeFunction(DecodeFunction.class),
     TimezoneOffsetFunction(TimezoneOffsetFunction.class),
