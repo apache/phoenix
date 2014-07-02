@@ -288,8 +288,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 }
             } while (hasMore);
         } finally {
-            innerScanner.close();
-            region.closeRegionOperation();
+            try {
+                innerScanner.close();
+            } finally {
+                region.closeRegionOperation();
+            }
         }
         
         if (logger.isInfoEnabled()) {
