@@ -364,7 +364,186 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             }
         }
     }
+    
+    @Test
+    public void testArraySelectWithORCondition() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+        Connection conn = null;
+        try {
+            createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+            initSimpleArrayTable(tenantId, null, ts, false);
+            Properties props = new Properties(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+            conn = DriverManager.getConnection(getUrl(), props);
+            String query = "SELECT a_double_array[1]  FROM " + SIMPLE_TABLE_WITH_ARRAY
+                    + " WHERE a_double_array[2] = 89.96d or a_char_array[0] = 'a'";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            Double[] doubleArr = new Double[1];
+            doubleArr[0] = 64.87d;
+            Double result = rs.getDouble(1);
+            assertEquals(result, doubleArr[0]);
+            assertFalse(rs.next());
 
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testArraySelectWithANY() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+        Connection conn = null;
+        try {
+            createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+            initSimpleArrayTable(tenantId, null, ts, false);
+            Properties props = new Properties(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+            conn = DriverManager.getConnection(getUrl(), props);
+            String query = "SELECT a_double_array[1]  FROM " + SIMPLE_TABLE_WITH_ARRAY
+                    + " WHERE 89.96d = ANY(a_double_array)";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            Double[] doubleArr = new Double[1];
+            doubleArr[0] = 64.87d;
+            Double result = rs.getDouble(1);
+            assertEquals(result, doubleArr[0]);
+            assertFalse(rs.next());
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testArraySelectWithALL() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+        Connection conn = null;
+        try {
+            createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+            initSimpleArrayTable(tenantId, null, ts, false);
+            Properties props = new Properties(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+            conn = DriverManager.getConnection(getUrl(), props);
+            String query = "SELECT a_double_array[1]  FROM " + SIMPLE_TABLE_WITH_ARRAY
+                    + " WHERE 64.87d = ALL(a_double_array)";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertFalse(rs.next());
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testArraySelectWithANYCombinedWithOR() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+        Connection conn = null;
+        try {
+            createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+            initSimpleArrayTable(tenantId, null, ts, false);
+            Properties props = new Properties(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+            conn = DriverManager.getConnection(getUrl(), props);
+            String query = "SELECT a_double_array[1]  FROM " + SIMPLE_TABLE_WITH_ARRAY
+                    + " WHERE  a_char_array[0] = 'f' or 89.96d > ANY(a_double_array)";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            Double[] doubleArr = new Double[1];
+            doubleArr[0] = 64.87d;
+            Double result = rs.getDouble(1);
+            assertEquals(result, doubleArr[0]);
+            assertFalse(rs.next());
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testArraySelectWithALLCombinedWithOR() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+        Connection conn = null;
+        try {
+            createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+            initSimpleArrayTable(tenantId, null, ts, false);
+            Properties props = new Properties(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+            conn = DriverManager.getConnection(getUrl(), props);
+            String query = "SELECT a_double_array[1], a_double_array[2]  FROM " + SIMPLE_TABLE_WITH_ARRAY
+                    + " WHERE  a_char_array[0] = 'f' or 100.0d > ALL(a_double_array)";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            Double[] doubleArr = new Double[1];
+            doubleArr[0] = 64.87d;
+            Double result = rs.getDouble(1);
+            assertEquals(result, doubleArr[0]);
+            doubleArr = new Double[1];
+            doubleArr[0] = 89.96d;
+            result = rs.getDouble(2);
+            assertEquals(result, doubleArr[0]);
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testArraySelectWithANYUsingVarLengthArray() throws Exception {
+        Connection conn = null;
+        try {
+            long ts = nextTimestamp();
+            String tenantId = getOrganizationId();
+            createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+            initTablesWithArrays(tenantId, null, ts, false, getUrl());
+            Properties props = new Properties(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+            conn = DriverManager.getConnection(getUrl(), props);
+            String query = "SELECT a_string_array[1]  FROM " + TABLE_WITH_ARRAY
+                    + " WHERE 'XYZWER' = ANY(a_string_array)";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            String[] strArr = new String[1];
+            strArr[0] = "ABC";
+            String result = rs.getString(1);
+            assertEquals(result, strArr[0]);
+            assertFalse(rs.next());
+            query = "SELECT a_string_array[1]  FROM " + TABLE_WITH_ARRAY + " WHERE 'AB' = ANY(a_string_array)";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            result = rs.getString(1);
+            assertEquals(result, strArr[0]);
+            assertFalse(rs.next());
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+    }
+   
     @Test
     public void testSelectWithArrayWithColumnRef() throws Exception {
         long ts = nextTimestamp();

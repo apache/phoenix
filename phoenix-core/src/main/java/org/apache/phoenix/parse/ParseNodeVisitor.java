@@ -104,4 +104,15 @@ public interface ParseNodeVisitor<E> {
     public boolean visitEnter(ArrayConstructorNode node) throws SQLException;
     public E visitLeave(ArrayConstructorNode node, List<E> l) throws SQLException;
     public E visit(SequenceValueParseNode node) throws SQLException;
+    
+    public boolean visitEnter(ArrayAllComparisonNode node) throws SQLException;
+    public E visitLeave(ArrayAllComparisonNode node, List<E> l) throws SQLException;
+    
+    public boolean visitEnter(ArrayAnyComparisonNode node) throws SQLException;
+    public E visitLeave(ArrayAnyComparisonNode node, List<E> l) throws SQLException;
+    
+    public boolean visitEnter(ArrayElemRefNode node) throws SQLException;
+    public E visitLeave(ArrayElemRefNode node, List<E> l) throws SQLException;
+    
+    
 }

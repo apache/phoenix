@@ -21,8 +21,6 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
-import com.google.common.collect.Lists;
-
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.BetweenParseNode;
 import org.apache.phoenix.parse.BindTableNode;
@@ -42,6 +40,8 @@ import org.apache.phoenix.parse.TableNodeVisitor;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.collect.Lists;
 
 
 /**

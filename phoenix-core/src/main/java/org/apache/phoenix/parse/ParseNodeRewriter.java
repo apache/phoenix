@@ -355,10 +355,9 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
                 return NODE_FACTORY.comparison(node.getFilterOp(), children.get(0), children.get(1));
             }
         });
-        
         return normNode;
     }
-    
+
     @Override
     public ParseNode visitLeave(final BetweenParseNode node, List<ParseNode> nodes) throws SQLException {
         return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
@@ -532,4 +531,19 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         }
 	    
 	}
+
+	@Override
+    public ParseNode visitLeave(ArrayAnyComparisonNode node, List<ParseNode> l) throws SQLException {
+        return node;
+    }
+
+    @Override
+    public ParseNode visitLeave(ArrayAllComparisonNode node, List<ParseNode> l) throws SQLException {
+        return node;
+    }
+ 
+    @Override
+    public ParseNode visitLeave(ArrayElemRefNode node, List<ParseNode> l) throws SQLException {
+        return node;
+    }
 }
