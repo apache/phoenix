@@ -24,7 +24,9 @@ import java.nio.ByteBuffer;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
@@ -254,6 +256,17 @@ public class PArrayDataType {
 				baseType, maxLength, desiredDataType);
 	}
 
+    public static boolean positionAtArrayElement(Tuple tuple, ImmutableBytesWritable ptr, int index,
+            Expression arrayExpr, PDataType pDataType, Integer maxLen) {
+        if (!arrayExpr.evaluate(tuple, ptr)) {
+            return false;
+        } else if (ptr.getLength() == 0) { return true; }
+
+        // Given a ptr to the entire array, set ptr to point to a particular element within that array
+        // given the type of an array element (see comments in PDataTypeForArray)
+        positionAtArrayElement(ptr, index - 1, pDataType, maxLen);
+        return true;
+    }
     public static void positionAtArrayElement(ImmutableBytesWritable ptr, int arrayIndex, PDataType baseDataType,
             Integer byteSize) {
         byte[] bytes = ptr.get();
@@ -301,6 +314,53 @@ public class PArrayDataType {
                 ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             } else {
                 ptr.set(bytes, ptr.getOffset() + offset, elemByteSize);
+            }
+        }
+    }
+    
+    public static void positionAtArrayElement(ImmutableBytesWritable ptr, int arrayIndex, PDataType baseDataType,
+            Integer byteSize, int offset, int length, int noOfElements, boolean first) {
+        byte[] bytes = ptr.get();
+        if (!baseDataType.isFixedWidth()) {
+            int indexOffset = Bytes.toInt(bytes, (offset + length - (Bytes.SIZEOF_BYTE + 2 * Bytes.SIZEOF_INT)))
+                    + offset;
+            boolean useShort = true;
+            if (first) {
+                int count = Bytes.toInt(bytes,
+                        (ptr.getOffset() + ptr.getLength() - (Bytes.SIZEOF_BYTE + Bytes.SIZEOF_INT)), Bytes.SIZEOF_INT);
+                if (count < 0) {
+                    count = -count;
+                    useShort = false;
+                }
+            }
+            if (arrayIndex >= noOfElements) {
+                return;
+            } else {
+                // Skip those many offsets as given in the arrayIndex
+                // If suppose there are 5 elements in the array and the arrayIndex = 3
+                // This means we need to read the 4th element of the array
+                // So inorder to know the length of the 4th element we will read the offset of 4th element and the
+                // offset of 5th element.
+                // Subtracting the offset of 5th element and 4th element will give the length of 4th element
+                // So we could just skip reading the other elements.
+                int currOffset = getOffset(bytes, arrayIndex, useShort, indexOffset);
+                int elementLength = 0;
+                if (arrayIndex == (noOfElements - 1)) {
+                    elementLength = bytes[currOffset + offset] == QueryConstants.SEPARATOR_BYTE ? 0 : indexOffset
+                            - (currOffset + offset) - 3;
+                } else {
+                    elementLength = bytes[currOffset + offset] == QueryConstants.SEPARATOR_BYTE ? 0 : getOffset(bytes,
+                            arrayIndex + 1, useShort, indexOffset) - currOffset - 1;
+                }
+                ptr.set(bytes, currOffset + offset, elementLength);
+            }
+        } else {
+            int elemByteSize = (byteSize == null ? baseDataType.getByteSize() : byteSize);
+            offset += arrayIndex * elemByteSize;
+            if (offset >= offset + length) {
+                return;
+            } else {
+                ptr.set(bytes, offset, elemByteSize);
             }
         }
     }

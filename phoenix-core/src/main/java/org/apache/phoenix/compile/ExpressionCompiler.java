@@ -61,10 +61,16 @@ import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.TimestampAddExpression;
 import org.apache.phoenix.expression.TimestampSubtractExpression;
+import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
+import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
+import org.apache.phoenix.expression.function.InlineArrayElemRefExpression;
 import org.apache.phoenix.parse.AddParseNode;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.ArithmeticParseNode;
+import org.apache.phoenix.parse.ArrayAllComparisonNode;
+import org.apache.phoenix.parse.ArrayAnyComparisonNode;
 import org.apache.phoenix.parse.ArrayConstructorNode;
+import org.apache.phoenix.parse.ArrayElemRefNode;
 import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.CaseParseNode;
 import org.apache.phoenix.parse.CastParseNode;
@@ -976,6 +982,35 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         });
     }
 
+    @Override
+    public boolean visitEnter(ArrayAnyComparisonNode node) throws SQLException {
+        return true;
+    }
+
+    @Override
+    public Expression visitLeave(ArrayAnyComparisonNode node, List<Expression> children) throws SQLException {
+        return new ArrayAnyComparisonExpression(children);
+    }
+
+    @Override
+    public boolean visitEnter(ArrayAllComparisonNode node) throws SQLException {
+        return true;
+    }
+    
+    @Override
+    public boolean visitEnter(ArrayElemRefNode node) throws SQLException {
+        return true;
+    }
+    
+    @Override
+    public Expression visitLeave(ArrayElemRefNode node, List<Expression> l) throws SQLException {
+        return new InlineArrayElemRefExpression(l);
+    }
+    
+    @Override
+    public Expression visitLeave(ArrayAllComparisonNode node, List<Expression> children) throws SQLException {
+        return new ArrayAllComparisonExpression(children);
+    }
     @Override
     public boolean visitEnter(DivideParseNode node) throws SQLException {
         return true;

@@ -242,4 +242,33 @@ public abstract class TraverseNoParseNodeVisitor<T> extends BaseParseNodeVisitor
     public T visitLeave(ArrayConstructorNode node, List<T> l) throws SQLException {
         return null;
     }
+    
+    @Override
+    public boolean visitEnter(ArrayAllComparisonNode node) throws SQLException {
+        return false;
+    }
+    @Override
+    public T visitLeave(ArrayAllComparisonNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    
+    
+    @Override
+    public boolean visitEnter(ArrayAnyComparisonNode node) throws SQLException {
+        return false;
+    }
+    @Override
+    public T visitLeave(ArrayAnyComparisonNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    
+    @Override
+    public boolean visitEnter(ArrayElemRefNode node) throws SQLException {
+        return false;
+    }
+    
+    @Override
+    public T visitLeave(ArrayElemRefNode node, List<T> l) throws SQLException {
+        return null;
+    }
 }
