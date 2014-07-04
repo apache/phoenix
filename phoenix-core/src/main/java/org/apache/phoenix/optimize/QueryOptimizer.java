@@ -195,6 +195,15 @@ public class QueryOptimizer {
             if (PIndexState.ACTIVE.equals(resolver.getTables().get(0).getTable().getIndexState())) {
                 QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory);
                 QueryPlan plan = compiler.compile();
+                // If query doesn't have where clause and some of columns to project are missing
+                // in the index then we need to get missing columns from main table for each row in
+                // local index. It's like full scan of both local index and data table which is inefficient.
+                // Then we don't use the index. If all the columns to project are present in the index 
+                // then we can use the index even the query doesn't have where clause. 
+                if (index.getIndexType() == IndexType.LOCAL && indexSelect.getWhere() == null
+                        && !plan.getContext().getDataColumns().isEmpty()) {
+                    return null;
+                }
                 // Checking number of columns handles the wildcard cases correctly, as in that case the index
                 // must contain all columns from the data table to be able to be used.
                 if (plan.getTableRef().getTable().getIndexState() == PIndexState.ACTIVE && plan.getProjector().getColumnCount() == nColumns) {
@@ -282,16 +291,22 @@ public class QueryOptimizer {
                 PTable table1 = plan1.getTableRef().getTable();
                 PTable table2 = plan2.getTableRef().getTable();
                 int c = plan2.getContext().getScanRanges().getRanges().size() - plan1.getContext().getScanRanges().getRanges().size();
+                boolean bothLocalIndexes = table1.getIndexType() == IndexType.LOCAL && table2.getIndexType() == IndexType.LOCAL;
                 // Account for potential view constants which are always bound
                 if (plan1 == dataPlan) { // plan2 is index plan. Ignore the viewIndexId if present
-                    c += boundRanges - (table2.getViewIndexId() == null || table2.getIndexType() == IndexType.LOCAL ? 0 : 1);
+                    c += boundRanges - (table2.getViewIndexId() == null || bothLocalIndexes ? 0 : 1);
+                    if(table2.getIndexType()==IndexType.LOCAL && plan2.getContext().getScanRanges().getRanges().size()==0) c++;
                 } else { // plan1 is index plan. Ignore the viewIndexId if present
-                    c -= boundRanges - (table1.getViewIndexId() == null || table1.getIndexType() == IndexType.LOCAL ? 0 : 1);
+                    c -= boundRanges - (table1.getViewIndexId() == null || bothLocalIndexes ? 0 : 1);
+                    if(table1.getIndexType()==IndexType.LOCAL && plan1.getContext().getScanRanges().getRanges().size()==0) c++;
                 }
-                if (c != 0 && table1.getIndexType() != IndexType.LOCAL && table2.getIndexType() != IndexType.LOCAL) return c;
+                if (c != 0) return c;
                 if (plan1.getGroupBy()!=null && plan2.getGroupBy()!=null) {
                     if (plan1.getGroupBy().isOrderPreserving() != plan2.getGroupBy().isOrderPreserving()) {
                         return plan1.getGroupBy().isOrderPreserving() ? -1 : 1;
+                    } else {
+                        if (!plan1.getGroupBy().isOrderPreserving()
+                                && table1.getIndexType() == IndexType.LOCAL && !bothLocalIndexes) return -1;
                     }
                 }
                 // Use smaller table (table with fewest kv columns)

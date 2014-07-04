@@ -83,6 +83,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
@@ -1037,8 +1038,13 @@ public class JoinCompiler {
             List<OrderByNode> orderBy = tableRef.equals(orderByTableRef) ? select.getOrderBy() : null;
             SelectStatement stmt = getSubqueryForOptimizedPlan(select.getHint(), table.getDynamicColumns(), tableRef, join.getColumnRefs(), table.getPreFiltersCombined(), groupBy, orderBy, table.isWildCardSelect());
             QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(statement, stmt);
+            boolean localIndex = plan.getContext().getCurrentTable().getTable().getIndexType()==IndexType.LOCAL;
+            Scan scan = plan.getContext().getScan();
+            boolean useLocalIndex = localIndex && plan.getContext().getDataColumns().isEmpty();
             if (!plan.getTableRef().equals(tableRef)) {
-                replacement.put(tableRef, plan.getTableRef());            
+                if (!localIndex || useLocalIndex) {
+                    replacement.put(tableRef, plan.getTableRef());
+                } 
             }            
         }
         

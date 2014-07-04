@@ -51,6 +51,7 @@ import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
@@ -511,6 +512,215 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "            BUILD HASH TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
+                "                    SERVER FILTER BY NAME != 'T3'\n" +
+                "                    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "                    BUILD HASH TABLE 0\n" +
+                "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
+                }});
+        testCases.add(new String[][] {
+                {
+                "CREATE LOCAL INDEX \"idx_customer\" ON " + JOIN_CUSTOMER_TABLE_FULL_NAME + " (name)",
+                "CREATE LOCAL INDEX \"idx_item\" ON " + JOIN_ITEM_TABLE_FULL_NAME + " (name) INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
+                "CREATE LOCAL INDEX \"idx_supplier\" ON " + JOIN_SUPPLIER_TABLE_FULL_NAME + " (name)"
+                }, {
+                /* 
+                 * testLeftJoinWithAggregation()
+                 *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
+                 *     LEFT JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     GROUP BY i.name ORDER BY i.name
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.0:NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [I.0:NAME]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME +"\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
+                /* 
+                 * testLeftJoinWithAggregation()
+                 *     SELECT i.item_id iid, sum(quantity) q FROM joinOrderTable o 
+                 *     LEFT JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     GROUP BY i.item_id ORDER BY q DESC"
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.:item_id]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME +"\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
+                /* 
+                 * testLeftJoinWithAggregation()
+                 *     SELECT i.item_id iid, sum(quantity) q FROM joinItemTable i 
+                 *     LEFT JOIN joinOrderTable o ON o.item_id = i.item_id 
+                 *     GROUP BY i.item_id ORDER BY q DESC NULLS LAST, iid
+                 */     
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.item_id]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, I.item_id]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME,
+                /* 
+                 * testRightJoinWithAggregation()
+                 *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
+                 *     RIGHT JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     GROUP BY i.name ORDER BY i.name
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME+"\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.0:NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [I.0:NAME]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME,
+                /*
+                 * testRightJoinWithAggregation()
+                 *     SELECT i.item_id iid, sum(quantity) q FROM joinOrderTable o 
+                 *     RIGHT JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     GROUP BY i.item_id ORDER BY q DESC NULLS LAST, iid
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.item_id]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, I.item_id]\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME,
+                /*
+                 * testJoinWithWildcard()
+                 *     SELECT * FROM joinItemTable LEFT JOIN joinSupplierTable supp 
+                 *     ON joinItemTable.supplier_id = supp.supplier_id 
+                 *     ORDER BY item_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
+                /*
+                 * testJoinPlanWithIndex()
+                 *     SELECT item.item_id, item.name, supp.supplier_id, supp.name 
+                 *     FROM joinItemTable item LEFT JOIN joinSupplierTable supp 
+                 *     ON substr(item.name, 2, 1) = substr(supp.name, 2, 1) 
+                 *         AND (supp.name BETWEEN 'S1' AND 'S5') 
+                 *     WHERE item.name BETWEEN 'T1' AND 'T5'
+                 */
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768,'T1'] - [-32768,'T5']\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_SUPPLIER_TABLE_DISPLAY_NAME +" [-32768,'S1'] - [-32768,'S5']",
+                /*
+                 * testJoinPlanWithIndex()
+                 *     SELECT item.item_id, item.name, supp.supplier_id, supp.name 
+                 *     FROM joinItemTable item INNER JOIN joinSupplierTable supp 
+                 *     ON item.supplier_id = supp.supplier_id 
+                 *     WHERE (item.name = 'T1' OR item.name = 'T5') 
+                 *         AND (supp.name = 'S1' OR supp.name = 'S5')
+                 */
+                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768,'T1'] - [-32768,'T5']\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_SUPPLIER_TABLE_DISPLAY_NAME +" [-32768,'S1'] - [-32768,'S5']",
+                /*
+                 * testJoinWithSkipMergeOptimization()
+                 *     SELECT s.name FROM joinItemTable i 
+                 *     JOIN joinOrderTable o ON o.item_id = i.item_id AND quantity < 5000 
+                 *     JOIN joinSupplierTable s ON i.supplier_id = s.supplier_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0 (SKIP MERGE)\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER FILTER BY QUANTITY < 5000\n" +
+                "    BUILD HASH TABLE 1\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
+                /*
+                 * testSelfJoin()
+                 *     SELECT i2.item_id, i1.name FROM joinItemTable i1 
+                 *     JOIN joinItemTable i2 ON i1.item_id = i2.item_id 
+                 *     ORDER BY i1.item_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +"\n"  +
+                "            SERVER FILTER BY FIRST KEY ONLY",
+                /*
+                 * testSelfJoin()
+                 *     SELECT i1.name, i2.name FROM joinItemTable i1 
+                 *     JOIN joinItemTable i2 ON i1.item_id = i2.supplier_id 
+                 *     ORDER BY i1.name, i2.name
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +"\n"  +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER SORTED BY [I1.0:NAME, I2.0:NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME,
+                /*
+                 * testStarJoin()
+                 *     SELECT order_id, c.name, i.name iname, quantity, o.date 
+                 *     FROM joinOrderTable o 
+                 *     JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
+                 *     JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     ORDER BY order_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + "\n" +
+                "    BUILD HASH TABLE 1\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
+                /*
+                 * testStarJoin()
+                 *     SELECT (*NO_STAR_JOIN*) order_id, c.name, i.name iname, quantity, o.date 
+                 *     FROM joinOrderTable o 
+                 *     JOIN joinCustomerTable c ON o.customer_id = c.customer_id 
+                 *     JOIN joinItemTable i ON o.item_id = i.item_id 
+                 *     ORDER BY order_id
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER SORTED BY [O.order_id]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "            BUILD HASH TABLE 0\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_CUSTOMER_TABLE_DISPLAY_NAME,
+                /*
+                 * testSubJoin()
+                 *     SELECT * FROM joinCustomerTable c 
+                 *     INNER JOIN (joinOrderTable o 
+                 *         INNER JOIN (joinSupplierTable s 
+                 *             RIGHT JOIN joinItemTable i ON i.supplier_id = s.supplier_id)
+                 *         ON o.item_id = i.item_id)
+                 *     ON c.customer_id = o.customer_id
+                 *     WHERE c.customer_id <= '0000000005' 
+                 *         AND order_id != '000000000000003' 
+                 *         AND i.name != 'T3' 
+                 *     ORDER BY c.customer_id, i.name
+                 */
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " [*] - ['0000000005']\n" +
+                "    SERVER SORTED BY [C.customer_id, I.0:NAME]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "            BUILD HASH TABLE 0\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +"\n" +
                 "                    SERVER FILTER BY NAME != 'T3'\n" +
                 "                    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "                    BUILD HASH TABLE 0\n" +

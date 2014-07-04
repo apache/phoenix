@@ -64,6 +64,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Types;
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
@@ -503,8 +504,10 @@ public class MetaDataClient {
             // region observer to generate the index rows based on the data rows as we scan
             if (index.getIndexType() == IndexType.LOCAL) {
                 final PhoenixStatement statement = new PhoenixStatement(connection);
-                String query = "SELECT count(*) FROM \"" + dataTableRef.getTable().getName().getString() + "\"";
+                String tableName = getFullTableName(dataTableRef);
+                String query = "SELECT count(*) FROM " + tableName;
                 QueryPlan plan = statement.compileQuery(query);
+                TableRef tableRef = plan.getContext().getResolver().getTables().get(0);
                 // Set attribute on scan that UngroupedAggregateRegionObserver will switch on.
                 // We'll detect that this attribute was set the server-side and write the index
                 // rows per region as a result. The value of the attribute will be our persisted
@@ -512,11 +515,11 @@ public class MetaDataClient {
                 // Define the LOCAL_INDEX_BUILD as a new static in BaseScannerRegionObserver
                 Scan scan = plan.getContext().getScan();
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                PTable dataTable = dataTableRef.getTable();
+                PTable dataTable = tableRef.getTable();
                 List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
                 // Only build newly created index.
                 indexes.add(index);
-                IndexMaintainer.serialize(dataTable, ptr, indexes);
+                IndexMaintainer.serialize(dataTable, ptr, indexes, false);
                 scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
                 // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
                 // However, in this case, we need to project all of the data columns that contribute to the index.
@@ -545,6 +548,15 @@ public class MetaDataClient {
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
+    }
+
+    private String getFullTableName(TableRef dataTableRef) {
+        String schemaName = dataTableRef.getTable().getSchemaName().getString();
+        String tableName = dataTableRef.getTable().getTableName().getString();
+        String fullName =
+                schemaName == null ? ("\"" + tableName + "\"") : ("\"" + schemaName + "\""
+                        + QueryConstants.NAME_SEPARATOR + "\"" + tableName + "\"");
+        return fullName;
     }
 
     /**
@@ -730,10 +742,6 @@ public class MetaDataClient {
         if (connection.getSCN() != null) {
             return buildIndexAtTimeStamp(table, statement.getTable());
         }
-        if (statement.getIndexType() == IndexType.LOCAL) {
-            ColumnResolver resolver = FromCompiler.getResolverForMutation(statement, connection);
-            tableRef = resolver.getTables().get(0);
-        }
         return buildIndex(table, tableRef);
     }
 
@@ -814,6 +822,7 @@ public class MetaDataClient {
                     addSaltColumn = (saltBucketNum != null && indexType != IndexType.LOCAL);
                     defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
                     if (indexType == IndexType.LOCAL) {
+                        saltBucketNum = null;
                         // Set physical name of local index table
                         physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getLocalIndexPhysicalName(physicalName.getBytes())));
                     } else {
@@ -1396,14 +1405,18 @@ public class MetaDataClient {
                             // TODO: consider removing this, as the DROP INDEX done for each DROP VIEW command
                             // would have deleted all the rows already
                             if (!dropMetaData) {
-                                String viewIndexSchemaName = MetaDataUtil.getViewIndexSchemaName(schemaName);
-                                String viewIndexTableName = MetaDataUtil.getViewIndexTableName(tableName);
-                                PTable viewIndexTable = new PTableImpl(null, viewIndexSchemaName, viewIndexTableName, ts, table.getColumnFamilies());
-                                tableRefs.add(new TableRef(null, viewIndexTable, ts, false));
-                                String localIndexSchemaName = MetaDataUtil.getLocalIndexSchemaName(schemaName);
-                                String localIndexTableName = MetaDataUtil.getLocalIndexTableName(tableName);
-                                PTable localIndexTable = new PTableImpl(null, localIndexSchemaName, localIndexTableName, ts, table.getColumnFamilies());
-                                tableRefs.add(new TableRef(null, localIndexTable, ts, false));
+                                if (hasViewIndexTable) {
+                                    String viewIndexSchemaName = MetaDataUtil.getViewIndexSchemaName(schemaName);
+                                    String viewIndexTableName = MetaDataUtil.getViewIndexTableName(tableName);
+                                    PTable viewIndexTable = new PTableImpl(null, viewIndexSchemaName, viewIndexTableName, ts, table.getColumnFamilies());
+                                    tableRefs.add(new TableRef(null, viewIndexTable, ts, false));
+                                } 
+                                if (hasLocalIndexTable) {
+                                    String localIndexSchemaName = MetaDataUtil.getLocalIndexSchemaName(schemaName);
+                                    String localIndexTableName = MetaDataUtil.getLocalIndexTableName(tableName);
+                                    PTable localIndexTable = new PTableImpl(null, localIndexSchemaName, localIndexTableName, ts, Collections.<PColumnFamily>emptyList());
+                                    tableRefs.add(new TableRef(null, localIndexTable, ts, false));
+                                }
                             }
                         }
                         if (!dropMetaData) {

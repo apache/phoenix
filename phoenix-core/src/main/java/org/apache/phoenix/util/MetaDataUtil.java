@@ -262,6 +262,13 @@ public class MetaDataUtil {
         return schemaName;
     }  
 
+    public static String getUserTableName(String localIndexTableName) {
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(localIndexTableName);
+        String tableName = localIndexTableName.substring((schemaName.isEmpty() ? 0 : (schemaName.length() + QueryConstants.NAME_SEPARATOR.length()))
+            + LOCAL_INDEX_TABLE_PREFIX.length());
+        return SchemaUtil.getTableName(schemaName, tableName);
+    }
+
     public static SequenceKey getViewIndexSequenceKey(String tenantId, PName physicalName) {
         // Create global sequence of the form: <prefixed base table name><tenant id>
         // rather than tenant-specific sequence, as it makes it much easier

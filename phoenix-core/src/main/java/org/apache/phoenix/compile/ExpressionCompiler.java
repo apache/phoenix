@@ -82,18 +82,22 @@ import org.apache.phoenix.parse.NotParseNode;
 import org.apache.phoenix.parse.OrParseNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.RowValueConstructorParseNode;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.StringConcatParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.parse.UnsupportedAllParseNodeVisitor;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.DelegateDatum;
+import org.apache.phoenix.schema.LocalIndexDataColumnRef;
 import org.apache.phoenix.schema.PArrayDataType;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
@@ -282,7 +286,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         children = node.validate(children, context);
         Expression expression = node.create(children, context);
         ImmutableBytesWritable ptr = context.getTempPtr();
-        if (node.isStateless()) {
+        if (node.isStateless() && expression.isDeterministic()) {
             Object value = null;
             PDataType type = expression.getDataType();
             if (expression.evaluate(null, ptr)) {
@@ -290,7 +294,6 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             }
             return LiteralExpression.newConstant(value, type, expression.isDeterministic());
         }
-        boolean isDeterministic = true;
         BuiltInFunctionInfo info = node.getInfo();
         for (int i = 0; i < info.getRequiredArgCount(); i++) { 
             // Optimization to catch cases where a required argument is null resulting in the function
@@ -298,9 +301,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             // we can get the proper type to use.
             if (node.evalToNullIfParamIsNull(context, i)) {
                 Expression child = children.get(i);
-                isDeterministic &= child.isDeterministic();
-                if (child.isStateless() && (!child.evaluate(null, ptr) || ptr.getLength() == 0)) {
-                    return LiteralExpression.newConstant(null, expression.getDataType(), isDeterministic);
+                if (child.isStateless() && child.isDeterministic() && (!child.evaluate(null, ptr) || ptr.getLength() == 0)) {
+                    return LiteralExpression.newConstant(null, expression.getDataType(), child.isDeterministic());
                 }
             }
         }
@@ -320,7 +322,21 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
      * @throws SQLException if the column expression node does not refer to a known/unambiguous column
      */
     protected ColumnRef resolveColumn(ColumnParseNode node) throws SQLException {
-        ColumnRef ref = context.getResolver().resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
+        ColumnRef ref = null;
+        try {
+            ref = context.getResolver().resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
+        } catch (ColumnNotFoundException e) {
+            // If local index table (need to test join case here)
+            if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
+                try {
+                    return new LocalIndexDataColumnRef(context, node.getName());
+                } catch (ColumnFamilyNotFoundException c) {
+                    throw e;
+                }
+            } else {
+                throw e;
+            }
+        }
         PTable table = ref.getTable();
         int pkPosition = ref.getPKSlotPosition();
         // Disallow explicit reference to salting column, tenant ID column, and index ID column

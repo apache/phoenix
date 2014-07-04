@@ -32,6 +32,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
@@ -101,14 +102,23 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
             String explainPlan = QueryUtil.getExplainPlan(rs);
             assertEquals(expectedToBeUsed, explainPlan.contains(" SCAN OVER " + indexName));
    }
-    
+
     private void testDeleteRange(boolean autoCommit, boolean createIndex) throws Exception {
+        testDeleteRange(autoCommit, createIndex, false);
+    }
+
+    private void testDeleteRange(boolean autoCommit, boolean createIndex, boolean local) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         initTableValues(conn);
         
         String indexName = "IDX";
         if (createIndex) {
-            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx ON IntIntKeyTest(j)");
+            if (local) {
+                conn.createStatement().execute("CREATE LOCAL INDEX IF NOT EXISTS local_idx ON IntIntKeyTest(j)");
+                indexName = MetaDataUtil.getLocalIndexTableName("INTINTKEYTEST");
+            } else {
+                conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx ON IntIntKeyTest(j)");
+            }
         }
         
         ResultSet rs;
@@ -171,17 +181,32 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testDeleteRangeNoAutoCommitWithIndex() throws Exception {
-        testDeleteRange(false, true);
+        testDeleteRange(false, true, false);
+    }
+
+    @Test
+    public void testDeleteRangeNoAutoCommitWithLocalIndexIndex() throws Exception {
+        testDeleteRange(false, true, true);
     }
     
     @Test
     public void testDeleteRangeAutoCommitWithIndex() throws Exception {
-        testDeleteRange(true, true);
+        testDeleteRange(true, true, false);
     }
     
     @Test
+    public void testDeleteRangeAutoCommitWithLocalIndex() throws Exception {
+        testDeleteRange(true, true, true);
+    }
+
+    @Test
     public void testDeleteAllFromTableWithIndexAutoCommitSalting() throws SQLException {
-        testDeleteAllFromTableWithIndex(true, true);
+        testDeleteAllFromTableWithIndex(true, true, false);
+    }
+
+    @Test
+    public void testDeleteAllFromTableWithLocalIndexAutoCommitSalting() throws SQLException {
+        testDeleteAllFromTableWithIndex(true, true, true);
     }
     
     @Test
@@ -196,26 +221,40 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testDeleteAllFromTableWithIndexNoAutoCommitSalted() throws SQLException {
-        testDeleteAllFromTableWithIndex(false, true);
+        testDeleteAllFromTableWithIndex(false, true, false);
     }
     
+    @Test
+    public void testDeleteAllFromTableWithLocalIndexNoAutoCommitSalted() throws SQLException {
+        testDeleteAllFromTableWithIndex(false, true, true);
+    }
+
     private void testDeleteAllFromTableWithIndex(boolean autoCommit, boolean isSalted) throws SQLException {
+        testDeleteAllFromTableWithIndex(autoCommit, isSalted, false);
+    }
+
+    private void testDeleteAllFromTableWithIndex(boolean autoCommit, boolean isSalted, boolean localIndex) throws SQLException {
         Connection con = null;
         try {
             con = DriverManager.getConnection(getUrl());
             con.setAutoCommit(autoCommit);
 
             Statement stm = con.createStatement();
-            stm.execute("CREATE TABLE IF NOT EXISTS web_stats (" +
-            		"HOST CHAR(2) NOT NULL," +
-            		"DOMAIN VARCHAR NOT NULL, " +
-            		"FEATURE VARCHAR NOT NULL, " +
-            		"DATE DATE NOT NULL, \n" + 
-            		"USAGE.CORE BIGINT," +
-            		"USAGE.DB BIGINT," +
-            		"STATS.ACTIVE_VISITOR INTEGER " +
-            		"CONSTRAINT PK PRIMARY KEY (HOST, DOMAIN, FEATURE, DATE))" + (isSalted ? " SALT_BUCKETS=3" : ""));
-            stm.execute("CREATE INDEX web_stats_idx ON web_stats (CORE,DB,ACTIVE_VISITOR)");
+            String s = "CREATE TABLE IF NOT EXISTS web_stats (" +
+                    "HOST CHAR(2) NOT NULL," +
+                    "DOMAIN VARCHAR NOT NULL, " +
+                    "FEATURE VARCHAR NOT NULL, " +
+                    "DATE DATE NOT NULL, \n" + 
+                    "USAGE.CORE BIGINT," +
+                    "USAGE.DB BIGINT," +
+                    "STATS.ACTIVE_VISITOR INTEGER " +
+                    "CONSTRAINT PK PRIMARY KEY (HOST, DOMAIN, FEATURE, DATE))" + (isSalted ? " SALT_BUCKETS=3" : "");
+            stm.execute(s);
+            if (localIndex) {
+                stm.execute("CREATE LOCAL INDEX local_web_stats_idx ON web_stats (CORE,DB,ACTIVE_VISITOR)");
+            } else {
+                stm.execute("CREATE INDEX web_stats_idx ON web_stats (CORE,DB,ACTIVE_VISITOR)");
+            }
             stm.close();
 
             PreparedStatement psInsert = con
@@ -241,8 +280,11 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
             ResultSet rs = con.createStatement().executeQuery("SELECT /*+ NO_INDEX */ count(*) FROM web_stats");
             assertTrue(rs.next());
             assertEquals(0, rs.getLong(1));
-
-            rs = con.createStatement().executeQuery("SELECT count(*) FROM web_stats_idx");
+            if(localIndex){
+                rs = con.createStatement().executeQuery("SELECT count(*) FROM local_web_stats_idx");
+            } else {
+                rs = con.createStatement().executeQuery("SELECT count(*) FROM web_stats_idx");
+            }
             assertTrue(rs.next());
             assertEquals(0, rs.getLong(1));
 

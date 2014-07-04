@@ -107,14 +107,18 @@ public class SaltingUtil {
         return KeyRange.getKeyRange(lowerRange, upperRange);
     }
 
-    public static void addRegionStartKeyToScanStartAndStopRows(byte[] startKey, Scan scan) {
-        byte[] newStartRow = new byte[scan.getStartRow().length + startKey.length];
-        System.arraycopy(startKey, 0, newStartRow, 0, startKey.length);
-        System.arraycopy(scan.getStartRow(), 0, newStartRow, startKey.length, scan.getStartRow().length);
+    public static void addRegionStartKeyToScanStartAndStopRows(byte[] startKey, byte[] endKey, Scan scan) {
+        if (startKey.length == 0 && endKey.length == 0) return;
+        byte[] prefixBytes = startKey.length != 0 ? startKey : new byte[endKey.length];
+        byte[] newStartRow = new byte[scan.getStartRow().length + prefixBytes.length];
+        System.arraycopy(prefixBytes, 0, newStartRow, 0, prefixBytes.length);
+        System.arraycopy(scan.getStartRow(), 0, newStartRow, prefixBytes.length, scan.getStartRow().length);
         scan.setStartRow(newStartRow);
-        byte[] newStopRow = new byte[scan.getStopRow().length + startKey.length];
-        System.arraycopy(startKey, 0, newStopRow, 0, startKey.length);
-        System.arraycopy(scan.getStopRow(), 0, newStopRow, startKey.length, scan.getStopRow().length);
-        scan.setStopRow(newStopRow);
+        if (scan.getStopRow().length != 0) {
+            byte[] newStopRow = new byte[scan.getStopRow().length + prefixBytes.length];
+            System.arraycopy(prefixBytes, 0, newStopRow, 0, prefixBytes.length);
+            System.arraycopy(scan.getStopRow(), 0, newStopRow, prefixBytes.length, scan.getStopRow().length);
+            scan.setStopRow(newStopRow);
+        }
     }
 }
