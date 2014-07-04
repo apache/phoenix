@@ -99,6 +99,8 @@ tokens
     FOR='for';
     CACHE='cache';
     DERIVE='derive';
+    ANY='any';
+    SOME='some';
 }
 
 
@@ -129,6 +131,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
@@ -685,13 +688,17 @@ not_expression returns [ParseNode ret]
     |   n=NOT? LPAREN e=expression RPAREN { $ret = n == null ? e : factory.not(e); }
     ;
 
+comparison_op returns [CompareOp ret]
+	: EQ { $ret = CompareOp.EQUAL; }
+	| LT { $ret = CompareOp.LESS; }
+	| GT { $ret = CompareOp.GREATER; }
+	| LT EQ { $ret = CompareOp.LESS_OR_EQUAL; }
+	| GT EQ { $ret = CompareOp.GREATER_OR_EQUAL; }
+	| (NOEQ1 | NOEQ2) { $ret = CompareOp.NOT_EQUAL; }
+	;
+	
 boolean_expression returns [ParseNode ret]
-    :   l=value_expression ((EQ r=value_expression {$ret = factory.equal(l,r); } )
-                  |  ((NOEQ1 | NOEQ2) r=value_expression {$ret = factory.notEqual(l,r); } )
-                  |  (LT r=value_expression {$ret = factory.lt(l,r); } )
-                  |  (GT r=value_expression {$ret = factory.gt(l,r); } )
-                  |  (LT EQ r=value_expression {$ret = factory.lte(l,r); } )
-                  |  (GT EQ r=value_expression {$ret = factory.gte(l,r); } )
+    :   l=value_expression ((op=comparison_op (r=value_expression | ((all=ALL | any=ANY) LPAREN r=value_expression RPAREN)) {$ret = all != null ? factory.wrapInAll(op, l, r) : any != null ? factory.wrapInAny(op, l, r) : factory.comparison(op,l,r); } )
                   |  (IS n=NOT? NULL {$ret = factory.isNull(l,n!=null); } )
                   |  ( n=NOT? ((LIKE r=value_expression {$ret = factory.like(l,r,n!=null); } )
                       |        (EXISTS LPAREN r=subquery_expression RPAREN {$ret = factory.exists(l,r,n!=null);} )

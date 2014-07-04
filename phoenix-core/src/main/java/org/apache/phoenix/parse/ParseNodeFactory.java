@@ -490,6 +490,18 @@ public class ParseNodeFactory {
         }
     }
 
+    public ArrayAnyComparisonNode wrapInAny(CompareOp op, ParseNode lhs, ParseNode rhs) {
+        return new ArrayAnyComparisonNode(rhs, comparison(op, lhs, elementRef(Arrays.<ParseNode>asList(rhs, literal(1)))));
+    }
+
+    public ArrayAllComparisonNode wrapInAll(CompareOp op, ParseNode lhs, ParseNode rhs) {
+        return new ArrayAllComparisonNode(rhs, comparison(op, lhs, elementRef(Arrays.<ParseNode>asList(rhs, literal(1)))));
+    }
+    
+    public ArrayElemRefNode elementRef(List<ParseNode> parseNode) {
+        return new ArrayElemRefNode(parseNode);
+    }
+
     public GreaterThanParseNode gt(ParseNode lhs, ParseNode rhs) {
         return new GreaterThanParseNode(lhs, rhs);
     }

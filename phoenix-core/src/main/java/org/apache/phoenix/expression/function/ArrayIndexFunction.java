@@ -58,17 +58,7 @@ public class ArrayIndexFunction extends ScalarFunction {
 			throw new ParseException("Index cannot be negative :" + index);
 		}
 		Expression arrayExpr = children.get(0);
-		if (!arrayExpr.evaluate(tuple, ptr)) {
-		  return false;
-		} else if (ptr.getLength() == 0) {
-		  return true;
-		}
-
-		// Given a ptr to the entire array, set ptr to point to a particular element within that array
-		// given the type of an array element (see comments in PDataTypeForArray)
-		PArrayDataType.positionAtArrayElement(ptr, index-1, getDataType(), getMaxLength());
-		return true;
-		
+		return PArrayDataType.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(), getMaxLength());
 	}
 
 	@Override
