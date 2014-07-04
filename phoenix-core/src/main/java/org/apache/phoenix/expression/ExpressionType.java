@@ -175,7 +175,11 @@ public enum ExpressionType {
     LpadFunction(LpadFunction.class),
     NthValueFunction(NthValueFunction.class),
     FirstValueFunction(FirstValueFunction.class),
-    LastValueFunction(LastValueFunction.class);
+    LastValueFunction(LastValueFunction.class),
+    ArrayAnyComparisonExpression(ArrayAnyComparisonExpression.class),
+    ArrayAllComparisonExpression(ArrayAllComparisonExpression.class),
+    InlineArrayElemRefExpression(InlineArrayElemRefExpression.class);
+
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }
