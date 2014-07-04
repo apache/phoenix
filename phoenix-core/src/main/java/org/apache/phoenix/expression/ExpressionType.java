@@ -26,23 +26,27 @@ import org.apache.phoenix.expression.function.CeilDecimalExpression;
 import org.apache.phoenix.expression.function.CeilFunction;
 import org.apache.phoenix.expression.function.CeilTimestampExpression;
 import org.apache.phoenix.expression.function.CoalesceFunction;
+import org.apache.phoenix.expression.function.ConvertTimezoneFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.DecodeFunction;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
 import org.apache.phoenix.expression.function.EncodeFunction;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
+import org.apache.phoenix.expression.function.FirstValueFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
 import org.apache.phoenix.expression.function.InvertFunction;
-import org.apache.phoenix.expression.function.LpadFunction;
 import org.apache.phoenix.expression.function.LTrimFunction;
+import org.apache.phoenix.expression.function.LastValueFunction;
 import org.apache.phoenix.expression.function.LengthFunction;
 import org.apache.phoenix.expression.function.LowerFunction;
+import org.apache.phoenix.expression.function.LpadFunction;
 import org.apache.phoenix.expression.function.MD5Function;
 import org.apache.phoenix.expression.function.MaxAggregateFunction;
 import org.apache.phoenix.expression.function.MinAggregateFunction;
+import org.apache.phoenix.expression.function.NthValueFunction;
 import org.apache.phoenix.expression.function.PercentRankAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileContAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileDiscAggregateFunction;
@@ -68,12 +72,6 @@ import org.apache.phoenix.expression.function.ToNumberFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.TruncFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
-import org.apache.phoenix.expression.function.TimezoneOffsetFunction;
-import org.apache.phoenix.expression.function.DecodeFunction;
-import org.apache.phoenix.expression.function.NthValueFunction;
-import org.apache.phoenix.expression.function.FirstValueFunction;
-import org.apache.phoenix.expression.function.LastValueFunction;
-import org.apache.phoenix.expression.function.ConvertTimezoneFunction;
 
 import com.google.common.collect.Maps;
 
@@ -87,6 +85,8 @@ import com.google.common.collect.Maps;
  *
  * @since 0.1
  */
+// Important : When you want to add new Types make sure to add those towards the end, not changing the existing type's
+// ordinal
 public enum ExpressionType {
     ReverseFunction(ReverseFunction.class),
     RowKey(RowKeyColumnExpression.class),
@@ -165,14 +165,14 @@ public enum ExpressionType {
     ArrayConstructorExpression(ArrayConstructorExpression.class),
     SQLViewTypeFunction(SQLViewTypeFunction.class),
     ExternalSqlTypeIdFunction(ExternalSqlTypeIdFunction.class),
-    NthValueFunction(NthValueFunction.class),
-    FirstValueFunction(FirstValueFunction.class),
-    LastValueFunction(LastValueFunction.class),
     ConvertTimezoneFunction(ConvertTimezoneFunction.class),
     DecodeFunction(DecodeFunction.class),
     TimezoneOffsetFunction(TimezoneOffsetFunction.class),
     EncodeFunction(EncodeFunction.class),
-    LpadFunction(LpadFunction.class);
+    LpadFunction(LpadFunction.class),
+    NthValueFunction(NthValueFunction.class),
+    FirstValueFunction(FirstValueFunction.class),
+    LastValueFunction(LastValueFunction.class);
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }

@@ -19,19 +19,18 @@ package org.apache.phoenix.expression.aggregator;
 
 import java.util.Map;
 import java.util.Map.Entry;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ByteUtil;
 import java.util.Set;
 import java.util.TreeMap;
+
 import org.apache.hadoop.hbase.filter.BinaryComparator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes.ByteArrayComparator;
+import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.FirstLastNthValueDataContainer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Base client aggregator for (FIRST|LAST|NTH)_VALUE functions
@@ -39,7 +38,6 @@ import org.slf4j.LoggerFactory;
  */
 public class FirstLastValueBaseClientAggregator extends BaseAggregator {
 
-    private static final Logger logger = LoggerFactory.getLogger(FirstLastValueBaseClientAggregator.class);
     protected boolean useOffset = false;
     protected int offset = -1;
     protected BinaryComparator topOrder = new BinaryComparator(ByteUtil.EMPTY_BYTE_ARRAY);
