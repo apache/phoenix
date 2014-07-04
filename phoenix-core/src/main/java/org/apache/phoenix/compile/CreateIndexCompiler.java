@@ -56,8 +56,8 @@ public class CreateIndexCompiler {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SPLIT_LOCAL_INDEX)
                 .build().buildException();
             } 
-            if (create.getProps() != null && create.getProps().get("") != null) {
-                List<Pair<String, Object>> list = create.getProps().get("");
+            List<Pair<String, Object>> list = create.getProps() != null ? create.getProps().get("") : null;
+            if (list != null) {
                 for (Pair<String, Object> pair : list) {
                     if (pair.getFirst().equals(PhoenixDatabaseMetaData.SALT_BUCKETS)) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SALT_LOCAL_INDEX)

@@ -112,20 +112,40 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testIndexWithNullableFixedWithCols() throws Exception {
+        testIndexWithNullableFixedWithCols(false);
+    }
+
+    @Test
+    public void testIndexWithNullableFixedWithColsWithLocalIndex() throws Exception {
+        testIndexWithNullableFixedWithCols(true);
+    }
+
+    private void testIndexWithNullableFixedWithCols(boolean localIndex) throws Exception {
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
         populateTestTable();
-        String ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                + " (char_col1 ASC, int_col1 ASC)"
-                + " INCLUDE (long_col1, long_col2)";
+        String ddl = null;
+        if(localIndex){
+            ddl = "CREATE LOCAL INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
+                    + " (char_col1 ASC, int_col1 ASC)"
+                    + " INCLUDE (long_col1, long_col2)";
+        } else {
+            ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
+                    + " (char_col1 ASC, int_col1 ASC)"
+                    + " INCLUDE (long_col1, long_col2)";
+        }
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
         
         String query = "SELECT char_col1, int_col1 from " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER INDEX_TEST.IDX", QueryUtil.getExplainPlan(rs));
+        if (localIndex) {
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER _LOCAL_IDX_INDEX_TEST.INDEX_DATA_TABLE\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+        } else {
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER INDEX_TEST.IDX", QueryUtil.getExplainPlan(rs));
+        }
         
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -190,14 +210,31 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testDeleteFromAllPKColumnIndex() throws Exception {
+        testDeleteFromAllPKColumnIndex(false);
+    }
+
+    @Test
+    public void testDeleteFromAllPKColumnLocalIndex() throws Exception {
+        testDeleteFromAllPKColumnIndex(true);
+    }
+
+    private void testDeleteFromAllPKColumnIndex(boolean localIndex) throws Exception {
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
         populateTestTable();
-        String ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                + " (long_pk, varchar_pk)"
-                + " INCLUDE (long_col1, long_col2)";
+        String ddl = null;
+        if (localIndex) {
+            ddl = "CREATE LOCAL INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
+                    + " (long_pk, varchar_pk)"
+                    + " INCLUDE (long_col1, long_col2)";
+            
+        } else {
+            ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
+                    + " (long_pk, varchar_pk)"
+                    + " INCLUDE (long_col1, long_col2)";
+        }
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
         
@@ -242,16 +279,30 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         conn.createStatement().execute("DROP INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE);
     }
     
-    
     @Test
     public void testDropIfImmutableKeyValueColumn() throws Exception {
+        testDropIfImmutableKeyValueColumn(false);
+    }
+    
+    @Test
+    public void testDropIfImmutableKeyValueColumnWithLocalIndex() throws Exception {
+        testDropIfImmutableKeyValueColumn(true);
+    }
+
+    private void testDropIfImmutableKeyValueColumn(boolean localIndex) throws Exception {
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
         populateTestTable();
-        String ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                + " (long_col1)";
+        String ddl = null;
+        if(localIndex) {
+            ddl = "CREATE LOCAL INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
+                    + " (long_col1)";
+        } else {
+            ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
+                    + " (long_col1)";
+        }
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
         

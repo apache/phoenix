@@ -419,7 +419,7 @@ public class FromCompiler {
             PTable t = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME, 
                     PTableType.SUBQUERY, null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM, 
                     null, null, columns, null, Collections.<PTable>emptyList(), false, 
-                    Collections.<PName>emptyList(), null, null, false, false, null, null);
+                    Collections.<PName>emptyList(), null, null, false, false, null, null, null);
             
             String alias = subselectNode.getAlias();
             TableRef tableRef = new TableRef(alias, t, MetaDataProtocol.MIN_TABLE_TIMESTAMP, false);

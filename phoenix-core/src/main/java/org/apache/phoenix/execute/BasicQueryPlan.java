@@ -17,27 +17,47 @@
  */
 package org.apache.phoenix.execute;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.expression.ProjectedColumnExpression;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.ParseNodeFactory;
+import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
@@ -153,8 +173,34 @@ public abstract class BasicQueryPlan implements QueryPlan {
         }
         ScanUtil.setTimeRange(scan, scn);
         ScanUtil.setTenantId(scan, connection.getTenantId() == null ? null : connection.getTenantId().getBytes());
+        // Set local index related scan attributes. 
         if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
             ScanUtil.setLocalIndex(scan);
+            Set<PColumn> dataColumns = context.getDataColumns();
+            // If any data columns to join back from data table are present then we set following attributes
+            // 1. data columns to be projected and their key value schema.
+            // 2. index maintainer and view constants if exists to build data row key from index row key. 
+            // TODO: can have an hint to skip joining back to data table, in that case if any column to
+            // project is not present in the index then we need to skip this plan.
+            if (!dataColumns.isEmpty()) {
+                // Set data columns to be join back from data table.
+                serializeDataTableColumnsToJoin(scan, dataColumns);
+                KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
+                // Set key value schema of the data columns.
+                serializeSchemaIntoScan(scan, schema);
+                String schemaName = context.getCurrentTable().getTable().getSchemaName().getString();
+                String parentTable = context.getCurrentTable().getTable().getParentTableName().getString();
+                final ParseNodeFactory FACTORY = new ParseNodeFactory();
+                TableRef dataTableRef =
+                        FromCompiler.getResolver(
+                            FACTORY.namedTable(null, TableName.create(schemaName, parentTable)),
+                            context.getConnection()).resolveTable(schemaName, parentTable);
+                PTable dataTable = dataTableRef.getTable();
+                // Set index maintainer of the local index.
+                serializeIndexMaintainerIntoScan(scan, dataTable);
+                // Set view constants if exists.
+                serializeViewConstantsIntoScan(scan, dataTable);
+            }
         }
         ResultIterator iterator = newIterator();
         return dependencies.isEmpty() ? 
@@ -168,6 +214,108 @@ public abstract class BasicQueryPlan implements QueryPlan {
                 }
             }
         };
+    }
+
+    private void serializeIndexMaintainerIntoScan(Scan scan, PTable dataTable) {
+        PName name = context.getCurrentTable().getTable().getName();
+        List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
+        for (PTable index : dataTable.getIndexes()) {
+            if (index.getName().equals(name) && index.getIndexType() == IndexType.LOCAL) {
+                indexes.add(index);
+                break;
+            }
+        }
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        IndexMaintainer.serialize(dataTable, ptr, indexes);
+        scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
+    }
+
+    private void serializeViewConstantsIntoScan(Scan scan, PTable dataTable) {
+        int dataPosOffset = (dataTable.getBucketNum() != null ? 1 : 0) + (dataTable.isMultiTenant() ? 1 : 0);
+        int nViewConstants = 0;
+        if (dataTable.getType() == PTableType.VIEW) {
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+            List<PColumn> dataPkColumns = dataTable.getPKColumns();
+            for (int i = dataPosOffset; i < dataPkColumns.size(); i++) {
+                PColumn dataPKColumn = dataPkColumns.get(i);
+                if (dataPKColumn.getViewConstant() != null) {
+                    nViewConstants++;
+                }
+            }
+            if (nViewConstants > 0) {
+                byte[][] viewConstants = new byte[nViewConstants][];
+                int j = 0;
+                for (int i = dataPosOffset; i < dataPkColumns.size(); i++) {
+                    PColumn dataPkColumn = dataPkColumns.get(i);
+                    if (dataPkColumn.getViewConstant() != null) {
+                        if (IndexUtil.getViewConstantValue(dataPkColumn, ptr)) {
+                            viewConstants[j++] = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                        } else {
+                            throw new IllegalStateException();
+                        }
+                    }
+                }
+                serializeViewConstantsIntoScan(viewConstants, scan);
+            }
+        }
+    }
+
+    private void serializeViewConstantsIntoScan(byte[][] viewConstants, Scan scan) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        try {
+            DataOutputStream output = new DataOutputStream(stream);
+            WritableUtils.writeVInt(output, viewConstants.length);
+            for (byte[] viewConstant : viewConstants) {
+                Bytes.writeByteArray(output, viewConstant);
+            }
+            scan.setAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS, stream.toByteArray());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } finally {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    private void serializeDataTableColumnsToJoin(Scan scan, Set<PColumn> dataColumns) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        try {
+            DataOutputStream output = new DataOutputStream(stream);
+            WritableUtils.writeVInt(output, dataColumns.size());
+            for (PColumn column : dataColumns) {
+                Bytes.writeByteArray(output, column.getFamilyName().getBytes());
+                Bytes.writeByteArray(output, column.getName().getBytes());
+            }
+            scan.setAttribute(BaseScannerRegionObserver.DATA_TABLE_COLUMNS_TO_JOIN, stream.toByteArray());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } finally {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    private void serializeSchemaIntoScan(Scan scan, KeyValueSchema schema) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream(schema.getEstimatedByteSize());
+        try {
+            DataOutputStream output = new DataOutputStream(stream);
+            schema.write(output);
+            scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_JOIN_SCHEMA, stream.toByteArray());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } finally {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     abstract protected ResultIterator newIterator() throws SQLException;

@@ -67,6 +67,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -169,7 +170,7 @@ public class DeleteCompiler {
         }
         for (PTable index : tableRef.getTable().getIndexes()) {
             for (PColumn column : index.getPKColumns()) {
-                if (!IndexUtil.isDataPKColumn(column)) {
+                if (!IndexUtil.isDataPKColumn(column) && (index.getIndexType() != IndexType.LOCAL || !column.getName().toString().equals(MetaDataUtil.VIEW_INDEX_ID_COLUMN_NAME))) {
                     return true;
                 }
             }

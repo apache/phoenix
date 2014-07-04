@@ -69,7 +69,7 @@ public class TupleProjector {
         valueSet = ValueBitSet.newInstance(schema);
     }
     
-    private TupleProjector(KeyValueSchema schema, Expression[] expressions) {
+    public TupleProjector(KeyValueSchema schema, Expression[] expressions) {
     	this.schema = schema;
     	this.expressions = expressions;
     	this.valueSet = ValueBitSet.newInstance(schema);
@@ -203,7 +203,7 @@ public class TupleProjector {
     }
     
     public ProjectedValueTuple projectResults(Tuple tuple) {
-    	byte[] bytesValue = schema.toBytes(tuple, expressions, valueSet, ptr);
+    	byte[] bytesValue = schema.toBytes(tuple, getExpressions(), valueSet, ptr);
     	Cell base = tuple.getValue(0);
         return new ProjectedValueTuple(base.getRowArray(), base.getRowOffset(), base.getRowLength(), base.getTimestamp(), bytesValue, valueSet.getEstimatedLength());
     }
@@ -237,6 +237,18 @@ public class TupleProjector {
     	destBitSet.toBytes(merged, o);
     	ImmutableBytesWritable keyPtr = dest.getKeyPtr();
         return new ProjectedValueTuple(keyPtr.get(), keyPtr.getOffset(), keyPtr.getLength(), dest.getTimestamp(), merged, destBitSetLen);
+    }
+
+    public KeyValueSchema getSchema() {
+        return schema;
+    }
+
+    public Expression[] getExpressions() {
+        return expressions;
+    }
+
+    public ValueBitSet getValueBitSet() {
+        return valueSet;
     }
 }
 

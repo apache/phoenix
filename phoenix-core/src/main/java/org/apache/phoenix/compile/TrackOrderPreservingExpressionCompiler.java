@@ -70,7 +70,6 @@ public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
         boolean isSharedViewIndex = table.getViewIndexId() != null;
         // TODO: util for this offset, as it's computed in numerous places
         positionOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
-        this.isOrderPreserving &= table.getIndexType() != IndexType.LOCAL;
         entries = Lists.newArrayListWithExpectedSize(expectedEntrySize);
         this.ordering = ordering;
     }

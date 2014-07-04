@@ -83,6 +83,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
@@ -771,7 +772,7 @@ public class JoinCompiler {
             PTable t = PTableImpl.makePTable(table.getTenantId(), PNameFactory.newName(PROJECTED_TABLE_SCHEMA), table.getName(), PTableType.JOIN,
                         table.getIndexState(), table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
                         null, projectedColumns, table.getParentTableName(),
-                        table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null, table.isWALDisabled(), table.isMultiTenant(), table.getViewType(), table.getViewIndexId());
+                        table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null, table.isWALDisabled(), table.isMultiTenant(), table.getViewType(), table.getViewIndexId(), table.getIndexType());
             return new ProjectedPTableWrapper(t, columnNameMap, sourceExpressions);
         }
     }
@@ -1134,8 +1135,14 @@ public class JoinCompiler {
             List<OrderByNode> orderBy = tableRef.equals(orderByTableRef) ? select.getOrderBy() : null;
             SelectStatement stmt = getSubqueryForOptimizedPlan(select.getHint(), table.getDynamicColumns(), tableRef, join.getColumnRefs(), table.getPreFiltersCombined(), groupBy, orderBy, table.isWildCardSelect());
             QueryPlan plan = statement.getConnection().getQueryServices().getOptimizer().optimize(statement, stmt);
+            boolean localIndex = plan.getContext().getCurrentTable().getTable().getIndexType()==IndexType.LOCAL;
             if (!plan.getTableRef().equals(tableRef)) {
-                replacement.put(tableRef, plan.getTableRef());            
+                // Use local index plan only when all the columns to project are available in index.
+                // Other wise use data plan.
+                // TODO: In join queries support joining back to data table from index when columns to project are missed index. 
+                if (!localIndex || plan.getContext().getDataColumns().isEmpty()) {
+                    replacement.put(tableRef, plan.getTableRef());
+                } 
             }            
         }
         

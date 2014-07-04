@@ -44,6 +44,8 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.iterate.RegionScannerResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -101,7 +103,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         }
     }
     
-    public static OrderedResultIterator deserializeFromScan(Scan scan, RegionScanner s, int offset) {
+    public static OrderedResultIterator deserializeFromScan(Scan scan, RegionScanner s) {
         byte[] topN = scan.getAttribute(BaseScannerRegionObserver.TOPN);
         if (topN == null) {
             return null;
@@ -117,9 +119,6 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             for (int i = 0; i < size; i++) {
                 OrderByExpression orderByExpression = new OrderByExpression();
                 orderByExpression.readFields(input);
-                if (offset != 0) {
-                    IndexUtil.setRowKeyExpressionOffset(orderByExpression.getExpression(), offset);
-                }
                 orderByExpressions.add(orderByExpression);
             }
             ResultIterator inner = new RegionScannerResultIterator(s);
@@ -186,7 +185,8 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
              * For local indexes, we need to set an offset on row key expressions to skip
              * the region start key.
              */
-            offset = c.getEnvironment().getRegion().getStartKey().length;
+            HRegion region = c.getEnvironment().getRegion();
+            offset = region.getStartKey().length != 0 ? region.getStartKey().length:region.getEndKey().length;
             ScanUtil.setRowKeyOffset(scan, offset);
         }
         
@@ -202,15 +202,30 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         List<KeyValueColumnExpression> arrayKVRefs = new ArrayList<KeyValueColumnExpression>();
         Expression[] arrayFuncRefs = deserializeArrayPostionalExpressionInfoFromScan(
                 scan, innerScanner, arrayKVRefs);
-        innerScanner = getWrappedScanner(c, innerScanner, arrayKVRefs, arrayFuncRefs, offset);
-        final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner, offset);
+        TupleProjector tupleProjector = null;
+        HRegion dataRegion = null;
+        IndexMaintainer indexMaintainer = null;
+        byte[][] viewConstants = null;
+        ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
+        if (dataColumns != null) {
+            tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
+            dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
+            byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
+            List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
+            indexMaintainer = indexMaintainers.get(0);
+            viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+        }
+        innerScanner =
+                getWrappedScanner(c, innerScanner, arrayKVRefs, arrayFuncRefs, offset, scan,
+                    dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants);
+        final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner);  
         if (iterator == null) {
             return innerScanner;
         }
         // TODO:the above wrapped scanner should be used here also
         return getTopNScanner(c, innerScanner, iterator, tenantId);
     }
-    
+
     /**
      *  Return region scanner that does TopN.
      *  We only need to call startRegionOperation and closeRegionOperation when
@@ -292,9 +307,18 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
      * @param arrayFuncRefs 
      * @param arrayKVRefs 
      * @param offset starting position in the rowkey.
+     * @param scan
+     * @param tupleProjector
+     * @param dataRegion
+     * @param indexMaintainer
+     * @param viewConstants
      */
-    private RegionScanner getWrappedScanner(final ObserverContext<RegionCoprocessorEnvironment> c, final RegionScanner s, 
-           final List<KeyValueColumnExpression> arrayKVRefs, final Expression[] arrayFuncRefs, final int offset) {
+    private RegionScanner getWrappedScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
+            final RegionScanner s, final List<KeyValueColumnExpression> arrayKVRefs,
+            final Expression[] arrayFuncRefs, final int offset, final Scan scan,
+            final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
+            final HRegion dataRegion, final IndexMaintainer indexMaintainer,
+            final byte[][] viewConstants) {
         return new RegionScanner() {
 
             @Override
@@ -352,8 +376,8 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                     if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
                         replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
                     }
-                    if (offset > 0) {
-                        wrapResultUsingOffset(result,offset);
+                    if (ScanUtil.isLocalIndex(scan)) {
+                        IndexUtil.wrapResultUsingOffset(result, offset, dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
                     }
                     // There is a scanattribute set to retrieve the specific array element
                     return next;
@@ -373,8 +397,8 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                     if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) { 
                         replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
                     }
-                    if (offset > 0) {
-                        wrapResultUsingOffset(result,offset);
+                    if (offset > 0 || ScanUtil.isLocalIndex(scan)) {
+                        IndexUtil.wrapResultUsingOffset(result, offset, dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
                     }
                     // There is a scanattribute set to retrieve the specific array element
                     return next;
@@ -417,133 +441,10 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                         Type.codeToType(rowKv.getTypeByte()), value, 0, value.length));
             }
 
-            private void wrapResultUsingOffset(List<Cell> result, final int offset) {
-                for (int i = 0; i < result.size(); i++) {
-                    final Cell cell = result.get(i);
-                    // TODO: Create DelegateCell class instead
-                    Cell newCell = new Cell() {
-
-                        @Override
-                        public byte[] getRowArray() {
-                            return cell.getRowArray();
-                        }
-
-                        @Override
-                        public int getRowOffset() {
-                            return cell.getRowOffset() + offset;
-                        }
-
-                        @Override
-                        public short getRowLength() {
-                            return (short)(cell.getRowLength() - offset);
-                        }
-
-                        @Override
-                        public byte[] getFamilyArray() {
-                            return cell.getFamilyArray();
-                        }
-
-                        @Override
-                        public int getFamilyOffset() {
-                            return cell.getFamilyOffset();
-                        }
-
-                        @Override
-                        public byte getFamilyLength() {
-                            return cell.getFamilyLength();
-                        }
-
-                        @Override
-                        public byte[] getQualifierArray() {
-                            return cell.getQualifierArray();
-                        }
-
-                        @Override
-                        public int getQualifierOffset() {
-                            return cell.getQualifierOffset();
-                        }
-
-                        @Override
-                        public int getQualifierLength() {
-                            return cell.getQualifierLength();
-                        }
-
-                        @Override
-                        public long getTimestamp() {
-                            return cell.getTimestamp();
-                        }
-
-                        @Override
-                        public byte getTypeByte() {
-                            return cell.getTypeByte();
-                        }
-
-                        @Override
-                        public long getMvccVersion() {
-                            return cell.getMvccVersion();
-                        }
-
-                        @Override
-                        public byte[] getValueArray() {
-                            return cell.getValueArray();
-                        }
-
-                        @Override
-                        public int getValueOffset() {
-                            return cell.getValueOffset();
-                        }
-
-                        @Override
-                        public int getValueLength() {
-                            return cell.getValueLength();
-                        }
-
-                        @Override
-                        public byte[] getTagsArray() {
-                            return cell.getTagsArray();
-                        }
-
-                        @Override
-                        public int getTagsOffset() {
-                            return cell.getTagsOffset();
-                        }
-
-                        @Override
-                        public short getTagsLength() {
-                            return cell.getTagsLength();
-                        }
-
-                        @Override
-                        public byte[] getValue() {
-                            return cell.getValue();
-                        }
-
-                        @Override
-                        public byte[] getFamily() {
-                            return cell.getFamily();
-                        }
-
-                        @Override
-                        public byte[] getQualifier() {
-                            return cell.getQualifier();
-                        }
-
-                        @Override
-                        public byte[] getRow() {
-                            return cell.getRow();
-                        }
-                    };
-                    // Wrap cell in cell that offsets row key
-                    result.set(i, newCell);
-                }
-            }
-
             @Override
             public long getMaxResultSize() {
                 return s.getMaxResultSize();
             }
         };
     }
-    
-    
 }

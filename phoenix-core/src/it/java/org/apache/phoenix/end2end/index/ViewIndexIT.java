@@ -47,7 +47,7 @@ public class ViewIndexIT extends BaseIndexIT {
         // Drop the HBase table metadata for this test
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         // Must update config before starting server
-        startServer(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     private void createBaseTable(String tableName, Integer saltBuckets, String splits) throws SQLException {

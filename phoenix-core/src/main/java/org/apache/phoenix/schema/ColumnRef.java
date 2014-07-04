@@ -36,15 +36,19 @@ import org.apache.phoenix.util.SchemaUtil;
  * @since 0.1
  */
 @Immutable
-public final class ColumnRef {
+public class ColumnRef {
     private final TableRef tableRef;
     private final int columnPosition;
     private final int pkSlotPosition;
     
-    public ColumnRef(ColumnRef columnRef, long timeStamp) {
+    protected ColumnRef(ColumnRef columnRef, long timeStamp) {
         this.tableRef = new TableRef(columnRef.tableRef, timeStamp);
         this.columnPosition = columnRef.columnPosition;
         this.pkSlotPosition = columnRef.pkSlotPosition;
+    }
+
+    public ColumnRef(TableRef tableRef, String familyName, String columnName) throws MetaDataEntityNotFoundException {
+        this(tableRef, tableRef.getTable().getColumnFamily(familyName).getColumn(columnName).getPosition());
     }
 
     public ColumnRef(TableRef tableRef, int columnPosition) {
@@ -113,7 +117,12 @@ public final class ColumnRef {
             String displayName = SchemaUtil.getColumnDisplayName(defaultFamilyName.equals(dataFamilyName) ? null : dataFamilyName, dataColumnName);
         	return new KeyValueColumnExpression(column, displayName);
         }
-        
+
+        // TODO: In ExpressionCompiler create a ColumnRef for a local index that causes a
+        // different kind of ColumnExpression to be created here. You might be able to
+        // use ProjectedColumnExpression, but not sure. The column values from the data
+        // table should get returned in a single KeyValue in a similar format (using a
+        // KeyValueSchema).
         if (table.getType() == PTableType.JOIN) {
         	return new ProjectedColumnExpression(column, table, column.getName().getString());
         }
@@ -121,6 +130,10 @@ public final class ColumnRef {
         byte[] defaultFamily = table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes();
         String displayName = SchemaUtil.getColumnDisplayName(Bytes.compareTo(defaultFamily, column.getFamilyName().getBytes()) == 0  ? null : column.getFamilyName().getBytes(), column.getName().getBytes());
         return new KeyValueColumnExpression(column, displayName);
+    }
+
+    public ColumnRef cloneAtTimestamp(long timestamp) {
+        return new ColumnRef(this, timestamp);
     }
 
     public int getColumnPosition() {

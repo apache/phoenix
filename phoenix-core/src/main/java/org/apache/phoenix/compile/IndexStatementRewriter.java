@@ -96,7 +96,6 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
 
         String indexColName = IndexUtil.getIndexColumnName(dataCol);
         // Same alias as before, but use the index column name instead of the data column name
-        // TODO: add dataColRef as an alternate ColumnParseNode in the case that the index
         // ColumnParseNode cannot be resolved. When this occurs, add the dataColRef to a list
         // on the StatementContext to indicate that a join back to the data table is necessary.
         // At ExpressionCompiler.resolveColumn(), test if the table is a local index, and only

@@ -56,7 +56,9 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
@@ -72,6 +74,7 @@ import org.apache.phoenix.util.TupleUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.io.Closeables;
 
@@ -112,11 +115,12 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
              * For local indexes, we need to set an offset on row key expressions to skip
              * the region start key.
              */
-            offset = c.getEnvironment().getRegion().getStartKey().length;
+            HRegion region = c.getEnvironment().getRegion();
+            offset = region.getStartKey().length != 0 ? region.getStartKey().length:region.getEndKey().length;
             ScanUtil.setRowKeyOffset(scan, offset);
         }
         
-        List<Expression> expressions = deserializeGroupByExpressions(expressionBytes, offset);
+        List<Expression> expressions = deserializeGroupByExpressions(expressionBytes, 0);
         ServerAggregators aggregators =
                 ServerAggregators.deserialize(scan
                         .getAttribute(BaseScannerRegionObserver.AGGREGATORS), c
@@ -136,12 +140,30 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                     new HashJoinRegionScanner(s, p, j, ScanUtil.getTenantId(scan),
                             c.getEnvironment());
         }
+        byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
+        List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
+        boolean localIndexScan = ScanUtil.isLocalIndex(scan);
+        TupleProjector tupleProjector = null;
+        HRegion dataRegion = null;
+        byte[][] viewConstants = null;
+        ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
+        if (ScanUtil.isLocalIndex(scan)) {
+            if (dataColumns != null) {
+                tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
+                dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
+                viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+            }
+        } 
 
         if (keyOrdered) { // Optimize by taking advantage that the rows are
                           // already in the required group by key order
-            return scanOrdered(c, scan, innerScanner, expressions, aggregators, limit);
+            return scanOrdered(c, scan, innerScanner, expressions, aggregators, limit, offset,
+                localIndexScan, dataColumns, tupleProjector, indexMaintainers, dataRegion,
+                viewConstants);
         } else { // Otherwse, collect them all up in an in memory map
-            return scanUnordered(c, scan, innerScanner, expressions, aggregators, limit);
+            return scanUnordered(c, scan, innerScanner, expressions, aggregators, limit, offset,
+                localIndexScan, dataColumns, tupleProjector, indexMaintainers, dataRegion,
+                viewConstants);
         }
     }
 
@@ -355,7 +377,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
      */
     private RegionScanner scanUnordered(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
             final RegionScanner s, final List<Expression> expressions,
-            final ServerAggregators aggregators, long limit) throws IOException {
+            final ServerAggregators aggregators, long limit, int offset, boolean localIndexScan,
+            ColumnReference[] dataColumns, TupleProjector tupleProjector,
+            List<IndexMaintainer> indexMaintainers, HRegion dataRegion, byte[][] viewConstants)
+            throws IOException {
         if (logger.isDebugEnabled()) {
             logger.debug("Grouped aggregation over unordered rows with scan " + scan
                     + ", group by " + expressions + ", aggregators " + aggregators);
@@ -377,7 +402,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 GroupByCacheFactory.INSTANCE.newCache(
                         env, ScanUtil.getTenantId(scan), 
                         aggregators, estDistVals);
-
+        ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
         boolean success = false;
         try {
             boolean hasMore;
@@ -399,6 +424,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                     // ones returned
                     hasMore = s.nextRaw(results);
                     if (!results.isEmpty()) {
+                        if (localIndexScan) {
+                            IndexUtil.wrapResultUsingOffset(results, offset, dataColumns, tupleProjector,
+                                dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0),
+                                viewConstants, tempPtr);
+                        }
                         result.setKeyValues(results);
                         ImmutableBytesWritable key =
                                 TupleUtil.getConcatenatedValue(result, expressions);
@@ -430,15 +460,20 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
      * Used for an aggregate query in which the key order match the group by key order. In this
      * case, we can do the aggregation as we scan, by detecting when the group by key changes.
      * @param limit TODO
+     * @throws IOException 
      */
     private RegionScanner scanOrdered(final ObserverContext<RegionCoprocessorEnvironment> c,
             Scan scan, final RegionScanner s, final List<Expression> expressions,
-            final ServerAggregators aggregators, final long limit) {
+            final ServerAggregators aggregators, final long limit, final int offset,
+            final boolean localIndexScan, final ColumnReference[] dataColumns,
+            final TupleProjector tupleProjector, final List<IndexMaintainer> indexMaintainers,
+            final HRegion dataRegion, final byte[][] viewConstants) throws IOException {
 
         if (logger.isDebugEnabled()) {
             logger.debug("Grouped aggregation over ordered rows with scan " + scan + ", group by "
                     + expressions + ", aggregators " + aggregators);
         }
+        final ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
         return new BaseRegionScanner() {
             private long rowCount = 0;
             private ImmutableBytesWritable currentKey = null;
@@ -476,6 +511,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                         // ones returned
                         hasMore = s.nextRaw(kvs);
                         if (!kvs.isEmpty()) {
+                            if (localIndexScan) {
+                                IndexUtil.wrapResultUsingOffset(kvs, offset, dataColumns, tupleProjector,
+                                    dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0),
+                                    viewConstants, tempPtr);
+                            }
                             result.setKeyValues(kvs);
                             key = TupleUtil.getConcatenatedValue(result, expressions);
                             aggBoundary = currentKey != null && currentKey.compareTo(key) != 0;

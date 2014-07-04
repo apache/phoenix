@@ -170,7 +170,7 @@ public enum ExpressionType {
     SQLViewTypeFunction(SQLViewTypeFunction.class),
     ExternalSqlTypeIdFunction(ExternalSqlTypeIdFunction.class),
     ConvertTimezoneFunction(ConvertTimezoneFunction.class),
-    SQLIndexTypeFunction(SQLIndexTypeFunction.class);
+    SQLIndexTypeFunction(SQLIndexTypeFunction.class),
     DecodeFunction(DecodeFunction.class),
     TimezoneOffsetFunction(TimezoneOffsetFunction.class),
     EncodeFunction(EncodeFunction.class),

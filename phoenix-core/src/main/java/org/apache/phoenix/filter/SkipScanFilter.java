@@ -118,7 +118,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
 
     @Override
     public ReturnCode filterKeyValue(Cell kv) {
-        return navigate(kv.getRowArray(), kv.getRowOffset() + offset,kv.getRowLength(),Terminate.AFTER);
+        return navigate(kv.getRowArray(), kv.getRowOffset() + offset,kv.getRowLength()- offset,Terminate.AFTER);
     }
 
     @Override

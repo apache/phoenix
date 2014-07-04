@@ -242,7 +242,8 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                     }
                 } else if (localIndex) {
                     if (splitScan.getStartRow().length != 0 || splitScan.getStopRow().length != 0) {
-                        SaltingUtil.addRegionStartKeyToScanStartAndStopRows(split.getLowerRange(), splitScan);
+                        SaltingUtil.addRegionStartKeyToScanStartAndStopRows(split.getLowerRange(),split.getUpperRange(),
+                            splitScan);
                     }
                 } 
                 if (ScanUtil.intersectScanRange(splitScan, split.getLowerRange(), split.getUpperRange(), this.context.getScanRanges().useSkipScanFilter())) {
