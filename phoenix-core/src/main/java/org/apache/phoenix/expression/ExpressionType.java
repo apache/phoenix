@@ -88,6 +88,8 @@ import com.google.common.collect.Maps;
  *
  * @since 0.1
  */
+// Important : When you want to add new Types make sure to add those towards the end, not changing the existing type's
+// ordinal
 public enum ExpressionType {
     ReverseFunction(ReverseFunction.class),
     RowKey(RowKeyColumnExpression.class),
@@ -166,14 +168,14 @@ public enum ExpressionType {
     ArrayConstructorExpression(ArrayConstructorExpression.class),
     SQLViewTypeFunction(SQLViewTypeFunction.class),
     ExternalSqlTypeIdFunction(ExternalSqlTypeIdFunction.class),
-    NthValueFunction(NthValueFunction.class),
-    FirstValueFunction(FirstValueFunction.class),
-    LastValueFunction(LastValueFunction.class),
     ConvertTimezoneFunction(ConvertTimezoneFunction.class),
     DecodeFunction(DecodeFunction.class),
     TimezoneOffsetFunction(TimezoneOffsetFunction.class),
     EncodeFunction(EncodeFunction.class),
     LpadFunction(LpadFunction.class),
+    NthValueFunction(NthValueFunction.class),
+    FirstValueFunction(FirstValueFunction.class),
+    LastValueFunction(LastValueFunction.class),
     ArrayAnyComparisonExpression(ArrayAnyComparisonExpression.class),
     ArrayAllComparisonExpression(ArrayAllComparisonExpression.class),
     InlineArrayElemRefExpression(InlineArrayElemRefExpression.class);
