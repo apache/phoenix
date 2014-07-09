@@ -26,6 +26,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
@@ -143,4 +144,76 @@ public class CsvBulkLoadToolIT {
         rs.close();
         stmt.close();
     }
+
+    @Test
+    public void testImportWithIndex() throws Exception {
+
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE TABLE3 (ID INTEGER NOT NULL PRIMARY KEY, " +
+            "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
+        String ddl = "CREATE INDEX TABLE3_IDX ON TABLE3 "
+                + " (FIRST_NAME ASC)"
+                + " INCLUDE (LAST_NAME)";
+        stmt.execute(ddl);
+        
+        FileSystem fs = FileSystem.get(hbaseTestUtil.getConfiguration());
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input3.csv"));
+        PrintWriter printWriter = new PrintWriter(outputStream);
+        printWriter.println("1,FirstName 1,LastName 1");
+        printWriter.println("2,FirstName 2,LastName 2");
+        printWriter.close();
+
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(hbaseTestUtil.getConfiguration());
+        int exitCode = csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/input3.csv",
+                "--table", "table3",
+                "--zookeeper", zkQuorum});
+        assertEquals(0, exitCode);
+
+        ResultSet rs = stmt.executeQuery("SELECT id, FIRST_NAME FROM TABLE3 where first_name='FirstName 2'");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("FirstName 2", rs.getString(2));
+
+        rs.close();
+        stmt.close();
+    }
+    
+    @Test
+    public void testImportOneIndexTable() throws Exception {
+
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE TABLE4 (ID INTEGER NOT NULL PRIMARY KEY, " +
+            "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
+        String ddl = "CREATE INDEX TABLE4_IDX ON TABLE4 "
+                + " (FIRST_NAME ASC)";
+        stmt.execute(ddl);
+        
+        FileSystem fs = FileSystem.get(hbaseTestUtil.getConfiguration());
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input4.csv"));
+        PrintWriter printWriter = new PrintWriter(outputStream);
+        printWriter.println("1,FirstName 1,LastName 1");
+        printWriter.println("2,FirstName 2,LastName 2");
+        printWriter.close();
+
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(hbaseTestUtil.getConfiguration());
+        int exitCode = csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/input4.csv",
+                "--table", "table4",
+                "--index-table", "TABLE4_IDX",
+                "--zookeeper", zkQuorum});
+        assertEquals(0, exitCode);
+
+        ResultSet rs = stmt.executeQuery("SELECT * FROM TABLE4");
+        assertFalse(rs.next());
+        rs = stmt.executeQuery("SELECT FIRST_NAME FROM TABLE4 where FIRST_NAME='FirstName 1'");
+        assertTrue(rs.next());
+        assertEquals("FirstName 1", rs.getString(1));
+
+        rs.close();
+        stmt.close();
+    }
+    
 }

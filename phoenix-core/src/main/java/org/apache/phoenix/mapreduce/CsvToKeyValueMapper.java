@@ -33,6 +33,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
@@ -81,6 +82,9 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
 
     /** Configuration key for the name of the output table */
     public static final String TABLE_NAME_CONFKEY = "phoenix.mapreduce.import.tablename";
+    
+    /** Configuration key for the name of the output index table */
+    public static final String INDEX_TABLE_NAME_CONFKEY = "phoenix.mapreduce.import.indextablename";
 
     /** Configuration key for the columns to be imported */
     public static final String COLUMN_INFO_CONFKEY = "phoenix.mapreduce.import.columninfos";
@@ -93,6 +97,7 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
     private MapperUpsertListener upsertListener;
     private CsvLineParser csvLineParser;
     private ImportPreUpsertKeyValueProcessor preUpdateProcessor;
+    private byte[] tableName;
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
@@ -115,6 +120,11 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
         csvLineParser = new CsvLineParser(conf.get(FIELD_DELIMITER_CONFKEY).charAt(0));
 
         preUpdateProcessor = loadPreUpsertProcessor(conf);
+        if(!conf.get(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY, "").isEmpty()){
+        	tableName = Bytes.toBytes(conf.get(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY));
+        } else {
+        	tableName = Bytes.toBytes(conf.get(CsvToKeyValueMapper.TABLE_NAME_CONFKEY, ""));
+        }
     }
 
     @SuppressWarnings("deprecation")
@@ -136,13 +146,17 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
             csvUpsertExecutor.execute(ImmutableList.of(csvRecord));
 
             Iterator<Pair<byte[], List<KeyValue>>> uncommittedDataIterator
-                    = PhoenixRuntime.getUncommittedDataIterator(conn);
+                    = PhoenixRuntime.getUncommittedDataIterator(conn, true);
             while (uncommittedDataIterator.hasNext()) {
                 Pair<byte[], List<KeyValue>> kvPair = uncommittedDataIterator.next();
+                if(Bytes.compareTo(tableName, kvPair.getFirst()) != 0) {
+                	// skip edits for other tables
+                	continue;
+                }
                 List<KeyValue> keyValueList = kvPair.getSecond();
                 keyValueList = preUpdateProcessor.preUpsert(kvPair.getFirst(), keyValueList);
                 for (KeyValue kv : keyValueList) {
-                    outputKey.set(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength());
+                    outputKey.set(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
                     context.write(outputKey, kv);
                 }
             }
