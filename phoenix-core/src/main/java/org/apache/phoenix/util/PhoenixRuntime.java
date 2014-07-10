@@ -434,7 +434,7 @@ public class PhoenixRuntime {
      * been encoded and will not appear in the returned values.
      * @param conn an open connection
      * @param name the full table name
-     * @param value the value that was encoded with {@link #encodePK(Connection, String, Object[])}
+     * @param encodedValue the value that was encoded with {@link #encodePK(Connection, String, Object[])}
      * @return the Object values encoded in the byte array value
      * @throws SQLException
      */
@@ -442,15 +442,17 @@ public class PhoenixRuntime {
         PTable table = getTable(conn, name);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         int offset = (table.getBucketNum() == null ? 0 : 1) + (table.isMultiTenant() && pconn.getTenantId() != null ? 1 : 0);
+        int nValues = table.getPKColumns().size() - offset;
         RowKeySchema schema = table.getRowKeySchema();
-        int nValues = schema.getMaxFields()-offset;
         Object[] values = new Object[nValues];
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        schema.iterator(value, ptr);
         int i = 0;
-        schema.iterator(value, ptr, offset);
-        while (i < nValues && schema.next(ptr, i, value.length) != null) {
-            values[i] = schema.getField(i).getDataType().toObject(ptr);
+        int fieldIdx = offset;
+        while (i < nValues && schema.next(ptr, fieldIdx, value.length) != null) {
+            values[i] = schema.getField(fieldIdx).getDataType().toObject(ptr);
             i++;
+            fieldIdx++;
         }
         return values;
     }
