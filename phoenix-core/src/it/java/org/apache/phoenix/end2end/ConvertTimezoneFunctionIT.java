@@ -16,18 +16,21 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+
 import org.apache.phoenix.schema.IllegalDataException;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * CONVERT_TZ(date, 'from_timezone', 'to_timezone') tests
  *
  */
+@Category(HBaseManagedTimeTest.class)
 public class ConvertTimezoneFunctionIT extends BaseHBaseManagedTimeIT {
 
     @Test
