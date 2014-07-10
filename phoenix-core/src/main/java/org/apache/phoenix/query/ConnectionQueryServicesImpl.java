@@ -1357,6 +1357,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
                         SQLException sqlE = null;
                         PhoenixConnection metaConnection = null;
+                        int origClientRetries = ConnectionQueryServicesImpl.this.config.getInt(
+                            HConstants.HBASE_CLIENT_RETRIES_NUMBER, HConstants.DEFAULT_HBASE_CLIENT_RETRIES_NUMBER);
                         try {
                             openConnection();
                             Properties scnProps = PropertiesUtil.deepCopy(props);
@@ -1364,6 +1366,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     PhoenixRuntime.CURRENT_SCN_ATTRIB,
                                     Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
                             scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
+                            // during initialization fast fail when connection has issues
+                            ConnectionQueryServicesImpl.this.config.setInt(
+                                    HConstants.HBASE_CLIENT_RETRIES_NUMBER, Math.min(2,origClientRetries));
                             metaConnection = new PhoenixConnection(
                                     ConnectionQueryServicesImpl.this, url, scnProps, newEmptyMetaData());
                             try {
@@ -1382,6 +1387,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         } catch (SQLException e) {
                             sqlE = e;
                         } finally {
+                            ConnectionQueryServicesImpl.this.config.setInt(
+                                    HConstants.HBASE_CLIENT_RETRIES_NUMBER, origClientRetries);
                             try {
                                 if (metaConnection != null) metaConnection.close();
                             } catch (SQLException e) {
