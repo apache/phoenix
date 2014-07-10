@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.query;
 
+import static com.google.common.io.Closeables.closeQuietly;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
@@ -1642,6 +1643,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 return sequence.createSequence(result);
             } catch (IOException e) {
                 throw ServerUtil.parseServerException(e);
+            } finally {
+                closeQuietly(htable);
             }
         } finally {
             sequence.getLock().unlock();
@@ -1666,6 +1669,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 return sequence.dropSequence(result);
             } catch (IOException e) {
                 throw ServerUtil.parseServerException(e);
+            } finally {
+                closeQuietly(htable);
             }
         } finally {
             sequence.getLock().unlock();
