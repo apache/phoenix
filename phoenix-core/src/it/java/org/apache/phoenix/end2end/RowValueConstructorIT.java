@@ -894,4 +894,201 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         assertEquals("b",rs.getString(2));
         assertFalse(rs.next());
     }
+    
+    private Connection nextConnection(String url) throws SQLException {
+        Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        return DriverManager.getConnection(url, props);
+    }
+    
+    //Table type - multi-tenant. Salted - No. Query against - tenant specific view. Connection used for running IN list query - tenant specific. 
+    @Test
+    public void testInListOfRVC1() throws Exception {
+        String tenantId = "ABC";
+        String tenantSpecificUrl = getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId;
+        String baseTableDDL = "CREATE TABLE t (tenantId varchar(5) NOT NULL, pk2 varchar(5) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3)) MULTI_TENANT=true";
+        createTestTable(getUrl(), baseTableDDL, null, nextTimestamp());
+        String tenantTableDDL = "CREATE VIEW t_view (tenant_col VARCHAR) AS SELECT *\n" + 
+                "                FROM t";
+        createTestTable(tenantSpecificUrl, tenantTableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(tenantSpecificUrl);
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(tenantSpecificUrl);
+        //order by needed on the query to make the order of rows returned deterministic.
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t_view WHERE (pk2, pk3) IN ((?, ?), (?, ?)) ORDER BY pk2");
+        stmt.setString(1, "helo3");
+        stmt.setInt(2, 3);
+        stmt.setString(3, "helo5");
+        stmt.setInt(4, 5);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        conn.close();
+    }
+    
+    //Table type - multi-tenant. Salted - No. Query against - base table. Connection used for running IN list query - global. 
+    @Test
+    public void testInListOfRVC2() throws Exception {
+        String tenantId = "ABC";
+        String tenantSpecificUrl = getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId;
+        String baseTableDDL = "CREATE TABLE t (tenantId varchar(5) NOT NULL, pk2 varchar(5) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3)) MULTI_TENANT=true";
+        createTestTable(getUrl(), baseTableDDL, null, nextTimestamp());
+        String tenantTableDDL = "CREATE VIEW t_view (tenant_col VARCHAR) AS SELECT *\n" + 
+                "                FROM t";
+        createTestTable(tenantSpecificUrl, tenantTableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(tenantSpecificUrl);
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(getUrl());
+        //order by needed on the query to make the order of rows returned deterministic.
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) IN ((?, ?, ?), (?, ?, ?)) ORDER BY pk2");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo3");
+        stmt.setInt(3, 3);
+        stmt.setString(4, tenantId);
+        stmt.setString(5, "helo5");
+        stmt.setInt(6, 5);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        conn.close();
+    }
+    
+    //Table type - non multi-tenant. Salted - No. Query against - Table. Connection used for running IN list query - global. 
+    @Test
+    public void testInListOfRVC3() throws Exception {
+        String tenantId = "ABC";
+        String tableDDL = "CREATE TABLE t (tenantId varchar(5) NOT NULL, pk2 varchar(5) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3))";
+        createTestTable(getUrl(), tableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(getUrl());
+        //order by needed on the query to make the order of rows returned deterministic.
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) IN ((?, ?, ?), (?, ?, ?)) ORDER BY pk2");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo3");
+        stmt.setInt(3, 3);
+        stmt.setString(4, tenantId);
+        stmt.setString(5, "helo5");
+        stmt.setInt(6, 5);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        conn.close();
+    }
+    
+    //Table type - multi-tenant. Salted - Yes. Query against - base table. Connection used for running IN list query - global. 
+    @Test 
+    public void testInListOfRVC4() throws Exception {
+        String tenantId = "ABC";
+        String tenantSpecificUrl = getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId;
+        String baseTableDDL = "CREATE TABLE t (tenantId varchar(5) NOT NULL, pk2 varchar(5) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3)) SALT_BUCKETS=4, MULTI_TENANT=true";
+        createTestTable(getUrl(), baseTableDDL, null, nextTimestamp());
+        String tenantTableDDL = "CREATE VIEW t_view (tenant_col VARCHAR) AS SELECT *\n" + 
+                "                FROM t";
+        createTestTable(tenantSpecificUrl, tenantTableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(tenantSpecificUrl);
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(getUrl());
+        //order by needed on the query to make the order of rows returned deterministic.
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) IN ((?, ?, ?), (?, ?, ?)) ORDER BY pk2");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo3");
+        stmt.setInt(3, 3);
+        stmt.setString(4, tenantId);
+        stmt.setString(5, "helo5");
+        stmt.setInt(6, 5);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        conn.close();
+    }
+    
+    //Table type - non multi-tenant. Salted - Yes. Query against - regular table. Connection used for running IN list query - global. 
+    @Test 
+    public void testInListOfRVC5() throws Exception {
+        String tenantId = "ABC";
+        String tableDDL = "CREATE TABLE t (tenantId varchar(5) NOT NULL, pk2 varchar(5) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3)) SALT_BUCKETS=4";
+        createTestTable(getUrl(), tableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(getUrl());
+        //order by needed on the query to make the order of rows returned deterministic.
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) IN ((?, ?, ?), (?, ?, ?)) ORDER BY pk2");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo3");
+        stmt.setInt(3, 3);
+        stmt.setString(4, tenantId);
+        stmt.setString(5, "helo5");
+        stmt.setInt(6, 5);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        conn.close();
+    }
+
 }

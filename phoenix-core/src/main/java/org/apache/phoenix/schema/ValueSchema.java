@@ -275,6 +275,9 @@ public abstract class ValueSchema implements Writable {
         }
         
         protected ValueSchemaBuilder addField(PDatum datum, boolean isNullable, SortOrder sortOrder) {
+            if(fields.size() >= nFields) {
+                throw new IllegalArgumentException("Adding too many fields to Schema (max " + nFields + ")");
+            }
             fields.add(new Field(datum, isNullable, 1, sortOrder));
             return this;
         }
