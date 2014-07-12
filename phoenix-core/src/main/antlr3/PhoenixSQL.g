@@ -731,17 +731,18 @@ subtract_expression returns [ParseNode ret]
 
 concat_expression returns [ParseNode ret]
 @init{List<ParseNode> l = new ArrayList<ParseNode>(4); }
-    :   i=multiply_expression {l.add(i);} (CONCAT i=multiply_expression {l.add(i);})* { $ret = l.size() == 1 ? l.get(0) : factory.concat(l); }
+    :   i=multiply_divide_expression {l.add(i);} (CONCAT i=multiply_divide_expression {l.add(i);})* { $ret = l.size() == 1 ? l.get(0) : factory.concat(l); }
     ;
 
-multiply_expression returns [ParseNode ret]
-@init{List<ParseNode> l = new ArrayList<ParseNode>(4); }
-    :   i=divide_expression {l.add(i);} (ASTERISK i=divide_expression {l.add(i);})* { $ret = l.size() == 1 ? l.get(0) : factory.multiply(l); }
-    ;
-
-divide_expression returns [ParseNode ret]
-@init{List<ParseNode> l = new ArrayList<ParseNode>(4); }
-    :   i=negate_expression {l.add(i);} (DIVIDE i=negate_expression {l.add(i);})* { $ret = l.size() == 1 ? l.get(0) : factory.divide(l); }
+multiply_divide_expression returns [ParseNode ret]
+@init{ParseNode lhs = null; List<ParseNode> l;}
+    :   i=negate_expression {lhs = i;} 
+        (op=(ASTERISK | DIVIDE) rhs=negate_expression {
+            l = Arrays.asList(lhs, rhs); 
+            lhs = (op.getType() == ASTERISK ? factory.multiply(l) : factory.divide(l) );
+            }
+        )*
+        { $ret = lhs; }
     ;
 
 negate_expression returns [ParseNode ret]
