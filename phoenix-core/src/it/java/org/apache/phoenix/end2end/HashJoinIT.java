@@ -930,6 +930,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +"\n"  +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER SORTED BY [I1.0:NAME, I2.0:NAME]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
@@ -962,6 +963,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER SORTED BY [O.order_id]\n"+
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
@@ -1041,6 +1043,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */     
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER SORTED BY [O.Q DESC NULLS LAST, I.IID]\n"+
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
@@ -1057,6 +1060,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */     
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER SORTED BY [O.Q DESC, I.IID]\n"+
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +

@@ -361,7 +361,9 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         query = "SELECT v1 as foo FROM " + DATA_TABLE_FULL_NAME + " WHERE v2 = '1' ORDER BY foo";
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         if(localIndex){
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" +DATA_TABLE_FULL_NAME + " [-32768,~'1']\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" +DATA_TABLE_FULL_NAME + " [-32768,~'1']\n" + 
+                    "    SERVER SORTED BY [V1]\n" + 
+                    "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         } else {
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +INDEX_TABLE_FULL_NAME + " [~'1']\n" + 
                     "    SERVER SORTED BY [V1]\n" + 

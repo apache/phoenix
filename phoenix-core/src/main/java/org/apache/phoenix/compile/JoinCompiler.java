@@ -1139,7 +1139,8 @@ public class JoinCompiler {
             if (!plan.getTableRef().equals(tableRef)) {
                 // Use local index plan only when all the columns to project are available in index.
                 // Other wise use data plan.
-                // TODO: In join queries support joining back to data table from index when columns to project are missed index. 
+                // TODO: In join queries support joining back data table row from local index when
+                // columns to project are missed in the index. refer PHOENIX-1015. 
                 if (!localIndex || plan.getContext().getDataColumns().isEmpty()) {
                     replacement.put(tableRef, plan.getTableRef());
                 } 

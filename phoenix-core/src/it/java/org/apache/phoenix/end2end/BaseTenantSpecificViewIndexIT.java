@@ -149,29 +149,4 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
         assertValuesEqualsResultSet(rs,expectedResultsA);
         assertFalse(rs.next());
     }
-
-    /**
-     * Asserts that we find the expected values in the result set. We don't know the order, since we don't always
-     * have an order by and we're going through indexes, but we assert that each expected result occurs once as
-     * expected (in any order).
-     */
-    private void assertValuesEqualsResultSet(ResultSet rs, List<List<Object>> expectedResults) throws SQLException {
-        int expectedCount = expectedResults.size();
-        int count = 0;
-        List<List<Object>> actualResults = Lists.newArrayList();
-        List<Object> errorResult = null;
-        while (rs.next() && errorResult == null) {
-            List<Object> result = Lists.newArrayList();
-            for (int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
-                result.add(rs.getObject(i+1));
-            }
-            if (!expectedResults.contains(result)) {
-                errorResult = result;
-            }
-            actualResults.add(result);
-            count++;
-        }
-        assertTrue("Could not find " + errorResult + " in expected results: " + expectedResults + " with actual results: " + actualResults, errorResult == null);
-        assertEquals(count, expectedCount);
-    }
 }

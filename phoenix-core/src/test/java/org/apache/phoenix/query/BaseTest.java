@@ -81,7 +81,10 @@ import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.math.BigDecimal;
 import java.sql.Array;
@@ -94,8 +97,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.logging.Level;
@@ -130,6 +135,8 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 /**
  * 
@@ -1310,5 +1317,53 @@ public abstract class BaseTest {
         } finally {
             admin.close();
         }
+    }
+
+    public static void assertOneOfValuesEqualsResultSet(ResultSet rs, List<List<Object>>... expectedResultsArray) throws SQLException {
+        List<List<Object>> results = Lists.newArrayList();
+        while (rs.next()) {
+            List<Object> result = Lists.newArrayList();
+            for (int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
+                result.add(rs.getObject(i+1));
+            }
+            results.add(result);
+        }
+        for (int j = 0; j < expectedResultsArray.length; j++) {
+            List<List<Object>> expectedResults = expectedResultsArray[j];
+            Set<List<Object>> expectedResultsSet = Sets.newHashSet(expectedResults);
+            Iterator<List<Object>> iterator = results.iterator();
+            while (iterator.hasNext()) {
+                if (expectedResultsSet.contains(iterator.next())) {
+                    iterator.remove();
+                }
+            }
+        }
+        if (results.isEmpty()) return;
+        fail("Unable to find " + results + " in " + Arrays.asList(expectedResultsArray));
+    }
+
+    /**
+     * Asserts that we find the expected values in the result set. We don't know the order, since we don't always
+     * have an order by and we're going through indexes, but we assert that each expected result occurs once as
+     * expected (in any order).
+     */
+    public static void assertValuesEqualsResultSet(ResultSet rs, List<List<Object>> expectedResults) throws SQLException {
+        int expectedCount = expectedResults.size();
+        int count = 0;
+        List<List<Object>> actualResults = Lists.newArrayList();
+        List<Object> errorResult = null;
+        while (rs.next() && errorResult == null) {
+            List<Object> result = Lists.newArrayList();
+            for (int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
+                result.add(rs.getObject(i+1));
+            }
+            if (!expectedResults.contains(result)) {
+                errorResult = result;
+            }
+            actualResults.add(result);
+            count++;
+        }
+        assertTrue("Could not find " + errorResult + " in expected results: " + expectedResults + " with actual results: " + actualResults, errorResult == null);
+        assertEquals(count, expectedCount);
     }
 }
