@@ -31,7 +31,6 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.PTable.IndexType;
 
 
 /**
@@ -55,8 +54,7 @@ public class SkipRangeParallelIteratorRegionSplitter extends DefaultParallelIter
 
     public List<HRegionLocation> filterRegions(List<HRegionLocation> allTableRegions, final ScanRanges ranges) {
         Iterable<HRegionLocation> regions;
-        if (ranges == ScanRanges.EVERYTHING
-                || tableRef.getTable().getIndexType() == IndexType.LOCAL) {
+        if (ranges == ScanRanges.EVERYTHING) {
             return allTableRegions;
         } else if (ranges == ScanRanges.NOTHING) { // TODO: why not emptyList?
             return Lists.<HRegionLocation>newArrayList();

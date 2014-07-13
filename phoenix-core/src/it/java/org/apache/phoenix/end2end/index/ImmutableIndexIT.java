@@ -213,11 +213,6 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         testDeleteFromAllPKColumnIndex(false);
     }
 
-    @Test
-    public void testDeleteFromAllPKColumnLocalIndex() throws Exception {
-        testDeleteFromAllPKColumnIndex(true);
-    }
-
     private void testDeleteFromAllPKColumnIndex(boolean localIndex) throws Exception {
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
