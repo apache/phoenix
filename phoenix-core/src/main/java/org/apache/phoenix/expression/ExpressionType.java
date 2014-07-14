@@ -178,7 +178,9 @@ public enum ExpressionType {
     LastValueFunction(LastValueFunction.class),
     ArrayAnyComparisonExpression(ArrayAnyComparisonExpression.class),
     ArrayAllComparisonExpression(ArrayAllComparisonExpression.class),
-    InlineArrayElemRefExpression(InlineArrayElemRefExpression.class);
+    InlineArrayElemRefExpression(InlineArrayElemRefExpression.class),
+    ModulusExpression(ModulusExpression.class);
+    
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }

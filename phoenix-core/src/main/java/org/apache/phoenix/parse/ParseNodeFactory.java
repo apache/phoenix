@@ -198,6 +198,10 @@ public class ParseNodeFactory {
     public MultiplyParseNode multiply(List<ParseNode> children) {
         return new MultiplyParseNode(children);
     }
+    
+    public ModulusParseNode modulus(List<ParseNode> children) {
+        return new ModulusParseNode(children);
+    }
 
     public AndParseNode and(List<ParseNode> children) {
         return new AndParseNode(children);
