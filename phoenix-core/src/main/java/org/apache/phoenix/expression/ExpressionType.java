@@ -180,7 +180,7 @@ public enum ExpressionType {
     ArrayAnyComparisonExpression(ArrayAnyComparisonExpression.class),
     ArrayAllComparisonExpression(ArrayAllComparisonExpression.class),
     InlineArrayElemRefExpression(InlineArrayElemRefExpression.class),
-    SQLIndexTypeFunction(SQLIndexTypeFunction.class);
+    SQLIndexTypeFunction(SQLIndexTypeFunction.class),
     ModulusExpression(ModulusExpression.class);
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
