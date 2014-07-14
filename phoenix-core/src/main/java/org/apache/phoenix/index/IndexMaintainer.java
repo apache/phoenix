@@ -153,20 +153,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      */
     public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
             List<PTable> indexes) {
-        serialize(dataTable, ptr, indexes, false);
-    }
-
-    /**
-     * For client-side to serialize all IndexMaintainers for a given table
-     * @param dataTable data table
-     * @param ptr bytes pointer to hold returned serialized value
-     * @param indexes indexes to serialize
-     * @param serializeAlways true means serialize even in case of immutable indexing.
-     */
-    public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
-            List<PTable> indexes, boolean serializeAlways) {
         Iterator<PTable> indexesItr = nonDisabledIndexIterator(indexes.iterator());
-        if ((dataTable.isImmutableRows() && serializeAlways) || !indexesItr.hasNext()) {
+        if ((dataTable.isImmutableRows()) || !indexesItr.hasNext()) {
             ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             return;
         }

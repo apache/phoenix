@@ -127,6 +127,23 @@ public class LocalIndexIT extends BaseIndexIT {
     }
 
     @Test
+    public void testLocalIndexOnTableWithImmutableRows() throws Exception {
+        createBaseTable(DATA_TABLE_NAME, null, null);
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        Connection conn2 = DriverManager.getConnection(getUrl());
+        try {
+            conn1.createStatement().execute("ALTER TABLE " + DATA_TABLE_NAME + " SET IMMUTABLE_ROWS=true");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
+            fail("Local index aren't allowed on table with immutable rows");
+        } catch (SQLException e) { }
+        try {
+            conn2.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_FULL_NAME).next();
+            conn2.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,INDEX_TABLE_NAME));
+            fail("Local index should not be created.");
+        } catch (TableNotFoundException e) { }
+    }
+
+    @Test
     public void testLocalIndexTableRegionSplitPolicyAndSplitKeys() throws Exception {
         createBaseTable(DATA_TABLE_NAME, null,"('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());

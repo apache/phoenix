@@ -142,15 +142,7 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         // distributed across regions, using this scheme compensates for regions that
         // have more rows than others, by applying tighter splits and therefore spawning
         // off more scans over the overloaded regions.
-        PTable table = tableRef.getTable();
-        boolean localIndex = table.getType().equals(PTableType.INDEX) && table.getIndexType().equals(IndexType.LOCAL);
-        int splitsPerRegion;
-        if (localIndex) {
-            splitsPerRegion = 1;
-        } else {
-            splitsPerRegion = regions.size() >= targetConcurrency ? 1 : (regions.size() > targetConcurrency / 2 ? maxConcurrency : targetConcurrency) / regions.size();
-        }
-        splitsPerRegion = Math.min(splitsPerRegion, maxIntraRegionParallelization);
+        int splitsPerRegion = getSplitsPerRegion(regions.size());
         // Create a multi-map of ServerName to List<KeyRange> which we'll use to round robin from to ensure
         // that we keep each region server busy for each query.
         ListMultimap<HRegionLocation,KeyRange> keyRangesPerRegion = ArrayListMultimap.create(regions.size(),regions.size() * splitsPerRegion);;
@@ -232,5 +224,14 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
     @Override
     public List<KeyRange> getSplits() throws SQLException {
         return genKeyRanges(getAllRegions());
+    }
+
+    @Override
+    public int getSplitsPerRegion(int numRegions) {
+        int splitsPerRegion =
+                numRegions >= targetConcurrency ? 1
+                        : (numRegions > targetConcurrency / 2 ? maxConcurrency : targetConcurrency)
+                                / numRegions;
+        return Math.min(splitsPerRegion, maxIntraRegionParallelization);
     }
 }

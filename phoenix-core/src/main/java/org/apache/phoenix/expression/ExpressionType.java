@@ -170,7 +170,6 @@ public enum ExpressionType {
     SQLViewTypeFunction(SQLViewTypeFunction.class),
     ExternalSqlTypeIdFunction(ExternalSqlTypeIdFunction.class),
     ConvertTimezoneFunction(ConvertTimezoneFunction.class),
-    SQLIndexTypeFunction(SQLIndexTypeFunction.class),
     DecodeFunction(DecodeFunction.class),
     TimezoneOffsetFunction(TimezoneOffsetFunction.class),
     EncodeFunction(EncodeFunction.class),
@@ -181,8 +180,8 @@ public enum ExpressionType {
     ArrayAnyComparisonExpression(ArrayAnyComparisonExpression.class),
     ArrayAllComparisonExpression(ArrayAllComparisonExpression.class),
     InlineArrayElemRefExpression(InlineArrayElemRefExpression.class),
+    SQLIndexTypeFunction(SQLIndexTypeFunction.class);
     ModulusExpression(ModulusExpression.class);
-    
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }

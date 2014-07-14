@@ -212,6 +212,7 @@ public enum SQLExceptionCode {
     VIEW_WHERE_IS_CONSTANT(1045, "43A02", "WHERE clause in VIEW should not evaluate to a constant."),
     CANNOT_UPDATE_VIEW_COLUMN(1046, "43A03", "Column updated in VIEW may not differ from value specified in WHERE clause."),
     TOO_MANY_INDEXES(1047, "43A04", "Too many indexes have already been created on the physical table."),
+    NO_LOCAL_INDEX_ON_TABLE_WITH_IMMUTABLE_ROWS(1048,"43A04","Local indexes aren't allowed on tables with immutable rows."),
         
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

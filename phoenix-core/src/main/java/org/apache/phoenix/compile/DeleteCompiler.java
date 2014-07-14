@@ -28,7 +28,6 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -67,7 +66,6 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -170,7 +168,7 @@ public class DeleteCompiler {
         }
         for (PTable index : tableRef.getTable().getIndexes()) {
             for (PColumn column : index.getPKColumns()) {
-                if (!IndexUtil.isDataPKColumn(column) && (index.getIndexType() != IndexType.LOCAL || !column.getName().toString().equals(MetaDataUtil.VIEW_INDEX_ID_COLUMN_NAME))) {
+                if (!IndexUtil.isDataPKColumn(column)) {
                     return true;
                 }
             }

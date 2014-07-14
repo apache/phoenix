@@ -64,7 +64,6 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Types;
-import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
@@ -519,7 +518,7 @@ public class MetaDataClient {
                 List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
                 // Only build newly created index.
                 indexes.add(index);
-                IndexMaintainer.serialize(dataTable, ptr, indexes, false);
+                IndexMaintainer.serialize(dataTable, ptr, indexes);
                 scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
                 // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
                 // However, in this case, we need to project all of the data columns that contribute to the index.
@@ -635,6 +634,9 @@ public class MetaDataClient {
                  * 2) for a view on an index.
                  */
                 if (statement.getIndexType() == IndexType.LOCAL || (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED)) {
+                    if (dataTable.isImmutableRows() && statement.getIndexType() == IndexType.LOCAL) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_LOCAL_INDEX_ON_TABLE_WITH_IMMUTABLE_ROWS).setTableName(indexTableName.getTableName()).build().buildException();
+                    }
                     allocateIndexId = true;
                     // Next add index ID column
                     PDataType dataType = MetaDataUtil.getViewIndexIdDataType();

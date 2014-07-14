@@ -1135,15 +1135,8 @@ public class JoinCompiler {
             List<OrderByNode> orderBy = tableRef.equals(orderByTableRef) ? select.getOrderBy() : null;
             SelectStatement stmt = getSubqueryForOptimizedPlan(select.getHint(), table.getDynamicColumns(), tableRef, join.getColumnRefs(), table.getPreFiltersCombined(), groupBy, orderBy, table.isWildCardSelect());
             QueryPlan plan = statement.getConnection().getQueryServices().getOptimizer().optimize(statement, stmt);
-            boolean localIndex = plan.getContext().getCurrentTable().getTable().getIndexType()==IndexType.LOCAL;
             if (!plan.getTableRef().equals(tableRef)) {
-                // Use local index plan only when all the columns to project are available in index.
-                // Other wise use data plan.
-                // TODO: In join queries support joining back data table row from local index when
-                // columns to project are missed in the index. refer PHOENIX-1015. 
-                if (!localIndex || plan.getContext().getDataColumns().isEmpty()) {
-                    replacement.put(tableRef, plan.getTableRef());
-                } 
+                replacement.put(tableRef, plan.getTableRef());
             }            
         }
         

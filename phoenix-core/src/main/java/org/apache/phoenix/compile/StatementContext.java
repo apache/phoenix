@@ -124,7 +124,7 @@ public class StatementContext {
     }
 
     /**
-     * build map from dataColumn to what will be it's position in single KeyValue value bytes
+     * build map from dataColumn to what will be its position in single KeyValue value bytes
      * returned from the coprocessor that joins from the index row back to the data row.
      * @param column
      * @return

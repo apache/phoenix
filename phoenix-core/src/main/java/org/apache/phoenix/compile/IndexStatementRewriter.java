@@ -95,12 +95,6 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
             return node;
 
         String indexColName = IndexUtil.getIndexColumnName(dataCol);
-        // Same alias as before, but use the index column name instead of the data column name
-        // ColumnParseNode cannot be resolved. When this occurs, add the dataColRef to a list
-        // on the StatementContext to indicate that a join back to the data table is necessary.
-        // At ExpressionCompiler.resolveColumn(), test if the table is a local index, and only
-        // then use the alternate. How will the values be resolved on the client? Need to have
-        // a special cf? Or append the values to the PK?
         ParseNode indexColNode = new ColumnParseNode(tName, node.isCaseSensitive() ? '"' + indexColName + '"' : indexColName, node.getAlias());
         PDataType indexColType = IndexUtil.getIndexColumnDataType(dataCol);
         PDataType dataColType = dataColRef.getColumn().getDataType();
