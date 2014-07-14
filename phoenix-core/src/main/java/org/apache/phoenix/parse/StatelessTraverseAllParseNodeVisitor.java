@@ -68,6 +68,11 @@ public class StatelessTraverseAllParseNodeVisitor extends TraverseAllParseNodeVi
     }
 
     @Override
+    public Void visitLeave(ModulusParseNode node, List<Void> l) throws SQLException {
+        return null;
+    }
+
+    @Override
     public Void visitLeave(SubtractParseNode node, List<Void> l) throws SQLException {
         return null;
     }

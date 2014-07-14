@@ -18,6 +18,7 @@
 package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.List;
 
 
@@ -65,6 +66,9 @@ public interface ParseNodeVisitor<E> {
     
     public boolean visitEnter(MultiplyParseNode node) throws SQLException;
     public E visitLeave(MultiplyParseNode node, List<E> l) throws SQLException;
+
+    public boolean visitEnter(ModulusParseNode node) throws SQLException;
+    public E visitLeave(ModulusParseNode node, List<E> l) throws SQLException;
     
     public boolean visitEnter(DivideParseNode node) throws SQLException;
     public E visitLeave(DivideParseNode node, List<E> l) throws SQLException;
