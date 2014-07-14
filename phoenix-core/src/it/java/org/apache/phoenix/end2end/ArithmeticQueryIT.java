@@ -669,6 +669,29 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
+    public void testOrderOfOperationsAdditionModulus() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 + 4 % 3
+        // 6 + 1
+        // 7
+        rs = conn.createStatement().executeQuery("SELECT six + four % three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(7, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 % 3 + 6
+        // 1 + 6
+        // 7
+        rs = conn.createStatement().executeQuery("SELECT four % three + six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(7, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
     public void testOrderOfOperationsSubtrationMultiplication() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         initIntegerTable(conn);
@@ -715,6 +738,29 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
+    public void testOrderOfOperationsSubtractionModulus() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 - 4 % 3
+        // 6 - 1
+        // 5
+        rs = conn.createStatement().executeQuery("SELECT six - four % three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(5, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 % 3 - 6
+        // 1 - 6
+        // -5
+        rs = conn.createStatement().executeQuery("SELECT four % three - six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(-5, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
     public void testOrderOfOperationsMultiplicationDivision() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         initIntegerTable(conn);
@@ -734,6 +780,52 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         rs = conn.createStatement().executeQuery("SELECT four / three * six FROM ARITHMETIC_TEST");
         assertTrue(rs.next());
         assertEquals(6, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testOrderOfOperationsMultiplicationModulus() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 * 4 % 3
+        // 24 % 3
+        // 0
+        rs = conn.createStatement().executeQuery("SELECT six * four % three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(0, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 % 3 * 6
+        // 1 * 6
+        // 6
+        rs = conn.createStatement().executeQuery("SELECT four % three * six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(6, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testOrderOfOperationsDivisionModulus() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 / 4 % 3
+        // 1 % 3     (integer division)
+        // 1
+        rs = conn.createStatement().executeQuery("SELECT six / four % three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 % 3 / 6
+        // 1 / 6
+        // 0         (integer division)
+        rs = conn.createStatement().executeQuery("SELECT four % three / six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(0, rs.getLong(1));
         assertFalse(rs.next());
     }
 }

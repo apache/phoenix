@@ -98,6 +98,11 @@ public abstract class TraverseAllParseNodeVisitor<T> extends BaseParseNodeVisito
     public boolean visitEnter(DivideParseNode node) throws SQLException {
         return true;
     }
+    
+    @Override
+    public boolean visitEnter(ModulusParseNode node) throws SQLException {
+        return true;
+    }
 
     @Override
     public boolean visitEnter(BetweenParseNode node) throws SQLException {
