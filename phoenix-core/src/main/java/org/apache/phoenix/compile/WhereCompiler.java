@@ -44,8 +44,10 @@ import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.LocalIndexDataColumnRef;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
@@ -135,6 +137,15 @@ public class WhereCompiler {
         protected ColumnRef resolveColumn(ColumnParseNode node) throws SQLException {
             ColumnRef ref = super.resolveColumn(node);
             PTable table = ref.getTable();
+            // if current table in the context is local index and table in column reference is global means
+            // the column is not present in the local index. If where condition contains the column 
+            // not present in the index then we need to go through main table for each row in index and get the
+            // missing column which is like full scan of index table and data table. Which is
+            // inefficient. Then we can skip this plan.
+            if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL
+                    && (table.getIndexType() == null || table.getIndexType() == IndexType.GLOBAL)) {
+                throw new ColumnNotFoundException(ref.getColumn().getName().getString());
+            }
             // Track if we need to compare KeyValue during filter evaluation
             // using column family. If the column qualifier is enough, we
             // just use that.

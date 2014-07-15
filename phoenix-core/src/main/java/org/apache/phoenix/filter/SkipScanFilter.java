@@ -72,6 +72,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     private byte[] endKey; 
     private int endKeyLength;
     private boolean isDone;
+    private int offset;
 
     private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
@@ -84,6 +85,10 @@ public class SkipScanFilter extends FilterBase implements Writable {
 
     public SkipScanFilter(List<List<KeyRange>> slots, RowKeySchema schema) {
         init(slots, schema);
+    }
+    
+    public void setOffset(int offset) {
+        this.offset = offset;
     }
 
     private void init(List<List<KeyRange>> slots, RowKeySchema schema) {
@@ -113,7 +118,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
 
     @Override
     public ReturnCode filterKeyValue(Cell kv) {
-        return navigate(kv.getRowArray(), kv.getRowOffset(),kv.getRowLength(),Terminate.AFTER);
+        return navigate(kv.getRowArray(), kv.getRowOffset() + offset,kv.getRowLength()- offset,Terminate.AFTER);
     }
 
     @Override

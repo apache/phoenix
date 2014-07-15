@@ -42,12 +42,31 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     }
 
     @Test
+    public void testUpdatableViewLocalIndex() throws Exception {
+        testUpdatableView(null, true);
+    }
+
+    @Test
     public void testUpdatableViewsWithSameNameDifferentTenants() throws Exception {
         testUpdatableViewsWithSameNameDifferentTenants(null);
     }
 
     @Test
+    public void testUpdatableViewsWithSameNameDifferentTenantsWithLocalIndex() throws Exception {
+        testUpdatableViewsWithSameNameDifferentTenants(null, true);
+    }
+
+    @Test
     public void testMultiCFViewIndex() throws Exception {
+        testMultiCFViewIndex(false);
+    }
+
+    @Test
+    public void testMultiCFViewLocalIndex() throws Exception {
+        testMultiCFViewIndex(true);
+    }
+    
+    private void testMultiCFViewIndex(boolean localIndex) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE MT_BASE (PK1 VARCHAR not null, PK2 VARCHAR not null, "
                 + "MYCF1.COL1 varchar,MYCF2.COL2 varchar "
@@ -76,7 +95,11 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         assertFalse(rs.next());
         conn.createStatement().execute("UPSERT INTO acme VALUES ('e','f','g')");
         conn.commit();
-        conn.createStatement().execute("create index idx_acme on acme (COL1)");
+        if(localIndex){
+            conn.createStatement().execute("create local index idx_acme on acme (COL1)");
+        } else {
+            conn.createStatement().execute("create index idx_acme on acme (COL1)");
+        }
         rs = conn.createStatement().executeQuery("select * from acme");
         assertTrue(rs.next());
         assertEquals("b",rs.getString(1));
@@ -96,7 +119,11 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         assertEquals("f",rs.getString(2));
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("explain select pk2,col1 from acme where col1='f'");
-        assertEquals("CLIENT PARALLEL 4-WAY RANGE SCAN OVER _IDX_MT_BASE ['a',-32768,'f']",QueryUtil.getExplainPlan(rs));
+        if(localIndex){
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_MT_BASE ['a',-32768,'f']\nCLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
+        } else {
+            assertEquals("CLIENT PARALLEL 4-WAY RANGE SCAN OVER _IDX_MT_BASE ['a',-32768,'f']",QueryUtil.getExplainPlan(rs));
+        }
         
         try {
             // Cannot reference tenant_id column in tenant specific connection

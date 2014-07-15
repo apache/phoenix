@@ -42,6 +42,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.ScanUtil;
 
 import java.sql.SQLException;
@@ -115,7 +116,7 @@ public class ScanPlan extends BasicQueryPlan {
         if (isOrdered) {
             scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions());
         } else {
-            if (isSalted &&
+            if ((isSalted || table.getIndexType() == IndexType.LOCAL) &&
                     (context.getConnection().getQueryServices().getProps().getBoolean(
                             QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB,
                             QueryServicesOptions.DEFAULT_ROW_KEY_ORDER_SALTED_TABLE) ||

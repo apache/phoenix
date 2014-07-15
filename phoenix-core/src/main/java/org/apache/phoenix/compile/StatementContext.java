@@ -20,7 +20,10 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 import java.text.Format;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -32,11 +35,14 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
 import org.apache.phoenix.util.ScanUtil;
+
+import com.google.common.collect.Maps;
 
 
 /**
@@ -59,6 +65,7 @@ public class StatementContext {
     private final String numberFormat;
     private final ImmutableBytesWritable tempPtr;
     private final PhoenixStatement statement;
+    private final Map<PColumn, Integer> dataColumns;
     
     private long currentTime = QueryConstants.UNSET_TIMESTAMP;
     private ScanRanges scanRanges = ScanRanges.EVERYTHING;
@@ -89,6 +96,7 @@ public class StatementContext {
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;
         this.whereConditionColumns = new ArrayList<Pair<byte[],byte[]>>();
+        this.dataColumns = this.currentTable == null ? Collections.<PColumn, Integer>emptyMap() : Maps.<PColumn, Integer>newLinkedHashMap();
     }
 
     /**
@@ -112,6 +120,36 @@ public class StatementContext {
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = stmtContext.currentTable;
         this.whereConditionColumns = stmtContext.whereConditionColumns;
+        this.dataColumns = stmtContext.getDataColumnsMap();
+    }
+
+    /**
+     * build map from dataColumn to what will be its position in single KeyValue value bytes
+     * returned from the coprocessor that joins from the index row back to the data row.
+     * @param column
+     * @return
+     */
+    public int getDataColumnPosition(PColumn column) {
+        Integer pos = dataColumns.get(column);
+        if (pos == null) {
+            pos = dataColumns.size();
+            dataColumns.put(column, pos);
+        }
+        return pos;
+    }
+
+    /**
+     * @return return set of data columns.
+     */
+    public Set<PColumn> getDataColumns() {
+        return dataColumns.keySet();
+    }
+
+    /**
+     * @return map of data columns and their positions. 
+     */
+    public Map<PColumn, Integer> getDataColumnsMap() {
+        return dataColumns;
     }
 
     public String getDateFormat() {

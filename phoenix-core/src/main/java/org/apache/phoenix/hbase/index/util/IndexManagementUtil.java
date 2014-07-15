@@ -25,6 +25,7 @@ import java.util.Map;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
@@ -100,15 +101,14 @@ public class IndexManagementUtil {
 
     }
 
-    public static ValueGetter createGetterFromKeyValues(Collection<KeyValue> pendingUpdates) {
+    public static ValueGetter createGetterFromKeyValues(Collection<Cell> pendingUpdates) {
         final Map<ReferencingColumn, ImmutableBytesPtr> valueMap = Maps.newHashMapWithExpectedSize(pendingUpdates
                 .size());
-        for (KeyValue kv : pendingUpdates) {
+        for (Cell kv : pendingUpdates) {
             // create new pointers to each part of the kv
-            ImmutableBytesPtr family = new ImmutableBytesPtr(kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength());
-            ImmutableBytesPtr qual = new ImmutableBytesPtr(kv.getBuffer(), kv.getQualifierOffset(),
-                    kv.getQualifierLength());
-            ImmutableBytesPtr value = new ImmutableBytesPtr(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength());
+            ImmutableBytesPtr family = new ImmutableBytesPtr(kv.getRowArray(),kv.getFamilyOffset(),kv.getFamilyLength());
+            ImmutableBytesPtr qual = new ImmutableBytesPtr(kv.getRowArray(), kv.getQualifierOffset(), kv.getQualifierLength());
+            ImmutableBytesPtr value = new ImmutableBytesPtr(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
             valueMap.put(new ReferencingColumn(family, qual), value);
         }
         return new ValueGetter() {
@@ -119,11 +119,11 @@ public class IndexManagementUtil {
         };
     }
 
-    private static class ReferencingColumn {
+    public static class ReferencingColumn {
         ImmutableBytesPtr family;
         ImmutableBytesPtr qual;
 
-        static ReferencingColumn wrap(ColumnReference ref) {
+        public static ReferencingColumn wrap(ColumnReference ref) {
             ImmutableBytesPtr family = new ImmutableBytesPtr(ref.getFamily());
             ImmutableBytesPtr qual = new ImmutableBytesPtr(ref.getQualifier());
             return new ReferencingColumn(family, qual);

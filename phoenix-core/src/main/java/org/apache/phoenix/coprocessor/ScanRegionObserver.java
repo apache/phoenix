@@ -25,8 +25,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
@@ -44,6 +44,8 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.iterate.RegionScannerResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -57,6 +59,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
@@ -176,6 +179,16 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         if (isScanQuery == null || Bytes.compareTo(PDataType.FALSE_BYTES, isScanQuery) == 0) {
             return s;
         }
+        int offset = 0;
+        if (ScanUtil.isLocalIndex(scan)) {
+            /*
+             * For local indexes, we need to set an offset on row key expressions to skip
+             * the region start key.
+             */
+            HRegion region = c.getEnvironment().getRegion();
+            offset = region.getStartKey().length != 0 ? region.getStartKey().length:region.getEndKey().length;
+            ScanUtil.setRowKeyOffset(scan, offset);
+        }
         
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
@@ -186,18 +199,33 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             innerScanner = new HashJoinRegionScanner(s, p, j, tenantId, c.getEnvironment());
         }
         
-        final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner);
         List<KeyValueColumnExpression> arrayKVRefs = new ArrayList<KeyValueColumnExpression>();
         Expression[] arrayFuncRefs = deserializeArrayPostionalExpressionInfoFromScan(
                 scan, innerScanner, arrayKVRefs);
-        innerScanner = getWrappedScanner(c, innerScanner, arrayKVRefs, arrayFuncRefs);
+        TupleProjector tupleProjector = null;
+        HRegion dataRegion = null;
+        IndexMaintainer indexMaintainer = null;
+        byte[][] viewConstants = null;
+        ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
+        if (dataColumns != null) {
+            tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
+            dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
+            byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
+            List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
+            indexMaintainer = indexMaintainers.get(0);
+            viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+        }
+        innerScanner =
+                getWrappedScanner(c, innerScanner, arrayKVRefs, arrayFuncRefs, offset, scan,
+                    dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants);
+        final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner);  
         if (iterator == null) {
             return innerScanner;
         }
         // TODO:the above wrapped scanner should be used here also
         return getTopNScanner(c, innerScanner, iterator, tenantId);
     }
-    
+
     /**
      *  Return region scanner that does TopN.
      *  We only need to call startRegionOperation and closeRegionOperation when
@@ -278,9 +306,19 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
      * the same from a custom filter.
      * @param arrayFuncRefs 
      * @param arrayKVRefs 
+     * @param offset starting position in the rowkey.
+     * @param scan
+     * @param tupleProjector
+     * @param dataRegion
+     * @param indexMaintainer
+     * @param viewConstants
      */
-    private RegionScanner getWrappedScanner(final ObserverContext<RegionCoprocessorEnvironment> c, final RegionScanner s, 
-           final List<KeyValueColumnExpression> arrayKVRefs, final Expression[] arrayFuncRefs) {
+    private RegionScanner getWrappedScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
+            final RegionScanner s, final List<KeyValueColumnExpression> arrayKVRefs,
+            final Expression[] arrayFuncRefs, final int offset, final Scan scan,
+            final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
+            final HRegion dataRegion, final IndexMaintainer indexMaintainer,
+            final byte[][] viewConstants) {
         return new RegionScanner() {
 
             @Override
@@ -332,12 +370,16 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             public boolean nextRaw(List<Cell> result) throws IOException {
                 try {
                     boolean next = s.nextRaw(result);
-                    if(result.size() == 0) {
+                    if (result.size() == 0) {
                         return next;
-                    } else if((arrayFuncRefs != null && arrayFuncRefs.length == 0) || arrayKVRefs.size() == 0) {
-                        return next;
+                    } 
+                    if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
+                        replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
                     }
-                    replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                    if (ScanUtil.isLocalIndex(scan)) {
+                        IndexUtil.wrapResultUsingOffset(result, offset, dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
+                    }
+                    // There is a scanattribute set to retrieve the specific array element
                     return next;
                 } catch (Throwable t) {
                     ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
@@ -351,11 +393,14 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                     boolean next = s.nextRaw(result, limit);
                     if (result.size() == 0) {
                         return next;
-                    } else if ((arrayFuncRefs != null && arrayFuncRefs.length == 0) || arrayKVRefs.size() == 0) { 
-                        return next; 
+                    } 
+                    if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) { 
+                        replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                    }
+                    if (offset > 0 || ScanUtil.isLocalIndex(scan)) {
+                        IndexUtil.wrapResultUsingOffset(result, offset, dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
                     }
                     // There is a scanattribute set to retrieve the specific array element
-                    replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
                     return next;
                 } catch (Throwable t) {
                     ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
@@ -395,13 +440,11 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                         QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER.length, HConstants.LATEST_TIMESTAMP,
                         Type.codeToType(rowKv.getTypeByte()), value, 0, value.length));
             }
-            
+
             @Override
             public long getMaxResultSize() {
                 return s.getMaxResultSize();
             }
         };
     }
-    
-    
 }

@@ -54,9 +54,10 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     public static final String SCHEMA_NAME = "";
     public static final String DATA_TABLE_NAME = "T";
     public static final String INDEX_TABLE_NAME = "I";
+    public static final String LOCAL_INDEX_TABLE_NAME = "LI";
     public static final String DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "T");
     public static final String INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "I");
-
+    public static final String LOCAL_INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "LI");
 
     @Test
     public void testAlterTableWithVarBinaryKey() throws Exception {
@@ -208,6 +209,9 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
         conn.createStatement().execute(
           "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1, v2)");
+        conn.createStatement().execute(
+            "CREATE LOCAL INDEX " + LOCAL_INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1, v2)");
+
         query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
@@ -266,7 +270,12 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
         conn.createStatement().execute(
           "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) include (v2, v3)");
+        conn.createStatement().execute(
+            "CREATE LOCAL INDEX " + LOCAL_INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) include (v2, v3)");
         query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertFalse(rs.next());
+        query = "SELECT * FROM " + LOCAL_INDEX_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
     

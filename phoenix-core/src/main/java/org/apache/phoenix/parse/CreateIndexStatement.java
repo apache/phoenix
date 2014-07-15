@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.schema.PTable.IndexType;
 
 import com.google.common.collect.ListMultimap;
 
@@ -32,10 +33,11 @@ public class CreateIndexStatement extends SingleTableStatement {
     private final List<ParseNode> splitNodes;
     private final ListMultimap<String,Pair<String,Object>> props;
     private final boolean ifNotExists;
+    private final IndexType indexType;
 
     public CreateIndexStatement(NamedNode indexTableName, NamedTableNode dataTable, 
             PrimaryKeyConstraint indexConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
-            ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, int bindCount) {
+            ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, int bindCount) {
         super(dataTable, bindCount);
         this.indexTableName =TableName.create(dataTable.getName().getSchemaName(),indexTableName.getName());
         this.indexConstraint = indexConstraint == null ? PrimaryKeyConstraint.EMPTY : indexConstraint;
@@ -43,6 +45,7 @@ public class CreateIndexStatement extends SingleTableStatement {
         this.splitNodes = splits == null ? Collections.<ParseNode>emptyList() : splits;
         this.props = props;
         this.ifNotExists = ifNotExists;
+        this.indexType = indexType;
     }
 
     public PrimaryKeyConstraint getIndexConstraint() {
@@ -67,6 +70,11 @@ public class CreateIndexStatement extends SingleTableStatement {
 
     public boolean ifNotExists() {
         return ifNotExists;
+    }
+
+
+    public IndexType getIndexType() {
+        return indexType;
     }
 
 }

@@ -51,9 +51,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -66,6 +66,7 @@ import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
@@ -78,7 +79,6 @@ import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 
 
 
@@ -143,6 +143,8 @@ public class QueryIT extends BaseClientManagedTimeIT {
                 + "    B_STRING, " + "    A_DATE)" });
         testCases.add(new String[] { "CREATE INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer) INCLUDE ("
                 + "    A_STRING, " + "    B_STRING, " + "    A_DATE)" });
+        testCases.add(new String[] { "CREATE LOCAL INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer, a_string) INCLUDE ("
+                + "    B_STRING, " + "    A_DATE)" });
         testCases.add(new String[] { "" });
         return testCases;
     }
@@ -153,59 +155,6 @@ public class QueryIT extends BaseClientManagedTimeIT {
             nestedExpectedResults.add(Arrays.asList(expectedResult));
         }
         assertValuesEqualsResultSet(rs, nestedExpectedResults); 
-    }
-
-    /**
-     * Asserts that we find the expected values in the result set. We don't know the order, since we don't always
-     * have an order by and we're going through indexes, but we assert that each expected result occurs once as
-     * expected (in any order).
-     */
-    protected void assertValuesEqualsResultSet(ResultSet rs, List<List<Object>> expectedResults) throws SQLException {
-        int expectedCount = expectedResults.size();
-        int count = 0;
-        List<List<Object>> actualResults = Lists.newArrayList();
-        List<Object> errorResult = null;
-        while (rs.next() && errorResult == null) {
-            List<Object> result = Lists.newArrayList();
-            for (int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
-                result.add(rs.getObject(i+1));
-            }
-            if (!expectedResults.contains(result)) {
-                errorResult = result;
-            }
-            actualResults.add(result);
-            count++;
-        }
-        assertTrue("Could not find " + errorResult + " in expected results: " + expectedResults + " with actual results: " + actualResults, errorResult == null);
-        assertEquals(count, expectedCount);
-    }
-    
-    protected void assertOneOfValuesEqualsResultSet(ResultSet rs, List<List<Object>>... expectedResultsArray) throws SQLException {
-        List<List<Object>> results = Lists.newArrayList();
-        while (rs.next()) {
-            List<Object> result = Lists.newArrayList();
-            for (int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
-                result.add(rs.getObject(i+1));
-            }
-            results.add(result);
-        }
-        for (int j = 0; j < expectedResultsArray.length; j++) {
-                List<List<Object>> expectedResults = expectedResultsArray[j];
-                Set<List<Object>> expectedResultsSet = Sets.newHashSet(expectedResults);
-                int count = 0;
-                boolean brokeEarly = false;
-                for (List<Object> result : results) {
-                    if (!expectedResultsSet.contains(result)) {
-                        brokeEarly = true;
-                        break;
-                    }
-                    count++;
-                }
-                if (!brokeEarly && count == expectedResults.size()) {
-                    return;
-                }
-        }
-        fail("Unable to find " + results + " in " + Arrays.asList(expectedResultsArray));
     }
     
     @Test
@@ -771,8 +720,8 @@ public class QueryIT extends BaseClientManagedTimeIT {
         String[] answers = new String[]{"00D300000000XHP5bar","a5bar","15bar","5bar","5bar"};
         String[] queries = new String[] { 
         		"SELECT  organization_id || 5 || 'bar' FROM atable limit 1",
-        		"SELECT a_string || 5 || 'bar' FROM atable limit 1",
-        		"SELECT a_integer||5||'bar' FROM atable limit 1",
+        		"SELECT a_string || 5 || 'bar' FROM atable  order by a_string  limit 1",
+        		"SELECT a_integer||5||'bar' FROM atable order by a_integer  limit 1",
         		"SELECT x_decimal||5||'bar' FROM atable limit 1",
         		"SELECT x_long||5||'bar' FROM atable limit 1"
         };
@@ -879,17 +828,19 @@ public class QueryIT extends BaseClientManagedTimeIT {
             
             byte[] tableName = Bytes.toBytes(ATABLE_NAME);
             admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            HTable htable = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName);
-            htable.clearRegionCache();
-            int nRegions = htable.getRegionLocations().size();
-            admin.split(tableName, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A" + Character.valueOf((char) ('3' + nextRunCount())) + ts))); // vary split point with test run
-            int retryCount = 0;
-            do {
-                Thread.sleep(2000);
-                retryCount++;
-                //htable.clearRegionCache();
-            } while (retryCount < 10 && htable.getRegionLocations().size() == nRegions);
-            assertNotEquals(nRegions, htable.getRegionLocations().size());
+            if (admin.tableExists(TableName.valueOf(MetaDataUtil.getLocalIndexTableName("atable")))) {
+                HTable htable = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName);
+                htable.clearRegionCache();
+                int nRegions = htable.getRegionLocations().size();
+                admin.split(tableName, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A" + Character.valueOf((char) ('3' + nextRunCount())) + ts))); // vary split point with test run
+                int retryCount = 0;
+                do {
+                    Thread.sleep(2000);
+                    retryCount++;
+                    //htable.clearRegionCache();
+                } while (retryCount < 10 && htable.getRegionLocations().size() == nRegions);
+                assertNotEquals(nRegions, htable.getRegionLocations().size());
+            }
             
             statement.setString(1, tenantId);
             rs = statement.executeQuery();

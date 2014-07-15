@@ -32,6 +32,11 @@ public class SaltedViewIT extends BaseViewIT {
      */
     @Test
     public void testSaltedUpdatableViewWithIndex() throws Exception {
-        testUpdatableViewWithIndex(3);
+        testUpdatableViewWithIndex(3, false);
+    }
+
+    @Test
+    public void testSaltedUpdatableViewWithLocalIndex() throws Exception {
+        testUpdatableViewWithIndex(3, true);
     }
 }

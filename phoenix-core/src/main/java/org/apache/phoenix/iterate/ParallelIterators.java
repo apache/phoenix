@@ -38,6 +38,7 @@ import org.apache.phoenix.parse.*;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.*;
 import org.apache.phoenix.schema.*;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.util.*;
 import org.slf4j.Logger;
@@ -223,6 +224,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         List<PeekingResultIterator> iterators = new ArrayList<PeekingResultIterator>(numSplits);
         List<Pair<byte[],Future<PeekingResultIterator>>> futures = new ArrayList<Pair<byte[],Future<PeekingResultIterator>>>(numSplits);
         final UUID scanId = UUID.randomUUID();
+        final boolean localIndex = this.tableRef.getTable().getType() == PTableType.INDEX && this.tableRef.getTable().getIndexType() == IndexType.LOCAL;
         try {
             ExecutorService executor = services.getExecutor();
             for (KeyRange split : splits) {
@@ -238,7 +240,12 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                         minMaxRange = SaltingUtil.addSaltByte(split.getLowerRange(), minMaxRange);
                         split = split.intersect(minMaxRange);
                     }
-                }
+                } else if (localIndex) {
+                    if (splitScan.getStartRow().length != 0 || splitScan.getStopRow().length != 0) {
+                        SaltingUtil.addRegionStartKeyToScanStartAndStopRows(split.getLowerRange(),split.getUpperRange(),
+                            splitScan);
+                    }
+                } 
                 if (ScanUtil.intersectScanRange(splitScan, split.getLowerRange(), split.getUpperRange(), this.context.getScanRanges().useSkipScanFilter())) {
                     // Delay the swapping of start/stop row until row so we don't muck with the intersect logic
                     ScanUtil.swapStartStopRowIfReversed(splitScan);

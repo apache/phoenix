@@ -44,6 +44,11 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String EMPTY_CF = "_EmptyCF";
     public static final String SPECIFIC_ARRAY_INDEX = "_SpecificArrayIndex";
     public static final String GROUP_BY_LIMIT = "_GroupByLimit";
+    public static final String LOCAL_INDEX = "_LocalIndex";
+    public static final String LOCAL_INDEX_BUILD = "_LocalIndexBuild";
+    public static final String LOCAL_INDEX_JOIN_SCHEMA = "_LocalIndexJoinSchema";
+    public static final String DATA_TABLE_COLUMNS_TO_JOIN = "_DataTableColumnsToJoin";
+    public static final String VIEW_CONSTANTS = "_ViewConstants";
 
     /**
      * Used by logger to identify coprocessor
