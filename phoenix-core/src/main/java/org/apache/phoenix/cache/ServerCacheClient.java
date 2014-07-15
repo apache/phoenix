@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.cache;
 
+import static com.google.common.io.Closeables.closeQuietly;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.sql.SQLException;
@@ -229,36 +231,40 @@ public class ServerCacheClient {
      * @throws IllegalStateException if hashed table cannot be removed on any region server on which it was added
      */
     private void removeServerCache(byte[] cacheId, Set<HRegionLocation> servers) throws SQLException {
-        ConnectionQueryServices services = connection.getQueryServices();
-        Throwable lastThrowable = null;
-        TableRef cacheUsingTableRef = cacheUsingTableRefMap.get(Bytes.mapKey(cacheId));
-        byte[] tableName = cacheUsingTableRef.getTable().getPhysicalName().getBytes();
-        HTableInterface iterateOverTable = services.getTable(tableName);
-        List<HRegionLocation> locations = services.getAllTableRegions(tableName);
-        Set<HRegionLocation> remainingOnServers = new HashSet<HRegionLocation>(servers);
-        /**
-         * Allow for the possibility that the region we based where to send our cache has split and been
-         * relocated to another region server *after* we sent it, but before we removed it. To accommodate
-         * this, we iterate through the current metadata boundaries and remove the cache once for each
-         * server that we originally sent to.
-         */
-        if (LOG.isDebugEnabled()) {LOG.debug("Removing Cache " + cacheId + " from servers.");}
-        for (HRegionLocation entry : locations) {
-            if (remainingOnServers.contains(entry)) {  // Call once per server
-                try {
-                    byte[] key = entry.getRegionInfo().getStartKey();
-                    ServerCachingProtocol protocol = iterateOverTable.coprocessorProxy(ServerCachingProtocol.class, key);
-                    protocol.removeServerCache(connection.getTenantId() == null ? null : connection.getTenantId().getBytes(), cacheId);
-                    remainingOnServers.remove(entry);
-                } catch (Throwable t) {
-                    lastThrowable = t;
-                    LOG.error("Error trying to remove hash cache for " + entry, t);
-                }
-            }
-        }
-        if (!remainingOnServers.isEmpty()) {
-            LOG.warn("Unable to remove hash cache for " + remainingOnServers, lastThrowable);
-        }
+    	ConnectionQueryServices services = connection.getQueryServices();
+    	Throwable lastThrowable = null;
+    	TableRef cacheUsingTableRef = cacheUsingTableRefMap.get(Bytes.mapKey(cacheId));
+    	byte[] tableName = cacheUsingTableRef.getTable().getPhysicalName().getBytes();
+    	HTableInterface iterateOverTable = services.getTable(tableName);
+    	try {
+    		List<HRegionLocation> locations = services.getAllTableRegions(tableName);
+    		Set<HRegionLocation> remainingOnServers = new HashSet<HRegionLocation>(servers);
+    		/**
+    		 * Allow for the possibility that the region we based where to send our cache has split and been
+    		 * relocated to another region server *after* we sent it, but before we removed it. To accommodate
+    		 * this, we iterate through the current metadata boundaries and remove the cache once for each
+    		 * server that we originally sent to.
+    		 */
+    		if (LOG.isDebugEnabled()) {LOG.debug("Removing Cache " + cacheId + " from servers.");}
+    		for (HRegionLocation entry : locations) {
+    			if (remainingOnServers.contains(entry)) {  // Call once per server
+    				try {
+    					byte[] key = entry.getRegionInfo().getStartKey();
+    					ServerCachingProtocol protocol = iterateOverTable.coprocessorProxy(ServerCachingProtocol.class, key);
+    					protocol.removeServerCache(connection.getTenantId() == null ? null : connection.getTenantId().getBytes(), cacheId);
+    					remainingOnServers.remove(entry);
+    				} catch (Throwable t) {
+    					lastThrowable = t;
+    					LOG.error("Error trying to remove hash cache for " + entry, t);
+    				}
+    			}
+    		}
+    		if (!remainingOnServers.isEmpty()) {
+    			LOG.warn("Unable to remove hash cache for " + remainingOnServers, lastThrowable);
+    		}
+    	} finally {
+    		closeQuietly(iterateOverTable);
+    	}
     }
 
     /**
