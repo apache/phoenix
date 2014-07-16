@@ -41,6 +41,7 @@ public class RowKeyColumnExpression  extends ColumnExpression {
     private PDataType fromType;
     private RowKeyValueAccessor accessor;
     protected final String name;
+    private int offset;
     
     public RowKeyColumnExpression() {
         name = null; // Only on client
@@ -63,6 +64,15 @@ public class RowKeyColumnExpression  extends ColumnExpression {
     
     public RowKeyColumnExpression(PDatum datum, RowKeyValueAccessor accessor, PDataType fromType) {
         this(datum, accessor, fromType, datum.toString());
+    }
+    
+    /**
+     * Used to set an offset to be skipped from the start of a the row key. Used by
+     * local indexing to skip the region start key bytes.
+     * @param offset the number of bytes to offset accesses to row key columns
+     */
+    public void setOffset(int offset) {
+        this.offset = offset;
     }
     
     public int getPosition() {
@@ -94,7 +104,7 @@ public class RowKeyColumnExpression  extends ColumnExpression {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         tuple.getKey(ptr);
-        int offset = accessor.getOffset(ptr.get(), ptr.getOffset());
+        int offset = accessor.getOffset(ptr.get(), ptr.getOffset() + this.offset);
         // Null is represented in the last expression of a multi-part key 
         // by the bytes not being present.
         int maxOffset = ptr.getOffset() + ptr.getLength();

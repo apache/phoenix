@@ -132,7 +132,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             // get the values from the scanner so we can actually use them
             ValueGetter valueGetter = IndexManagementUtil.createGetterFromScanner(scanner, dataRowKey);
             ptr.set(dataRowKey);
-            Put put = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, state.getCurrentTimestamp());
+            Put put = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, state.getCurrentTimestamp(), env.getRegion().getStartKey(), env.getRegion().getEndKey());
             indexUpdate.setTable(maintainer.getIndexTableName());
             indexUpdate.setUpdate(put);
             //make sure we close the scanner when we are done
@@ -162,7 +162,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             ptr.set(dataRowKey);
             Delete delete =
                 maintainer.buildDeleteMutation(kvBuilder, valueGetter, ptr,
-                  state.getPendingUpdate(), state.getCurrentTimestamp());
+                  state.getPendingUpdate(), state.getCurrentTimestamp(), env.getRegion().getStartKey(), env.getRegion().getEndKey());
             scanner.close();
             indexUpdate.setUpdate(delete);
             indexUpdates.add(indexUpdate);

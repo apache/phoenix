@@ -138,7 +138,7 @@ public abstract class ValueSchema implements Writable {
         return minNullable;
     }
     
-    public static final class Field implements Writable {
+    public static final class Field implements Writable, PDatum {
         @Override
         public int hashCode() {
             final int prime = 31;
@@ -194,14 +194,17 @@ public abstract class ValueSchema implements Writable {
             this.sortOrder = SortOrder.getDefault();
         }
         
+        @Override
         public final SortOrder getSortOrder() {
             return sortOrder;
         }
         
+        @Override
         public final PDataType getDataType() {
             return type;
         }
         
+        @Override
         public final boolean isNullable() {
             return isNullable;
         }
@@ -212,6 +215,16 @@ public abstract class ValueSchema implements Writable {
         
         public final int getCount() {
             return count;
+        }
+
+        @Override
+        public Integer getMaxLength() {
+            return type.isFixedWidth() ? byteSize : null;
+        }
+
+        @Override
+        public Integer getScale() {
+            return null;
         }
 
         @Override
@@ -279,6 +292,11 @@ public abstract class ValueSchema implements Writable {
                 throw new IllegalArgumentException("Adding too many fields to Schema (max " + nFields + ")");
             }
             fields.add(new Field(datum, isNullable, 1, sortOrder));
+            return this;
+        }
+
+        public ValueSchemaBuilder addField(Field field) {
+            fields.add(field);
             return this;
         }
     }

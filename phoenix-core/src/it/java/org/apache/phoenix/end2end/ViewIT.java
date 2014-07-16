@@ -95,7 +95,7 @@ public class ViewIT extends BaseViewIT {
 
     @Test
     public void testNonSaltedUpdatableViewWithIndex() throws Exception {
-        testUpdatableViewWithIndex(null);
+        testUpdatableViewWithIndex(null, false);
     }
     
     @Test

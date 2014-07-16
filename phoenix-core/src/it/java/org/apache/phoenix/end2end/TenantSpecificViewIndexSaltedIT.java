@@ -37,4 +37,14 @@ public class TenantSpecificViewIndexSaltedIT extends BaseTenantSpecificViewIndex
     public void testUpdatableViewsWithSameNameDifferentTenants() throws Exception {
         testUpdatableViewsWithSameNameDifferentTenants(SALT_BUCKETS);
     }
+    
+    @Test
+    public void testUpdatableSaltedViewWithLocalIndex() throws Exception {
+        testUpdatableView(SALT_BUCKETS, true);
+    }
+
+    @Test
+    public void testUpdatableViewsWithSameNameDifferentTenantsWithLocalIndex() throws Exception {
+        testUpdatableViewsWithSameNameDifferentTenants(SALT_BUCKETS, true);
+    }
 }

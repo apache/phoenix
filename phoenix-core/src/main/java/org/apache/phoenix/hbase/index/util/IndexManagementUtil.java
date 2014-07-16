@@ -120,11 +120,11 @@ public class IndexManagementUtil {
         };
     }
 
-    private static class ReferencingColumn {
+    public static class ReferencingColumn {
         ImmutableBytesPtr family;
         ImmutableBytesPtr qual;
 
-        static ReferencingColumn wrap(ColumnReference ref) {
+        public static ReferencingColumn wrap(ColumnReference ref) {
             ImmutableBytesPtr family = new ImmutableBytesPtr(ref.getFamily());
             ImmutableBytesPtr qual = new ImmutableBytesPtr(ref.getQualifier());
             return new ReferencingColumn(family, qual);

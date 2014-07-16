@@ -80,6 +80,42 @@ public interface PTable {
         }
     }
 
+    public enum IndexType { 
+        GLOBAL((byte)1),
+        LOCAL((byte)2);
+
+        private final byte[] byteValue;
+        private final byte serializedValue;
+        
+        IndexType(byte serializedValue) {
+            this.serializedValue = serializedValue;
+            this.byteValue = Bytes.toBytes(this.name());
+        }
+        
+        public byte[] getBytes() {
+            return byteValue;
+        }
+        
+        public byte getSerializedValue() {
+            return this.serializedValue;
+        }
+        
+        public static IndexType getDefault() {
+            return GLOBAL;
+        }
+        
+        public static IndexType fromToken(String token) {
+            return IndexType.valueOf(token.trim().toUpperCase());
+        }
+        
+        public static IndexType fromSerializedValue(byte serializedValue) {
+            if (serializedValue < 1 || serializedValue > IndexType.values().length) {
+                throw new IllegalArgumentException("Invalid IndexType " + serializedValue);
+            }
+            return IndexType.values()[serializedValue-1];
+        }
+    }
+
     public enum LinkType {
         /**
          * Link from a table to its index table
@@ -279,4 +315,5 @@ public interface PTable {
     PTableKey getKey();
     
     int getEstimatedSize();
+    IndexType getIndexType();
 }

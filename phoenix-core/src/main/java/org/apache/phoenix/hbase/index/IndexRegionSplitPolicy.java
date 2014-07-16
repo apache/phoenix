@@ -15,28 +15,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end;
+package org.apache.phoenix.hbase.index;
 
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
+import org.apache.hadoop.hbase.regionserver.RegionSplitPolicy;
 
-@Category(HBaseManagedTimeTest.class)
-public class SaltedViewIT extends BaseViewIT {
-    
-    /**
-     * Salted tests must be in their own test file to ensure that the underlying
-     * table is dropped. Otherwise, the splits may not be performed.
-     * TODO: we should throw in that case
-     * 
-     * @throws Exception
-     */
-    @Test
-    public void testSaltedUpdatableViewWithIndex() throws Exception {
-        testUpdatableViewWithIndex(3, false);
+/**
+ * Split policy for index regions to avoid split from external requests.
+ */
+public class IndexRegionSplitPolicy extends RegionSplitPolicy {
+
+    @Override
+    protected boolean shouldSplit() {
+        return false;
     }
 
-    @Test
-    public void testSaltedUpdatableViewWithLocalIndex() throws Exception {
-        testUpdatableViewWithIndex(3, true);
-    }
 }

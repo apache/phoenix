@@ -118,8 +118,8 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
         populateTestTable();
         String ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                + " (char_col1 ASC, int_col1 ASC)"
-                + " INCLUDE (long_col1, long_col2)";
+                    + " (char_col1 ASC, int_col1 ASC)"
+                    + " INCLUDE (long_col1, long_col2)";
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
         
@@ -196,8 +196,8 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
         populateTestTable();
         String ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                + " (long_pk, varchar_pk)"
-                + " INCLUDE (long_col1, long_col2)";
+                    + " (long_pk, varchar_pk)"
+                    + " INCLUDE (long_col1, long_col2)";
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
         
@@ -242,7 +242,6 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         conn.createStatement().execute("DROP INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE);
     }
     
-    
     @Test
     public void testDropIfImmutableKeyValueColumn() throws Exception {
         Properties props = new Properties(TEST_PROPERTIES);
@@ -251,7 +250,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
         populateTestTable();
         String ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                + " (long_col1)";
+                    + " (long_col1)";
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
         

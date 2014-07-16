@@ -48,9 +48,9 @@ public class BaseViewIT extends BaseHBaseManagedTimeIT {
         setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
 
-    protected void testUpdatableViewWithIndex(Integer saltBuckets) throws Exception {
+    protected void testUpdatableViewWithIndex(Integer saltBuckets, boolean localIndex) throws Exception {
         testUpdatableView(saltBuckets);
-        testUpdatableViewIndex(saltBuckets);
+        testUpdatableViewIndex(saltBuckets, localIndex);
     }
 
     protected void testUpdatableView(Integer saltBuckets) throws Exception {
@@ -100,9 +100,18 @@ public class BaseViewIT extends BaseHBaseManagedTimeIT {
     }
 
     protected void testUpdatableViewIndex(Integer saltBuckets) throws Exception {
+        testUpdatableViewIndex(saltBuckets, false);
+    }
+
+    protected void testUpdatableViewIndex(Integer saltBuckets, boolean localIndex) throws Exception {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE INDEX i1 on v(k3) include (s)");
+        if (localIndex) {
+            conn.createStatement().execute("CREATE LOCAL INDEX i1 on v(k3)");
+        } else {
+            conn.createStatement().execute("CREATE INDEX i1 on v(k3) include (s)");
+        }
+        conn.createStatement().execute("UPSERT INTO v(k2,S,k3) VALUES(120,'foo',50.0)");
         String query = "SELECT k1, k2, k3, s FROM v WHERE k3 = 51.0";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -112,12 +121,21 @@ public class BaseViewIT extends BaseHBaseManagedTimeIT {
         assertEquals("bar", rs.getString(4));
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        assertEquals(saltBuckets == null
-                ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + Short.MIN_VALUE + ",51]"
-                : "CLIENT PARALLEL " + saltBuckets + "-WAY SKIP SCAN ON 3 KEYS OVER _IDX_T [0," + Short.MIN_VALUE + ",51] - [2," + Short.MIN_VALUE + ",51]\nCLIENT MERGE SORT",
-            QueryUtil.getExplainPlan(rs));
+        if (localIndex) {
+            assertEquals("CLIENT PARALLEL 3-WAY RANGE SCAN OVER _LOCAL_IDX_T [-32768,51]\nCLIENT MERGE SORT",
+                QueryUtil.getExplainPlan(rs));
+        } else {
+            assertEquals(saltBuckets == null
+                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + Short.MIN_VALUE + ",51]"
+                            : "CLIENT PARALLEL " + saltBuckets + "-WAY SKIP SCAN ON 3 KEYS OVER _IDX_T [0," + Short.MIN_VALUE + ",51] - [2," + Short.MIN_VALUE + ",51]\nCLIENT MERGE SORT",
+                            QueryUtil.getExplainPlan(rs));
+        }
 
-        conn.createStatement().execute("CREATE INDEX i2 on v(s)");
+        if (localIndex) {
+            conn.createStatement().execute("CREATE LOCAL INDEX i2 on v(s)");
+        } else {
+            conn.createStatement().execute("CREATE INDEX i2 on v(s)");
+        }
         query = "SELECT k1, k2, s FROM v WHERE s = 'foo'";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -126,10 +144,14 @@ public class BaseViewIT extends BaseHBaseManagedTimeIT {
         assertEquals("foo", rs.getString(3));
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        assertEquals(saltBuckets == null
-                ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + (Short.MIN_VALUE+1) + ",'foo']"
-                : "CLIENT PARALLEL " + saltBuckets + "-WAY SKIP SCAN ON 3 KEYS OVER _IDX_T [0," + (Short.MIN_VALUE+1) + ",'foo'] - [2," + (Short.MIN_VALUE+1) + ",'foo']\nCLIENT MERGE SORT",
-            QueryUtil.getExplainPlan(rs));
+        if (localIndex) {
+            assertEquals("CLIENT PARALLEL 3-WAY RANGE SCAN OVER _LOCAL_IDX_T [" + (Short.MIN_VALUE+1) + ",'foo']\nCLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
+        } else {
+            assertEquals(saltBuckets == null
+                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + (Short.MIN_VALUE+1) + ",'foo']"
+                            : "CLIENT PARALLEL " + saltBuckets + "-WAY SKIP SCAN ON 3 KEYS OVER _IDX_T [0," + (Short.MIN_VALUE+1) + ",'foo'] - [2," + (Short.MIN_VALUE+1) + ",'foo']\nCLIENT MERGE SORT",
+                            QueryUtil.getExplainPlan(rs));
+        }
     }
 
 

@@ -15,28 +15,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end;
+package org.apache.phoenix.expression.visitor;
 
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
+import org.apache.phoenix.expression.RowKeyColumnExpression;
 
-@Category(HBaseManagedTimeTest.class)
-public class SaltedViewIT extends BaseViewIT {
-    
-    /**
-     * Salted tests must be in their own test file to ensure that the underlying
-     * table is dropped. Otherwise, the splits may not be performed.
-     * TODO: we should throw in that case
-     * 
-     * @throws Exception
-     */
-    @Test
-    public void testSaltedUpdatableViewWithIndex() throws Exception {
-        testUpdatableViewWithIndex(3, false);
-    }
 
-    @Test
-    public void testSaltedUpdatableViewWithLocalIndex() throws Exception {
-        testUpdatableViewWithIndex(3, true);
-    }
+
+
+/**
+ * 
+ * Implementation of ExpressionVisitor where only a RowKeyColumnExpression (i.e.
+ * a reference to a column that makes up the row key) is being visited,
+ *
+ * 
+ * @since 0.1
+ */
+public abstract class RowKeyExpressionVisitor extends TraverseAllExpressionVisitor<Void> {
+    @Override
+    abstract public Void visit(RowKeyColumnExpression node);
 }

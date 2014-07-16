@@ -20,6 +20,7 @@ package org.apache.phoenix.expression;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Collection;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
@@ -49,12 +50,24 @@ public class ProjectedColumnExpression extends ColumnExpression {
 		this.displayName = displayName;
 	}
     
-    private static KeyValueSchema buildSchema(PTable table) {
-    	KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
-        for (PColumn column : table.getColumns()) {
-        	if (!SchemaUtil.isPKColumn(column)) {
-        		builder.addField(column);
-        	}
+    public ProjectedColumnExpression(PColumn column, Collection<PColumn> columns, int position, String displayName) {
+        super(column);
+        this.schema = buildSchema(columns);
+        this.bitSet = ValueBitSet.newInstance(schema);
+        this.position = position;
+        this.displayName = displayName;
+    }
+
+	private static KeyValueSchema buildSchema(PTable table) {
+        return buildSchema(table.getColumns());
+    }
+    
+    public static KeyValueSchema buildSchema(Collection<PColumn> columns) {
+        KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
+        for (PColumn column : columns) {
+            if (!SchemaUtil.isPKColumn(column)) {
+                builder.addField(column);
+            }
         }
         return builder.build();
     }

@@ -18,25 +18,30 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
+import java.util.List;
 
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.PTable.IndexType;
 
+public class LocalIndexParallelIteratorRegionSplitter extends DefaultParallelIteratorRegionSplitter {
+    
+    public static DefaultParallelIteratorRegionSplitter getInstance(StatementContext context, TableRef table, HintNode hintNode) {
+        return new LocalIndexParallelIteratorRegionSplitter(context, table, hintNode);
+    }
+    
+    protected LocalIndexParallelIteratorRegionSplitter(StatementContext context, TableRef table, HintNode hintNode) {
+        super(context,table,hintNode);
+    }
 
-/**
- * Factory class for the Region Splitter used by the project.
- */
-public class ParallelIteratorRegionSplitterFactory {
+    @Override
+    protected List<HRegionLocation> getAllRegions() throws SQLException {
+        return context.getConnection().getQueryServices().getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
+    }
 
-    public static ParallelIteratorRegionSplitter getSplitter(StatementContext context, TableRef table, HintNode hintNode) throws SQLException {
-        if(table.getTable().getIndexType() == IndexType.LOCAL) {
-            return LocalIndexParallelIteratorRegionSplitter.getInstance(context, table, hintNode);
-        }
-        if (context.getScanRanges().useSkipScanFilter()) {
-            return SkipRangeParallelIteratorRegionSplitter.getInstance(context, table, hintNode);
-        }
-        return DefaultParallelIteratorRegionSplitter.getInstance(context, table, hintNode);
+    @Override
+    public int getSplitsPerRegion(int numRegions) {
+        return 1;
     }
 }

@@ -94,14 +94,17 @@ import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.StringConcatParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.parse.UnsupportedAllParseNodeVisitor;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.DelegateDatum;
+import org.apache.phoenix.schema.LocalIndexDataColumnRef;
 import org.apache.phoenix.schema.PArrayDataType;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
@@ -322,7 +325,23 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
      * @throws SQLException if the column expression node does not refer to a known/unambiguous column
      */
     protected ColumnRef resolveColumn(ColumnParseNode node) throws SQLException {
-        ColumnRef ref = context.getResolver().resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
+        ColumnRef ref = null;
+        try {
+            ref = context.getResolver().resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
+        } catch (ColumnNotFoundException e) {
+            // Rather than not use a local index when a column not contained by it is referenced, we
+            // join back to the data table in our coprocessor since this is a relatively cheap
+            // operation given that we know the join is local.
+            if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
+                try {
+                    return new LocalIndexDataColumnRef(context, node.getName());
+                } catch (ColumnFamilyNotFoundException c) {
+                    throw e;
+                }
+            } else {
+                throw e;
+            }
+        }
         PTable table = ref.getTable();
         int pkPosition = ref.getPKSlotPosition();
         // Disallow explicit reference to salting column, tenant ID column, and index ID column

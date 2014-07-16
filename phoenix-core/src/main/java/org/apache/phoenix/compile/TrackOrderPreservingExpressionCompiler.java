@@ -36,6 +36,7 @@ import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;

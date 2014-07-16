@@ -131,15 +131,15 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
             assertTrue(indexMutations.get(0) instanceof Put);
             Mutation indexMutation = indexMutations.get(0);
             ImmutableBytesWritable indexKeyPtr = new ImmutableBytesWritable(indexMutation.getRow());
-            
             ptr.set(rowKeyPtr.get(), rowKeyPtr.getOffset(), rowKeyPtr.getLength());
-            byte[] mutablelndexRowKey = im1.buildRowKey(valueGetter, ptr);
+            byte[] mutablelndexRowKey = im1.buildRowKey(valueGetter, ptr, null, null);
             byte[] immutableIndexRowKey = indexKeyPtr.copyBytes();
             assertArrayEquals(immutableIndexRowKey, mutablelndexRowKey);
-            
             for (ColumnReference ref : im1.getCoverededColumns()) {
                 valueMap.get(ref);
             }
+            byte[] dataRowKey = im1.buildDataRowKey(indexKeyPtr, null);
+            assertArrayEquals(dataRowKey, dataKeyValues.get(0).getRow());
         } finally {
             try {
                 conn.createStatement().execute("DROP TABLE " + fullTableName);
@@ -239,7 +239,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
  
     @Test
     public void testCompositeDescRowKeyVarFixedDescSaltedIndexSaltedTable() throws Exception {
-        testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER NOT NULL, v VARCHAR", "k1, k2 DESC", "k2 DESC, k1", new Object [] {"a",1}, "", "SALT_BUCKETS=3", "SALT_BUCKETS=4");
+        testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER NOT NULL, v VARCHAR", "k1, k2 DESC", "k2 DESC, k1", new Object [] {"a",1}, "", "SALT_BUCKETS=3", "SALT_BUCKETS=3");
     }
  
     @Test

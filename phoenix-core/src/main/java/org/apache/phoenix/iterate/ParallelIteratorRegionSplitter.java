@@ -31,4 +31,7 @@ import org.apache.phoenix.query.KeyRange;
 public interface ParallelIteratorRegionSplitter {
 
     public List<KeyRange> getSplits() throws SQLException;
+
+    public int getSplitsPerRegion(int numRegions);
+
 }

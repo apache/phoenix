@@ -38,6 +38,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -56,8 +57,11 @@ import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
+import org.apache.phoenix.hbase.index.ValueGetter;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.TupleProjector;
@@ -72,7 +76,9 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
@@ -89,7 +95,7 @@ import com.google.common.collect.Sets;
  * @since 0.1
  */
 public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver {
-
+    private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     // TODO: move all constants into a single class
     public static final String UNGROUPED_AGG = "UngroupedAgg";
     public static final String DELETE_AGG = "DeleteAgg";
@@ -130,6 +136,21 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (isUngroupedAgg == null) {
             return s;
         }
+        int offset = 0;
+        if (ScanUtil.isLocalIndex(scan)) {
+            /*
+             * For local indexes, we need to set an offset on row key expressions to skip
+             * the region start key.
+             */
+            HRegion region = c.getEnvironment().getRegion();
+            offset = region.getStartKey().length != 0 ? region.getStartKey().length:region.getEndKey().length;
+            ScanUtil.setRowKeyOffset(scan, offset);
+        }
+
+        byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
+        List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
+        List<Mutation> indexMutations = localIndexBytes == null ? Collections.<Mutation>emptyList() : Lists.<Mutation>newArrayListWithExpectedSize(1024);
+        boolean localIndexScan = ScanUtil.isLocalIndex(scan);
         
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
@@ -137,7 +158,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (p != null || j != null)  {
             theScanner = new HashJoinRegionScanner(s, p, j, ScanUtil.getTenantId(scan), c.getEnvironment());
         }
-        final RegionScanner innerScanner = theScanner;
         
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
         PTable projectedTable = null;
@@ -165,6 +185,22 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
             emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_CF);
         }
+        if(localIndexBytes != null) {
+            ptr = new ImmutableBytesWritable();
+        }
+        TupleProjector scanProjector = null;
+        HRegion dataRegion = null;
+        byte[][] viewConstants = null;
+        ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
+        final RegionScanner innerScanner;
+        if (ScanUtil.isLocalIndex(scan) && !isDelete) {
+            if (dataColumns != null) {
+                scanProjector = IndexUtil.getTupleProjector(scan, dataColumns);
+                dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
+                viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+            }
+        } 
+        innerScanner = theScanner;
         
         int batchSize = 0;
         long ts = scan.getTimeRange().getMax();
@@ -186,6 +222,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
         long rowCount = 0;
         region.startRegionOperation();
+        ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
         try {
             do {
                 List<Cell> results = new ArrayList<Cell>();
@@ -193,11 +230,28 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 // since this is an indication of whether or not there are more values after the
                 // ones returned
                 hasMore = innerScanner.nextRaw(results);
+                
                 if (!results.isEmpty()) {
+                    if (localIndexScan && !isDelete) {
+                        IndexUtil.wrapResultUsingOffset(results, offset, dataColumns, scanProjector,
+                            dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0),
+                            viewConstants, tempPtr);
+                    }
                     rowCount++;
                     result.setKeyValues(results);
                     try {
-                        if (isDelete) {
+                        if (indexMaintainers != null && dataColumns==null && !localIndexScan) {
+                            // TODO: join back to data row here if scan attribute set
+                            for (IndexMaintainer maintainer : indexMaintainers) {
+                                if (!results.isEmpty()) {
+                                    result.getKey(ptr);
+                                    ValueGetter valueGetter = maintainer.createGetterFromKeyValues(results);
+                                    Put put = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, c.getEnvironment().getRegion().getStartKey(), c.getEnvironment().getRegion().getEndKey());
+                                    indexMutations.add(put);
+                                }
+                            }
+                            result.setKeyValues(results);
+                        } else if (isDelete) {
                             // FIXME: the version of the Delete constructor without the lock args was introduced
                             // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version
                             // of the client.
@@ -278,6 +332,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             commitBatch(region, mutations, indexUUID);
                             mutations.clear();
                         }
+                        // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
+                        if (!indexMutations.isEmpty() && batchSize > 0 && indexMutations.size() % batchSize == 0) {
+                            HRegion indexRegion = getIndexRegion(c.getEnvironment());
+                            // Get indexRegion corresponding to data region
+                            commitBatch(indexRegion, indexMutations, null);
+                            indexMutations.clear();
+                        }
+
                     } catch (ConstraintViolationException e) {
                         // Log and ignore in count
                         logger.error("Failed to create row in " + region.getRegionNameAsString() + " with values " + SchemaUtil.toString(values), e);
@@ -298,6 +360,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
         if (!mutations.isEmpty()) {
             commitBatch(region,mutations, indexUUID);
+        }
+
+        if (!indexMutations.isEmpty()) {
+            HRegion indexRegion = getIndexRegion(c.getEnvironment());
+            // Get indexRegion corresponding to data region
+            commitBatch(indexRegion, indexMutations, null);
+            indexMutations.clear();
         }
 
         final boolean hadAny = hasAny;
@@ -341,7 +410,19 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         };
         return scanner;
     }
-    
+
+    private HRegion getIndexRegion(RegionCoprocessorEnvironment environment) throws IOException {
+        HRegion userRegion = environment.getRegion();
+        TableName indexTableName = TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(userRegion.getTableDesc().getName()));
+        List<HRegion> onlineRegions = environment.getRegionServerServices().getOnlineRegions(indexTableName);
+        for(HRegion indexRegion : onlineRegions) {
+            if (Bytes.compareTo(userRegion.getStartKey(), indexRegion.getStartKey()) == 0) {
+                return indexRegion;
+            }
+        }
+        return null;
+    }
+
     private static PTable deserializeTable(byte[] b) {
         try {
             PTableProtos.PTable ptableProto = PTableProtos.PTable.parseFrom(b);

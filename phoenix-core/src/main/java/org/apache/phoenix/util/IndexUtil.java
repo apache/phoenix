@@ -17,30 +17,49 @@
  */
 package org.apache.phoenix.util;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
+import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.expression.visitor.RowKeyExpressionVisitor;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.tuple.ResultTuple;
+import org.apache.phoenix.schema.tuple.Tuple;
 
 import com.google.common.collect.Lists;
 
@@ -182,7 +201,7 @@ public class IndexUtil {
                         }
                         
                     };
-                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts));
+                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, null, null));
                 } else {
                     // We can only generate the correct Delete if we have no KV columns in our index.
                     // Perhaps it'd be best to ignore Delete mutations all together here, as this
@@ -210,5 +229,274 @@ public class IndexUtil {
             return true;
         }
         return false;
+    }
+    
+    /**
+     * Traverse the expression tree and set the offset of every RowKeyColumnExpression
+     * to the offset provided. This is used for local indexing on the server-side to
+     * skip over the region start key that prefixes index rows.
+     * @param rootExpression the root expression from which to begin traversal
+     * @param offset the offset to set on each RowKeyColumnExpression
+     */
+    public static void setRowKeyExpressionOffset(Expression rootExpression, final int offset) {
+        rootExpression.accept(new RowKeyExpressionVisitor() {
+
+            @Override
+            public Void visit(RowKeyColumnExpression node) {
+                node.setOffset(offset);
+                return null;
+            }
+            
+        });
+    }
+    
+    public static HRegion getIndexRegion(RegionCoprocessorEnvironment environment) throws IOException {
+        HRegion userRegion = environment.getRegion();
+        TableName indexTableName = TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(userRegion.getTableDesc().getName()));
+        List<HRegion> onlineRegions = environment.getRegionServerServices().getOnlineRegions(indexTableName);
+        for(HRegion indexRegion : onlineRegions) {
+            if (Bytes.compareTo(userRegion.getStartKey(), indexRegion.getStartKey()) == 0) {
+                return indexRegion;
+            }
+        }
+        return null;
+    }
+
+    public static HRegion getDataRegion(RegionCoprocessorEnvironment env) throws IOException {
+        HRegion indexRegion = env.getRegion();
+        TableName dataTableName = TableName.valueOf(MetaDataUtil.getUserTableName(indexRegion.getTableDesc().getNameAsString()));
+        List<HRegion> onlineRegions = env.getRegionServerServices().getOnlineRegions(dataTableName);
+        for(HRegion region : onlineRegions) {
+            if (Bytes.compareTo(indexRegion.getStartKey(), region.getStartKey()) == 0) {
+                return region;
+            }
+        }
+        return null;
+    }
+
+    public static ColumnReference[] deserializeDataTableColumnsToJoin(Scan scan) {
+        byte[] columnsBytes = scan.getAttribute(BaseScannerRegionObserver.DATA_TABLE_COLUMNS_TO_JOIN);
+        if (columnsBytes == null) return null;
+        ByteArrayInputStream stream = new ByteArrayInputStream(columnsBytes); // TODO: size?
+        try {
+            DataInputStream input = new DataInputStream(stream);
+            int numColumns = WritableUtils.readVInt(input);
+            ColumnReference[] dataColumns = new ColumnReference[numColumns];
+            for (int i = 0; i < numColumns; i++) {
+                dataColumns[i] = new ColumnReference(Bytes.readByteArray(input), Bytes.readByteArray(input));
+            }
+            return dataColumns;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } finally {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    public static byte[][] deserializeViewConstantsFromScan(Scan scan) {
+        byte[] bytes = scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS);
+        if (bytes == null) return null;
+        ByteArrayInputStream stream = new ByteArrayInputStream(bytes); // TODO: size?
+        try {
+            DataInputStream input = new DataInputStream(stream);
+            int numConstants = WritableUtils.readVInt(input);
+            byte[][] viewConstants = new byte[numConstants][];
+            for (int i = 0; i < numConstants; i++) {
+                viewConstants[i] = Bytes.readByteArray(input);
+            }
+            return viewConstants;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } finally {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+    
+    public static KeyValueSchema deserializeLocalIndexJoinSchemaFromScan(final Scan scan) {
+        byte[] schemaBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_JOIN_SCHEMA);
+        if (schemaBytes == null) return null;
+        ByteArrayInputStream stream = new ByteArrayInputStream(schemaBytes); // TODO: size?
+        try {
+            DataInputStream input = new DataInputStream(stream);
+            KeyValueSchema schema = new KeyValueSchema();
+            schema.readFields(input);
+            return schema;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } finally {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+    
+    public static TupleProjector getTupleProjector(Scan scan, ColumnReference[] dataColumns) {
+        if (dataColumns != null && dataColumns.length != 0) {
+            KeyValueSchema keyValueSchema = deserializeLocalIndexJoinSchemaFromScan(scan); 
+            KeyValueColumnExpression[] keyValueColumns = new KeyValueColumnExpression[dataColumns.length];
+            for (int i = 0; i < dataColumns.length; i++) {
+                ColumnReference dataColumn = dataColumns[i];
+                KeyValueColumnExpression dataColumnExpr = new KeyValueColumnExpression(keyValueSchema.getField(i), dataColumn.getFamily(), dataColumn.getQualifier());
+                keyValueColumns[i] = dataColumnExpr;
+            }
+            return new TupleProjector(keyValueSchema, keyValueColumns);
+        }
+        return null;
+    }
+    
+    public static void wrapResultUsingOffset(List<Cell> result, final int offset,
+            ColumnReference[] dataColumns, TupleProjector tupleProjector, HRegion dataRegion,
+            IndexMaintainer indexMaintainer, byte[][] viewConstants, ImmutableBytesWritable ptr) throws IOException {
+        if (tupleProjector != null) {
+            // Join back to data table here by issuing a local get projecting
+            // all of the cq:cf from the KeyValueColumnExpression into the Get.
+            Cell firstCell = result.get(0);
+            byte[] indexRowKey = firstCell.getRowArray();
+            ptr.set(indexRowKey, firstCell.getRowOffset() + offset, firstCell.getRowLength() - offset);
+            byte[] dataRowKey = indexMaintainer.buildDataRowKey(ptr, viewConstants);
+            Get get = new Get(dataRowKey);
+            for (int i = 0; i < dataColumns.length; i++) {
+                get.addColumn(dataColumns[i].getFamily(), dataColumns[i].getQualifier());
+            }
+            Result joinResult = dataRegion.get(get);
+            // TODO: handle null case (but shouldn't happen)
+            Tuple joinTuple = new ResultTuple(joinResult);
+            // This will create a byte[] that captures all of the values from the data table
+            byte[] value =
+                    tupleProjector.getSchema().toBytes(joinTuple, tupleProjector.getExpressions(),
+                        tupleProjector.getValueBitSet(), ptr);
+            KeyValue keyValue =
+                    KeyValueUtil.newKeyValue(firstCell.getRowArray(),firstCell.getRowOffset(),firstCell.getRowLength(), TupleProjector.VALUE_COLUMN_FAMILY,
+                        TupleProjector.VALUE_COLUMN_QUALIFIER, firstCell.getTimestamp(), value, 0, value.length);
+            result.add(keyValue);
+        }
+        for (int i = 0; i < result.size(); i++) {
+            final Cell cell = result.get(i);
+            // TODO: Create DelegateCell class instead
+            Cell newCell = new Cell() {
+
+                @Override
+                public byte[] getRowArray() {
+                    return cell.getRowArray();
+                }
+
+                @Override
+                public int getRowOffset() {
+                    return cell.getRowOffset() + offset;
+                }
+
+                @Override
+                public short getRowLength() {
+                    return (short)(cell.getRowLength() - offset);
+                }
+
+                @Override
+                public byte[] getFamilyArray() {
+                    return cell.getFamilyArray();
+                }
+
+                @Override
+                public int getFamilyOffset() {
+                    return cell.getFamilyOffset();
+                }
+
+                @Override
+                public byte getFamilyLength() {
+                    return cell.getFamilyLength();
+                }
+
+                @Override
+                public byte[] getQualifierArray() {
+                    return cell.getQualifierArray();
+                }
+
+                @Override
+                public int getQualifierOffset() {
+                    return cell.getQualifierOffset();
+                }
+
+                @Override
+                public int getQualifierLength() {
+                    return cell.getQualifierLength();
+                }
+
+                @Override
+                public long getTimestamp() {
+                    return cell.getTimestamp();
+                }
+
+                @Override
+                public byte getTypeByte() {
+                    return cell.getTypeByte();
+                }
+
+                @Override
+                public long getMvccVersion() {
+                    return cell.getMvccVersion();
+                }
+
+                @Override
+                public byte[] getValueArray() {
+                    return cell.getValueArray();
+                }
+
+                @Override
+                public int getValueOffset() {
+                    return cell.getValueOffset();
+                }
+
+                @Override
+                public int getValueLength() {
+                    return cell.getValueLength();
+                }
+
+                @Override
+                public byte[] getTagsArray() {
+                    return cell.getTagsArray();
+                }
+
+                @Override
+                public int getTagsOffset() {
+                    return cell.getTagsOffset();
+                }
+
+                @Override
+                public short getTagsLength() {
+                    return cell.getTagsLength();
+                }
+
+                @Override
+                public byte[] getValue() {
+                    return cell.getValue();
+                }
+
+                @Override
+                public byte[] getFamily() {
+                    return cell.getFamily();
+                }
+
+                @Override
+                public byte[] getQualifier() {
+                    return cell.getQualifier();
+                }
+
+                @Override
+                public byte[] getRow() {
+                    return cell.getRow();
+                }
+            };
+            // Wrap cell in cell that offsets row key
+            result.set(i, newCell);
+        }
     }
 }

@@ -34,7 +34,9 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
@@ -60,6 +62,14 @@ public class ScanUtil {
 
     public static void setTenantId(Scan scan, byte[] tenantId) {
         scan.setAttribute(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+    }
+
+    public static void setLocalIndex(Scan scan) {
+        scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX, PDataType.TRUE_BYTES);
+    }
+
+    public static boolean isLocalIndex(Scan scan) {
+        return scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX) != null;
     }
 
     // Use getTenantId and pass in column name to match against
@@ -101,6 +111,10 @@ public class ScanUtil {
 
     public static boolean intersectScanRange(Scan scan, byte[] startKey, byte[] stopKey, boolean useSkipScan) {
         boolean mayHaveRows = false;
+        int offset = 0;
+        if (ScanUtil.isLocalIndex(scan)) {
+            offset = startKey.length != 0 ? startKey.length : stopKey.length;
+        }
         byte[] existingStartKey = scan.getStartRow();
         byte[] existingStopKey = scan.getStopRow();
         if (existingStartKey.length > 0) {
@@ -119,7 +133,19 @@ public class ScanUtil {
         }
         scan.setStartRow(startKey);
         scan.setStopRow(stopKey);
-        
+        if (offset > 0 && useSkipScan) {
+            byte[] temp = null;
+            if (startKey.length != 0) {
+                temp =new byte[startKey.length - offset];
+                System.arraycopy(startKey, offset, temp, 0, startKey.length - offset);
+                startKey = temp;
+            }
+            if (stopKey.length != 0) {
+                temp = new byte[stopKey.length - offset];
+                System.arraycopy(stopKey, offset, temp, 0, stopKey.length - offset);
+                stopKey = temp;
+            }
+        }
         mayHaveRows = mayHaveRows || Bytes.compareTo(scan.getStartRow(), scan.getStopRow()) < 0;
         
         // If the scan is using skip scan filter, intersect and replace the filter.
@@ -413,5 +439,30 @@ public class ScanUtil {
     public static boolean isReversed(Scan scan) {
         byte[] reversed = scan.getAttribute(REVERSED_ATTR);
         return (PDataType.TRUE_BYTES.equals(reversed));
+    }
+    
+    private static void setRowKeyOffset(Filter filter, int offset) {
+        if (filter instanceof BooleanExpressionFilter) {
+            BooleanExpressionFilter boolFilter = (BooleanExpressionFilter)filter;
+            IndexUtil.setRowKeyExpressionOffset(boolFilter.getExpression(), offset);
+        } else if (filter instanceof SkipScanFilter) {
+            SkipScanFilter skipScanFilter = (SkipScanFilter)filter;
+            skipScanFilter.setOffset(offset);
+        }
+    }
+
+    public static void setRowKeyOffset(Scan scan, int offset) {
+        Filter filter = scan.getFilter();
+        if (filter == null) {
+            return;
+        }
+        if (filter instanceof FilterList) {
+            FilterList filterList = (FilterList)filter;
+            for (Filter childFilter : filterList.getFilters()) {
+                setRowKeyOffset(childFilter, offset);
+            }
+        } else {
+            setRowKeyOffset(filter, offset);
+        }
     }
 }

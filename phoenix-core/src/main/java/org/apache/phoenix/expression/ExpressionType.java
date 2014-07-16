@@ -61,6 +61,7 @@ import org.apache.phoenix.expression.function.RoundDateExpression;
 import org.apache.phoenix.expression.function.RoundDecimalExpression;
 import org.apache.phoenix.expression.function.RoundFunction;
 import org.apache.phoenix.expression.function.RoundTimestampExpression;
+import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
@@ -178,8 +179,8 @@ public enum ExpressionType {
     ArrayAnyComparisonExpression(ArrayAnyComparisonExpression.class),
     ArrayAllComparisonExpression(ArrayAllComparisonExpression.class),
     InlineArrayElemRefExpression(InlineArrayElemRefExpression.class),
+    SQLIndexTypeFunction(SQLIndexTypeFunction.class),
     ModulusExpression(ModulusExpression.class);
-    
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }
