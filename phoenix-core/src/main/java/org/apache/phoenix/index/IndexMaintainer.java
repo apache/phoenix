@@ -508,7 +508,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             // in which case nIndexSaltBuckets would never be used. Note that when we do add this
             // to be serialized, we have to add it at the end and allow for the value not being
             // there to maintain compatibility between an old client and a new server.
-            assert(isLocalIndex); // Remove when we persist nDataSaltBuckets
             if (isDataTableSalted) {
                 // Set salt byte
                 byte saltByte = SaltingUtil.getSaltingByte(dataRowKey, SaltingUtil.NUM_SALTING_BYTES, length-SaltingUtil.NUM_SALTING_BYTES, nIndexSaltBuckets);
