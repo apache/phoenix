@@ -97,7 +97,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final int SCHEMA_NAME_INDEX = 1;
     public static final int TENANT_ID_INDEX = 0;
 
-    public static final String SYSTEM_CATALOG_SCHEMA = "SYSTEM";
+    public static final String SYSTEM_CATALOG_SCHEMA = QueryConstants.SYSTEM_SCHEMA_NAME;
     public static final String SYSTEM_CATALOG_TABLE = "CATALOG";
     public static final String SYSTEM_CATALOG = SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"";
     public static final byte[] SYSTEM_CATALOG_SCHEMA_BYTES = Bytes.toBytes(SYSTEM_CATALOG_TABLE);

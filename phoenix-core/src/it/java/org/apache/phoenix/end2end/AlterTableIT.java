@@ -39,12 +39,15 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -84,6 +87,26 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
    
 
+
+    @Test
+    public void testAddColsIntoSystemTable() throws Exception {
+      Properties props = new Properties(TEST_PROPERTIES);
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP + 1));
+      Connection conn = DriverManager.getConnection(getUrl(), props);
+ 
+      try{
+        conn.createStatement().executeUpdate("ALTER TABLE " + PhoenixDatabaseMetaData.SYSTEM_CATALOG + 
+          " ADD IF NOT EXISTS testNewColumn integer");
+        String query = "SELECT testNewColumn FROM " + PhoenixDatabaseMetaData.SYSTEM_CATALOG;
+        try {
+          conn.createStatement().executeQuery(query);
+        } catch(SQLException e) {
+          assertFalse("testNewColumn wasn't created successfully:" + e, true);
+        }
+      } finally {
+        conn.close();
+      }
+    }
 
     @Test
     public void testAddVarCharColToPK() throws Exception {
