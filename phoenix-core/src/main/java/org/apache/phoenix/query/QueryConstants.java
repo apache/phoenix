@@ -105,7 +105,7 @@ public interface QueryConstants {
     public static final long UNSET_TIMESTAMP = -1;
     
     public enum JoinType {INNER, LEFT_OUTER}
-    public final static String PHOENIX_SCHEMA = "system";
+    public final static String SYSTEM_SCHEMA_NAME = "SYSTEM";
     public final static String PHOENIX_METADATA = "table";
 
     public final static PName SINGLE_COLUMN_NAME = PNameFactory.newNormalizedName("s");
