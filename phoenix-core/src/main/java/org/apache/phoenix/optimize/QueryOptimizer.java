@@ -297,10 +297,18 @@ public class QueryOptimizer {
                 // Account for potential view constants which are always bound
                 if (plan1 == dataPlan) { // plan2 is index plan. Ignore the viewIndexId if present
                     c += boundRanges - (table2.getViewIndexId() == null || bothLocalIndexes ? 0 : 1);
+                    // if table2 is local index table and query doesn't have any condition on the
+                    // indexed columns then give first priority to the local index.
                     if(table2.getIndexType()==IndexType.LOCAL && plan2.getContext().getScanRanges().getRanges().size()==0) c++;
                 } else { // plan1 is index plan. Ignore the viewIndexId if present
                     c -= boundRanges - (table1.getViewIndexId() == null || bothLocalIndexes ? 0 : 1);
-                    if(table1.getIndexType()==IndexType.LOCAL && plan1.getContext().getScanRanges().getRanges().size()==0) c++;
+                    // if table1 is local index table and query doesn't have any condition on the
+                    // indexed columns then give first priority to the local index.
+                    if (!bothLocalIndexes && table1.getIndexType() == IndexType.LOCAL
+                            && plan1.getContext().getScanRanges().getRanges().isEmpty()) c--;
+                    // if both tables are index tables then select plan below based on number of
+                    // columns and type of index.
+                    if(table1.getType()==PTableType.INDEX && table2.getType()==PTableType.INDEX && !bothLocalIndexes) c=0;
                 }
                 if (c != 0) return c;
                 if (plan1.getGroupBy()!=null && plan2.getGroupBy()!=null) {
