@@ -95,7 +95,6 @@ import com.google.common.collect.Sets;
  * @since 0.1
  */
 public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver {
-    private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     // TODO: move all constants into a single class
     public static final String UNGROUPED_AGG = "UngroupedAgg";
     public static final String DELETE_AGG = "DeleteAgg";
