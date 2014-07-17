@@ -23,6 +23,15 @@ import os
 import subprocess
 import sys
 import phoenix_utils
+import atexit
+
+global childProc
+childProc = None
+def kill_child():
+    if childProc is not None:
+        childProc.terminate()
+        childProc.kill()
+atexit.register(kill_child)
 
 phoenix_utils.setPath()
 
@@ -50,4 +59,7 @@ java_cmd = 'java -cp ".' + os.pathsep + phoenix_utils.phoenix_client_jar + \
     " -n none -p none --color=" + colorSetting + " --fastConnect=false --verbose=true \
 --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
 
-subprocess.call(java_cmd, shell=True)
+childProc = subprocess.Popen(java_cmd, shell=True)
+#Wait for child process exit
+(output, error) = childProc.communicate()
+childProc = None
