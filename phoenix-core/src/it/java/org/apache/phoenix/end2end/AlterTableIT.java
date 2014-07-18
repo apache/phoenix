@@ -84,28 +84,26 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
         }
     }
     
-    
-   
-
-
     @Test
     public void testAddColsIntoSystemTable() throws Exception {
-      Properties props = new Properties(TEST_PROPERTIES);
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP + 1));
-      Connection conn = DriverManager.getConnection(getUrl(), props);
- 
-      try{
-        conn.createStatement().executeUpdate("ALTER TABLE " + PhoenixDatabaseMetaData.SYSTEM_CATALOG + 
-          " ADD IF NOT EXISTS testNewColumn integer");
-        String query = "SELECT testNewColumn FROM " + PhoenixDatabaseMetaData.SYSTEM_CATALOG;
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
+                Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP + 1));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
         try {
-          conn.createStatement().executeQuery(query);
-        } catch(SQLException e) {
-          assertFalse("testNewColumn wasn't created successfully:" + e, true);
+            conn.createStatement().executeUpdate(
+                    "ALTER TABLE " + PhoenixDatabaseMetaData.SYSTEM_CATALOG
+                            + " ADD IF NOT EXISTS testNewColumn integer");
+            String query = "SELECT testNewColumn FROM " + PhoenixDatabaseMetaData.SYSTEM_CATALOG;
+            try {
+                conn.createStatement().executeQuery(query);
+            } catch (SQLException e) {
+                assertFalse("testNewColumn wasn't created successfully:" + e, true);
+            }
+        } finally {
+            conn.close();
         }
-      } finally {
-        conn.close();
-      }
     }
 
     @Test

@@ -207,6 +207,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String SUPERTABLE_NAME = "SUPERTABLE_NAME";
     		
     public static final String TYPE_ID = "TYPE_ID";
+    public static final String INDEX_TYPE = "INDEX_TYPE";
     
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;
