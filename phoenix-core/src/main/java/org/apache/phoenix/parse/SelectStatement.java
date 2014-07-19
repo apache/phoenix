@@ -37,7 +37,7 @@ public class SelectStatement implements FilterableStatement {
     public static final SelectStatement SELECT_ONE =
             new SelectStatement(
                     Collections.<TableNode>emptyList(), null, false, 
-                    Collections.<AliasedNode>singletonList(new AliasedNode(null,new LiteralParseNode(1))),
+                    Collections.<AliasedNode>singletonList(new AliasedNode(null, LiteralParseNode.ONE)),
                     null, Collections.<ParseNode>emptyList(),
                     null, Collections.<OrderByNode>emptyList(),
                     null, 0, false);

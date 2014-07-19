@@ -61,6 +61,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
+import org.apache.phoenix.schema.SequenceInfo;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
@@ -70,6 +71,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.SequenceUtil;
 
 import com.google.common.collect.Maps;
 
@@ -84,7 +86,7 @@ import com.google.common.collect.Maps;
  */
 public class ConnectionlessQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices  {
     private PMetaData metaData;
-    private final Map<SequenceKey, Long> sequenceMap = Maps.newHashMap();
+    private final Map<SequenceKey, SequenceInfo> sequenceMap = Maps.newHashMap();
     private KeyValueBuilder kvBuilder;
     private volatile boolean initialized;
     private volatile SQLException initializationException;
@@ -316,13 +318,14 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, long cacheSize, long timestamp)
-            throws SQLException {
+    public long createSequence(String tenantId, String schemaName, String sequenceName,
+            long startWith, long incrementBy, long cacheSize, long minValue, long maxValue,
+            boolean cycle, long timestamp) throws SQLException {
         SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName);
         if (sequenceMap.get(key) != null) {
             throw new SequenceAlreadyExistsException(schemaName, sequenceName);
         }
-        sequenceMap.put(key, startWith);
+        sequenceMap.put(key, new SequenceInfo(startWith, incrementBy, minValue, maxValue, 1l, cycle)) ;
         return timestamp;
     }
 
@@ -340,11 +343,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
             SQLException[] exceptions, Sequence.ValueOp action) throws SQLException {
         int i = 0;
         for (SequenceKey key : sequenceKeys) {
-            Long value = sequenceMap.get(key);
-            if (value == null) {
+            SequenceInfo info = sequenceMap.get(key);
+            if (info == null) {
                 exceptions[i] = new SequenceNotFoundException(key.getSchemaName(), key.getSequenceName());
             } else {
-                values[i] = value;          
+                values[i] = info.sequenceValue;          
             }
             i++;
         }
@@ -355,11 +358,14 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
             SQLException[] exceptions) throws SQLException {
         int i = 0;
         for (SequenceKey key : sequenceKeys) {
-            Long value = sequenceMap.get(key);
-            if (value == null) {
-                exceptions[i] = new SequenceNotFoundException(key.getSchemaName(), key.getSequenceName());
+            SequenceInfo info = sequenceMap.get(key);
+            if (info == null) {
+                exceptions[i] =
+                        new SequenceNotFoundException(key.getSchemaName(), key.getSequenceName());
             } else {
-                values[i] = value++;
+                values[i] = info.sequenceValue;
+                info.sequenceValue =
+                        SequenceUtil.getNextValue(key, info);
             }
             i++;
         }
@@ -374,13 +380,13 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public long currentSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException {
-        Long value = sequenceMap.get(sequenceKey);
-        if (value == null) {
+        SequenceInfo info = sequenceMap.get(sequenceKey);
+        if (info == null) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CALL_CURRENT_BEFORE_NEXT_VALUE)
             .setSchemaName(sequenceKey.getSchemaName()).setTableName(sequenceKey.getSequenceName())
             .build().buildException();
         }
-        return value;
+        return info.sequenceValue;
     }
 
     @Override

@@ -562,7 +562,8 @@ public abstract class BaseTest {
         PhoenixTestDriver driver = new PhoenixTestDriver(props);
         DriverManager.registerDriver(driver);
         Assert.assertTrue(DriverManager.getDriver(url) == driver);
-        driver.connect(url, TestUtil.TEST_PROPERTIES);
+        Connection conn = driver.connect(url, TestUtil.TEST_PROPERTIES);
+        conn.close();
         return driver;
     }
     

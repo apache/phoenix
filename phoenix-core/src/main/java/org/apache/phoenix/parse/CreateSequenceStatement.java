@@ -20,24 +20,37 @@ package org.apache.phoenix.parse;
 public class CreateSequenceStatement extends MutableStatement {
 
     public static CreateSequenceStatement create(TableName sequenceName) {
-        return new CreateSequenceStatement(sequenceName, null, null, null, true, 0);
+        return new CreateSequenceStatement(sequenceName, null, null, null, null, null, false, true,
+                0);
     }
     
 	private final TableName sequenceName;
 	private final ParseNode startWith;
 	private final ParseNode incrementBy;
     private final ParseNode cacheSize;
+    private final ParseNode minValue;
+    private final ParseNode maxValue;
+    private final boolean cycle;
     private final boolean ifNotExists;
 	private final int bindCount;
 
-	protected CreateSequenceStatement(TableName sequenceName, ParseNode startsWith, ParseNode incrementBy, ParseNode cacheSize, boolean ifNotExists, int bindCount) {
-		this.sequenceName = sequenceName;
-		this.startWith = startsWith == null ? LiteralParseNode.ONE : startsWith;
-		this.incrementBy = incrementBy == null ? LiteralParseNode.ONE : incrementBy;
-        this.cacheSize = cacheSize == null ? null : cacheSize;
-		this.ifNotExists = ifNotExists;
-		this.bindCount = bindCount;
-	}
+    protected CreateSequenceStatement(TableName sequenceName, ParseNode startWith,
+            ParseNode incrementBy, ParseNode cacheSize, ParseNode minValue, ParseNode maxValue,
+            boolean cycle, boolean ifNotExists, int bindCount) {
+        this.sequenceName = sequenceName;
+        // if MINVALUE, MAXVALUE and START WITH are not specified, set START WITH to 1 in order to
+        // maintain backward compatibility
+        this.startWith =
+                (minValue == null && maxValue == null && startWith == null) ? LiteralParseNode.ONE
+                        : startWith;
+        this.minValue = minValue == null ? new LiteralParseNode(Long.MIN_VALUE) : minValue;
+        this.maxValue = maxValue == null ? new LiteralParseNode(Long.MAX_VALUE) : maxValue;
+        this.incrementBy = incrementBy == null ? LiteralParseNode.ONE : incrementBy;
+        this.cacheSize = cacheSize;
+        this.cycle = cycle;
+        this.ifNotExists = ifNotExists;
+        this.bindCount = bindCount;
+    }
 
 	@Override
 	public int getBindCount() {
@@ -56,7 +69,19 @@ public class CreateSequenceStatement extends MutableStatement {
         return cacheSize;
     }
 
-	public ParseNode getStartWith() {
+	public ParseNode getMinValue() {
+        return minValue;
+    }
+
+    public ParseNode getMaxValue() {
+        return maxValue;
+    }
+
+    public boolean getCycle() {
+        return cycle;
+    }
+
+    public ParseNode getStartWith() {
 		return startWith;
 	}
 

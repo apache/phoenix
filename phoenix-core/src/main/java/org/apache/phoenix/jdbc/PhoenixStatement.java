@@ -488,9 +488,12 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     private static class ExecutableCreateSequenceStatement extends	CreateSequenceStatement implements CompilableStatement {
 
-		public ExecutableCreateSequenceStatement(TableName sequenceName, ParseNode startWith, ParseNode incrementBy, ParseNode cacheSize, boolean ifNotExists, int bindCount) {
-			super(sequenceName, startWith, incrementBy, cacheSize, ifNotExists, bindCount);
-		}
+        public ExecutableCreateSequenceStatement(TableName sequenceName, ParseNode startWith,
+                ParseNode incrementBy, ParseNode cacheSize, ParseNode minValue, ParseNode maxValue,
+                boolean cycle, boolean ifNotExists, int bindCount) {
+            super(sequenceName, startWith, incrementBy, cacheSize, minValue, maxValue, cycle,
+                    ifNotExists, bindCount);
+        }
 
 		@SuppressWarnings("unchecked")
         @Override
@@ -745,8 +748,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
         
         @Override
-        public CreateSequenceStatement createSequence(TableName tableName, ParseNode startsWith, ParseNode incrementBy, ParseNode cacheSize, boolean ifNotExists, int bindCount){
-        	return new ExecutableCreateSequenceStatement(tableName, startsWith, incrementBy, cacheSize, ifNotExists, bindCount);
+        public CreateSequenceStatement createSequence(TableName tableName, ParseNode startsWith,
+                ParseNode incrementBy, ParseNode cacheSize, ParseNode minValue, ParseNode maxValue,
+                boolean cycle, boolean ifNotExists, int bindCount) {
+            return new ExecutableCreateSequenceStatement(tableName, startsWith, incrementBy,
+                    cacheSize, minValue, maxValue, cycle, ifNotExists, bindCount);
         }
         
         @Override
