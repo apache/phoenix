@@ -66,6 +66,24 @@ public class KeyValueUtil {
                 value, valueOffset, valueLength);
     }
 
+    public static KeyValue newKeyValue(byte[] key, int keyOffset, int keyLength, byte[] cf, 
+        int cfOffset, int cfLength, byte[] cq, int cqOffset, int cqLength, long ts, byte[] value, 
+        int valueOffset, int valueLength) {
+        return new KeyValue(key, keyOffset, keyLength,
+                cf, cfOffset, cfLength,
+                cq, cqOffset, cqLength,
+                ts, Type.Put,
+                value, valueOffset, valueLength);
+    }
+    
+    public static KeyValue newKeyValue(byte[] key, KeyValue kv, byte[] value) {
+        return newKeyValue(key, 0, key.length,
+            kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength(), 
+            kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength(), 
+            kv.getTimestamp(),
+            value, 0, value.length);
+    }
+
     public static KeyValue newKeyValue(byte[] key, byte[] cf, byte[] cq, long ts, byte[] value) {
         return newKeyValue(key,cf,cq,ts,value,0,value.length);
     }

@@ -22,6 +22,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CYCLE_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE;
@@ -31,6 +32,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
@@ -189,7 +192,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private volatile boolean initialized;
     private volatile boolean closed;
     private volatile SQLException initializationException;
-    private ConcurrentMap<SequenceKey,Sequence> sequenceMap = Maps.newConcurrentMap();
+    protected ConcurrentMap<SequenceKey,Sequence> sequenceMap = Maps.newConcurrentMap();
     private KeyValueBuilder kvBuilder;
 
     private PMetaData newEmptyMetaData() {
@@ -1370,7 +1373,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             try {
                                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
-                                // Ignore, as this will happen if the SYSTEM.TABLE already exists at this fixed timestamp.
+                                // Ignore, as this will happen if the SYSTEM.CATALOG already exists at this fixed timestamp.
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                             } catch (TableAlreadyExistsException ignore) {
                                 // This will occur if we have an older SYSTEM.CATALOG and we need to update it to include
@@ -1382,6 +1385,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             } catch (NewerTableAlreadyExistsException ignore) {
                                 // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
+                            } catch (TableAlreadyExistsException ignore) {
+                                // This will occur if we have an older SYSTEM.SEQUENCE, so we need to update it to include
+                                // any new columns we've added.
+                                String newColumns =
+                                        MIN_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", " 
+                                                + MAX_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", " 
+                                                + CYCLE_FLAG + " " + PDataType.BOOLEAN.getSqlTypeName();
+                                metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME, 
+                                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, newColumns); 
                             }
                             upgradeMetaDataTo3_0(url, props);
                         } catch (SQLException e) {
@@ -1510,8 +1522,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, long cacheSize, long timestamp) 
-            throws SQLException {
+    public long createSequence(String tenantId, String schemaName, String sequenceName,
+            long startWith, long incrementBy, long cacheSize, long minValue, long maxValue,
+            boolean cycle, long timestamp) throws SQLException {
         SequenceKey sequenceKey = new SequenceKey(tenantId, schemaName, sequenceName);
         Sequence newSequences = new Sequence(sequenceKey);
         Sequence sequence = sequenceMap.putIfAbsent(sequenceKey, newSequences);
@@ -1521,11 +1534,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             sequence.getLock().lock();
             // Now that we have the lock we need, create the sequence
-            Append append = sequence.createSequence(startWith, incrementBy, cacheSize, timestamp);
-            HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES);
+            Append append = sequence.createSequence(startWith, incrementBy, cacheSize, timestamp, minValue, maxValue, cycle);
+            HTableInterface htable =
+                    this.getTable(PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES);
             try {
                 Result result = htable.append(append);
-                return sequence.createSequence(result);
+                return sequence.createSequence(result, minValue, maxValue, cycle);
             } catch (IOException e) {
                 throw ServerUtil.parseServerException(e);
             } finally {
@@ -1639,6 +1653,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     toIncrementList.add(sequence);
                     Increment inc = sequence.newIncrement(timestamp, action);
                     incrementBatch.add(inc);
+                } catch (SQLException e) {
+                    exceptions[i] = e;
                 }
             }
             if (toIncrementList.isEmpty()) {
@@ -1757,6 +1773,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     // Take no locks, as this only gets run when there are no open connections
     // so there's no danger of contention.
+    @SuppressWarnings("deprecation")
     private void returnAllSequences(ConcurrentMap<SequenceKey,Sequence> sequenceMap) throws SQLException {
         List<Append> mutations = Lists.newArrayListWithExpectedSize(sequenceMap.size());
         for (Sequence sequence : sequenceMap.values()) {

@@ -28,6 +28,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CURRENT_VALUE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CYCLE_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DECIMAL_DIGITS;
@@ -41,6 +42,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NULLABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_PREC_RADIX;
@@ -213,15 +216,19 @@ public interface QueryConstants {
             HTableDescriptor.SPLIT_POLICY + "='" + MetaDataSplitPolicy.class.getName() + "'\n";
     
     public static final String CREATE_SEQUENCE_METADATA =
-            "CREATE TABLE IF NOT EXISTS " + SYSTEM_CATALOG_SCHEMA + ".\"" + TYPE_SEQUENCE + "\"(\n" +                                    
+            "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + TYPE_SEQUENCE + "\"(\n" +                                    
             TENANT_ID + " VARCHAR NULL," +
-    		SEQUENCE_SCHEMA + " VARCHAR NULL, \n" + 
+            SEQUENCE_SCHEMA + " VARCHAR NULL, \n" + 
             SEQUENCE_NAME +  " VARCHAR NOT NULL, \n" +
             START_WITH + " BIGINT, \n" + 
-    		CURRENT_VALUE + " BIGINT, \n" + 
+            CURRENT_VALUE + " BIGINT, \n" + 
             INCREMENT_BY  + " BIGINT, \n" + 
-            CACHE_SIZE  + " BIGINT \n" + 
-    		" CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + SEQUENCE_SCHEMA + "," + SEQUENCE_NAME + "))\n" + 
-    		HConstants.VERSIONS + "=" + MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS + "\n";
+            CACHE_SIZE  + " BIGINT, \n" + 
+            //  the following three columns were added in 3.0/4.0
+            MIN_VALUE + " BIGINT, \n" + 
+            MAX_VALUE + " BIGINT, \n" + 
+            CYCLE_FLAG + " BOOLEAN \n" + 
+            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + SEQUENCE_SCHEMA + "," + SEQUENCE_NAME + "))\n" + 
+            HConstants.VERSIONS + "=" + MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS + "\n";
 	
 }

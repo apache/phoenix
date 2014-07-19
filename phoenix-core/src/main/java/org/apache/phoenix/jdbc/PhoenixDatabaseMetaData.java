@@ -198,10 +198,17 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] CURRENT_VALUE_BYTES = Bytes.toBytes(CURRENT_VALUE);
     public static final String START_WITH = "START_WITH";
     public static final byte[] START_WITH_BYTES = Bytes.toBytes(START_WITH);
+    // MIN_VALUE, MAX_VALUE and CYCLE_FLAG were added in 3.0
+    public static final String MIN_VALUE = "MIN_VALUE";
+    public static final byte[] MIN_VALUE_BYTES = Bytes.toBytes(MIN_VALUE);
+    public static final String MAX_VALUE = "MAX_VALUE";
+    public static final byte[] MAX_VALUE_BYTES = Bytes.toBytes(MAX_VALUE);
     public static final String INCREMENT_BY = "INCREMENT_BY";
     public static final byte[] INCREMENT_BY_BYTES = Bytes.toBytes(INCREMENT_BY);
     public static final String CACHE_SIZE = "CACHE_SIZE";
     public static final byte[] CACHE_SIZE_BYTES = Bytes.toBytes(CACHE_SIZE);
+    public static final String CYCLE_FLAG = "CYCLE_FLAG";
+    public static final byte[] CYCLE_FLAG_BYTES = Bytes.toBytes(CYCLE_FLAG);
     public static final String KEY_SEQ = "KEY_SEQ";
     public static final byte[] KEY_SEQ_BYTES = Bytes.toBytes(KEY_SEQ);
     public static final String SUPERTABLE_NAME = "SUPERTABLE_NAME";

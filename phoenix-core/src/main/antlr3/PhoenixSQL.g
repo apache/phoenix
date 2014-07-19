@@ -101,6 +101,9 @@ tokens
     DERIVE='derive';
     ANY='any';
     SOME='some';
+    MINVALUE='minvalue';
+    MAXVALUE='maxvalue';
+    CYCLE='cycle';
 }
 
 
@@ -138,6 +141,7 @@ import java.util.Collections;
 import java.util.Stack;
 import java.sql.SQLException;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.IllegalDataException;
@@ -392,10 +396,13 @@ create_index_node returns [CreateIndexStatement ret]
 // Parse a create sequence statement.
 create_sequence_node returns [CreateSequenceStatement ret]
     :   CREATE SEQUENCE  (IF NOT ex=EXISTS)? t=from_table_name
-        (START WITH? s=int_literal_or_bind)?
-        (INCREMENT BY? i=int_literal_or_bind)?
+        (START WITH? s=value_expression)?
+        (INCREMENT BY? i=value_expression)?
+        (MINVALUE min=value_expression)?
+        (MAXVALUE max=value_expression)?
+        (cyc=CYCLE)? 
         (CACHE c=int_literal_or_bind)?
-    { $ret = factory.createSequence(t, s, i, c, ex!=null, getBindCount()); }
+    { $ret = factory.createSequence(t, s, i, c, min, max, cyc!=null, ex!=null, getBindCount()); }
     ;
 
 int_literal_or_bind returns [ParseNode ret]
