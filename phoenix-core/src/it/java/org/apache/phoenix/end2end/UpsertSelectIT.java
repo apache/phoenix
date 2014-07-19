@@ -796,4 +796,61 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
     
     }
+    
+    @Test
+    public void testUpsertSelectWithSequenceAndOrderByWithSalting() throws Exception {
+
+        int numOfRecords = 200;
+        long ts = nextTimestamp();
+        Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE IF NOT EXISTS DUMMY_CURSOR_STORAGE ("
+                + "ORGANIZATION_ID CHAR(15) NOT NULL, QUERY_ID CHAR(15) NOT NULL, CURSOR_ORDER BIGINT NOT NULL, K1 INTEGER, V1 INTEGER "
+                + "CONSTRAINT MAIN_PK PRIMARY KEY (ORGANIZATION_ID, QUERY_ID, CURSOR_ORDER) " + ") SALT_BUCKETS = 4";
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute(
+                "CREATE TABLE DUMMY_SEQ_TEST_DATA "
+                        + "(ORGANIZATION_ID CHAR(15) NOT NULL, k1 integer NOT NULL, v1 integer NOT NULL "
+                        + "CONSTRAINT PK PRIMARY KEY (ORGANIZATION_ID, k1, v1) ) VERSIONS=1, SALT_BUCKETS = 4");
+        conn.createStatement().execute("create sequence s cache " + Integer.MAX_VALUE);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        for (int i = 0; i < numOfRecords; i++) {
+            conn.createStatement().execute(
+                    "UPSERT INTO DUMMY_SEQ_TEST_DATA values ('00Dxx0000001gEH'," + i + "," + (i + 2) + ")");
+        }
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+        conn.createStatement().execute(
+                    "UPSERT INTO DUMMY_CURSOR_STORAGE SELECT '00Dxx0000001gEH', 'MyQueryId', NEXT VALUE FOR S, k1, v1  FROM DUMMY_SEQ_TEST_DATA ORDER BY K1, V1");
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs = conn.createStatement().executeQuery("select count(*) from DUMMY_CURSOR_STORAGE");
+
+        assertTrue(rs.next());
+        assertEquals(numOfRecords, rs.getLong(1));
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 25));
+        ResultSet rs2 = conn.createStatement().executeQuery(
+                "select cursor_order, k1, v1 from DUMMY_CURSOR_STORAGE order by cursor_order");
+        long seq = 1;
+        while (rs2.next()) {
+            assertEquals(seq, rs2.getLong("cursor_order"));
+            // This value should be the sequence - 1 as we said order by k1 in the UPSERT...SELECT, but is not because
+            // of sequence processing.
+            assertEquals(seq - 1, rs2.getLong("k1"));
+            seq++;
+        }
+        conn.close();
+
+    }
 }

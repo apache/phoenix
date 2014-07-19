@@ -166,7 +166,7 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         }
         return NODE_FACTORY.select(normFrom, statement.getHint(), statement.isDistinct(),
                 normSelectNodes, normWhere, normGroupByNodes, normHaving, normOrderByNodes,
-                statement.getLimit(), statement.getBindCount(), statement.isAggregate());
+                statement.getLimit(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
     }
     
     private Map<String, ParseNode> getAliasMap() {
