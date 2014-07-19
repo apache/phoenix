@@ -557,7 +557,7 @@ select_node returns [SelectStatement ret]
         (HAVING having=expression)?
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        { ParseContext context = contextStack.pop(); $ret = factory.select(from, null, d!=null, sel, where, group, having, order, l, getBindCount(), context.isAggregate()); }
+        { ParseContext context = contextStack.pop(); $ret = factory.select(from, null, d!=null, sel, where, group, having, order, l, getBindCount(), context.isAggregate(), context.hasSequences()); }
     ;
 
 // Parse a full select expression structure.
@@ -807,7 +807,9 @@ term returns [ParseNode ret]
                      scale == null ? null : Integer.parseInt(scale.getText()),
                      ar!=null);
         }
-    |   (n=NEXT | CURRENT) VALUE FOR s=from_table_name { $ret = n==null ? factory.currentValueFor(s) : factory.nextValueFor(s);}    
+    |   (n=NEXT | CURRENT) VALUE FOR s=from_table_name 
+        { contextStack.peek().hasSequences(true);
+          $ret = n==null ? factory.currentValueFor(s) : factory.nextValueFor(s); }    
     ;
 
 one_or_more_expressions returns [List<ParseNode> ret]
