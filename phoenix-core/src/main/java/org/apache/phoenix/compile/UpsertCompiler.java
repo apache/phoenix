@@ -49,7 +49,6 @@ import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ResultIterator;
-import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -181,9 +180,8 @@ public class UpsertCompiler {
         @Override
         protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException {
             PhoenixStatement statement = new PhoenixStatement(connection);
-            // Clone the connection as it's not thread safe and will be operated on in parallel
             if (context.getSequenceManager().getSequenceCount() > 0) {
-                iterator = new SequenceResultIterator(iterator,context.getSequenceManager());
+                throw new IllegalStateException("Cannot pipeline upsert when sequence is referenced");
             }
             return upsertSelect(statement, tableRef, projector, iterator, columnIndexes, pkSlotIndexes);
         }
@@ -360,17 +358,19 @@ public class UpsertCompiler {
                 && tableRef.equals(selectResolver.getTables().get(0));
             /* We can run the upsert in a coprocessor if:
              * 1) from has only 1 table and the into table matches from table
-             * 2) the select query isn't doing aggregation
+             * 2) the select query isn't doing aggregation (which requires a client-side final merge)
              * 3) autoCommit is on
              * 4) the table is not immutable, as the client is the one that figures out the additional
              *    puts for index tables.
-             * 5) no limit clause
+             * 5) no limit clause, as the limit clause requires client-side post processing
+             * 6) no sequences, as sequences imply that the order of upsert must match the order of
+             *    selection.
              * Otherwise, run the query to pull the data from the server
              * and populate the MutationState (upto a limit).
             */            
             runOnServer = sameTable && isAutoCommit && !table.isImmutableRows() && !select.isAggregate() && !select.isDistinct() && select.getLimit() == null && table.getBucketNum() == null;
             ParallelIteratorFactory parallelIteratorFactory;
-            if (select.isAggregate() || select.isDistinct() || select.getLimit() != null) {
+            if (select.isAggregate() || select.isDistinct() || select.getLimit() != null || select.hasSequence()) {
                 parallelIteratorFactory = null;
             } else {
                 // We can pipeline the upsert select instead of spooling everything to disk first,
