@@ -705,7 +705,9 @@ public class MetaDataClient {
                     SequenceKey key = MetaDataUtil.getViewIndexSequenceKey(tenantIdStr, physicalName);
                     // Create at parent timestamp as we know that will be earlier than now
                     // and earlier than any SCN if one is set.
-                    createSequence(key.getTenantId(), key.getSchemaName(), key.getSequenceName(), true, Short.MIN_VALUE, 1, 1, dataTable.getTimeStamp());
+                    createSequence(key.getTenantId(), key.getSchemaName(), key.getSequenceName(),
+                        true, Short.MIN_VALUE, 1, 1, false, Long.MIN_VALUE, Long.MAX_VALUE,
+                        dataTable.getTimeStamp());
                     long[] seqValues = new long[1];
                     SQLException[] sqlExceptions = new SQLException[1];
                     connection.getQueryServices().incrementSequences(Collections.singletonList(key), timestamp, seqValues, sqlExceptions);
@@ -764,16 +766,23 @@ public class MetaDataClient {
         return new MutationState(1, connection);
     }
     
-    public MutationState createSequence(CreateSequenceStatement statement, long startWith, long incrementBy, long cacheSize) throws SQLException {
+    public MutationState createSequence(CreateSequenceStatement statement, long startWith,
+            long incrementBy, long cacheSize, long minValue, long maxValue) throws SQLException {
         Long scn = connection.getSCN();
         long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
-        String tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getString();
-        return createSequence(tenantId, statement.getSequenceName().getSchemaName(), statement.getSequenceName().getTableName(), statement.ifNotExists(), startWith, incrementBy, cacheSize, timestamp);
+        String tenantId =
+                connection.getTenantId() == null ? null : connection.getTenantId().getString();
+        return createSequence(tenantId, statement.getSequenceName().getSchemaName(), statement
+                .getSequenceName().getTableName(), statement.ifNotExists(), startWith, incrementBy,
+            cacheSize, statement.getCycle(), minValue, maxValue, timestamp);
     }
-    
-    private MutationState createSequence(String tenantId, String schemaName, String sequenceName, boolean ifNotExists, long startWith, long incrementBy, long cacheSize, long timestamp) throws SQLException {
+
+    private MutationState createSequence(String tenantId, String schemaName, String sequenceName,
+            boolean ifNotExists, long startWith, long incrementBy, long cacheSize, boolean cycle,
+            long minValue, long maxValue, long timestamp) throws SQLException {
         try {
-            connection.getQueryServices().createSequence(tenantId, schemaName, sequenceName, startWith, incrementBy, cacheSize, timestamp);
+            connection.getQueryServices().createSequence(tenantId, schemaName, sequenceName,
+                startWith, incrementBy, cacheSize, minValue, maxValue, cycle, timestamp);
         } catch (SequenceAlreadyExistsException e) {
             if (ifNotExists) {
                 return new MutationState(0, connection);
@@ -782,7 +791,7 @@ public class MetaDataClient {
         }
         return new MutationState(1, connection);
     }
-    
+
     private static ColumnDef findColumnDefOrNull(List<ColumnDef> colDefs, ColumnName colName) {
         for (ColumnDef colDef : colDefs) {
             if (colDef.getColumnDefName().getColumnName().equals(colName.getColumnName())) {

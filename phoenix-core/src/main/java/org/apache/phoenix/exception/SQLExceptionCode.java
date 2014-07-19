@@ -227,13 +227,21 @@ public enum SQLExceptionCode {
             return new SequenceNotFoundException(info.getSchemaName(), info.getTableName());
         }
     }),
-    STARTS_WITH_MUST_BE_CONSTANT(1202, "42Z02", "Sequence STARTS WITH value must be an integer or long constant."),
+    START_WITH_MUST_BE_CONSTANT(1202, "42Z02", "Sequence START WITH value must be an integer or long constant."),
     INCREMENT_BY_MUST_BE_CONSTANT(1203, "42Z03", "Sequence INCREMENT BY value must be an integer or long constant."),
     CACHE_MUST_BE_NON_NEGATIVE_CONSTANT(1204, "42Z04", "Sequence CACHE value must be a non negative integer constant."),
     INVALID_USE_OF_NEXT_VALUE_FOR(1205, "42Z05", "NEXT VALUE FOR may only be used as in a SELECT or an UPSERT VALUES expression."),
     CANNOT_CALL_CURRENT_BEFORE_NEXT_VALUE(1206, "42Z06", "NEXT VALUE FOR must be called before CURRENT VALUE FOR is called."),
     EMPTY_SEQUENCE_CACHE(1207, "42Z07", "No more cached sequence values"),
-
+    MINVALUE_MUST_BE_CONSTANT(1208, "42Z08", "Sequence MINVALUE must be an integer or long constant."),
+    MAXVALUE_MUST_BE_CONSTANT(1209, "42Z09", "Sequence MAXVALUE must be an integer or long constant."),
+    MINVALUE_MUST_BE_LESS_THAN_OR_EQUAL_TO_MAXVALUE(1210, "42Z10", "Sequence MINVALUE must be less than or equal to MAXVALUE."),
+    STARTS_WITH_MUST_BE_BETWEEN_MIN_MAX_VALUE(1211, "42Z11",
+            "STARTS WITH value must be greater than or equal to MINVALUE and less than or equal to MAXVALUE"),
+    SEQUENCE_VAL_REACHED_MAX_VALUE(1212, "42Z12", "Reached MAXVALUE of sequence"),
+    SEQUENCE_VAL_REACHED_MIN_VALUE(1213, "42Z13", "Reached MINVALUE of sequence"),
+    INCREMENT_BY_MUST_NOT_BE_ZERO(1214, "42Z14", "Sequence INCREMENT BY value cannot be zero"),
+                    
     /** Parser error. (errorcode 06, sqlState 42P) */
     PARSER_ERROR(601, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
     MISSING_TOKEN(602, "42P00", "Syntax error.", Factory.SYTAX_ERROR),

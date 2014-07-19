@@ -32,12 +32,14 @@ import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.SortOrder;
 
+import org.apache.phoenix.util.SequenceUtil;
 
 public class CreateSequenceCompiler {
     private final PhoenixStatement statement;
@@ -105,77 +107,134 @@ public class CreateSequenceCompiler {
     private static final PDatum LONG_DATUM = new LongDatum();
     private static final PDatum INTEGER_DATUM = new IntegerDatum();
 
+    private void validateNodeIsStateless(CreateSequenceStatement sequence, ParseNode node,
+            SQLExceptionCode code) throws SQLException {
+        if (!node.isStateless()) {
+            TableName sequenceName = sequence.getSequenceName();
+            throw SequenceUtil.getException(sequenceName.getSchemaName(), sequenceName.getTableName(), code);
+        }
+    }
+
+    private long evalExpression(CreateSequenceStatement sequence, StatementContext context,
+            Expression expression, SQLExceptionCode code) throws SQLException {
+        ImmutableBytesWritable ptr = context.getTempPtr();
+        expression.evaluate(null, ptr);
+        if (ptr.getLength() == 0 || !expression.getDataType().isCoercibleTo(PDataType.LONG)) {
+            TableName sequenceName = sequence.getSequenceName();
+            throw SequenceUtil.getException(sequenceName.getSchemaName(), sequenceName.getTableName(), code);
+        }
+        return (Long) PDataType.LONG.toObject(ptr, expression.getDataType());
+    }
+
     public MutationPlan compile(final CreateSequenceStatement sequence) throws SQLException {
         ParseNode startsWithNode = sequence.getStartWith();
         ParseNode incrementByNode = sequence.getIncrementBy();
-        if (!startsWithNode.isStateless()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.STARTS_WITH_MUST_BE_CONSTANT)
-            .setSchemaName(sequence.getSequenceName().getSchemaName())
-            .setTableName(sequence.getSequenceName().getTableName()).build().buildException();
-        }
-        if (!incrementByNode.isStateless()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INCREMENT_BY_MUST_BE_CONSTANT)
-            .setSchemaName(sequence.getSequenceName().getSchemaName())
-            .setTableName(sequence.getSequenceName().getTableName()).build().buildException();
-        }
+        ParseNode maxValueNode = sequence.getMaxValue();
+        ParseNode minValueNode = sequence.getMinValue();
         ParseNode cacheNode = sequence.getCacheSize();
-        if (cacheNode != null && !cacheNode.isStateless()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CACHE_MUST_BE_NON_NEGATIVE_CONSTANT)
-            .setSchemaName(sequence.getSequenceName().getSchemaName())
-            .setTableName(sequence.getSequenceName().getTableName()).build().buildException();
+
+        // validate parse nodes
+        if (startsWithNode!=null) {
+            validateNodeIsStateless(sequence, startsWithNode,
+                SQLExceptionCode.START_WITH_MUST_BE_CONSTANT);
         }
-        
+        validateNodeIsStateless(sequence, incrementByNode,
+            SQLExceptionCode.INCREMENT_BY_MUST_BE_CONSTANT);
+        validateNodeIsStateless(sequence, maxValueNode, 
+            SQLExceptionCode.MAXVALUE_MUST_BE_CONSTANT);
+        validateNodeIsStateless(sequence, minValueNode, 
+            SQLExceptionCode.MINVALUE_MUST_BE_CONSTANT);
+        if (cacheNode != null) {
+            validateNodeIsStateless(sequence, cacheNode,
+                SQLExceptionCode.CACHE_MUST_BE_NON_NEGATIVE_CONSTANT);
+        }
+
         final PhoenixConnection connection = statement.getConnection();
-        
         final StatementContext context = new StatementContext(statement);
+        
+        // add param meta data if required
         if (startsWithNode instanceof BindParseNode) {
-            context.getBindManager().addParamMetaData((BindParseNode)startsWithNode, LONG_DATUM);
+            context.getBindManager().addParamMetaData((BindParseNode) startsWithNode, LONG_DATUM);
         }
         if (incrementByNode instanceof BindParseNode) {
-            context.getBindManager().addParamMetaData((BindParseNode)incrementByNode, LONG_DATUM);
+            context.getBindManager().addParamMetaData((BindParseNode) incrementByNode, LONG_DATUM);
+        }
+        if (maxValueNode instanceof BindParseNode) {
+            context.getBindManager().addParamMetaData((BindParseNode) maxValueNode, LONG_DATUM);
+        }
+        if (minValueNode instanceof BindParseNode) {
+            context.getBindManager().addParamMetaData((BindParseNode) minValueNode, LONG_DATUM);
         }
         if (cacheNode instanceof BindParseNode) {
-            context.getBindManager().addParamMetaData((BindParseNode)cacheNode, INTEGER_DATUM);
+            context.getBindManager().addParamMetaData((BindParseNode) cacheNode, INTEGER_DATUM);
         }
-        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
-        Expression startsWithExpr = startsWithNode.accept(expressionCompiler);
-        ImmutableBytesWritable ptr = context.getTempPtr();
-        startsWithExpr.evaluate(null, ptr);
-        if (ptr.getLength() == 0 || !startsWithExpr.getDataType().isCoercibleTo(PDataType.LONG)) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.STARTS_WITH_MUST_BE_CONSTANT)
-            .setSchemaName(sequence.getSequenceName().getSchemaName())
-            .setTableName(sequence.getSequenceName().getTableName()).build().buildException();
-        }
-        final long startsWith = (Long)PDataType.LONG.toObject(ptr, startsWithExpr.getDataType());
-
-        Expression incrementByExpr = incrementByNode.accept(expressionCompiler);
-        incrementByExpr.evaluate(null, ptr);
-        if (ptr.getLength() == 0 || !incrementByExpr.getDataType().isCoercibleTo(PDataType.LONG)) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INCREMENT_BY_MUST_BE_CONSTANT)
-            .setSchemaName(sequence.getSequenceName().getSchemaName())
-            .setTableName(sequence.getSequenceName().getTableName()).build().buildException();
-        }
-        final long incrementBy = (Long)PDataType.LONG.toObject(ptr, incrementByExpr.getDataType());
         
-        long cacheSizeValue = connection.getQueryServices().getProps().getLong(QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_SEQUENCE_CACHE_SIZE);
-        if (cacheNode != null) {
-            Expression cacheSizeExpr = cacheNode.accept(expressionCompiler);
-            cacheSizeExpr.evaluate(null, ptr);
-            if (ptr.getLength() != 0 && (!cacheSizeExpr.getDataType().isCoercibleTo(PDataType.LONG) || (cacheSizeValue = (Long)PDataType.LONG.toObject(ptr, cacheSizeExpr.getDataType())) < 0)) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CACHE_MUST_BE_NON_NEGATIVE_CONSTANT)
-                .setSchemaName(sequence.getSequenceName().getSchemaName())
-                .setTableName(sequence.getSequenceName().getTableName()).build().buildException();
+        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);        
+        final long incrementBy =
+                evalExpression(sequence, context, incrementByNode.accept(expressionCompiler),
+                    SQLExceptionCode.INCREMENT_BY_MUST_BE_CONSTANT);
+        if (incrementBy == 0) {
+            throw SequenceUtil.getException(sequence.getSequenceName().getSchemaName(), sequence
+                    .getSequenceName().getTableName(),
+                SQLExceptionCode.INCREMENT_BY_MUST_NOT_BE_ZERO);
+        }
+        final long maxValue =
+                evalExpression(sequence, context, maxValueNode.accept(expressionCompiler),
+                    SQLExceptionCode.MAXVALUE_MUST_BE_CONSTANT);
+        final long minValue =
+                evalExpression(sequence, context, minValueNode.accept(expressionCompiler),
+                    SQLExceptionCode.MINVALUE_MUST_BE_CONSTANT);
+        if (minValue>maxValue) {
+            TableName sequenceName = sequence.getSequenceName();
+            throw SequenceUtil.getException(sequenceName.getSchemaName(),
+                sequenceName.getTableName(),
+                SQLExceptionCode.MINVALUE_MUST_BE_LESS_THAN_OR_EQUAL_TO_MAXVALUE);
+        }
+        
+        long startsWithValue;
+        if (startsWithNode == null) {
+            startsWithValue = incrementBy > 0 ? minValue : maxValue;
+        } else {
+            startsWithValue =
+                    evalExpression(sequence, context, startsWithNode.accept(expressionCompiler),
+                        SQLExceptionCode.START_WITH_MUST_BE_CONSTANT);
+            if (startsWithValue < minValue || startsWithValue > maxValue) {
+                TableName sequenceName = sequence.getSequenceName();
+                throw SequenceUtil.getException(sequenceName.getSchemaName(),
+                    sequenceName.getTableName(),
+                    SQLExceptionCode.STARTS_WITH_MUST_BE_BETWEEN_MIN_MAX_VALUE);
+            }
+        }
+        final long startsWith = startsWithValue;
+
+        long cacheSizeValue;
+        if (cacheNode == null) {
+            cacheSizeValue =
+                    connection
+                            .getQueryServices()
+                            .getProps()
+                            .getLong(QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB,
+                                QueryServicesOptions.DEFAULT_SEQUENCE_CACHE_SIZE);
+        }
+        else {
+            cacheSizeValue = 
+                    evalExpression(sequence, context, cacheNode.accept(expressionCompiler),
+                        SQLExceptionCode.CACHE_MUST_BE_NON_NEGATIVE_CONSTANT);
+            if (cacheSizeValue < 0) {
+                TableName sequenceName = sequence.getSequenceName();
+                throw SequenceUtil.getException(sequenceName.getSchemaName(),
+                    sequenceName.getTableName(),
+                    SQLExceptionCode.CACHE_MUST_BE_NON_NEGATIVE_CONSTANT);
             }
         }
         final long cacheSize = Math.max(1L, cacheSizeValue);
-        
 
-        final MetaDataClient client = new MetaDataClient(connection);        
-        return new MutationPlan() {           
+        final MetaDataClient client = new MetaDataClient(connection);
+        return new MutationPlan() {
 
             @Override
             public MutationState execute() throws SQLException {
-                return client.createSequence(sequence, startsWith, incrementBy, cacheSize);
+                return client.createSequence(sequence, startsWith, incrementBy, cacheSize, minValue, maxValue);
             }
 
             @Override
@@ -189,7 +248,7 @@ public class CreateSequenceCompiler {
             }
 
             @Override
-            public ParameterMetaData getParameterMetaData() {                
+            public ParameterMetaData getParameterMetaData() {
                 return context.getBindManager().getParameterMetaData();
             }
 

@@ -67,5 +67,4 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
             super.close();
         }
     }
-    
 }
