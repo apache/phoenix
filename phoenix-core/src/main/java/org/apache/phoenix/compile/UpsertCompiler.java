@@ -360,7 +360,7 @@ public class UpsertCompiler {
              * 1) from has only 1 table and the into table matches from table
              * 2) the select query isn't doing aggregation (which requires a client-side final merge)
              * 3) autoCommit is on
-             * 4) the table is not immutable, as the client is the one that figures out the additional
+             * 4) the table is not immutable with indexes, as the client is the one that figures out the additional
              *    puts for index tables.
              * 5) no limit clause, as the limit clause requires client-side post processing
              * 6) no sequences, as sequences imply that the order of upsert must match the order of
@@ -368,7 +368,6 @@ public class UpsertCompiler {
              * Otherwise, run the query to pull the data from the server
              * and populate the MutationState (upto a limit).
             */            
-            runOnServer = sameTable && isAutoCommit && !table.isImmutableRows() && !select.isAggregate() && !select.isDistinct() && select.getLimit() == null && table.getBucketNum() == null;
             ParallelIteratorFactory parallelIteratorFactory;
             if (select.isAggregate() || select.isDistinct() || select.getLimit() != null || select.hasSequence()) {
                 parallelIteratorFactory = null;
@@ -376,6 +375,9 @@ public class UpsertCompiler {
                 // We can pipeline the upsert select instead of spooling everything to disk first,
                 // if we don't have any post processing that's required.
                 parallelIteratorFactory = upsertParallelIteratorFactoryToBe = new UpsertingParallelIteratorFactory(connection, tableRef);
+                // If we're in the else, then it's not an aggregate, distinct, limted, or sequence using query,
+                // so we might be able to run it entirely on the server side.
+                runOnServer = sameTable && isAutoCommit && !(table.isImmutableRows() && !table.getIndexes().isEmpty());
             }
             // If we may be able to run on the server, add a hint that favors using the data table
             // if all else is equal.
