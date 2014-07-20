@@ -90,6 +90,7 @@ public class FirstLastValueBaseClientAggregator extends BaseAggregator {
         return true;
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void aggregate(Tuple tuple, ImmutableBytesWritable ptr) {
 

@@ -1773,7 +1773,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     // Take no locks, as this only gets run when there are no open connections
     // so there's no danger of contention.
-    @SuppressWarnings("deprecation")
     private void returnAllSequences(ConcurrentMap<SequenceKey,Sequence> sequenceMap) throws SQLException {
         List<Append> mutations = Lists.newArrayListWithExpectedSize(sequenceMap.size());
         for (Sequence sequence : sequenceMap.values()) {
