@@ -22,6 +22,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -48,8 +49,7 @@ import com.google.common.collect.Sets;
  *
  */
 public class InListExpression extends BaseSingleExpression {
-    public final LinkedHashSet<ImmutableBytesPtr> EMPTY_SET = new LinkedHashSet<ImmutableBytesPtr>();
-    private LinkedHashSet<ImmutableBytesPtr> values;
+    private Set<ImmutableBytesPtr> values;
     private ImmutableBytesPtr minValue;
     private ImmutableBytesPtr maxValue;
     private int valuesByteLength;
@@ -135,10 +135,12 @@ public class InListExpression extends BaseSingleExpression {
         if (values.isEmpty()) {
             this.minValue = ByteUtil.EMPTY_BYTE_ARRAY_PTR;
             this.maxValue = ByteUtil.EMPTY_BYTE_ARRAY_PTR;
-            this.values = EMPTY_SET;
+            this.values = Collections.emptySet();
         } else {
             this.minValue = valuesArray[0];
             this.maxValue = valuesArray[valuesArray.length-1];
+            // Use LinkedHashSet on client-side so that we don't need to serialize the
+            // minValue and maxValue but can infer them based on the first and last position.
             this.values = new LinkedHashSet<ImmutableBytesPtr>(Arrays.asList(valuesArray));
         }
     }
@@ -205,6 +207,7 @@ public class InListExpression extends BaseSingleExpression {
         byte[] valuesBytes = Bytes.readByteArray(input);
         valuesByteLength = valuesBytes.length;
         int len = fixedWidth == -1 ? WritableUtils.readVInt(input) : valuesByteLength / fixedWidth;
+        // TODO: consider using a regular HashSet as we never serialize from the server-side
         values = Sets.newLinkedHashSetWithExpectedSize(len);
         int offset = 0;
         int i  = 0;
