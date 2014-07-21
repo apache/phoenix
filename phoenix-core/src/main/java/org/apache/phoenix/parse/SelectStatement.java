@@ -37,10 +37,10 @@ public class SelectStatement implements FilterableStatement {
     public static final SelectStatement SELECT_ONE =
             new SelectStatement(
                     Collections.<TableNode>emptyList(), null, false, 
-                    Collections.<AliasedNode>singletonList(new AliasedNode(null,new LiteralParseNode(1))),
+                    Collections.<AliasedNode>singletonList(new AliasedNode(null, LiteralParseNode.ONE)),
                     null, Collections.<ParseNode>emptyList(),
                     null, Collections.<OrderByNode>emptyList(),
-                    null, 0, false);
+                    null, 0, false, false);
     public static final SelectStatement COUNT_ONE =
             new SelectStatement(
                     Collections.<TableNode>emptyList(), null, false,
@@ -52,14 +52,14 @@ public class SelectStatement implements FilterableStatement {
                                 new BuiltInFunctionInfo(CountAggregateFunction.class, CountAggregateFunction.class.getAnnotation(BuiltInFunction.class))))),
                     null, Collections.<ParseNode>emptyList(), 
                     null, Collections.<OrderByNode>emptyList(), 
-                    null, 0, true);
+                    null, 0, true, false);
     public static SelectStatement create(SelectStatement select, HintNode hint) {
         if (select.getHint() == hint || hint.isEmpty()) {
             return select;
         }
         return new SelectStatement(select.getFrom(), hint, select.isDistinct(), 
                 select.getSelect(), select.getWhere(), select.getGroupBy(), select.getHaving(), 
-                select.getOrderBy(), select.getLimit(), select.getBindCount(), select.isAggregate());
+                select.getOrderBy(), select.getLimit(), select.getBindCount(), select.isAggregate(), select.hasSequence());
     }
     
     public SelectStatement combine(ParseNode where) {
@@ -71,13 +71,13 @@ public class SelectStatement implements FilterableStatement {
         }
         return new SelectStatement(this.getFrom(), this.getHint(), this.isDistinct(), 
                 this.getSelect(), where, this.getGroupBy(), this.getHaving(), 
-                this.getOrderBy(), this.getLimit(), this.getBindCount(), this.isAggregate());
+                this.getOrderBy(), this.getLimit(), this.getBindCount(), this.isAggregate(), this.hasSequence());
     }
     
     public static SelectStatement create(SelectStatement select, List<AliasedNode> selects) {
         return new SelectStatement(select.getFrom(), select.getHint(), select.isDistinct(), 
                 selects, select.getWhere(), select.getGroupBy(), select.getHaving(), 
-                select.getOrderBy(), select.getLimit(), select.getBindCount(), select.isAggregate());
+                select.getOrderBy(), select.getLimit(), select.getBindCount(), select.isAggregate(), select.hasSequence());
     }
     
     private final List<TableNode> fromTable;
@@ -91,6 +91,7 @@ public class SelectStatement implements FilterableStatement {
     private final LimitNode limit;
     private final int bindCount;
     private final boolean isAggregate;
+    private final boolean hasSequence;
     
     // Count constant expressions
     private static int countConstants(List<ParseNode> nodes) {
@@ -103,7 +104,9 @@ public class SelectStatement implements FilterableStatement {
         return count;
     }
     
-    protected SelectStatement(List<? extends TableNode> from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where, List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate) {
+    protected SelectStatement(List<? extends TableNode> from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
+            ParseNode where, List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit,
+            int bindCount, boolean isAggregate, boolean hasSequence) {
         this.fromTable = Collections.unmodifiableList(from);
         this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
         this.isDistinct = isDistinct;
@@ -115,6 +118,7 @@ public class SelectStatement implements FilterableStatement {
         this.limit = limit;
         this.bindCount = bindCount;
         this.isAggregate = isAggregate || groupBy.size() != countConstants(groupBy) || this.having != null;
+        this.hasSequence = hasSequence;
     }
     
     @Override
@@ -174,6 +178,10 @@ public class SelectStatement implements FilterableStatement {
     @Override
     public boolean isAggregate() {
         return isAggregate;
+    }
+
+    public boolean hasSequence() {
+        return hasSequence;
     }
 
     @Override

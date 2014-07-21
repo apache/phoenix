@@ -67,6 +67,7 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             if (HashJoinInfo.isHashJoin(context.getScan())) {
                 return delegateFactory.newIterator(context, scanner);
             } else {
+            	scanner.close(); //close the iterator since we don't need it anymore.
                 return new ChunkedResultIterator(delegateFactory, context, tableRef,
                         context.getConnection().getQueryServices().getProps().getLong(
                                             QueryServices.SCAN_RESULT_CHUNK_SIZE,

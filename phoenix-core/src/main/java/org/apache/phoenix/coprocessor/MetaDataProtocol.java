@@ -62,7 +62,9 @@ public interface MetaDataProtocol extends CoprocessorProtocol {
             VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER);
     
     public static final long MIN_TABLE_TIMESTAMP = 0;
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_TABLE_TIMESTAMP + 1;
+    // Incremented with the addition of INDEX_TYPE to SYSTEM.CATALOG (though it's unused in 3.0)
+    // plus the addition of MIN_VALUE, MAX_VALUE, and CYCLE to SYSTEM.SEQUENCE.
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_TABLE_TIMESTAMP + 2;
     public static final int DEFAULT_MAX_META_DATA_VERSIONS = 1000;
 
     // TODO: pare this down to minimum, as we don't need duplicates for both table and column errors, nor should we need

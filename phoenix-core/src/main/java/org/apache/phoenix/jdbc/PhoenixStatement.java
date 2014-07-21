@@ -278,8 +278,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     private static class ExecutableSelectStatement extends SelectStatement implements CompilableStatement {
         private ExecutableSelectStatement(List<? extends TableNode> from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
-                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate) {
-            super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate);
+                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
+            super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate, hasSequence);
         }
 
         @SuppressWarnings("unchecked")
@@ -487,9 +487,12 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     private static class ExecutableCreateSequenceStatement extends	CreateSequenceStatement implements CompilableStatement {
 
-		public ExecutableCreateSequenceStatement(TableName sequenceName, ParseNode startWith, ParseNode incrementBy, ParseNode cacheSize, boolean ifNotExists, int bindCount) {
-			super(sequenceName, startWith, incrementBy, cacheSize, ifNotExists, bindCount);
-		}
+        public ExecutableCreateSequenceStatement(TableName sequenceName, ParseNode startWith,
+                ParseNode incrementBy, ParseNode cacheSize, ParseNode minValue, ParseNode maxValue,
+                boolean cycle, boolean ifNotExists, int bindCount) {
+            super(sequenceName, startWith, incrementBy, cacheSize, minValue, maxValue, cycle,
+                    ifNotExists, bindCount);
+        }
 
 		@SuppressWarnings("unchecked")
         @Override
@@ -723,8 +726,9 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         @Override
         public ExecutableSelectStatement select(List<? extends TableNode> from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
                                                 ParseNode where, List<ParseNode> groupBy, ParseNode having,
-                                                List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate) {
-            return new ExecutableSelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy, having, orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate);
+                                                List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
+            return new ExecutableSelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy,
+                    having, orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate, hasSequence);
         }
         
         @Override
@@ -744,8 +748,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
         
         @Override
-        public CreateSequenceStatement createSequence(TableName tableName, ParseNode startsWith, ParseNode incrementBy, ParseNode cacheSize, boolean ifNotExists, int bindCount){
-        	return new ExecutableCreateSequenceStatement(tableName, startsWith, incrementBy, cacheSize, ifNotExists, bindCount);
+        public CreateSequenceStatement createSequence(TableName tableName, ParseNode startsWith,
+                ParseNode incrementBy, ParseNode cacheSize, ParseNode minValue, ParseNode maxValue,
+                boolean cycle, boolean ifNotExists, int bindCount) {
+            return new ExecutableCreateSequenceStatement(tableName, startsWith, incrementBy,
+                    cacheSize, minValue, maxValue, cycle, ifNotExists, bindCount);
         }
         
         @Override

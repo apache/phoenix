@@ -23,6 +23,7 @@ import com.google.common.collect.Lists;
 
 public class ParseContext {
     private boolean isAggregate;
+    private boolean hasSequences;
     
     public ParseContext() {
     }
@@ -33,6 +34,14 @@ public class ParseContext {
 
     public void setAggregate(boolean isAggregate) {
         this.isAggregate |= isAggregate;
+    }
+
+    public boolean hasSequences() {
+        return hasSequences;
+    }
+
+    public void hasSequences(boolean hasSequences) {
+        this.hasSequences |= hasSequences;
     }
 
     public static class Stack {

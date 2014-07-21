@@ -86,5 +86,6 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         connectionQueryServices.close();
         queryServices.close();
     }
+    
 
 }

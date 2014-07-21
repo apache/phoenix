@@ -18,7 +18,6 @@
 package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.util.List;
 
 

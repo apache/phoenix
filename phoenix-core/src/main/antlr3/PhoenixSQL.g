@@ -101,6 +101,9 @@ tokens
     DERIVE='derive';
     ANY='any';
     SOME='some';
+    MINVALUE='minvalue';
+    MAXVALUE='maxvalue';
+    CYCLE='cycle';
 }
 
 
@@ -138,6 +141,7 @@ import java.util.Collections;
 import java.util.Stack;
 import java.sql.SQLException;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.IllegalDataException;
@@ -392,10 +396,13 @@ create_index_node returns [CreateIndexStatement ret]
 // Parse a create sequence statement.
 create_sequence_node returns [CreateSequenceStatement ret]
     :   CREATE SEQUENCE  (IF NOT ex=EXISTS)? t=from_table_name
-        (START WITH? s=int_literal_or_bind)?
-        (INCREMENT BY? i=int_literal_or_bind)?
+        (START WITH? s=value_expression)?
+        (INCREMENT BY? i=value_expression)?
+        (MINVALUE min=value_expression)?
+        (MAXVALUE max=value_expression)?
+        (cyc=CYCLE)? 
         (CACHE c=int_literal_or_bind)?
-    { $ret = factory.createSequence(t, s, i, c, ex!=null, getBindCount()); }
+    { $ret = factory.createSequence(t, s, i, c, min, max, cyc!=null, ex!=null, getBindCount()); }
     ;
 
 int_literal_or_bind returns [ParseNode ret]
@@ -482,7 +489,7 @@ alter_index_node returns [AlterIndexStatement ret]
 alter_table_node returns [AlterTableStatement ret]
     :   ALTER (TABLE | v=VIEW) t=from_table_name
         ( (DROP COLUMN (IF ex=EXISTS)? c=column_names) | (ADD (IF NOT ex=EXISTS)? (d=column_defs) (p=properties)?) | (SET (p=properties)) )
-        { PTableType tt = v==null ? PTableType.TABLE : PTableType.VIEW; ret = ( c == null ? factory.addColumn(factory.namedTable(null,t), tt, d, ex!=null, p) : factory.dropColumn(factory.namedTable(null,t), tt, c, ex!=null) ); }
+        { PTableType tt = v==null ? (QueryConstants.SYSTEM_SCHEMA_NAME.equals(t.getSchemaName()) ? PTableType.SYSTEM : PTableType.TABLE) : PTableType.VIEW; ret = ( c == null ? factory.addColumn(factory.namedTable(null,t), tt, d, ex!=null, p) : factory.dropColumn(factory.namedTable(null,t), tt, c, ex!=null) ); }
     ;
 
 prop_name returns [String ret]
@@ -549,7 +556,7 @@ select_node returns [SelectStatement ret]
         (HAVING having=expression)?
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        { ParseContext context = contextStack.pop(); $ret = factory.select(from, null, d!=null, sel, where, group, having, order, l, getBindCount(), context.isAggregate()); }
+        { ParseContext context = contextStack.pop(); $ret = factory.select(from, null, d!=null, sel, where, group, having, order, l, getBindCount(), context.isAggregate(), context.hasSequences()); }
     ;
 
 // Parse a full select expression structure.
@@ -799,7 +806,9 @@ term returns [ParseNode ret]
                      scale == null ? null : Integer.parseInt(scale.getText()),
                      ar!=null);
         }
-    |   (n=NEXT | CURRENT) VALUE FOR s=from_table_name { $ret = n==null ? factory.currentValueFor(s) : factory.nextValueFor(s);}    
+    |   (n=NEXT | CURRENT) VALUE FOR s=from_table_name 
+        { contextStack.peek().hasSequences(true);
+          $ret = n==null ? factory.currentValueFor(s) : factory.nextValueFor(s); }    
     ;
 
 one_or_more_expressions returns [List<ParseNode> ret]
