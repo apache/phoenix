@@ -101,7 +101,10 @@ public class QueryServicesOptions {
     public static final int DEFAULT_DISTINCT_VALUE_COMPRESS_THRESHOLD = 1024 * 1024 * 1; // 1 Mb
     public static final int DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD = 5;
     public static final long DEFAULT_MAX_SPOOL_TO_DISK_BYTES = 1024000000;
-    public static final long DEFAULT_SCAN_RESULT_CHUNK_SIZE = 1000L;
+    // We make the default chunk size one row smaller than the default scan cache size because
+    // one extra row is typically read and discarded by the ChunkedResultIterator, and we don't
+    // want to fill up a whole new cache to read a single extra record
+    public static final long DEFAULT_SCAN_RESULT_CHUNK_SIZE = DEFAULT_SCAN_CACHE_SIZE - 1L;
     
     // 
     // Spillable GroupBy - SPGBY prefix

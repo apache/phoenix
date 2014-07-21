@@ -27,7 +27,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.PhoenixIOException;
-import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableRef;
@@ -60,19 +59,11 @@ public class ChunkedResultIterator implements PeekingResultIterator {
 
         @Override
         public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner) throws SQLException {
-            // TODO It doesn't seem right to do this selection here, but it's not currently clear
-            // where a better place is to do it
-            // For a HashJoin the scan can't be restarted where it left off, so we don't use
-            // a ChunkedResultIterator
-            if (HashJoinInfo.isHashJoin(context.getScan())) {
-                return delegateFactory.newIterator(context, scanner);
-            } else {
-            	scanner.close(); //close the iterator since we don't need it anymore.
-                return new ChunkedResultIterator(delegateFactory, context, tableRef,
-                        context.getConnection().getQueryServices().getProps().getLong(
-                                            QueryServices.SCAN_RESULT_CHUNK_SIZE,
-                                            QueryServicesOptions.DEFAULT_SCAN_RESULT_CHUNK_SIZE));
-            }
+            scanner.close(); //close the iterator since we don't need it anymore.
+            return new ChunkedResultIterator(delegateFactory, context, tableRef,
+                    context.getConnection().getQueryServices().getProps().getLong(
+                                        QueryServices.SCAN_RESULT_CHUNK_SIZE,
+                                        QueryServicesOptions.DEFAULT_SCAN_RESULT_CHUNK_SIZE));
         }
     }
 
@@ -136,6 +127,7 @@ public class ChunkedResultIterator implements PeekingResultIterator {
     private static class SingleChunkResultIterator implements ResultIterator {
 
         private int rowCount = 0;
+        private boolean chunkComplete;
         private boolean endOfStreamReached;
         private Tuple lastTuple;
         private final ResultIterator delegate;
@@ -153,6 +145,14 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             }
             Tuple next = delegate.next();
             if (next != null) {
+                // We actually keep going past the chunk size until the row key changes. This is
+                // necessary for (at least) hash joins, as they can return multiple rows with the
+                // same row key. Stopping a chunk at a row key boundary is necessary in order to
+                // be able to start the next chunk on the next row key
+                if (rowCount >= chunkSize && rowKeyChanged(lastTuple, next)) {
+                    chunkComplete = true;
+                    return null;
+                }
                 lastTuple = next;
                 rowCount++;
             } else {
@@ -175,7 +175,7 @@ public class ChunkedResultIterator implements PeekingResultIterator {
          * Returns true if the current chunk has been fully iterated over.
          */
         public boolean isChunkComplete() {
-            return rowCount == chunkSize;
+            return chunkComplete;
         }
 
         /**
@@ -192,6 +192,15 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             ImmutableBytesWritable keyPtr = new ImmutableBytesWritable();
             lastTuple.getKey(keyPtr);
             return keyPtr.get();
+        }
+
+        private boolean rowKeyChanged(Tuple lastTuple, Tuple newTuple) {
+            ImmutableBytesWritable oldKeyPtr = new ImmutableBytesWritable();
+            ImmutableBytesWritable newKeyPtr = new ImmutableBytesWritable();
+            lastTuple.getKey(oldKeyPtr);
+            newTuple.getKey(newKeyPtr);
+
+            return oldKeyPtr.compareTo(newKeyPtr) != 0;
         }
     }
 }
