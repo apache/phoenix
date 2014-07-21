@@ -104,7 +104,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         }
     }
     
-    @Parameters(name="{0}")
+    @Parameters
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         testCases.add(new String[][] {
@@ -1783,7 +1783,83 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         String query = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o RIGHT JOIN " 
             + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
             + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
+
         Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertNull(rs.getString(1));
+            assertEquals(rs.getString(2), "T5");
+            assertEquals(rs.getString(3), "S5");
+            assertEquals(rs.getInt(4), 0);
+            assertNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertNull(rs.getString(1));
+            assertNull(rs.getString(2));
+            assertEquals(rs.getString(3), "S4");
+            assertEquals(rs.getInt(4), 0);
+            assertNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertNull(rs.getString(1));
+            assertNull(rs.getString(2));
+            assertEquals(rs.getString(3), "S3");
+            assertEquals(rs.getInt(4), 0);
+            assertNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertNull(rs.getString(1));
+            assertEquals(rs.getString(2), "T4");
+            assertEquals(rs.getString(3), "S2");
+            assertEquals(rs.getInt(4), 0);
+            assertNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertEquals(rs.getString(2), "T1");
+            assertEquals(rs.getString(3), "S1");
+            assertEquals(rs.getInt(4), 1000);
+            assertNotNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertEquals(rs.getString(2), "T6");
+            assertEquals(rs.getString(3), "S6");
+            assertEquals(rs.getInt(4), 2000);
+            assertNotNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertEquals(rs.getString(2), "T2");
+            assertEquals(rs.getString(3), "S1");
+            assertEquals(rs.getInt(4), 3000);
+            assertNotNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertEquals(rs.getString(2), "T6");
+            assertEquals(rs.getString(3), "S6");
+            assertEquals(rs.getInt(4), 4000);
+            assertNotNull(rs.getDate(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertEquals(rs.getString(2), "T3");
+            assertEquals(rs.getString(3), "S2");
+            assertEquals(rs.getInt(4), 5000);
+            assertNotNull(rs.getDate(5));
+
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    // Basically a copy of testMultiRightJoin, but with a very small result scan chunk size
+    // to test that repeated row keys within a single chunk are handled properly
+    @Test
+    public void testMultiRightJoin_SmallChunkSize() throws Exception {
+        String query = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o RIGHT JOIN "
+                + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
+                + JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
+
+        Properties props = new Properties(TEST_PROPERTIES);
+        props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, "1");
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);

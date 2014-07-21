@@ -224,15 +224,4 @@ public class HashJoinInfo {
             }
         }
     }
-
-    /**
-     * Check if a scan is intended for completing a HashJoin.
-     *
-     * @param scan the scan to be checked
-     * @return {@code true} if the scan is to be used for a HashJoin, otherwise {@code false}
-     */
-    public static boolean isHashJoin(Scan scan) {
-        return scan.getAttribute(HASH_JOIN) != null;
-    }
-
 }
