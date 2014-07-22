@@ -20,23 +20,20 @@ package org.apache.phoenix.filter;
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Writables;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
  *
  * Filter that evaluates WHERE clause expression, used in the case where there
- * are references to multiple column qualifiers over a single column family.
+ * are references to multiple unique column qualifiers over one or more column families.
  *
  * 
  * @since 0.1
  */
 public class MultiCQKeyValueComparisonFilter extends MultiKeyValueComparisonFilter {
     private ImmutableBytesPtr ptr = new ImmutableBytesPtr();
-    private byte[] cf;
 
     public MultiCQKeyValueComparisonFilter() {
     }
@@ -55,21 +52,17 @@ public class MultiCQKeyValueComparisonFilter extends MultiKeyValueComparisonFilt
     @Override
     protected Object newColumnKey(byte[] cf, int cfOffset, int cfLength, byte[] cq, int cqOffset,
             int cqLength) {
+        byte[] cfKey;
         if (cfOffset == 0 && cf.length == cfLength) {
-            this.cf = cf;
+            cfKey = cf;
         } else {
-            this.cf = new byte[cfLength];
-            System.arraycopy(cf, cfOffset, this.cf, 0, cfLength);
+            cfKey = new byte[cfLength];
+            System.arraycopy(cf, cfOffset, cfKey, 0, cfLength);
         }
+        cfSet.add(cfKey);
         return new ImmutableBytesPtr(cq, cqOffset, cqLength);
     }
 
-
-    @SuppressWarnings("all") // suppressing missing @Override since this doesn't exist for HBase 0.94.4
-    public boolean isFamilyEssential(byte[] name) {
-        return Bytes.compareTo(cf, name) == 0;
-    }
-    
     public static MultiCQKeyValueComparisonFilter parseFrom(final byte [] pbBytes) throws DeserializationException {
         try {
             return (MultiCQKeyValueComparisonFilter)Writables.getWritable(pbBytes, new MultiCQKeyValueComparisonFilter());
