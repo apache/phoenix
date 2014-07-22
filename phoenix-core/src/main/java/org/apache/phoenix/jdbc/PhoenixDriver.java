@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
 
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
@@ -167,21 +168,25 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             return;
         }
         closed = true;
-        Collection<ConnectionQueryServices> connectionQueryServices = connectionQueryServicesMap.values();
-        if (!connectionQueryServices.isEmpty()) {
-            try {
-                try {
-                    SQLCloseables.closeAll(connectionQueryServices);
-                } finally {
-                    // We know there's a services object if any connections were made
-                    services.close();
-                }
+        try {
+            Collection<ConnectionQueryServices> connectionQueryServices = connectionQueryServicesMap.values();
+             try {
+                SQLCloseables.closeAll(connectionQueryServices);
             } finally {
-                //even if something wrong happened while closing services above, we still
-                //want to set it to null. Otherwise, we will end up having a possibly non-working
-                //services instance. 
-                services = null;
                 connectionQueryServices.clear();
+            }
+        } finally {
+            if (services != null) {
+                try {
+                    services.close();
+                } finally {
+                    ExecutorService executor = services.getExecutor();
+                    // Even if something wrong happened while closing services above, we still
+                    // want to set it to null. Otherwise, we will end up having a possibly non-working
+                    // services instance. 
+                    services = null;
+                    executor.shutdown();
+                }
             }
         }
     }

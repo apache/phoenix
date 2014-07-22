@@ -69,7 +69,6 @@ public abstract class BaseQueryServicesImpl implements QueryServices {
 
     @Override
     public void close() {
-        executor.shutdown();
     }
 
     @Override
