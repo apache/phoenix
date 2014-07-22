@@ -21,6 +21,7 @@ import java.io.DataInput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeSet;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -45,6 +46,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
 
     private Boolean matchedColumn;
     protected final IncrementalResultTuple inputTuple = new IncrementalResultTuple();
+    protected TreeSet<byte[]> cfSet;
 
     public MultiKeyValueComparisonFilter() {
     }
@@ -178,6 +180,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
     }
     
     protected void init() {
+        cfSet = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
         TraverseAllExpressionVisitor<Void> visitor = new TraverseAllExpressionVisitor<Void>() {
             @Override
             public Void visit(KeyValueColumnExpression expression) {
@@ -234,6 +237,14 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
         matchedColumn = null;
         inputTuple.reset();
         super.reset();
+    }
+
+    @SuppressWarnings("all")
+    // suppressing missing @Override since this doesn't exist for HBase 0.94.4
+    public boolean isFamilyEssential(byte[] name) {
+        // Only the column families involved in the expression are essential.
+        // The others are for columns projected in the select expression.
+        return cfSet.contains(name);
     }
 
     @Override

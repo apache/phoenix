@@ -17,10 +17,7 @@
  */
 package org.apache.phoenix.filter;
 
-import java.util.TreeSet;
-
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.expression.Expression;
 
 
@@ -28,25 +25,18 @@ import org.apache.phoenix.expression.Expression;
  *
  * Filter that evaluates WHERE clause expression, used in the case where there
  * are references to multiple column qualifiers over multiple column families.
- *
+ * Also there same qualifier names in different families.
  * 
  * @since 0.1
  */
 public class MultiCFCQKeyValueComparisonFilter extends MultiKeyValueComparisonFilter {
     private final ImmutablePairBytesPtr ptr = new ImmutablePairBytesPtr();
-    private TreeSet<byte[]> cfSet;
 
     public MultiCFCQKeyValueComparisonFilter() {
     }
 
     public MultiCFCQKeyValueComparisonFilter(Expression expression) {
         super(expression);
-    }
-
-    @Override
-    protected void init() {
-        cfSet = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
-        super.init();
     }
 
     @Override
@@ -120,13 +110,5 @@ public class MultiCFCQKeyValueComparisonFilter extends MultiKeyValueComparisonFi
             if (Bytes.compareTo(this.bytes1, this.offset1, this.length1, that.bytes1, that.offset1, that.length1) != 0) return false;
             return true;
         }
-    }
-
-
-    @SuppressWarnings("all") // suppressing missing @Override since this doesn't exist for HBase 0.94.4
-    public boolean isFamilyEssential(byte[] name) {
-        // Only the column families involved in the expression are essential.
-        // The others are for columns projected in the select expression.
-        return cfSet.contains(name);
     }
 }
