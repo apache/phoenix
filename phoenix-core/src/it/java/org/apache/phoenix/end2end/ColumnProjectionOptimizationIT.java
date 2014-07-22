@@ -37,6 +37,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -306,5 +307,20 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
             admin.deleteTable(htableName);
             admin.close();
         }
+    }
+
+    @Test
+    public void testSelectWithConditionOnMultiCF() throws Exception {
+        initMultiCFTable(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl());
+        String query = "SELECT c.db_cpu_utilization FROM MULTI_CF WHERE a.unique_user_count = ? and b.unique_org_count = ?";
+        PreparedStatement statement = conn.prepareStatement(query);
+        statement.setInt(1, 1);
+        statement.setInt(2, 1);
+        ResultSet rs = statement.executeQuery();
+        boolean b = rs.next();
+        assertTrue(b);
+        assertEquals(BigDecimal.valueOf(40.1), rs.getBigDecimal(1));
+        assertFalse(rs.next());
     }
 }

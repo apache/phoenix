@@ -100,9 +100,9 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -1005,7 +1005,37 @@ public abstract class BaseTest {
             conn.close();
         }
     }
-    
+
+    protected static void initMultiCFTable(String url) throws Exception {
+        ensureTableCreated(url, MULTI_CF_NAME);
+
+        Connection conn = DriverManager.getConnection(url);
+        try {
+            PreparedStatement stmt = conn.prepareStatement(
+                    "upsert into " +
+                    "MULTI_CF(" +
+                    "    id, " +
+                    "    a.unique_user_count, " +
+                    "    b.unique_org_count, " +
+                    "    c.db_cpu_utilization) " +
+                    "VALUES (?, ?, ?, ?)");
+            stmt.setString(1, "id1");
+            stmt.setInt(2, 1);
+            stmt.setInt(3, 1);
+            stmt.setBigDecimal(4, BigDecimal.valueOf(40.1));
+            stmt.execute();
+
+            stmt.setString(1, "id2");
+            stmt.setInt(2, 2);
+            stmt.setInt(3, 2);
+            stmt.setBigDecimal(4, BigDecimal.valueOf(20.9));
+            stmt.execute();
+            conn.commit();
+        } finally {
+            conn.close();
+        }
+    }
+
     protected static void initTablesWithArrays(String tenantId, Date date, Long ts, boolean useNull, String url) throws Exception {
         Properties props = new Properties();
         if (ts != null) {
