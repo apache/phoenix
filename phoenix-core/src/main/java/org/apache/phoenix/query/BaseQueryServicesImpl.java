@@ -69,6 +69,8 @@ public abstract class BaseQueryServicesImpl implements QueryServices {
 
     @Override
     public void close() {
+        // Do not shutdown the executor as it prevents the Driver from being able
+        // to attempt to open a connection in the future.
     }
 
     @Override
