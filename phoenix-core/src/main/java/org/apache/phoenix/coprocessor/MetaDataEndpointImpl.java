@@ -50,6 +50,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT_BYTE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
@@ -265,18 +266,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     private RegionCoprocessorEnvironment env;
-
-    private static MetaDataMutationResult checkTableKeyInRegion(byte[] key, HRegion region) {
-        byte[] startKey = region.getStartKey();
-        byte[] endKey = region.getEndKey();
-        if (Bytes.compareTo(startKey, key) <= 0
-                && (Bytes.compareTo(HConstants.LAST_ROW, endKey) == 0 || Bytes.compareTo(key,
-                    endKey) < 0)) {
-            return null; // normal case;
-        }
-        return new MetaDataMutationResult(MutationCode.TABLE_NOT_IN_REGION,
-                EnvironmentEdgeManager.currentTimeMillis(), null);
-    }
 
     /**
      * Stores a reference to the coprocessor environment provided by the
@@ -1413,7 +1402,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             long timeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
             ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
             List<Cell> newKVs = tableMetadata.get(0).getFamilyCellMap().get(TABLE_FAMILY_BYTES);
-            Cell newKV = newKVs.get(0);
+            Cell newKV = null;
+            int disableTimeStampKVIndex = -1;
+            int index = 0;
+            for(Cell cell : newKVs){
+                if(Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(), 
+                      INDEX_STATE_BYTES, 0, INDEX_STATE_BYTES.length) == 0){
+                  newKV = cell;
+                } else if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(), 
+                  INDEX_DISABLE_TIMESTAMP_BYTES, 0, INDEX_DISABLE_TIMESTAMP_BYTES.length) == 0){
+                  disableTimeStampKVIndex = index;
+                }
+                index++;
+            }
             PIndexState newState =
                     PIndexState.fromSerializedValue(newKV.getValueArray()[newKV.getValueOffset()]);
             RowLock rowLock = region.getRowLock(key);
@@ -1424,6 +1425,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 Get get = new Get(key);
                 get.setTimeRange(PTable.INITIAL_SEQ_NUM, timeStamp);
                 get.addColumn(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
+                get.addColumn(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
                 Result currentResult = region.get(get);
                 if (currentResult.rawCells().length == 0) {
                     builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
@@ -1431,10 +1433,30 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     done.run(builder.build());
                     return;
                 }
-                Cell currentStateKV = currentResult.rawCells()[0];
+                Cell currentStateKV = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
+                Cell currentDisableTimeStamp = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
+               
                 PIndexState currentState =
                         PIndexState.fromSerializedValue(currentStateKV.getValueArray()[currentStateKV
                                 .getValueOffset()]);
+                
+                // check if we need reset disable time stamp
+                if( (newState == PIndexState.DISABLE) && 
+                    (currentState == PIndexState.DISABLE || currentState == PIndexState.INACTIVE) && 
+                    (currentDisableTimeStamp != null && currentDisableTimeStamp.getValueLength() > 0) &&
+                    (disableTimeStampKVIndex >= 0)) {
+                    Long curTimeStampVal = (Long)PDataType.LONG.toObject(currentDisableTimeStamp.getValueArray(), 
+                      currentDisableTimeStamp.getValueOffset(), currentDisableTimeStamp.getValueLength());
+                    // new DisableTimeStamp is passed in
+                    Cell newDisableTimeStampCell = newKVs.get(disableTimeStampKVIndex);
+                    Long newDisableTimeStamp = (Long)PDataType.LONG.toObject(newDisableTimeStampCell.getValueArray(),
+                      newDisableTimeStampCell.getValueOffset(), newDisableTimeStampCell.getValueLength());
+                    if(curTimeStampVal > 0 && curTimeStampVal < newDisableTimeStamp){
+                        // not reset disable timestamp
+                        newKVs.remove(disableTimeStampKVIndex);
+                    }
+                }
+                
                 // Detect invalid transitions
                 if (currentState == PIndexState.BUILDING) {
                     if (newState == PIndexState.USABLE) {
@@ -1444,7 +1466,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         return;
                     }
                 } else if (currentState == PIndexState.DISABLE) {
-                    if (newState != PIndexState.BUILDING && newState != PIndexState.DISABLE) {
+                    if (newState != PIndexState.BUILDING && newState != PIndexState.DISABLE &&
+                        newState != PIndexState.INACTIVE) {
                         builder.setReturnCode(MetaDataProtos.MutationCode.UNALLOWED_TABLE_MUTATION);
                         builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
                         done.run(builder.build());
@@ -1469,6 +1492,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     newKVs.set(0, KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
                         INDEX_STATE_BYTES, timeStamp, Bytes.toBytes(newState.getSerializedValue())));
                 }
+                
                 if (currentState != newState) {
                     region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet());
                     // Invalidate from cache
@@ -1492,6 +1516,18 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
     }
     
+    private static MetaDataMutationResult checkTableKeyInRegion(byte[] key, HRegion region) {
+        byte[] startKey = region.getStartKey();
+        byte[] endKey = region.getEndKey();
+        if (Bytes.compareTo(startKey, key) <= 0
+                && (Bytes.compareTo(HConstants.LAST_ROW, endKey) == 0 || Bytes.compareTo(key,
+                    endKey) < 0)) {
+            return null; // normal case;
+        }
+        return new MetaDataMutationResult(MutationCode.TABLE_NOT_IN_REGION,
+                EnvironmentEdgeManager.currentTimeMillis(), null);
+    }
+
     /**
      * 
      * Matches rows that end with a given byte array suffix

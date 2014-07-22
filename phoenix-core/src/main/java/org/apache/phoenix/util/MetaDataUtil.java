@@ -19,17 +19,28 @@ package org.apache.phoenix.util;
 
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.client.HConnection;
+import org.apache.hadoop.hbase.client.HConnectionManager;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.protobuf.RequestConverter;
+import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.AdminService;
+import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.GetRegionInfoRequest;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -39,13 +50,20 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.protobuf.ServiceException;
 
 
 public class MetaDataUtil {
+    private static final Logger logger = LoggerFactory.getLogger(MetaDataUtil.class);
+  
     public static final String VIEW_INDEX_TABLE_PREFIX = "_IDX_";
     public static final byte[] VIEW_INDEX_TABLE_PREFIX_BYTES = Bytes.toBytes(VIEW_INDEX_TABLE_PREFIX);
     public static final String LOCAL_INDEX_TABLE_PREFIX = "_LOCAL_IDX_";
@@ -330,6 +348,55 @@ public class MetaDataUtil {
                 " WHERE " + PhoenixDatabaseMetaData.TENANT_ID + " IS NULL AND " + 
                 PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + key.getSchemaName() + "'");
         
+    }
+    
+    /**
+     * This function checks if all regions of a table is online
+     * @param table
+     * @return true when all regions of a table are online
+     * @throws IOException
+     * @throws
+     */
+    public static boolean tableRegionsOnline(Configuration conf, PTable table) {
+        HConnection hcon = null;
+
+        try {
+            hcon = HConnectionManager.getConnection(conf);
+            List<HRegionLocation> locations = hcon.locateRegions(
+                org.apache.hadoop.hbase.TableName.valueOf(table.getTableName().getBytes()));
+
+            for (HRegionLocation loc : locations) {
+                try {
+                    ServerName sn = loc.getServerName();
+                    if (sn == null) continue;
+
+                    AdminService.BlockingInterface admin = hcon.getAdmin(sn);
+                    GetRegionInfoRequest request = RequestConverter.buildGetRegionInfoRequest(
+                        loc.getRegionInfo().getRegionName());
+
+                    admin.getRegionInfo(null, request);
+                } catch (ServiceException e) {
+                    IOException ie = ProtobufUtil.getRemoteException(e);
+                    logger.debug("Region " + loc.getRegionInfo().getEncodedName() + " isn't online due to:" + ie);
+                    return false;
+                } catch (RemoteException e) {
+                    logger.debug("Cannot get region " + loc.getRegionInfo().getEncodedName() + " info due to error:" + e);
+                    return false;
+                }
+            }
+        } catch (IOException ex) {
+            logger.warn("tableRegionsOnline failed due to:" + ex);
+            return false;
+        } finally {
+            if (hcon != null) {
+                try {
+                    hcon.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }
+
+        return true;
     }
 
     public static final String IS_VIEW_INDEX_TABLE_PROP_NAME = "IS_VIEW_INDEX_TABLE";
