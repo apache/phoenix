@@ -182,7 +182,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
 	private int loadData(Configuration conf, CommandLine cmdLine,
 			Connection conn) throws SQLException, InterruptedException,
 			ExecutionException {
-		String tableName = cmdLine.getOptionValue(TABLE_NAME_OPT.getOpt());
+		    String tableName = cmdLine.getOptionValue(TABLE_NAME_OPT.getOpt());
         String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPT.getOpt());
         String indexTableName = cmdLine.getOptionValue(INDEX_TABLE_NAME_OPT.getOpt());
         String qualifiedTableName = getQualifiedTableName(schemaName, tableName);

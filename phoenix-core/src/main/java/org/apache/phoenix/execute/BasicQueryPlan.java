@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.execute;
 
+import java.io.IOException;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
@@ -139,16 +140,24 @@ public abstract class BasicQueryPlan implements QueryPlan {
         // is resolved.
         // TODO: include time range in explain plan?
         PhoenixConnection connection = context.getConnection();
-        Long scn = connection.getSCN();
-        if(scn == null) {
+        if (context.getScanTimeRange() == null) {
+          Long scn = connection.getSCN();
+          if (scn == null) {
             scn = context.getCurrentTime();
             // Add one to server time since max of time range is exclusive
             // and we need to account of OSs with lower resolution clocks.
-            if(scn < HConstants.LATEST_TIMESTAMP) {
-                scn++;
+            if (scn < HConstants.LATEST_TIMESTAMP) {
+              scn++;
             }
+          }
+          ScanUtil.setTimeRange(scan, scn);
+        } else {
+          try {
+            scan.setTimeRange(context.getScanTimeRange().getMin(), context.getScanTimeRange().getMax());
+          } catch (IOException e) {
+            throw new SQLException(e);
+          }
         }
-        ScanUtil.setTimeRange(scan, scn);
         ScanUtil.setTenantId(scan, connection.getTenantId() == null ? null : connection.getTenantId().getBytes());
         ResultIterator iterator = newIterator();
         return dependencies.isEmpty() ? 

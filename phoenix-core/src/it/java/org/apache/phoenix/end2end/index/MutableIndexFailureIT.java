@@ -26,7 +26,6 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -37,13 +36,13 @@ import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
@@ -81,6 +80,7 @@ public class MutableIndexFailureIT extends BaseTest {
         setUpConfigForMiniCluster(conf);
         conf.setInt("hbase.client.retries.number", 2);
         conf.setInt("hbase.client.pause", 5000);
+        conf.setLong(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB, 0);
         util = new HBaseTestingUtility(conf);
         util.startMiniCluster();
         String clientPort = util.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
@@ -98,21 +98,7 @@ public class MutableIndexFailureIT extends BaseTest {
         }
     }
 
-    private static void destroyIndexTable() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = driver.connect(url, props);
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        HBaseAdmin admin = services.getAdmin();
-        try {
-            admin.disableTable(INDEX_TABLE_FULL_NAME);
-            admin.deleteTable(INDEX_TABLE_FULL_NAME);
-        } catch (TableNotFoundException e) {} finally {
-            conn.close();
-            admin.close();
-        }
-    }
-
-    @Test
+    @Test(timeout=300000)
     public void testWriteFailureDisablesIndex() throws Exception {
         String query;
         ResultSet rs;
@@ -139,17 +125,29 @@ public class MutableIndexFailureIT extends BaseTest {
         assertEquals(INDEX_TABLE_NAME, rs.getString(3));
         assertEquals(PIndexState.ACTIVE.toString(), rs.getString("INDEX_STATE"));
         assertFalse(rs.next());
-
-        destroyIndexTable();
-
+        
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
         stmt.setString(1, "a");
         stmt.setString(2, "x");
         stmt.setString(3, "1");
         stmt.execute();
+        conn.commit();
+
+        byte[] indexTable = Bytes.toBytes(INDEX_TABLE_FULL_NAME);
+        HBaseAdmin admin = this.util.getHBaseAdmin();
+        HTableDescriptor indexTableDesc = admin.getTableDescriptor(indexTable);
+        try{
+          admin.disableTable(indexTable);
+          admin.deleteTable(indexTable);
+        } catch (TableNotFoundException ignore) {}
+
+        stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
+        stmt.setString(1, "a2");
+        stmt.setString(2, "x2");
+        stmt.setString(3, "2");
+        stmt.execute();
         try {
             conn.commit();
-            fail();
         } catch (SQLException e) {}
 
         // Verify the metadata for index is correct.
@@ -159,5 +157,32 @@ public class MutableIndexFailureIT extends BaseTest {
         assertEquals(INDEX_TABLE_NAME, rs.getString(3));
         assertEquals(PIndexState.DISABLE.toString(), rs.getString("INDEX_STATE"));
         assertFalse(rs.next());
+        
+        stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
+        stmt.setString(1, "a3");
+        stmt.setString(2, "x3");
+        stmt.setString(3, "3");
+        stmt.execute();
+        conn.commit();
+        
+        // recreate index table
+        admin.createTable(indexTableDesc);
+        do {
+          Thread.sleep(15 * 1000); // sleep 15 secs
+          rs = conn.getMetaData().getTables(null, "", INDEX_TABLE_NAME, new String[] {PTableType.INDEX.toString()});
+          assertTrue(rs.next());
+          if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
+              break;
+          }
+        } while(true);
+        
+        // verify index table has data
+        query = "SELECT count(1) FROM " + INDEX_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        
+        // using 2 here because we onluy partially build index from where we failed and the oldest 
+        // index row has been deleted when we dropped the index table during test.
+        assertEquals(2, rs.getInt(1));
     }
 }

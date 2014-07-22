@@ -26,6 +26,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
@@ -122,7 +123,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
     private static final int INITIAL_CHILD_SERVICES_CAPACITY = 100;
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
-    
     protected final Configuration config;
     // Copy of config.getProps(), but read-only to prevent synchronization that we
     // don't need.
@@ -1218,7 +1218,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     // Keeping this to use for further upgrades
-    protected PhoenixConnection addColumnsIfNotExists(PhoenixConnection oldMetaConnection, String tableName, long timestamp, String columns) throws SQLException {
+    protected PhoenixConnection addColumnsIfNotExists(PhoenixConnection oldMetaConnection, 
+        String tableName, long timestamp, String columns) throws SQLException {
+
         Properties props = new Properties(oldMetaConnection.getClientInfo());
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
         // Cannot go through DriverManager or you end up in an infinite loop because it'll call init again
@@ -1227,6 +1229,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             metaConnection.createStatement().executeUpdate("ALTER TABLE " + tableName + " ADD IF NOT EXISTS " + columns );
         } catch (SQLException e) {
+            logger.warn("addColumnsIfNotExists failed due to:" + e);
             sqlE = e;
         } finally {
             try {
@@ -1289,7 +1292,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             } catch (TableAlreadyExistsException ignore) {
                                 // This will occur if we have an older SYSTEM.CATALOG and we need to update it to include
                                 // any new columns we've added.
-                                metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, PhoenixDatabaseMetaData.INDEX_TYPE + " " + PDataType.UNSIGNED_TINYINT.getSqlTypeName());
+                                metaConnection = addColumnsIfNotExists(metaConnection, 
+                                  PhoenixDatabaseMetaData.SYSTEM_CATALOG, 
+                                  MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, 
+                                  PhoenixDatabaseMetaData.INDEX_TYPE + " " + PDataType.UNSIGNED_TINYINT.getSqlTypeName() + 
+                                  ", " + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " " + PDataType.LONG.getSqlTypeName());
                             }
                             try {
                                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);

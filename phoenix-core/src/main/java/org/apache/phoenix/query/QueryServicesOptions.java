@@ -123,6 +123,9 @@ public class QueryServicesOptions {
     public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE =  1024L*1024L*10L; // 10 Mb
     public static final int DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES = 1000;
     public static final int DEFAULT_CLOCK_SKEW_INTERVAL = 2000;
+    public static final boolean DEFAULT_INDEX_FAILURE_HANDLING_REBUILD = true; // auto rebuild on
+    public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 10000; // 10 secs
+    public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME = 300000; // 5 mins
     
     private final Configuration config;
     

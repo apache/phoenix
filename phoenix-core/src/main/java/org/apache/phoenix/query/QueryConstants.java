@@ -77,7 +77,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
-
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP;
 import java.math.BigDecimal;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -211,6 +212,8 @@ public interface QueryConstants {
             SCOPE_TABLE + " VARCHAR," +
             SOURCE_DATA_TYPE + " SMALLINT," +
             IS_AUTOINCREMENT + " VARCHAR," +
+            INDEX_TYPE + " UNSIGNED_TINYINT," +
+            INDEX_DISABLE_TIMESTAMP + " BIGINT," +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ","
             + TABLE_SCHEM + "," + TABLE_NAME + "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" +
             HConstants.VERSIONS + "=" + MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS + ",\n" +

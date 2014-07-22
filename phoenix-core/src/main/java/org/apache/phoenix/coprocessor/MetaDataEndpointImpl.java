@@ -49,6 +49,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT_BYTE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
@@ -63,6 +64,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
@@ -995,14 +997,6 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         
     }
     
-    private static MetaDataMutationResult checkTableKeyInRegion(byte[] key, HRegion region) {
-        byte[] startKey = region.getStartKey();
-        byte[] endKey = region.getEndKey();
-        if (Bytes.compareTo(startKey, key) <= 0 && (Bytes.compareTo(HConstants.LAST_ROW, endKey) == 0 || Bytes.compareTo(key, endKey) < 0)) {
-            return null; // normal case;
-        }
-        return new MetaDataMutationResult(MutationCode.TABLE_NOT_IN_REGION, EnvironmentEdgeManager.currentTimeMillis(), null);
-    }
 
     @Override
     public MetaDataMutationResult getTable(byte[] tenantId, byte[] schemaName, byte[] tableName, long tableTimeStamp, long clientTimeStamp) throws IOException {
@@ -1126,7 +1120,17 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             long timeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
             ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
             List<KeyValue> newKVs = tableMetadata.get(0).getFamilyMap().get(TABLE_FAMILY_BYTES);
-            KeyValue newKV = newKVs.get(0);
+            KeyValue newKV = null;
+            int disableTimeStampKVIndex = -1;
+            int index = 0;
+            for(KeyValue cell : newKVs){
+                if(Bytes.compareTo(cell.getQualifier(), INDEX_STATE_BYTES) == 0){
+                  newKV = cell;
+                } else if (Bytes.compareTo(cell.getQualifier(), INDEX_DISABLE_TIMESTAMP_BYTES) == 0){
+                  disableTimeStampKVIndex = index;
+                }
+                index++;
+            }
             PIndexState newState =  PIndexState.fromSerializedValue(newKV.getBuffer()[newKV.getValueOffset()]);
             Integer lid = region.getLock(null, key, true);
             if (lid == null) {
@@ -1136,19 +1140,39 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                 Get get = new Get(key);
                 get.setTimeRange(PTable.INITIAL_SEQ_NUM, timeStamp);
                 get.addColumn(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
+                get.addColumn(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
                 Result currentResult = region.get(get);
                 if (currentResult.raw().length == 0) {
                     return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
                 }
-                KeyValue currentStateKV = currentResult.raw()[0];
+                KeyValue currentStateKV = currentResult.getColumnLatest(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
+                KeyValue currentDisableTimeStamp = currentResult.getColumnLatest(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
+               
                 PIndexState currentState = PIndexState.fromSerializedValue(currentStateKV.getBuffer()[currentStateKV.getValueOffset()]);
+                
+                // check if we need reset disable time stamp
+                if( (newState == PIndexState.DISABLE) && 
+                    (currentState == PIndexState.DISABLE || currentState == PIndexState.INACTIVE) && 
+                    (currentDisableTimeStamp != null && currentDisableTimeStamp.getValueLength() > 0) &&
+                    (disableTimeStampKVIndex >= 0)) {
+                    Long curTimeStampVal = (Long)PDataType.LONG.toObject(currentDisableTimeStamp.getBuffer());
+                    // new DisableTimeStamp is passed in
+                    KeyValue newDisableTimeStampCell = newKVs.get(disableTimeStampKVIndex);
+                    Long newDisableTimeStamp = (Long)PDataType.LONG.toObject(newDisableTimeStampCell.getBuffer());
+                    if(curTimeStampVal > 0 && curTimeStampVal < newDisableTimeStamp){
+                        // not reset disable timestamp
+                        newKVs.remove(disableTimeStampKVIndex);
+                    }
+                }
+                
                 // Detect invalid transitions
                 if (currentState == PIndexState.BUILDING) {
                     if (newState == PIndexState.USABLE) {
                         return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
                     }
                 } else if (currentState == PIndexState.DISABLE) {
-                    if (newState != PIndexState.BUILDING && newState != PIndexState.DISABLE) {
+                    if (newState != PIndexState.BUILDING && newState != PIndexState.DISABLE &&
+                        newState != PIndexState.INACTIVE) {
                         return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
                     }
                     // Done building, but was disable before that, so that in disabled state
@@ -1167,6 +1191,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                     newState = PIndexState.ACTIVE;
                     newKVs.set(0, KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES, INDEX_STATE_BYTES, timeStamp, Bytes.toBytes(newState.getSerializedValue())));
                 }
+                
                 if (currentState != newState) {
                     region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]>emptySet());
                     // Invalidate from cache
@@ -1185,6 +1210,18 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         }
     }
     
+    private static MetaDataMutationResult checkTableKeyInRegion(byte[] key, HRegion region) {
+        byte[] startKey = region.getStartKey();
+        byte[] endKey = region.getEndKey();
+        if (Bytes.compareTo(startKey, key) <= 0
+                && (Bytes.compareTo(HConstants.LAST_ROW, endKey) == 0 || Bytes.compareTo(key,
+                    endKey) < 0)) {
+            return null; // normal case;
+        }
+        return new MetaDataMutationResult(MutationCode.TABLE_NOT_IN_REGION,
+                EnvironmentEdgeManager.currentTimeMillis(), null);
+    }
+
     /**
      * 
      * Matches rows that end with a given byte array suffix

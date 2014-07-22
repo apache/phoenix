@@ -24,7 +24,8 @@ import org.apache.hadoop.hbase.HConstants;
 public final class TableRef {
     private final PTable table;
     private final String alias;
-    private final long timeStamp;
+    private final long upperBoundTimeStamp;
+    private final long lowerBoundTimeStamp;
     private final boolean hasDynamicCols;
 
     public TableRef(TableRef tableRef, long timeStamp) {
@@ -34,11 +35,21 @@ public final class TableRef {
     public TableRef(PTable table) {
         this(null, table, HConstants.LATEST_TIMESTAMP, false);
     }
+    
+    public TableRef(PTable table, long upperBoundTimeStamp, long lowerBoundTimeStamp) {
+        this(null, table, upperBoundTimeStamp, lowerBoundTimeStamp, false);
+    }
 
-    public TableRef(String alias, PTable table, long timeStamp, boolean hasDynamicCols) {
+    public TableRef(String alias, PTable table, long upperBoundTimeStamp, boolean hasDynamicCols) {
+        this(alias, table, upperBoundTimeStamp, 0, hasDynamicCols);
+    }
+    
+    public TableRef(String alias, PTable table, long upperBoundTimeStamp, long lowerBoundTimeStamp, 
+        boolean hasDynamicCols) {
         this.alias = alias;
         this.table = table;
-        this.timeStamp = timeStamp;
+        this.upperBoundTimeStamp = upperBoundTimeStamp;
+        this.lowerBoundTimeStamp = lowerBoundTimeStamp;
         this.hasDynamicCols = hasDynamicCols;
     }
     
@@ -70,7 +81,11 @@ public final class TableRef {
     }
 
     public long getTimeStamp() {
-        return timeStamp;
+        return this.upperBoundTimeStamp;
+    }
+    
+    public long getLowerBoundTimeStamp() {
+        return this.lowerBoundTimeStamp;
     }
 
     public boolean hasDynamicCols() {
