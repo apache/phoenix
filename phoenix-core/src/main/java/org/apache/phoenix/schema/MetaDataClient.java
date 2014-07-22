@@ -54,10 +54,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.schema.PDataType.VARCHAR;
 
+import java.io.IOException;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
@@ -85,6 +87,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -211,12 +214,20 @@ public class MetaDataClient {
             IMMUTABLE_ROWS + 
             ") VALUES (?, ?, ?, ?)";
     private static final String UPDATE_INDEX_STATE =
+        "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + 
+        TENANT_ID + "," +
+        TABLE_SCHEM + "," +
+        TABLE_NAME + "," +
+        INDEX_STATE + 
+        ") VALUES (?, ?, ?, ?)";
+    private static final String UPDATE_INDEX_STATE_TO_ACTIVE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + 
             TENANT_ID + "," +
             TABLE_SCHEM + "," +
             TABLE_NAME + "," +
-            INDEX_STATE +
-            ") VALUES (?, ?, ?, ?)";
+            INDEX_STATE + "," +
+            INDEX_DISABLE_TIMESTAMP +
+            ") VALUES (?, ?, ?, ?, ?)";
     private static final String INSERT_COLUMN =
         "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + 
         TENANT_ID + "," +
@@ -493,11 +504,13 @@ public class MetaDataClient {
     }
     
     private MutationState buildIndex(PTable index, TableRef dataTableRef) throws SQLException {
+        AlterIndexStatement indexStatement = null;
         boolean wasAutoCommit = connection.getAutoCommit();
         connection.rollback();
         try {
             connection.setAutoCommit(true);
             MutationState state;
+            
             // For local indexes, we optimize the initial index population by *not* sending Puts over
             // the wire for the index rows, as we don't need to do that. Instead, we tap into our
             // region observer to generate the index rows based on the data rows as we scan
@@ -513,6 +526,11 @@ public class MetaDataClient {
                 // index maintainers.
                 // Define the LOCAL_INDEX_BUILD as a new static in BaseScannerRegionObserver
                 Scan scan = plan.getContext().getScan();
+                try {
+                    scan.setTimeRange(dataTableRef.getLowerBoundTimeStamp(), Long.MAX_VALUE);
+                } catch (IOException e) {
+                    throw new SQLException(e);
+                }
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 PTable dataTable = tableRef.getTable();
                 List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
@@ -537,12 +555,18 @@ public class MetaDataClient {
             } else {
                 PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(connection, dataTableRef);
                 MutationPlan plan = compiler.compile(index);
+                try {
+                    plan.getContext().setScanTimeRange(new TimeRange(dataTableRef.getLowerBoundTimeStamp(), Long.MAX_VALUE));
+                } catch (IOException e) {
+                    throw new SQLException(e);
+                }
                 state = connection.getQueryServices().updateData(plan);
-            }
-            AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null, 
-                    TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
-                    dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
+            }            
+            indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null, 
+                TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
+                dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
             alterIndex(indexStatement);
+            
             return state;
         } finally {
             connection.setAutoCommit(wasAutoCommit);
@@ -556,6 +580,32 @@ public class MetaDataClient {
                 schemaName == null ? ("\"" + tableName + "\"") : ("\"" + schemaName + "\""
                         + QueryConstants.NAME_SEPARATOR + "\"" + tableName + "\"");
         return fullName;
+    }
+
+    /**
+     * Rebuild indexes from a timestamp which is the value from hbase row key timestamp field
+     */
+    public void buildPartialIndexFromTimeStamp(PTable index, TableRef dataTableRef) throws SQLException {
+        boolean needRestoreIndexState = false;
+        // Need to change index state from Disable to InActive when build index partially so that
+        // new changes will be indexed during index rebuilding
+        AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
+            TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
+            dataTableRef.getTable().getTableName().getString(), false, PIndexState.INACTIVE);
+        alterIndex(indexStatement);
+        needRestoreIndexState = true;
+        try {
+            buildIndex(index, dataTableRef);
+            needRestoreIndexState = false;
+        } finally {
+            if(needRestoreIndexState) {
+                // reset index state to disable
+                indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
+                    TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
+                    dataTableRef.getTable().getTableName().getString(), false, PIndexState.DISABLE);
+                alterIndex(indexStatement);
+            }
+        }
     }
 
     /**
@@ -2078,11 +2128,18 @@ public class MetaDataClient {
             TableRef indexRef = FromCompiler.getResolverForMutation(statement, connection).getTables().get(0);
             PreparedStatement tableUpsert = null;
             try {
-                tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE);
+                if(newIndexState == PIndexState.ACTIVE){
+                    tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE_TO_ACTIVE);
+                } else {
+                    tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE);
+                }
                 tableUpsert.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
                 tableUpsert.setString(2, schemaName);
                 tableUpsert.setString(3, indexName);
                 tableUpsert.setString(4, newIndexState.getSerializedValue());
+                if(newIndexState == PIndexState.ACTIVE){
+                    tableUpsert.setLong(5, 0);
+                }
                 tableUpsert.execute();
             } finally {
                 if(tableUpsert != null) {
