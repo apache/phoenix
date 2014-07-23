@@ -494,6 +494,12 @@ public class IndexUtil {
                 public byte[] getRow() {
                     return cell.getRow();
                 }
+
+                @Override
+                @Deprecated
+                public int getTagsLengthUnsigned() {
+                    return cell.getTagsLengthUnsigned();
+                }
             };
             // Wrap cell in cell that offsets row key
             result.set(i, newCell);
