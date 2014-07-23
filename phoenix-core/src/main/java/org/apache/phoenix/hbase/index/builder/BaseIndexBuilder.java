@@ -24,8 +24,6 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
-import org.apache.hadoop.hbase.util.Pair;
-
 import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
 
 /**
