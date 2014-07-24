@@ -37,7 +37,7 @@ public class PhoenixIndexRpcSchedulerFactoryTest {
             Class<?> rpcSchedulerFactoryClass =
                     conf.getClass(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
                         SimpleRpcSchedulerFactory.class);
-            Object o = ((RpcSchedulerFactory) rpcSchedulerFactoryClass.newInstance());
+            Object o = rpcSchedulerFactoryClass.newInstance();
             assertTrue(o instanceof PhoenixIndexRpcSchedulerFactory);
         } catch (InstantiationException e) {
             assertTrue("Should not have got an exception when instantiing the rpc scheduler: " + e,

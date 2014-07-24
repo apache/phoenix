@@ -20,11 +20,6 @@ package org.apache.hadoop.hbase.ipc;
 import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ipc.BalancedQueueRpcExecutor;
-import org.apache.hadoop.hbase.ipc.CallRunner;
-import org.apache.hadoop.hbase.ipc.RpcExecutor;
-import org.apache.hadoop.hbase.ipc.RpcScheduler;
-import org.apache.hadoop.hbase.ipc.RpcServer;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -58,7 +53,7 @@ public class PhoenixIndexRpcScheduler extends RpcScheduler {
         // copied from org.apache.hadoop.hbase.ipc.SimpleRpcScheduler in HBase 0.98.4
         float callQueuesHandlersFactor = conf.getFloat(CALL_QUEUE_HANDLER_FACTOR_CONF_KEY, 0);
         int numCallQueues =
-                Math.max(1, (int) Math.round(indexHandlerCount * callQueuesHandlersFactor));
+                Math.max(1, Math.round(indexHandlerCount * callQueuesHandlersFactor));
 
         this.minPriority = minPriority;
         this.maxPriority = maxPriority;

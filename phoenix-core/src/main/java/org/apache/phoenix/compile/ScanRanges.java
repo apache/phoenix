@@ -40,47 +40,49 @@ import com.google.common.collect.Lists;
 public class ScanRanges {
     private static final List<List<KeyRange>> EVERYTHING_RANGES = Collections.<List<KeyRange>>emptyList();
     private static final List<List<KeyRange>> NOTHING_RANGES = Collections.<List<KeyRange>>singletonList(Collections.<KeyRange>singletonList(KeyRange.EMPTY_RANGE));
-    public static final ScanRanges EVERYTHING = new ScanRanges(EVERYTHING_RANGES,null,false, false);
-    public static final ScanRanges NOTHING = new ScanRanges(NOTHING_RANGES,null,false, false);
+    public static final ScanRanges EVERYTHING = new ScanRanges(null,ScanUtil.SINGLE_COLUMN_SLOT_SPAN,EVERYTHING_RANGES, false, false);
+    public static final ScanRanges NOTHING = new ScanRanges(null,ScanUtil.SINGLE_COLUMN_SLOT_SPAN,NOTHING_RANGES, false, false);
 
-    public static ScanRanges create(List<List<KeyRange>> ranges, RowKeySchema schema) {
-        return create(ranges, schema, false, null);
+    public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan) {
+        return create(schema, ranges, slotSpan, false, null);
     }
     
-    public static ScanRanges create(List<List<KeyRange>> ranges, RowKeySchema schema, boolean forceRangeScan, Integer nBuckets) {
+    public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan, boolean forceRangeScan, Integer nBuckets) {
         int offset = nBuckets == null ? 0 : 1;
         if (ranges.size() == offset) {
             return EVERYTHING;
         } else if (ranges.size() == 1 + offset && ranges.get(offset).size() == 1 && ranges.get(offset).get(0) == KeyRange.EMPTY_RANGE) {
             return NOTHING;
         }
-        boolean isPointLookup = !forceRangeScan && ScanRanges.isPointLookup(schema, ranges);
+        boolean isPointLookup = !forceRangeScan && ScanRanges.isPointLookup(schema, ranges, slotSpan);
         if (isPointLookup) {
             // TODO: consider keeping original to use for serialization as it would
             // be smaller?
-            List<byte[]> keys = ScanRanges.getPointKeys(ranges, schema, nBuckets);
+            List<byte[]> keys = ScanRanges.getPointKeys(ranges, slotSpan, schema, nBuckets);
             List<KeyRange> keyRanges = Lists.newArrayListWithExpectedSize(keys.size());
             for (byte[] key : keys) {
                 keyRanges.add(KeyRange.getKeyRange(key));
             }
             ranges = Collections.singletonList(keyRanges);
             schema = SchemaUtil.VAR_BINARY_SCHEMA;
+            slotSpan = ScanUtil.SINGLE_COLUMN_SLOT_SPAN;
         } else if (nBuckets != null) {
             List<List<KeyRange>> saltedRanges = Lists.newArrayListWithExpectedSize(ranges.size());
             saltedRanges.add(SaltingUtil.generateAllSaltingRanges(nBuckets));
             saltedRanges.addAll(ranges.subList(1, ranges.size()));
             ranges = saltedRanges;
         }
-        return new ScanRanges(ranges, schema, forceRangeScan, isPointLookup);
+        return new ScanRanges(schema, slotSpan, ranges, forceRangeScan, isPointLookup);
     }
 
     private SkipScanFilter filter;
     private final List<List<KeyRange>> ranges;
+    private final int[] slotSpan;
     private final RowKeySchema schema;
     private final boolean forceRangeScan;
     private final boolean isPointLookup;
 
-    private ScanRanges (List<List<KeyRange>> ranges, RowKeySchema schema, boolean forceRangeScan, boolean isPointLookup) {
+    private ScanRanges (RowKeySchema schema, int[] slotSpan, List<List<KeyRange>> ranges, boolean forceRangeScan, boolean isPointLookup) {
         this.isPointLookup = isPointLookup;
         List<List<KeyRange>> sortedRanges = Lists.newArrayListWithExpectedSize(ranges.size());
         for (int i = 0; i < ranges.size(); i++) {
@@ -89,6 +91,7 @@ public class ScanRanges {
             sortedRanges.add(ImmutableList.copyOf(sorted));
         }
         this.ranges = ImmutableList.copyOf(sortedRanges);
+        this.slotSpan = slotSpan;
         this.schema = schema;
         if (schema != null && !ranges.isEmpty()) {
             this.filter = new SkipScanFilter(this.ranges, schema);
@@ -142,8 +145,8 @@ public class ScanRanges {
         return false;
     }
 
-    private static boolean isPointLookup(RowKeySchema schema, List<List<KeyRange>> ranges) {
-        if (ranges.size() < schema.getMaxFields()) {
+    private static boolean isPointLookup(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan) {
+        if (ScanUtil.calculateSlotSpan(ranges, slotSpan) < schema.getMaxFields()) {
             return false;
         }
         for (List<KeyRange> orRanges : ranges) {
@@ -165,7 +168,7 @@ public class ScanRanges {
         return idx >= 0;
     }
 
-    private static List<byte[]> getPointKeys(List<List<KeyRange>> ranges, RowKeySchema schema, Integer bucketNum) {
+    private static List<byte[]> getPointKeys(List<List<KeyRange>> ranges, int[] slotSpan, RowKeySchema schema, Integer bucketNum) {
         if (ranges == null || ranges.isEmpty()) {
             return Collections.emptyList();
         }
@@ -182,7 +185,7 @@ public class ScanRanges {
         int length;
         byte[] key = new byte[maxKeyLength];
         do {
-            length = ScanUtil.setKey(schema, ranges, position, Bound.LOWER, key, offset, offset, ranges.size(), offset);
+            length = ScanUtil.setKey(schema, ranges, slotSpan, position, Bound.LOWER, key, offset, offset, ranges.size(), offset);
             if (isSalted) {
                 key[0] = SaltingUtil.getSaltingByte(key, offset, length, bucketNum);
             }
@@ -217,11 +220,11 @@ public class ScanRanges {
         }
         
         byte[] expectedKey;
-        expectedKey = ScanUtil.getMinKey(schema, ranges);
+        expectedKey = ScanUtil.getMinKey(schema, ranges, slotSpan);
         if (expectedKey != null) {
             scan.setStartRow(expectedKey);
         }
-        expectedKey = ScanUtil.getMaxKey(schema, ranges);
+        expectedKey = ScanUtil.getMaxKey(schema, ranges, slotSpan);
         if (expectedKey != null) {
             scan.setStopRow(expectedKey);
         }
