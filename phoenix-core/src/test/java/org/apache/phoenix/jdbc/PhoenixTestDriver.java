@@ -20,6 +20,7 @@ package org.apache.phoenix.jdbc;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 import org.apache.phoenix.end2end.ConnectionQueryServicesTestImpl;
@@ -42,9 +43,16 @@ import org.apache.phoenix.util.ReadOnlyProps;
 @ThreadSafe
 public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     
+    @GuardedBy("this")
     private ConnectionQueryServices connectionQueryServices;
     private final ReadOnlyProps overrideProps;
+    
+    @GuardedBy("this")
     private final QueryServices queryServices;
+    
+    //The only place it is modified is under a lock provided by "this". 
+    //So ok to have it just as volatile.
+    private volatile boolean closed = false;
 
     public PhoenixTestDriver() {
         this.overrideProps = ReadOnlyProps.EMPTY_PROPS;
@@ -58,18 +66,21 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     }
 
     @Override
-    public QueryServices getQueryServices() {
+    public synchronized QueryServices getQueryServices() {
+        checkClosed();
         return queryServices;
     }
 
     @Override
     public boolean acceptsURL(String url) throws SQLException {
+        checkClosed();
         // Accept the url only if test=true attribute set
         return super.acceptsURL(url) && isTestUrl(url);
     }
 
     @Override // public for testing
     public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties info) throws SQLException {
+        checkClosed();
         if (connectionQueryServices != null) { return connectionQueryServices; }
         ConnectionInfo connInfo = ConnectionInfo.create(url);
         if (connInfo.isConnectionless()) {
@@ -81,11 +92,26 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         return connectionQueryServices;
     }
     
-    @Override
-    public synchronized void close() throws SQLException {
-        connectionQueryServices.close();
-        queryServices.close();
+    private void checkClosed() {
+        if (closed) {
+            throw new IllegalStateException("The Phoenix jdbc test driver has been closed.");
+        }
     }
     
-
+    @Override
+    public synchronized void close() throws SQLException {
+        if (closed) {
+            return;
+        }
+        closed = true;
+        try {
+            connectionQueryServices.close();
+        } finally {
+            try {
+                queryServices.close();
+            } finally {
+                queryServices.getExecutor().shutdown();
+            }
+        }
+    }
 }
