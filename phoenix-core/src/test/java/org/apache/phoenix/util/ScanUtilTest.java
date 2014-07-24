@@ -112,7 +112,7 @@ public class ScanUtilTest {
     public void test() {
         byte[] key = new byte[1024];
         int[] position = new int[slots.size()];
-        int offset = ScanUtil.setKey(schema, slots, position, bound, key, 0, 0, slots.size());
+        int offset = ScanUtil.setKey(schema, slots, ScanUtil.getDefaultSlotSpans(slots.size()), position, bound, key, 0, 0, slots.size());
         byte[] actualKey = new byte[offset];
         System.arraycopy(key, 0, actualKey, 0, offset);
         assertArrayEquals(expectedKey, actualKey);

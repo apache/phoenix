@@ -29,6 +29,7 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -522,7 +523,7 @@ public class ScanRangesTest {
                 }, false, SortOrder.getDefault());
             }
         }
-        ScanRanges scanRanges = ScanRanges.create(slots, builder.build());
+        ScanRanges scanRanges = ScanRanges.create(builder.build(), slots, ScanUtil.getDefaultSlotSpans(slots.size()));
         return foreach(scanRanges, widths, keyRange, expectedResult);
     }
 

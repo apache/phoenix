@@ -55,6 +55,8 @@ import com.google.common.collect.Lists;
  */
 public class ScanUtil {
 
+    public static final int[] SINGLE_COLUMN_SLOT_SPAN = new int[1];
+
     private ScanUtil() {
     }
 
@@ -197,15 +199,15 @@ public class ScanUtil {
         }
     }
 
-    public static byte[] getMinKey(RowKeySchema schema, List<List<KeyRange>> slots) {
-        return getKey(schema, slots, Bound.LOWER);
+    public static byte[] getMinKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan) {
+        return getKey(schema, slots, slotSpan, Bound.LOWER);
     }
 
-    public static byte[] getMaxKey(RowKeySchema schema, List<List<KeyRange>> slots) {
-        return getKey(schema, slots, Bound.UPPER);
+    public static byte[] getMaxKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan) {
+        return getKey(schema, slots, slotSpan, Bound.UPPER);
     }
 
-    private static byte[] getKey(RowKeySchema schema, List<List<KeyRange>> slots, Bound bound) {
+    private static byte[] getKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan, Bound bound) {
         if (slots.isEmpty()) {
             return null;
         }
@@ -217,7 +219,7 @@ public class ScanUtil {
             maxLength += range.getRange(bound).length + (schema.getField(i).getDataType().isFixedWidth() ? 0 : 1);
         }
         byte[] key = new byte[maxLength];
-        int length = setKey(schema, slots, position, bound, key, 0, 0, position.length);
+        int length = setKey(schema, slots, slotSpan, position, bound, key, 0, 0, position.length);
         if (length == 0) {
             return null;
         }
@@ -243,21 +245,27 @@ public class ScanUtil {
      *  single         inclusive      lower         no
      *  single         inclusive      upper         yes, at the end if it is the last slots.
      */
-    public static int setKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] position, Bound bound,
-            byte[] key, int byteOffset, int slotStartIndex, int slotEndIndex) {
-        return setKey(schema, slots, position, bound, key, byteOffset, slotStartIndex, slotEndIndex, slotStartIndex);
+    public static int setKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan, int[] position,
+            Bound bound, byte[] key, int byteOffset, int slotStartIndex, int slotEndIndex) {
+        return setKey(schema, slots, slotSpan, position, bound, key, byteOffset, slotStartIndex, slotEndIndex, slotStartIndex);
     }
 
-    public static int setKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] position, Bound bound,
-            byte[] key, int byteOffset, int slotStartIndex, int slotEndIndex, int schemaStartIndex) {
+    public static int setKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan, int[] position,
+            Bound bound, byte[] key, int byteOffset, int slotStartIndex, int slotEndIndex, int schemaStartIndex) {
         int offset = byteOffset;
         boolean lastInclusiveUpperSingleKey = false;
         boolean anyInclusiveUpperRangeKey = false;
+        // The index used for slots should be incremented by 1,
+        // but the index for the field it represents in the schema
+        // should be incremented by 1 + value in the current slotSpan index
+        // slotSpan stores the number of columns beyond one that the range spans
         for (int i = slotStartIndex; i < slotEndIndex; i++) {
             // Build up the key by appending the bound of each key range
             // from the current position of each slot. 
             KeyRange range = slots.get(i).get(position[i]);
-            boolean isFixedWidth = schema.getField(schemaStartIndex++).getDataType().isFixedWidth();
+            // Use last slot in a multi-span column to determine if fixed width
+            boolean isFixedWidth = schema.getField(schemaStartIndex + slotSpan[i]).getDataType().isFixedWidth();
+            schemaStartIndex += slotSpan[i] + 1;
             /*
              * If the current slot is unbound then stop if:
              * 1) setting the upper bound. There's no value in
@@ -370,7 +378,7 @@ public class ScanUtil {
         for (Mutation m : mutations) {
             keys.add(PDataType.VARBINARY.getKeyRange(m.getRow()));
         }
-        ScanRanges keyRanges = ScanRanges.create(Collections.singletonList(keys), SchemaUtil.VAR_BINARY_SCHEMA);
+        ScanRanges keyRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
         return keyRanges;
     }
 
@@ -413,5 +421,18 @@ public class ScanUtil {
     public static boolean isReversed(Scan scan) {
         byte[] reversed = scan.getAttribute(REVERSED_ATTR);
         return (PDataType.TRUE_BYTES.equals(reversed));
+    }
+
+    public static int[] getDefaultSlotSpans(int nSlots) {
+        return new int[nSlots];
+    }
+
+    public static int calculateSlotSpan(List<List<KeyRange>> ranges, int[] slotSpan) {
+        int nSlots = ranges.size();
+        int totalSlotSpan = nSlots;
+        for (int i = 0; i < nSlots; i++) {
+            totalSlotSpan += slotSpan[i];
+        }
+        return totalSlotSpan;
     }
 }

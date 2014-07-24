@@ -30,14 +30,15 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.MultiVersionConsistencyControl;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Pair;
-
-import com.google.common.collect.Lists;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.collect.Lists;
 
 /**
  * Index builder for covered-columns index that ties into phoenix for faster use.
@@ -57,7 +58,7 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
             maintainers.addAll(getCodec().getIndexMaintainers(m.getAttributesMap()));
         }
         Scan scan = IndexManagementUtil.newLocalStateScan(maintainers);
-        ScanRanges scanRanges = ScanRanges.create(Collections.singletonList(keys), SchemaUtil.VAR_BINARY_SCHEMA);
+        ScanRanges scanRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
         scanRanges.setScanStartStopRow(scan);
         scan.setFilter(scanRanges.getSkipScanFilter());
         HRegion region = this.env.getRegion();
