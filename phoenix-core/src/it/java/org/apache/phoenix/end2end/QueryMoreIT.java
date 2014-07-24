@@ -41,16 +41,28 @@ import com.google.common.collect.Lists;
 @Category(HBaseManagedTimeTest.class)
 public class QueryMoreIT extends BaseHBaseManagedTimeIT {
     
-    //Cursor table - salted/non-multi-tenant. Data table - salted/multi-tenant. 
+    //Data table - multi-tenant = true, salted = true 
     @Test
     public void testQueryMore1() throws Exception {
         testQueryMore(true, true);
     }
     
-    //Cursor table - salted/non-multi-tenant. Data table - salted/non multi-tenant. 
+    //Data table - multi-tenant = false, salted = true 
     @Test
     public void testQueryMore2() throws Exception {
         testQueryMore(false, true);
+    }
+    
+    //Data table - multi-tenant = false, salted = false
+    @Test
+    public void testQueryMore3() throws Exception {
+        testQueryMore(false, false);
+    }
+    
+    //Data table - multi-tenant = true, salted = false 
+    @Test
+    public void testQueryMore4() throws Exception {
+        testQueryMore(true, false);
     }
     
     private void testQueryMore(boolean dataTableMultiTenant, boolean dataTableSalted) throws Exception {
