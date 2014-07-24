@@ -198,7 +198,7 @@ public class ExecuteStatementsIT extends BaseHBaseManagedTimeIT {
             
             // test upsert statement with padding
             String tenantId = getOrganizationId();
-            initATableValues(tenantId, getDefaultSplits(tenantId), null, nextTimestamp()-1, getUrl());
+            initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
             
             upsert = "UPSERT INTO " + tableName + "(a_id, a_string, b_string) " +
                     "SELECT A_INTEGER, A_STRING, B_STRING FROM ATABLE WHERE a_string = ?";
