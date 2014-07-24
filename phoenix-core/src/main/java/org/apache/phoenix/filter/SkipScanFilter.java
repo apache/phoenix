@@ -61,6 +61,8 @@ public class SkipScanFilter extends FilterBase implements Writable {
     private enum Terminate {AT, AFTER};
     // Conjunctive normal form of or-ed ranges or point lookups
     private List<List<KeyRange>> slots;
+    // How far each slot spans minus one. We only handle a single column span currently
+    private int[] slotSpan;
     // schema of the row key
     private RowKeySchema schema;
     // current position for each slot
@@ -98,6 +100,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
             }
         }
         this.slots = slots;
+        this.slotSpan = ScanUtil.getDefaultSlotSpans(slots.size());
         this.schema = schema;
         this.maxKeyLength = SchemaUtil.getMaxKeyLength(schema, slots);
         this.position = new int[slots.size()];
@@ -434,7 +437,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     }
     
     private int setKey(Bound bound, byte[] key, int keyOffset, int slotStartIndex) {
-        return ScanUtil.setKey(schema, slots, position, bound, key, keyOffset, slotStartIndex, position.length);
+        return ScanUtil.setKey(schema, slots, slotSpan, position, bound, key, keyOffset, slotStartIndex, position.length);
     }
 
     private static byte[] copyKey(byte[] targetKey, int targetLength, byte[] sourceKey, int offset, int length) {

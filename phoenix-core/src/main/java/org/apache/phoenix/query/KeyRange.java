@@ -630,4 +630,25 @@ public class KeyRange implements Writable {
         writeBound(Bound.LOWER, out);
         writeBound(Bound.UPPER, out);
     }
+
+    public KeyRange prependRange(byte[] bytes, int offset, int length) {
+        if (length == 0 || this == EVERYTHING_RANGE) {
+            return this;
+        }
+        byte[] lowerRange = this.getLowerRange();
+        if (!this.lowerUnbound()) {
+            byte[] newLowerRange = new byte[length + lowerRange.length];
+            System.arraycopy(bytes, offset, newLowerRange, 0, length);
+            System.arraycopy(lowerRange, 0, newLowerRange, length, lowerRange.length);
+            lowerRange = newLowerRange;
+        }
+        byte[] upperRange = this.getUpperRange();
+        if (!this.upperUnbound()) {
+            byte[] newUpperRange = new byte[length + upperRange.length];
+            System.arraycopy(bytes, offset, newUpperRange, 0, length);
+            System.arraycopy(upperRange, 0, newUpperRange, length, upperRange.length);
+            upperRange = newUpperRange;
+        }
+        return getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
+    }
 }

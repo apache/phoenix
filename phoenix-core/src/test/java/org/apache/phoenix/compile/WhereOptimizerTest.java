@@ -38,6 +38,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Properties;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
@@ -55,6 +56,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -82,7 +84,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(limit, plan.getLimit());
         return plan.getContext();
     }
-
+    
     @Test
     public void testSingleKeyExpression() throws SQLException {
         String tenantId = "000000000000001";
@@ -1570,4 +1572,72 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertArrayEquals(ByteUtil.concat(PDataType.CHAR.toBytes(firstOrgId), PDataType.CHAR.toBytes(firstParentId)), scan.getStartRow());
         assertArrayEquals(ByteUtil.concat(PDataType.CHAR.toBytes(secondOrgId), PDataType.CHAR.toBytes(secondParentId), QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
     }
+    
+    @Test
+    public void testFullyQualifiedRVCWithTenantSpecificViewAndConnection() throws Exception {
+    	String baseTableDDL = "CREATE TABLE BASE_MULTI_TENANT_TABLE(\n " + 
+                "  tenant_id VARCHAR(5) NOT NULL,\n" + 
+                "  userid INTEGER NOT NULL,\n" + 
+                "  username VARCHAR NOT NULL,\n" +
+                "  col VARCHAR\n " + 
+                "  CONSTRAINT pk PRIMARY KEY (tenant_id, userid, username)) MULTI_TENANT=true";
+    	Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(baseTableDDL);
+        conn.close();
+        
+        String tenantId = "tenantId";
+        String tenantViewDDL = "CREATE VIEW TENANT_VIEW AS SELECT * FROM BASE_MULTI_TENANT_TABLE";
+        Properties tenantProps = TEST_PROPERTIES;
+        tenantProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        conn = DriverManager.getConnection(getUrl(), tenantProps);
+        conn.createStatement().execute(tenantViewDDL);
+        
+        String query = "SELECT * FROM TENANT_VIEW WHERE (userid, username) IN ((?, ?), (?, ?))";
+        List<Object> binds = Arrays.<Object>asList(1, "uname1", 2, "uname2");
+        
+        StatementContext context = compileStatementTenantSpecific(tenantId, query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertEquals(SkipScanFilter.class, filter.getClass());
+    }
+    
+    @Test
+    public void testFullyQualifiedRVCWithNonTenantSpecificView() throws Exception {
+    	String baseTableDDL = "CREATE TABLE BASE_TABLE(\n " + 
+                "  tenant_id VARCHAR(5) NOT NULL,\n" + 
+                "  userid INTEGER NOT NULL,\n" + 
+                "  username VARCHAR NOT NULL,\n" +
+                "  col VARCHAR\n " + 
+                "  CONSTRAINT pk PRIMARY KEY (tenant_id, userid, username))";
+    	Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(baseTableDDL);
+        conn.close();
+        
+        String viewDDL = "CREATE VIEW VIEWXYZ AS SELECT * FROM BASE_TABLE";
+        conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(viewDDL);
+        
+        String query = "SELECT * FROM VIEWXYZ WHERE (tenant_id, userid, username) IN ((?, ?, ?), (?, ?, ?))";
+        List<Object> binds = Arrays.<Object>asList("tenantId", 1, "uname1", "tenantId", 2, "uname2");
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertEquals(SkipScanFilter.class, filter.getClass());
+    }
+    
+    private static StatementContext compileStatementTenantSpecific(String tenantId, String query, List<Object> binds) throws Exception {
+    	PhoenixConnection pconn = getTenantSpecificConnection("tenantId").unwrap(PhoenixConnection.class);
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        TestUtil.bindParams(pstmt, binds);
+        QueryPlan plan = pstmt.compileQuery();
+        return  plan.getContext();
+    }
+    
+    private static Connection getTenantSpecificConnection(String tenantId) throws Exception {
+    	Properties tenantProps = TEST_PROPERTIES;
+        tenantProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        Connection conn = DriverManager.getConnection(getUrl(), tenantProps);
+        return conn;
+    }
+    
 }

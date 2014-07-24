@@ -157,7 +157,7 @@ public class IndexHandlerIT {
         table.flushCommits();
 
         // check the counts on the rpc controller
-        assertEquals("Didn't get the expected number of index priority writes!", (int) 1,
+        assertEquals("Didn't get the expected number of index priority writes!", 1,
             (int) CountingIndexClientRpcController.priorityCounts
                     .get(PhoenixIndexRpcSchedulerFactory.DEFAULT_INDEX_MIN_PRIORITY));
 
