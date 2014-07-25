@@ -11,6 +11,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
@@ -22,7 +23,6 @@ import org.junit.experimental.categories.Category;
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import java.util.Collections;
 
 @Category(ClientManagedTimeTest.class)
 public class InListIT extends BaseHBaseManagedTimeIT {
@@ -196,6 +196,7 @@ public class InListIT extends BaseHBaseManagedTimeIT {
         }
     }
     
+    @SuppressWarnings("unchecked")
     List<List<Object>> DEFAULT_UPSERTS = Arrays.asList(Arrays.<Object>asList(1, 2, 4, 5, 6, "row1"),
                                                        Arrays.<Object>asList(2, 3, 4, 5, 6, "row2"),
                                                        Arrays.<Object>asList(2, 3, 6, 4, 5, "row3"),
