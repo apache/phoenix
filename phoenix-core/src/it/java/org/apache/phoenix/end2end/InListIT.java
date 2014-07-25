@@ -22,6 +22,7 @@ import org.junit.experimental.categories.Category;
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import java.util.Collections;
 
 @Category(ClientManagedTimeTest.class)
 public class InListIT extends BaseHBaseManagedTimeIT {
@@ -211,8 +212,87 @@ public class InListIT extends BaseHBaseManagedTimeIT {
         }
     });
     
+    // test variations used:
+    // 1. queries with no results
+    // 2. queries with fully qualified row keys
+    // 3. queries with partiall qualified row keys, starting from the beginning
+    // 4. queries with partially qualified row keys, but not the beginning
+    // 5. queries with partially qualified row keys with a "hole slot" in the middle
+    
     @Test
-    public void testLeadingPKWithTrailingRVC3() throws Exception {
+    public void testPlainRVCNoResults() throws Exception {
+        String whereClause = "WHERE (pk1, pk2, pk3, pk4, pk5) IN ((1, 2, 3, 4, 5), (1, 2, 4, 5, 3))";
+        List<String> expecteds = Collections.<String>emptyList();
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testPlainRVCFullyQualified() throws Exception {
+        String whereClause = "WHERE (pk1, pk2, pk3, pk4, pk5) IN ((1, 2, 3, 4, 5), (1, 2, 4, 5, 6))";
+        List<String> expecteds = singletonList("row1");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testPlainRVCPartiallyQualifiedBegin() throws Exception {
+        String whereClause = "WHERE (pk1, pk2, pk3, pk4) IN ((2, 3, 4, 5), (1, 2, 4, 5))";
+        List<String> expecteds = Arrays.asList("row1", "row2");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testPlainRVCPartiallyQualifiedEnd() throws Exception {
+        String whereClause = "WHERE (pk2, pk3, pk4, pk5) IN ((2, 3, 4, 5), (2, 4, 5, 6))";
+        List<String> expecteds = singletonList("row1");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testPlainRVCSlotHole() throws Exception {
+        String whereClause = "WHERE (pk1, pk2, pk4, pk5) IN ((1, 2, 4, 5), (6, 5, 3, 2))";
+        List<String> expecteds = singletonList("row4");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testLeadingPKWithTrailingRVCNoResults() throws Exception {
+        String whereClause = "WHERE pk1 != 2 AND (pk3, pk4, pk5) IN ((6, 4, 5), (5, 6, 4))";
+        List<String> expecteds = Collections.<String>emptyList();
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testLeadingPKWithTrailingRVCFullyQualified() throws Exception {
+        String whereClause = "WHERE pk1 = 2 AND (pk2, pk3, pk4, pk5) IN ((2, 4, 5, 6), (3, 4, 5, 6))";
+        List<String> expecteds = singletonList("row2");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testLeadingPKWithTrailingRVCPartiallyQualifiedBegin() throws Exception {
+        String whereClause = "WHERE pk1 = 2 AND (pk2, pk3) IN ((3, 6), (5, 4))";
+        List<String> expecteds = singletonList("row3");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testLeadingPKWithTrailingRVCPartiallyQualifiedEnd() throws Exception {
+        String whereClause = "WHERE pk2 = 2 AND (pk3, pk4, pk5) IN ((4, 5, 6), (5, 6, 4))";
+        List<String> expecteds = singletonList("row1");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testLeadingPKWithTrailingRVCSlotHole() throws Exception {
         String whereClause = "WHERE pk1 = 2 AND (pk3, pk4, pk5) IN ((4, 5, 6), (5, 6, 4))";
         List<String> expecteds = singletonList("row2");
         
@@ -220,15 +300,23 @@ public class InListIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
-    public void testLeadingPKWithTrailingRVC4() throws Exception {
-        String whereClause = "WHERE pk1 = 2 AND (pk3, pk4, pk5) IN ((4, 5, 6), (5, 6, 4))";
-        List<String> expecteds = singletonList("row2");
+    public void testLeadingRVCWithTrailingPKNoResults() throws Exception {
+        String whereClause = "WHERE (pk1, pk2, pk3) IN ((2, 3, 4), (2, 3, 6)) AND pk4 = 3";
+        List<String> expecteds = Collections.<String>emptyList();
         
         testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
     }
     
     @Test
-    public void testLeadingRVCWithTrailingPK() throws Exception {
+    public void testLeadingRVCWithTrailingPKFullyQualified() throws Exception {
+        String whereClause = "WHERE (pk1, pk2, pk3, pk4) IN ((1, 2, 4, 5), (2, 3, 4, 5)) AND pk5 = 6";
+        List<String> expecteds = Arrays.asList("row1", "row2");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testLeadingRVCWithTrailingPKPartiallyQualifiedBegin() throws Exception {
         String whereClause = "WHERE (pk1, pk2, pk3) IN ((2, 3, 4), (2, 3, 6)) AND pk4 = 4";
         List<String> expecteds = singletonList("row3");
         
@@ -236,17 +324,81 @@ public class InListIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
-    public void testLeadingRVCWithTrailingPK2() throws Exception {
-        String whereClause = "WHERE pk1 = 2 AND (pk2, pk3, pk4) IN ((3, 4, 4), (3, 6, 4))";
+    public void testLeadingRVCWithTrailingPKPartiallyQualifiedEnd() throws Exception {
+        String whereClause = "WHERE (pk2, pk3, pk4) IN ((3, 4, 5), (3, 6, 4)) AND pk5 = 5";
         List<String> expecteds = singletonList("row3");
         
         testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
     }
     
     @Test
-    public void testOverlappingRVC() throws Exception {
+    public void testLeadingRVCWithTrailingPKSlotHole() throws Exception {
+        String whereClause = "WHERE (pk1, pk2, pk3) IN ((2, 3, 4), (2, 3, 6)) AND pk5 = 5";
+        List<String> expecteds = singletonList("row3");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testOverlappingRVCAndPKNoResults() throws Exception {
+        String whereClause = "WHERE (pk1, pk2) IN ((1, 2), (2, 3)) AND pk2 = 4";
+        List<String> expecteds = Collections.<String>emptyList();
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testOverlappingRVCAndPKFullyQualified() throws Exception {
+        String whereClause = "WHERE (pk1, pk2, pk3, pk4, pk5) IN ((1, 2, 4, 5, 6), (2, 3, 4, 5, 6)) AND pk1 = 2";
+        List<String> expecteds = singletonList("row2");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testOverlappingRVCAndPKPartiallyQualifiedBegin() throws Exception {
+        String whereClause = "WHERE (pk1, pk2, pk3) IN ((1, 2, 4), (2, 3, 6)) AND pk3 = 4";
+        List<String> expecteds = singletonList("row1");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testOverlappingRVCAndPKPartiallyQualifiedEnd() throws Exception {
+        String whereClause = "WHERE (pk3, pk4, pk5) IN ((4, 5, 6), (4, 3, 2)) AND pk5 = 2";
+        List<String> expecteds = singletonList("row4");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testOverlappingRVCAndRVCNoResults() throws Exception {
+        String whereClause = "WHERE (pk1, pk2) IN ((1, 2), (2, 3)) AND (pk2, pk3) IN ((4, 4), (4, 6))";
+        List<String> expecteds = Collections.<String>emptyList();
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testOverlappingRVCAndRVCFullyQualified() throws Exception {
+        String whereClause = "WHERE (pk1, pk2, pk3) IN ((2, 3, 6), (2, 3, 4)) AND (pk3, pk4, pk5) IN ((4, 5, 6), (4, 3, 2))";
+        List<String> expecteds = singletonList("row2");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testOverlappingRVCAndRVCPartiallyQualifiedBegin() throws Exception {
         String whereClause = "WHERE (pk1, pk2) IN ((1, 2), (2, 3)) AND (pk2, pk3) IN ((3, 4), (3, 6))";
         List<String> expecteds = Arrays.asList("row2", "row3");
+        
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+    }
+    
+    @Test
+    public void testOverlappingRVCAndRVCPartiallyQualifiedEnd() throws Exception {
+        String whereClause = "WHERE (pk3, pk4) IN ((4, 5), (4, 3)) AND (pk4, pk5) IN ((3, 2), (4, 5))";
+        List<String> expecteds = singletonList("row4");
         
         testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
     }
