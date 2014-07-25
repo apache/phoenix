@@ -77,7 +77,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     }
 
     private static StatementContext compileStatement(String query, List<Object> binds, Integer limit) throws SQLException {
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), new Properties(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
         TestUtil.bindParams(pstmt, binds);
         QueryPlan plan = pstmt.compileQuery();
@@ -1587,7 +1587,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         
         String tenantId = "tenantId";
         String tenantViewDDL = "CREATE VIEW TENANT_VIEW AS SELECT * FROM BASE_MULTI_TENANT_TABLE";
-        Properties tenantProps = TEST_PROPERTIES;
+        Properties tenantProps = new Properties();
         tenantProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         conn = DriverManager.getConnection(getUrl(), tenantProps);
         conn.createStatement().execute(tenantViewDDL);
@@ -1634,7 +1634,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     }
     
     private static Connection getTenantSpecificConnection(String tenantId) throws Exception {
-    	Properties tenantProps = TEST_PROPERTIES;
+    	Properties tenantProps = new Properties();
         tenantProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         Connection conn = DriverManager.getConnection(getUrl(), tenantProps);
         return conn;
