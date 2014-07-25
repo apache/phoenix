@@ -513,7 +513,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             if (result != null) {
                 return result; 
             }
-            List<Integer> lids = Lists.newArrayList(5);
+            List<Integer> lids = Lists.newArrayList();
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
             try {
                 acquireLock(region, lockKey, lids);
