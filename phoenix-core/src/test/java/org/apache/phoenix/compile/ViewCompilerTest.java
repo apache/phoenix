@@ -62,15 +62,18 @@ public class ViewCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute(view);
         }
         
+        StringBuilder buf = new StringBuilder();
         int count = 0;
         for (PTable table : conn.getMetaDataCache().getTables()) {
             if (table.getType() == PTableType.VIEW) {
                 assertEquals(viewType, table.getViewType());
                 conn.createStatement().execute("DROP VIEW " + table.getName().getString());
+                buf.append(' ');
+                buf.append(table.getName().getString());
                 count++;
             }
         }
-        assertEquals(views.length, count);
+        assertEquals("Expected " + views.length + ", but got " + count + ":"+ buf.toString(), views.length, count);
     }
 
     @Test
