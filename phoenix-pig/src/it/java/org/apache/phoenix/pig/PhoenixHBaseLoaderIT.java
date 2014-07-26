@@ -41,6 +41,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.pig.ExecType;
@@ -88,7 +89,7 @@ public class PhoenixHBaseLoaderIT {
 
         Class.forName(PhoenixDriver.class.getName());
         zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        Properties props = TestUtil.TEST_PROPERTIES;
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         conn = DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL +
                  PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum,props);
