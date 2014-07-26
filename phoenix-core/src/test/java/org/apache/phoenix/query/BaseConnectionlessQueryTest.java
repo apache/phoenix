@@ -29,6 +29,7 @@ import static org.apache.phoenix.util.TestUtil.MULTI_CF_NAME;
 import static org.apache.phoenix.util.TestUtil.PHOENIX_CONNECTIONLESS_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.DriverManager;
@@ -44,6 +45,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
@@ -80,7 +82,7 @@ public class BaseConnectionlessQueryTest extends BaseTest {
         if (PhoenixEmbeddedDriver.isTestUrl(url)) {
             driver = initDriver(ReadOnlyProps.EMPTY_PROPS);
             assertTrue(DriverManager.getDriver(url) == driver);
-            driver.connect(url, TestUtil.TEST_PROPERTIES);
+            driver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
         }
     }
     

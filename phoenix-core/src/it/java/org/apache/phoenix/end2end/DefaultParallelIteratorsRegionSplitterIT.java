@@ -43,6 +43,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -85,7 +86,7 @@ public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIterat
         long ts = nextTimestamp();
         initTableValues(ts);
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
 
         Scan scan = new Scan();
@@ -127,12 +128,12 @@ public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIterat
         long ts = nextTimestamp();
         initTableValues(ts);
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
 
         Scan scan = new Scan();
         
-        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES);
+        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         TableRef table = getTableRef(conn,ts);
         services.getStatsManager().updateStats(table);
         scan.setStartRow(HConstants.EMPTY_START_ROW);

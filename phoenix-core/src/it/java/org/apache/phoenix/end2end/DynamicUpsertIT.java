@@ -33,6 +33,7 @@ import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -52,7 +53,7 @@ public class DynamicUpsertIT extends BaseClientManagedTimeIT {
 
     @BeforeClass
     public static void doBeforeTestSetup() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String ddl = "create table if not exists  " + TABLE + "   (entry varchar not null primary key,"
                 + "    a.dummy varchar," + "    b.dummy varchar)";
@@ -71,7 +72,7 @@ public class DynamicUpsertIT extends BaseClientManagedTimeIT {
         // String selectquery = "SELECT * FROM "+TABLE;
 
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
         try {
@@ -101,7 +102,7 @@ public class DynamicUpsertIT extends BaseClientManagedTimeIT {
                 + " (a.DynColA VARCHAR,b.DynColB VARCHAR) where entry='dynEntry'";
 
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
         try {
@@ -134,7 +135,7 @@ public class DynamicUpsertIT extends BaseClientManagedTimeIT {
                 + " (a.DynColA VARCHAR,b.DynColB VARCHAR) where entry='dynEntry'";
 
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
         try {
@@ -166,7 +167,7 @@ public class DynamicUpsertIT extends BaseClientManagedTimeIT {
                 + " (a.DynCol VARCHAR,b.DynCol varchar) VALUES('dynEntry','aValue','bValue','dyncola')";
 
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(upsertquery);
@@ -186,7 +187,7 @@ public class DynamicUpsertIT extends BaseClientManagedTimeIT {
     public void testAmbiguousStaticUpsert() throws Exception {
         String upsertquery = "UPSERT INTO " + TABLE + " (a.dummy INTEGER,b.dummy INTEGER) VALUES(1,2)";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(upsertquery);
@@ -203,7 +204,7 @@ public class DynamicUpsertIT extends BaseClientManagedTimeIT {
     public void testAmbiguousDynamicUpsert() throws Exception {
         String upsertquery = "UPSERT INTO " + TABLE + " (a.DynCol VARCHAR,a.DynCol INTEGER) VALUES('dynCol',1)";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(upsertquery);
@@ -220,7 +221,7 @@ public class DynamicUpsertIT extends BaseClientManagedTimeIT {
     public void testFakeCFDynamicUpsert() throws Exception {
         String upsertquery = "UPSERT INTO " + TABLE + " (fakecf.DynCol VARCHAR) VALUES('dynCol')";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(upsertquery);

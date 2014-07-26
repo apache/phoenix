@@ -51,6 +51,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -65,7 +66,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY A_INTEGER ASC) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -90,7 +91,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY A_INTEGER DESC) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -115,7 +116,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT A_STRING, PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY A_INTEGER ASC) FROM aTable GROUP BY A_STRING";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -151,7 +152,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT A_STRING, PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY A_INTEGER ASC) AS PC FROM aTable GROUP BY A_STRING ORDER BY PC";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -187,7 +188,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
 		String query = "SELECT PERCENTILE_DISC(0.9) WITHIN GROUP (ORDER BY A_INTEGER ASC) FROM aTable";
 
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at
 										// timestamp 2
@@ -212,7 +213,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
 		String query = "SELECT PERCENTILE_DISC(0.9) WITHIN GROUP (ORDER BY A_INTEGER DESC) FROM aTable";
 
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at
 										// timestamp 2
@@ -237,7 +238,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT A_STRING, PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY A_INTEGER ASC) FROM aTable GROUP BY A_STRING";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -270,7 +271,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT A_STRING, PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY A_INTEGER ASC) FROM aTable GROUP BY A_STRING ORDER BY A_STRING DESC";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -303,7 +304,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT PERCENT_RANK(5) WITHIN GROUP (ORDER BY A_INTEGER ASC) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -328,7 +329,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT PERCENT_RANK(-2) WITHIN GROUP (ORDER BY A_INTEGER ASC) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -353,7 +354,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT PERCENT_RANK(8.9) WITHIN GROUP (ORDER BY A_INTEGER DESC) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -378,7 +379,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT PERCENT_RANK('ba') WITHIN GROUP (ORDER BY A_STRING DESC) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -403,7 +404,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT PERCENT_RANK(2) WITHIN GROUP (ORDER BY x_decimal ASC) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -428,7 +429,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT PERCENT_RANK(2) WITHIN GROUP (ORDER BY x_decimal ASC), PERCENT_RANK(8.9) WITHIN GROUP (ORDER BY A_INTEGER DESC) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -514,7 +515,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
     }
 
     private static void populateINDEX_DATA_TABLETable() throws SQLException {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             String upsert = "UPSERT INTO " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE

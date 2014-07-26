@@ -49,6 +49,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -73,7 +74,7 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     
     @BeforeClass
     public static void doBeforeTestSetup() throws Exception {
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES).getAdmin();
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
         try {
             try {
                 admin.disableTable(HBASE_NATIVE_BYTES);
@@ -94,7 +95,7 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     
     @SuppressWarnings("deprecation")
     private static void initTableValues() throws Exception {
-        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES);
+        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         HTableInterface hTable = services.getTable(SchemaUtil.getTableNameAsBytes(HBASE_NATIVE_SCHEMA_NAME, HBASE_NATIVE));
         try {
             // Insert rows using standard HBase mechanism with standard HBase "types"
@@ -158,7 +159,7 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     public void testRangeQuery1() throws Exception {
         String query = "SELECT uint_key, ulong_key, string_key FROM HBASE_NATIVE WHERE uint_key > 20 and ulong_key >= 400";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -177,7 +178,7 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     public void testRangeQuery2() throws Exception {
         String query = "SELECT uint_key, ulong_key, string_key FROM HBASE_NATIVE WHERE uint_key > 20 and uint_key < 40";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -196,7 +197,7 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     public void testRangeQuery3() throws Exception {
         String query = "SELECT uint_key, ulong_key, string_key FROM HBASE_NATIVE WHERE ulong_key > 200 and ulong_key < 400";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -215,7 +216,7 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     public void testNegativeAgainstUnsignedNone() throws Exception {
         String query = "SELECT uint_key, ulong_key, string_key FROM HBASE_NATIVE WHERE ulong_key < -1";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -230,7 +231,7 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     public void testNegativeAgainstUnsignedAll() throws Exception {
         String query = "SELECT string_key FROM HBASE_NATIVE WHERE ulong_key > -100";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -252,7 +253,7 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     @Test
     public void testNegativeAddNegativeValue() throws Exception {
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO HBASE_NATIVE(uint_key,ulong_key,string_key, uint_col) VALUES(?,?,?,?)");
@@ -272,7 +273,7 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     public void testNegativeCompareNegativeValue() throws Exception {
         String query = "SELECT string_key FROM HBASE_NATIVE WHERE uint_key > 100000";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 7); // Run query at timestamp 7
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         PhoenixConnection conn = DriverManager.getConnection(url, props).unwrap(PhoenixConnection.class);
         HTableInterface hTable = conn.getQueryServices().getTable(SchemaUtil.getTableNameAsBytes(HBASE_NATIVE_SCHEMA_NAME, HBASE_NATIVE));
         

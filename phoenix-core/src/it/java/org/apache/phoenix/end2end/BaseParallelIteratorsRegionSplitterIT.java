@@ -32,6 +32,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
@@ -71,7 +72,7 @@ public class BaseParallelIteratorsRegionSplitterIT extends BaseClientManagedTime
         byte[][] splits = new byte[][] {K3,K4,K9,K11};
         ensureTableCreated(getUrl(),STABLE_NAME,splits, ts-2);
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         PreparedStatement stmt = conn.prepareStatement(
                 "upsert into " + STABLE_NAME + " VALUES (?, ?)");

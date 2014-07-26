@@ -42,6 +42,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -62,7 +63,7 @@ public class DynamicColumnIT extends BaseClientManagedTimeIT {
 
     @BeforeClass
     public static void doBeforeTestSetup() throws Exception {
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES).getAdmin();
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
         try {
             try {
                 admin.disableTable(HBASE_DYNAMIC_COLUMNS_BYTES);
@@ -77,7 +78,7 @@ public class DynamicColumnIT extends BaseClientManagedTimeIT {
 
     @SuppressWarnings("deprecation")
     private static void initTableValues() throws Exception {
-        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES);
+        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         HTableInterface hTable = services.getTable(SchemaUtil.getTableNameAsBytes(HBASE_DYNAMIC_COLUMNS_SCHEMA_NAME,HBASE_DYNAMIC_COLUMNS));
         try {
             // Insert rows using standard HBase mechanism with standard HBase "types"
@@ -116,7 +117,7 @@ public class DynamicColumnIT extends BaseClientManagedTimeIT {
     public void testDynamicColums() throws Exception {
         String query = "SELECT * FROM HBASE_DYNAMIC_COLUMNS (DV varchar)";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -141,7 +142,7 @@ public class DynamicColumnIT extends BaseClientManagedTimeIT {
     public void testDynamicColumsFamily() throws Exception {
         String query = "SELECT * FROM HBASE_DYNAMIC_COLUMNS (DV varchar,B.F2V2 varchar)";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -168,7 +169,7 @@ public class DynamicColumnIT extends BaseClientManagedTimeIT {
     public void testDynamicColumsSpecificQuery() throws Exception {
         String query = "SELECT entry,F2V2 FROM HBASE_DYNAMIC_COLUMNS (DV varchar,B.F2V2 varchar)";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -189,7 +190,7 @@ public class DynamicColumnIT extends BaseClientManagedTimeIT {
     public void testAmbiguousStaticSelect() throws Exception {
         String upsertquery = "Select * FROM HBASE_DYNAMIC_COLUMNS(A.F1V1 INTEGER)";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(upsertquery);
@@ -206,7 +207,7 @@ public class DynamicColumnIT extends BaseClientManagedTimeIT {
     public void testFakeCFDynamicUpsert() throws Exception {
         String upsertquery = "Select * FROM HBASE_DYNAMIC_COLUMNS(fakecf.DynCol VARCHAR)";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(upsertquery);

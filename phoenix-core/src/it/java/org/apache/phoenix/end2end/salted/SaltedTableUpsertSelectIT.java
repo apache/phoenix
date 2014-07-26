@@ -31,6 +31,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.HBaseManagedTimeTest;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -39,7 +40,7 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testUpsertIntoSaltedTableFromNormalTable() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -76,7 +77,7 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testUpsertIntoNormalTableFromSaltedTable() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -113,7 +114,7 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testUpsertSaltedTableIntoSaltedTable() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -150,7 +151,7 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testUpsertSelectOnSameSaltedTable() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -183,7 +184,7 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testUpsertSelectOnSameSaltedTableWithEmptyPKColumn() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {

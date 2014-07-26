@@ -39,6 +39,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
@@ -72,7 +73,7 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testWhereClauseOptimization() throws Exception {
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         String queryTemplate = "SELECT t1.\"item_id\", t2.\"item_id\", t3.\"item_id\" FROM " + JOIN_ITEM_TABLE_FULL_NAME + " t1 " 
                 + "%s JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " t2 ON t1.\"item_id\" = t2.\"item_id\" " 
                 + "%s JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " t3 ON t1.\"item_id\" = t3.\"item_id\" " 

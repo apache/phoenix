@@ -31,6 +31,7 @@ import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 @Category(ClientManagedTimeTest.class)
@@ -44,7 +45,7 @@ public class StddevIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT STDDEV_POP(A_INTEGER) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -69,7 +70,7 @@ public class StddevIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT STDDEV_SAMP(x_decimal) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -94,7 +95,7 @@ public class StddevIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT STDDEV_POP(x_decimal) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -119,7 +120,7 @@ public class StddevIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT STDDEV_SAMP(x_decimal) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);

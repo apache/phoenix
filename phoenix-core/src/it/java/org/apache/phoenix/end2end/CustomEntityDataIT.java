@@ -35,6 +35,7 @@ import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -46,7 +47,7 @@ public class CustomEntityDataIT extends BaseClientManagedTimeIT {
         ensureTableCreated(getUrl(),CUSTOM_ENTITY_DATA_FULL_NAME,null, ts-2);
             
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         // Insert all rows at ts
         PreparedStatement stmt = conn.prepareStatement(
@@ -163,7 +164,7 @@ public class CustomEntityDataIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         String query = "SELECT count(1) FROM CORE.CUSTOM_ENTITY_DATA WHERE organization_id=?";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Connection conn = DriverManager.getConnection(url, TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             initTableValues(tenantId, getDefaultSplits(getOrganizationId()), ts);
             PreparedStatement statement = conn.prepareStatement(query);
@@ -183,7 +184,7 @@ public class CustomEntityDataIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         String query = "SELECT CREATED_BY,CREATED_DATE,CURRENCY_ISO_CODE,DELETED,DIVISION,LAST_UPDATE,LAST_UPDATE_BY,NAME,OWNER,SYSTEM_MODSTAMP,VAL0,VAL1,VAL2,VAL3,VAL4,VAL5,VAL6,VAL7,VAL8,VAL9 FROM CORE.CUSTOM_ENTITY_DATA WHERE organization_id=?";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Connection conn = DriverManager.getConnection(url, TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             initTableValues(tenantId, getDefaultSplits(getOrganizationId()), ts);
             PreparedStatement statement = conn.prepareStatement(query);

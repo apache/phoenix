@@ -39,6 +39,7 @@ import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
@@ -77,7 +78,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
     }
 
     private void testIndexWithNullableFixedWithCols(boolean localIndex) throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -132,7 +133,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
     }
 
     private void testIndexWithNullableDateCol(boolean localIndex) throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -198,7 +199,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
     }
 
     private void testCoveredColumnUpdates(boolean localIndex) throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -305,7 +306,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         String query;
         ResultSet rs;
         
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         conn.createStatement().execute("CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
@@ -391,7 +392,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         String query;
         ResultSet rs;
         
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         conn.createStatement().execute("CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, a.v1 VARCHAR, a.v2 VARCHAR, b.v1 VARCHAR)  ");
@@ -459,7 +460,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         String query;
         ResultSet rs;
         
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         conn.createStatement().execute("CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
@@ -577,7 +578,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         String query;
         ResultSet rs;
         
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
 
@@ -703,7 +704,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         String query;
         ResultSet rs;
     
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
     
@@ -787,7 +788,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         String query;
         ResultSet rs;
     
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
     
@@ -857,7 +858,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         String query;
         ResultSet rs;
     
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
     
@@ -956,7 +957,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         String query;
         ResultSet rs;
         
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -1051,7 +1052,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
     }
     
     private void testInFilterOnIndexedTable(boolean localIndex) throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -1083,7 +1084,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
     }
 
     private void testIndexWithDecimalCol(boolean localIndex) throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -1129,7 +1130,7 @@ public class MutableIndexIT extends BaseMutableIndexIT {
     
     @Test
     public void testUpsertingNullForIndexedColumns() throws Exception {
-    	Properties props = new Properties(TEST_PROPERTIES);
+    	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     	Connection conn = DriverManager.getConnection(getUrl(), props);
     	conn.setAutoCommit(false);
     	try {

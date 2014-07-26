@@ -30,6 +30,7 @@ import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -123,7 +124,7 @@ public class ReadIsolationLevelIT extends BaseClientManagedTimeIT {
         initTableValues(ts, null);
         String query = "SELECT A_STRING FROM ATABLE WHERE ORGANIZATION_ID=? AND ENTITY_ID=?";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts+1);
-        Connection conn = DriverManager.getConnection(url, TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(true);
         try {
             String tenantId = getOrganizationId();

@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
@@ -75,7 +76,7 @@ public class DropViewIT extends BaseMutableIndexIT {
             admin.close();
         }
         
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("create view " + HBASE_NATIVE +
                 "   (uint_key unsigned_int not null," +
@@ -87,7 +88,7 @@ public class DropViewIT extends BaseMutableIndexIT {
                      HColumnDescriptor.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE + "'");
         conn.createStatement().execute("drop view " + HBASE_NATIVE);
         
-        admin = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES).getAdmin();
+        admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
         try {
             try {
                 admin.disableTable(HBASE_NATIVE_BYTES);

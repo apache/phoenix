@@ -45,6 +45,7 @@ import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -115,7 +116,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testIndexCreation() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -277,7 +278,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
     public void testIndexDefinitionWithNullableFixedWidthColInPK() throws Exception {
     	// If we have nullable fixed width column in the PK, we convert those types into a compatible variable type
     	// column. The definition is defined in IndexUtil.getIndexColumnDataType.
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -335,7 +336,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testIndexDefinitionWithRepeatedColumns() throws Exception {
     	// Test index creation when the columns is included in both the PRIMARY and INCLUDE section. Test de-duplication.
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -355,7 +356,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testIndexDefinitionWithSameColumnNamesInTwoFamily() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         String ddl = "create table test_table (char_pk varchar not null,"

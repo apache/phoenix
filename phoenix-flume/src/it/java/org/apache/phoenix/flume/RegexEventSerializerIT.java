@@ -44,6 +44,7 @@ import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.flume.serializer.EventSerializers;
 import org.apache.phoenix.flume.sink.PhoenixSink;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -258,7 +259,7 @@ public class RegexEventSerializerIT extends BaseHBaseManagedTimeIT {
         sink.process();
    
         final String query = " SELECT * FROM \n " + fullTableName;
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         final ResultSet rs ;
         final Connection conn = DriverManager.getConnection(getUrl(), props);
         try{
@@ -332,7 +333,7 @@ public class RegexEventSerializerIT extends BaseHBaseManagedTimeIT {
         sink.process();
    
         final String query = " SELECT * FROM \n " + fullTableName;
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         final ResultSet rs ;
         final Connection conn = DriverManager.getConnection(getUrl(), props);
         try{
@@ -392,7 +393,7 @@ public class RegexEventSerializerIT extends BaseHBaseManagedTimeIT {
     
     private int countRows(final String fullTableName) throws SQLException {
         Preconditions.checkNotNull(fullTableName);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         final Connection conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs = null ;
         try{
