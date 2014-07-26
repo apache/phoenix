@@ -72,6 +72,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -558,7 +559,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
  
     @Test
     public void testCreateOnExistingTable() throws Exception {
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         String tableName = MDTEST_NAME;
         String schemaName = MDTEST_SCHEMA_NAME;
         byte[] cfA = Bytes.toBytes(SchemaUtil.normalizeIdentifier("a"));
@@ -641,7 +642,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     @SuppressWarnings("deprecation")
     @Test
     public void testCreateViewOnExistingTable() throws Exception {
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         String tableName = MDTEST_NAME;
         String schemaName = MDTEST_SCHEMA_NAME;
         byte[] cfB = Bytes.toBytes(SchemaUtil.normalizeIdentifier("b"));

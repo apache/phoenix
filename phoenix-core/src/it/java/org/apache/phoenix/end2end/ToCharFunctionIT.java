@@ -38,6 +38,7 @@ import java.util.TimeZone;
 
 import org.apache.phoenix.expression.function.ToCharFunction;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -82,7 +83,7 @@ public class ToCharFunctionIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         createTestTable(getUrl(), TO_CHAR_TABLE_DDL, null, ts-2);
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(false);
         

@@ -57,6 +57,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -77,7 +78,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     }
 
     private static StatementContext compileStatement(String query, List<Object> binds, Integer limit) throws SQLException {
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), new Properties(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
         TestUtil.bindParams(pstmt, binds);
         QueryPlan plan = pstmt.compileQuery();

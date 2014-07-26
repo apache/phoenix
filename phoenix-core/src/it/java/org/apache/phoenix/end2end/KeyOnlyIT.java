@@ -30,6 +30,7 @@ import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -125,7 +126,7 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         
     protected static void initTableValues(long ts) throws Exception {
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         PreparedStatement stmt = conn.prepareStatement(
             "upsert into " +

@@ -31,6 +31,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.ClientManagedTimeTest;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -38,7 +39,7 @@ import org.junit.experimental.categories.Category;
 public class SaltedTableVarLengthRowKeyIT extends BaseClientManagedTimeIT {
 
     private static void initTableValues() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         
@@ -66,7 +67,7 @@ public class SaltedTableVarLengthRowKeyIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectValueWithPointKeyQuery() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {

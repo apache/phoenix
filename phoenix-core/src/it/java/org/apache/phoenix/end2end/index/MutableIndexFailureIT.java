@@ -47,6 +47,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -98,7 +99,7 @@ public class MutableIndexFailureIT extends BaseTest {
     }
 
     private static void destroyIndexTable() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = driver.connect(url, props);
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         HBaseAdmin admin = services.getAdmin();
@@ -116,7 +117,7 @@ public class MutableIndexFailureIT extends BaseTest {
         String query;
         ResultSet rs;
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = driver.connect(url, props);
         conn.setAutoCommit(false);
         conn.createStatement().execute(

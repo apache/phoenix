@@ -33,6 +33,7 @@ import org.apache.phoenix.query.StatsManager;
 import org.apache.phoenix.query.StatsManagerImpl;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TimeKeeper;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -118,7 +119,7 @@ public class StatsManagerIT extends BaseParallelIteratorsRegionSplitterIT {
         long ts = nextTimestamp();
         initTableValues(ts);
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         TableRef table = getTableRef(conn,ts);
 
@@ -129,7 +130,7 @@ public class StatsManagerIT extends BaseParallelIteratorsRegionSplitterIT {
         
         ManualTimeKeeper timeKeeper = new ManualTimeKeeper();
         timeKeeper.setCurrentTime(startTime);
-        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES);
+        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         StatsManager stats = new StatsManagerImpl(services, updateFreq, maxAge, timeKeeper);
         MinKeyChange minKeyChange = new MinKeyChange(stats, table);
         MaxKeyChange maxKeyChange = new MaxKeyChange(stats, table);
@@ -142,7 +143,7 @@ public class StatsManagerIT extends BaseParallelIteratorsRegionSplitterIT {
         minKeyChange = new MinKeyChange(stats, table);
         
         url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts+2;
-        props = new Properties(TEST_PROPERTIES);
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(url, props);
         PreparedStatement delStmt = conn.prepareStatement("delete from " + STABLE_NAME + " where id=?");
         delStmt.setString(1, new String(KMIN));

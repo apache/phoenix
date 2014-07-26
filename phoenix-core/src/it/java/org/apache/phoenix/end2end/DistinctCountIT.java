@@ -46,6 +46,7 @@ import java.sql.Types;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -60,7 +61,7 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT count(DISTINCT A_STRING) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -83,7 +84,7 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT count(DISTINCT ORGANIZATION_ID) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -106,7 +107,7 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT A_STRING, count(DISTINCT B_STRING) FROM aTable group by A_STRING";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -136,7 +137,7 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT A_STRING, count(DISTINCT B_STRING) FROM aTable group by A_STRING order by A_STRING desc";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -166,7 +167,7 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT A_STRING, count(DISTINCT B_STRING) as COUNT_B_STRING FROM aTable group by A_STRING order by COUNT_B_STRING";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -197,7 +198,7 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT organization_id, count(DISTINCT A_STRING) FROM aTable group by organization_id";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -224,7 +225,7 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT count(DISTINCT A_STRING), count(DISTINCT B_STRING) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -248,7 +249,7 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT count(DISTINCT 1) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -271,7 +272,7 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT count(DISTINCT 1) FROM aTable";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
                                                                                      // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);

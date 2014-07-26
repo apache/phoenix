@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -31,7 +32,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 public class ViewCompilerTest extends BaseConnectionlessQueryTest {
@@ -52,7 +53,7 @@ public class ViewCompilerTest extends BaseConnectionlessQueryTest {
     }
     
     public void assertViewType(String[] views, ViewType viewType) throws Exception {
-        Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         String ct = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 VARCHAR, v VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))";
         conn.createStatement().execute(ct);
@@ -74,7 +75,7 @@ public class ViewCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testViewInvalidation() throws Exception {
-        Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         String ct = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 VARCHAR, v VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))";
         conn.createStatement().execute(ct);
@@ -100,7 +101,7 @@ public class ViewCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testInvalidUpsertSelect() throws Exception {
-        Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         conn.createStatement().execute("CREATE TABLE t1 (k1 INTEGER NOT NULL, k2 VARCHAR, v VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))");
         conn.createStatement().execute("CREATE TABLE t2 (k3 INTEGER NOT NULL, v VARCHAR, CONSTRAINT pk PRIMARY KEY (k3))");

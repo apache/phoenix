@@ -50,6 +50,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Test;
@@ -61,7 +62,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     @Test
     public void testCreateTenantSpecificTable() throws Exception {
         // ensure we didn't create a physical HBase table for the tenant-specific table
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES).getAdmin();
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
         assertEquals(0, admin.listTables(TENANT_TABLE_NAME).length);
     }
     

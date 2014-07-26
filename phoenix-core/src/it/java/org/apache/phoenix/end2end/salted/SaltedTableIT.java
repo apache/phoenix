@@ -34,6 +34,7 @@ import java.util.Properties;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.ClientManagedTimeTest;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -47,7 +48,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
 
     private static void initTableValues(byte[][] splits, long ts) throws Exception {
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         
         // Rows we inserted:
@@ -129,7 +130,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     public void testTableWithInvalidBucketNumber() throws Exception {
         long ts = nextTimestamp();
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             String query = "create table salted_table (a_integer integer not null CONSTRAINT pk PRIMARY KEY (a_integer)) SALT_BUCKETS = 257";
@@ -158,7 +159,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     public void testSelectValueNoWhereClause() throws Exception {
         long ts = nextTimestamp();
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(null, ts);
@@ -219,7 +220,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     public void testSelectValueWithFullyQualifiedWhereClause() throws Exception {
         long ts = nextTimestamp();
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(null, ts);
@@ -351,7 +352,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     public void testSelectValueWithNotFullyQualifiedWhereClause() throws Exception {
         long ts = nextTimestamp();
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(null, ts);
@@ -422,7 +423,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     public void testSelectWithGroupBy() throws Exception {
         long ts = nextTimestamp();
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(null, ts);
@@ -444,7 +445,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     public void testLimitScan() throws Exception {
         long ts = nextTimestamp();
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(null, ts);
@@ -464,7 +465,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     public void testSelectWithOrderByRowKey() throws Exception {
         long ts = nextTimestamp();
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(null, ts);

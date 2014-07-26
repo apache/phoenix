@@ -28,6 +28,7 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.HBaseManagedTimeTest;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.experimental.categories.Category;
 
@@ -55,7 +56,7 @@ public class BaseMutableIndexIT extends BaseIndexIT {
                 "   b.decimal_col2 DECIMAL, " +
                 "   b.date_col DATE " + 
                 "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk))";
-            Properties props = new Properties(TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute(ddl);
             conn.close();
@@ -67,7 +68,7 @@ public class BaseMutableIndexIT extends BaseIndexIT {
     }
     // Populate the test table with data.
     protected static void populateTestTable(Date date) throws SQLException {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             String upsert = "UPSERT INTO " + DATA_TABLE_FULL_NAME
