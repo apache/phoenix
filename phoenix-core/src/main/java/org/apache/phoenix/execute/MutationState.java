@@ -49,11 +49,14 @@ import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.ServerUtil;
+import org.cloudera.htrace.Span;
+import org.cloudera.htrace.TraceScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -333,6 +336,10 @@ public class MutationState implements SQLCloseable {
         long[] serverTimeStamps = validate();
         Iterator<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> iterator = this.mutations.entrySet().iterator();
         List<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> committedList = Lists.newArrayListWithCapacity(this.mutations.size());
+
+        // add tracing for this operation
+        TraceScope trace = Tracing.startNewSpan(connection, "Committing mutations to tables");
+        Span span = trace.getSpan();
         while (iterator.hasNext()) {
             Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> entry = iterator.next();
             Map<ImmutableBytesPtr,Map<PColumn,byte[]>> valuesMap = entry.getValue();
@@ -348,6 +355,10 @@ public class MutationState implements SQLCloseable {
                 byte[] htableName = pair.getFirst();
                 List<Mutation> mutations = pair.getSecond();
                 
+                //create a span per target table
+                //TODO maybe we can be smarter about the table name to string here?
+                Span child = Tracing.child(span,"Writing mutation batch for table: "+Bytes.toString(htableName));
+
                 int retryCount = 0;
                 boolean shouldRetry = false;
                 do {
@@ -358,6 +369,7 @@ public class MutationState implements SQLCloseable {
                         if (IndexMetaDataCacheClient.useIndexMetadataCache(connection, mutations, tempPtr.getLength())) {
                             IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, tableRef);
                             cache = client.addIndexMetadataCache(mutations, tempPtr);
+                            child.addTimelineAnnotation("Updated index metadata cache");
                             uuidValue = cache.getId();
                             // If we haven't retried yet, retry for this case only, as it's possible that
                             // a split will occur after we send the index metadata cache to all known
@@ -385,7 +397,9 @@ public class MutationState implements SQLCloseable {
                     try {
                         if (logger.isDebugEnabled()) logMutationSize(hTable, mutations);
                         long startTime = System.currentTimeMillis();
+                        child.addTimelineAnnotation("Attempt " + retryCount);
                         hTable.batch(mutations);
+                        child.stop();
                         shouldRetry = false;
                         if (logger.isDebugEnabled()) logger.debug("Total time for batch call of  " + mutations.size() + " mutations into " + table.getName().getString() + ": " + (System.currentTimeMillis() - startTime) + " ms");
                         committedList.add(entry);
@@ -396,8 +410,15 @@ public class MutationState implements SQLCloseable {
                                 // Swallow this exception once, as it's possible that we split after sending the index metadata
                                 // and one of the region servers doesn't have it. This will cause it to have it the next go around.
                                 // If it fails again, we don't retry.
-                                logger.warn("Swallowing exception and retrying after clearing meta cache on connection. " + inferredE);
+                                String msg = "Swallowing exception and retrying after clearing meta cache on connection. " + inferredE;
+                                logger.warn(msg);
                                 connection.getQueryServices().clearTableRegionCache(htableName);
+
+                                // add a new child span as this one failed
+                                child.addTimelineAnnotation(msg);
+                                child.stop();
+                                child = Tracing.child(span,"Failed batch, attempting retry");
+
                                 continue;
                             }
                             e = inferredE;
@@ -432,6 +453,7 @@ public class MutationState implements SQLCloseable {
             numRows -= entry.getValue().size();
             iterator.remove(); // Remove batches as we process them
         }
+        trace.close();
         assert(numRows==0);
         assert(this.mutations.isEmpty());
     }

@@ -41,12 +41,19 @@ import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
 import java.text.Format;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -67,6 +74,8 @@ import org.apache.phoenix.schema.PMetaData.Pruner;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.trace.TracingCompat;
+import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.NumberUtil;
@@ -75,6 +84,8 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
+import org.cloudera.htrace.Sampler;
+import org.cloudera.htrace.Trace;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
@@ -96,6 +107,8 @@ import com.google.common.collect.Maps;
  * @since 0.1
  */
 public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jdbc7Shim.Connection, MetaDataMutated  {
+    private static final Log LOG = LogFactory.getLog(PhoenixConnection.class);
+
     private final String url;
     private final ConnectionQueryServices services;
     private final Properties info;
@@ -110,7 +123,19 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final String datePattern;
     
     private boolean isClosed = false;
+    private Sampler<?> sampler;
     
+    static {
+        // add the phoenix span receiver so we can log the traces. We have a single trace
+        // source for the whole JVM
+        try {
+            Trace.addReceiver(TracingCompat.newTraceMetricSource());
+        } catch (RuntimeException e) {
+            LOG.error("Tracing will outputs will not be written to any metrics sink! No "
+                    + "TraceMetricsSink found on the classpath", e);
+        }
+    }
+
     private static Properties newPropsWithSCN(long scn, Properties props) {
         props = new Properties(props);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
@@ -120,15 +145,18 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     public PhoenixConnection(PhoenixConnection connection) throws SQLException {
         this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache());
         this.isAutoCommit = connection.isAutoCommit;
+        this.sampler = connection.sampler;
     }
     
     public PhoenixConnection(PhoenixConnection connection, long scn) throws SQLException {
         this(connection.getQueryServices(), connection, scn);
+        this.sampler = connection.sampler;
     }
     
     public PhoenixConnection(ConnectionQueryServices services, PhoenixConnection connection, long scn) throws SQLException {
         this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.getMetaDataCache());
         this.isAutoCommit = connection.isAutoCommit;
+        this.sampler = connection.sampler;
     }
     
     @SuppressWarnings("unchecked")
@@ -189,6 +217,13 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         });
         this.mutationState = new MutationState(maxSize, this);
         this.services.addConnection(this);
+
+        // setup tracing, if its enabled
+        this.sampler = Tracing.getConfiguredSampler(this);
+    }
+
+    public Sampler<?> getSampler() {
+        return this.sampler;
     }
 
     public int executeStatements(Reader reader, List<Object> binds, PrintStream out) throws IOException, SQLException {
@@ -349,7 +384,12 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public void commit() throws SQLException {
-        mutationState.commit();
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            public Void call() throws SQLException {
+                mutationState.commit();
+                return null;
+            }
+        }, Tracing.withTracing(this, "committing mutations"));
     }
 
     @Override
