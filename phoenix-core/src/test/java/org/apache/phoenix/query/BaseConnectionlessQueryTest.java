@@ -30,6 +30,7 @@ import static org.apache.phoenix.util.TestUtil.PHOENIX_CONNECTIONLESS_JDBC_URL;
 import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.DriverManager;
@@ -48,6 +49,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
 
@@ -76,7 +78,7 @@ public class BaseConnectionlessQueryTest extends BaseTest {
     protected static PhoenixTestDriver driver;
     
     private static void startServer(String url) throws Exception {
-        //assertNull(driver);
+        assertNull(driver);
         // only load the test driver if we are testing locally - for integration tests, we want to
         // test on a wider scale
         if (PhoenixEmbeddedDriver.isTestUrl(url)) {
@@ -128,5 +130,17 @@ public class BaseConnectionlessQueryTest extends BaseTest {
         }
     }
     
+    @AfterClass
+    public static void doTeardown() throws Exception {
+        if (driver != null) {
+            try {
+                driver.close();
+            } finally {
+                PhoenixTestDriver driver = BaseConnectionlessQueryTest.driver;
+                BaseConnectionlessQueryTest.driver = null;
+                DriverManager.deregisterDriver(driver);
+            }
+        }
+    }
 
 }
