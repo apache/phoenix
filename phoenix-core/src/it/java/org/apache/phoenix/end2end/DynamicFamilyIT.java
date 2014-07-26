@@ -45,6 +45,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.Test;
@@ -94,7 +95,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
 
     @Before
     public void doBeforeTestSetup() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String ddl = "create table if not exists  " + WEB_STATS
                 + "   (entry varchar not null primary key,"
@@ -106,7 +107,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
     }
 
     private static void initTableValues() throws Exception {
-        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES);
+        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         HTableInterface hTable = services.getTable(SchemaUtil.getTableNameAsBytes(WEB_STATS_SCHEMA_NAME,WEB_STATS));
         try {
             // Insert rows using standard HBase mechanism with standard HBase "types"
@@ -176,7 +177,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
     public void testGetAllDynColsInFamily() throws Exception {
         String query = "SELECT A.* FROM WEB_STATS WHERE entry='entry1'";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -204,7 +205,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
     public void testGetAllDynCols() throws Exception {
         String query = "SELECT * FROM WEB_STATS WHERE entry='entry1'";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -231,7 +232,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
                 "B." + LAST_LOGIN_TIME_PREFIX + USER_ID2 + " TIME," + 
                 "B." + LAST_LOGIN_TIME_PREFIX + USER_ID3 + " TIME) WHERE entry='entry2'";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -256,7 +257,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
                 "B.\"" + LAST_LOGIN_TIME_PREFIX + USER_ID2 + "\"" + " TIME," + 
                 "B.\"" + LAST_LOGIN_TIME_PREFIX + USER_ID3 + "\"" + " TIME) WHERE entry='entry2'";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -281,7 +282,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
     public void testProjectStaticAndDynamic() throws Exception {
         String query = "SELECT ENTRY, A.DUMMY, B.DUMMY, A.*,B.* FROM WEB_STATS WHERE entry='entry3'";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -308,7 +309,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
     public void testDynamicFamilyException() throws Exception {
         String query = "SELECT C.* FROM WEB_STATS";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -322,7 +323,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
     public void testDynamicFamilyFunctionException() throws Exception {
         String query = "SELECT count(C.*) FROM WEB_STATS";
         String url = getUrl() + ";";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);

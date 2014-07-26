@@ -17,6 +17,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -29,7 +30,7 @@ public class InListIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLeadingPKWithTrailingRVC() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE TABLE in_test "
                 + "( col1 VARCHAR NOT NULL,"
@@ -51,7 +52,7 @@ public class InListIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLeadingPKWithTrailingRVC2() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE TABLE in_test ( user VARCHAR, tenant_id VARCHAR(5) NOT NULL,tenant_type_id VARCHAR(3) NOT NULL,  id INTEGER NOT NULL CONSTRAINT pk PRIMARY KEY (tenant_id, tenant_type_id, id))");
 

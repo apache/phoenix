@@ -185,7 +185,23 @@ public class TestUtil {
     public static final String JOIN_ITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_ITEM_TABLE;
     public static final String JOIN_SUPPLIER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_SUPPLIER_TABLE;
  
-    public static final Properties TEST_PROPERTIES = new Properties();
+    /**
+     * Read-only properties used by all tests
+     */
+    public static final Properties TEST_PROPERTIES = new Properties() {
+        @Override
+        public String put(Object key, Object value) {
+            throw new UnsupportedOperationException();
+        }
+        @Override
+        public void clear() {
+            throw new UnsupportedOperationException();
+        }
+        @Override
+        public Object remove(Object key) {
+            throw new UnsupportedOperationException();
+        }
+    };
 
     public static byte[][] getSplits(String tenantId) {
         return new byte[][] {

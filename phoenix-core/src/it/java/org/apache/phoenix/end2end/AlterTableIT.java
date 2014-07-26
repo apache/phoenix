@@ -48,6 +48,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -63,7 +64,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testAlterTableWithVarBinaryKey() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         
@@ -86,7 +87,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testAddColsIntoSystemTable() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -108,7 +109,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testAddVarCharColToPK() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         
@@ -179,7 +180,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testAlterColumnFamilyProperty() throws Exception {
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         
         String ddl = "CREATE TABLE test_table " +
@@ -219,7 +220,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
         ResultSet rs;
         PreparedStatement stmt;
     
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
     
@@ -277,7 +278,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
         ResultSet rs;
         PreparedStatement stmt;
     
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
     
@@ -340,7 +341,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
         ResultSet rs;
         PreparedStatement stmt;
     
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
     
@@ -417,7 +418,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testSetSaltedTableAsImmutable() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         
@@ -451,7 +452,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testDropColumnFromSaltedTable() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         
@@ -485,7 +486,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testAddVarCols() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         
@@ -594,7 +595,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testDropVarCols() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -614,7 +615,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testDisallowAddingNotNullableColumnNotPartOfPkForExistingTable() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
@@ -651,7 +652,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     public void testDisableWAL() throws Exception {
         String fullTableName = "TEST_TABLE";
         String fullIndexName = "I";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
         try {
@@ -745,7 +746,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testDropColumnsWithImutability() throws Exception {
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
 

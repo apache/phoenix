@@ -54,6 +54,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -67,7 +68,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
@@ -213,7 +214,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectFromViewOnExistingTable() throws Exception {
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(
                 PhoenixConnection.class);
         byte[] cfB = Bytes.toBytes(SchemaUtil.normalizeIdentifier("b"));
         byte[] cfC = Bytes.toBytes(SchemaUtil.normalizeIdentifier("c"));

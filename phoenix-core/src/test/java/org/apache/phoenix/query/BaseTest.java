@@ -81,6 +81,7 @@ import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertNotNull;
 
 import java.math.BigDecimal;
@@ -124,9 +125,9 @@ import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 
 import com.google.common.collect.ImmutableMap;
@@ -543,7 +544,7 @@ public abstract class BaseTest {
         PhoenixTestDriver driver = new PhoenixTestDriver(props);
         DriverManager.registerDriver(driver);
         Assert.assertTrue(DriverManager.getDriver(url) == driver);
-        Connection conn = driver.connect(url, TestUtil.TEST_PROPERTIES);
+        Connection conn = driver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.close();
         return driver;
     }

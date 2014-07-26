@@ -41,6 +41,7 @@ import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -66,7 +67,7 @@ public class NotQueryIT extends QueryIT {
     @Test
     public void testNotInList() throws Exception {
         String query = "SELECT entity_id FROM aTable WHERE organization_id=? and entity_id NOT IN (?,?,?,?,?,?)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -94,7 +95,7 @@ public class NotQueryIT extends QueryIT {
     @Test
     public void testNotInListOfFloat() throws Exception {
         String query = "SELECT a_float FROM aTable WHERE organization_id=? and a_float NOT IN (?,?,?,?,?,?)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -122,7 +123,7 @@ public class NotQueryIT extends QueryIT {
     @Test
     public void testNotInListOfDouble() throws Exception {
         String query = "SELECT a_double FROM aTable WHERE organization_id=? and a_double NOT IN (?,?,?,?,?,?)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -151,7 +152,7 @@ public class NotQueryIT extends QueryIT {
     public void testNotEquals() throws Exception {
         String query = "SELECT entity_id -- and here comment\n" + 
         "FROM aTable WHERE organization_id=? and a_integer != 1 and a_integer <= 2";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -170,7 +171,7 @@ public class NotQueryIT extends QueryIT {
     public void testNotEqualsByTinyInt() throws Exception {
         String query = "SELECT a_byte -- and here comment\n" + 
         "FROM aTable WHERE organization_id=? and a_byte != 1 and a_byte <= 2";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -189,7 +190,7 @@ public class NotQueryIT extends QueryIT {
     public void testNotEqualsBySmallInt() throws Exception {
         String query = "SELECT a_short -- and here comment\n" + 
         "FROM aTable WHERE organization_id=? and a_short != 128 and a_short !=0 and a_short <= 129";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -208,7 +209,7 @@ public class NotQueryIT extends QueryIT {
     public void testNotEqualsByFloat() throws Exception {
         String query = "SELECT a_float -- and here comment\n" + 
         "FROM aTable WHERE organization_id=? and a_float != 0.01d and a_float <= 0.02d";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -227,7 +228,7 @@ public class NotQueryIT extends QueryIT {
     public void testNotEqualsByUnsignedFloat() throws Exception {
         String query = "SELECT a_unsigned_float -- and here comment\n" + 
         "FROM aTable WHERE organization_id=? and a_unsigned_float != 0.01d and a_unsigned_float <= 0.02d";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -246,7 +247,7 @@ public class NotQueryIT extends QueryIT {
     public void testNotEqualsByDouble() throws Exception {
         String query = "SELECT a_double -- and here comment\n" + 
         "FROM aTable WHERE organization_id=? and a_double != 0.0001d and a_double <= 0.0002d";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -265,7 +266,7 @@ public class NotQueryIT extends QueryIT {
     public void testNotEqualsByUnsignedDouble() throws Exception {
         String query = "SELECT a_unsigned_double -- and here comment\n" + 
         "FROM aTable WHERE organization_id=? and a_unsigned_double != 0.0001d and a_unsigned_double <= 0.0002d";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -284,7 +285,7 @@ public class NotQueryIT extends QueryIT {
     public void testNotEquals2() throws Exception {
         String query = "SELECT entity_id FROM // one more comment  \n" +
         "aTable WHERE organization_id=? and not a_integer = 1 and a_integer <= 2";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {

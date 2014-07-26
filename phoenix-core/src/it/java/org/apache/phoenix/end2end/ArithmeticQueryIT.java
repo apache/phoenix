@@ -33,6 +33,7 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -44,7 +45,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testDecimalUpsertValue() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -128,7 +129,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testDecimalUpsertSelect() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -236,7 +237,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testDecimalAveraging() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -296,7 +297,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testDecimalArithmeticWithIntAndLong() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -527,7 +528,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     public void testSumDouble() throws Exception {
         initSumDoubleValues(null, getUrl());
         String query = "SELECT SUM(d) FROM SumDoubleTest";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -544,7 +545,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     public void testSumUnsignedDouble() throws Exception {
         initSumDoubleValues(null, getUrl());
         String query = "SELECT SUM(ud) FROM SumDoubleTest";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -561,7 +562,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     public void testSumFloat() throws Exception {
         initSumDoubleValues(null, getUrl());
         String query = "SELECT SUM(f) FROM SumDoubleTest";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -578,7 +579,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     public void testSumUnsignedFloat() throws Exception {
         initSumDoubleValues(null, getUrl());
         String query = "SELECT SUM(uf) FROM SumDoubleTest";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);

@@ -28,6 +28,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -40,7 +41,7 @@ import org.junit.experimental.categories.Category;
 public class StatementHintsIT extends BaseHBaseManagedTimeIT {
 
     private static void initTableValues() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         
@@ -104,7 +105,7 @@ public class StatementHintsIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testSelectForceRangeScan() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             initTableValues();
@@ -140,7 +141,7 @@ public class StatementHintsIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testSelectForceSkipScan() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             initTableValues();

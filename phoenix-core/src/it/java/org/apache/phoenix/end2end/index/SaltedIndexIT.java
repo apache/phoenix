@@ -35,6 +35,7 @@ import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -63,7 +64,7 @@ public class SaltedIndexIT extends BaseIndexIT {
     }
     
     private static void makeImmutableAndDeleteData() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             conn.setAutoCommit(true);
             conn.createStatement().execute("DELETE FROM " + DATA_TABLE_FULL_NAME);
@@ -101,7 +102,7 @@ public class SaltedIndexIT extends BaseIndexIT {
         String query;
         ResultSet rs;
         
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)  " +  (tableSaltBuckets == null ? "" : " SALT_BUCKETS=" + tableSaltBuckets));

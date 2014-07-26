@@ -31,6 +31,7 @@ import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.HBaseManagedTimeTest;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -42,7 +43,7 @@ public class PhoenixPigConfigurationIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testUpsertStatement() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         final String tableName = "TEST_TABLE";
@@ -62,7 +63,7 @@ public class PhoenixPigConfigurationIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testSelectStatement() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         final String tableName = "TEST_TABLE";
@@ -82,7 +83,7 @@ public class PhoenixPigConfigurationIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testSelectStatementForSpecificColumns() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         final String tableName = "TEST_TABLE";

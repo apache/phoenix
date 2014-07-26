@@ -33,13 +33,14 @@ import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
 
 public class SelectStatementRewriterTest extends BaseConnectionlessQueryTest {
     private static Filter compileStatement(String query) throws SQLException {
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.compileQuery();
         return plan.getContext().getScan().getFilter();

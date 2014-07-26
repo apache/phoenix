@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -67,7 +68,7 @@ public class GroupByIT extends QueryIT {
     @SuppressWarnings("unchecked")
     @Test
     public void testGroupByCondition() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement("SELECT count(*) FROM aTable WHERE organization_id=? GROUP BY a_integer=6");
@@ -129,7 +130,7 @@ public class GroupByIT extends QueryIT {
     @Test
     public void testNoWhereScan() throws Exception {
         String query = "SELECT y_integer FROM aTable";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -156,7 +157,7 @@ public class GroupByIT extends QueryIT {
     public void testGroupedAggregation() throws Exception {
         // Tests that you don't get an ambiguous column exception when using the same alias as the column name
         String query = "SELECT a_string as a_string, count(1), 'foo' FROM atable WHERE organization_id=? GROUP BY a_string";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -184,7 +185,7 @@ public class GroupByIT extends QueryIT {
     @Test
     public void testDistinctGroupedAggregation() throws Exception {
         String query = "SELECT DISTINCT a_string, count(1), 'foo' FROM atable WHERE organization_id=? GROUP BY a_string, b_string ORDER BY a_string, count(1)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -226,7 +227,7 @@ public class GroupByIT extends QueryIT {
     @Test
     public void testDistinctLimitedGroupedAggregation() throws Exception {
         String query = "SELECT /*+ NO_INDEX */ DISTINCT a_string, count(1), 'foo' FROM atable WHERE organization_id=? GROUP BY a_string, b_string ORDER BY count(1) desc,a_string LIMIT 2";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -264,7 +265,7 @@ public class GroupByIT extends QueryIT {
     @Test
     public void testDistinctUngroupedAggregation() throws Exception {
         String query = "SELECT DISTINCT count(1), 'foo' FROM atable WHERE organization_id=?";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -283,7 +284,7 @@ public class GroupByIT extends QueryIT {
     @Test
     public void testGroupedLimitedAggregation() throws Exception {
         String query = "SELECT a_string, count(1) FROM atable WHERE organization_id=? GROUP BY a_string LIMIT 2";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -309,7 +310,7 @@ public class GroupByIT extends QueryIT {
             "ATABLE VALUES ('" + tenantId + "','" + ROW5 + "','" + C_VALUE +"')";
         // Override value that was set at creation time
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
         // Insert all rows at ts
@@ -354,7 +355,7 @@ public class GroupByIT extends QueryIT {
     public void testUngroupedAggregation() throws Exception {
         String query = "SELECT count(1) FROM atable WHERE organization_id=? and a_string = ?";
         String url = getUrl();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5)); // Execute query at ts + 5
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -388,7 +389,7 @@ public class GroupByIT extends QueryIT {
     public void testUngroupedAggregationNoWhere() throws Exception {
         String query = "SELECT count(*) FROM atable";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -406,7 +407,7 @@ public class GroupByIT extends QueryIT {
     public void testPointInTimeUngroupedAggregation() throws Exception {
         // Override value that was set at creation time
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         String updateStmt = 
             "upsert into " +
@@ -465,7 +466,7 @@ public class GroupByIT extends QueryIT {
             "VALUES (?, ?, ?)";
         // Override value that was set at creation time
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
         PreparedStatement stmt = upsertConn.prepareStatement(updateStmt);
@@ -518,7 +519,7 @@ public class GroupByIT extends QueryIT {
         
         // Override value that was set at creation time
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 
         // Remove column value at ts + 1 (i.e. equivalent to setting the value to null)
         Connection conn = DriverManager.getConnection(url, props);

@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -74,7 +75,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
          ts = nextTimestamp();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
         if (indexDDL != null && indexDDL.length() > 0) {
-            Properties props = new Properties(TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
             Connection conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute(indexDDL);
@@ -93,7 +94,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testDerivedTableWithWhere() throws Exception {
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -205,7 +206,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testDerivedTableWithGroupBy() throws Exception {
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -240,7 +241,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testDerivedTableWithOrderBy() throws Exception {
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -335,7 +336,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testDerivedTableWithLimit() throws Exception {
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -402,7 +403,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testDerivedTableWithDistinct() throws Exception {
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -484,7 +485,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testDerivedTableWithAggregate() throws Exception {
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -540,7 +541,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testDerivedTableWithJoin() throws Exception {
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -590,7 +591,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testNestedDerivedTable() throws Exception {
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {

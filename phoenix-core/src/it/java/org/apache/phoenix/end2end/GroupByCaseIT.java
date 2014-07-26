@@ -33,6 +33,7 @@ import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -63,7 +64,7 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
     }
 
     private void loadData(long ts) throws SQLException {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         insertRow(conn, "Report1", 10);
@@ -91,7 +92,7 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
     @Test
     public void testGroupByCaseWithIndex() throws Exception {
         Connection conn;
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         GroupByCaseIT gbt = new GroupByCaseIT();
         long ts = gbt.createTable();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
@@ -121,7 +122,7 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
         GroupByCaseIT gbt = new GroupByCaseIT();
         long ts = gbt.createTable();
         gbt.loadData(ts);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         Statement stmt = conn.createStatement();
@@ -151,7 +152,7 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
         GroupByCaseIT gbt = new GroupByCaseIT();
         long ts = gbt.createTable();
         gbt.loadData(ts);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         Statement stmt = conn.createStatement();
@@ -175,7 +176,7 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
         GroupByCaseIT gbt = new GroupByCaseIT();
         long ts = gbt.createTable();
         gbt.loadData(ts);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         gbt.executeQuery(conn,GROUPBY1);
