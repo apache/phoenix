@@ -40,7 +40,7 @@ public abstract class BaseQueryServicesImpl implements QueryServices {
     private final ReadOnlyProps props;
     private final QueryOptimizer queryOptimizer;
     
-    public BaseQueryServicesImpl(QueryServicesOptions options) {
+    public BaseQueryServicesImpl(ReadOnlyProps defaultProps, QueryServicesOptions options) {
         this.executor =  JobManager.createThreadPoolExec(
                 options.getKeepAliveMs(), 
                 options.getThreadPoolSize(), 
@@ -48,7 +48,7 @@ public abstract class BaseQueryServicesImpl implements QueryServices {
         this.memoryManager = new GlobalMemoryManager(
                 Runtime.getRuntime().maxMemory() * options.getMaxMemoryPerc() / 100,
                 options.getMaxMemoryWaitMs());
-        this.props = options.getProps();
+        this.props = options.getProps(defaultProps);
         this.queryOptimizer = new QueryOptimizer(this);
     }
     

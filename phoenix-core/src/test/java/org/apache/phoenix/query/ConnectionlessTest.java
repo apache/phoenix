@@ -37,17 +37,19 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.StringUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 
-public class ConnectionlessUpsertTest {
+public class ConnectionlessTest {
     private static final int saltBuckets = 200;
     private static final String orgId = "00D300000000XHP";
     private static final String keyPrefix1 = "111";
@@ -87,7 +89,7 @@ public class ConnectionlessUpsertTest {
         testConnectionlessUpsert(saltBuckets);
     }
   
-    public void testConnectionlessUpsert(Integer saltBuckets) throws Exception {
+    private void testConnectionlessUpsert(Integer saltBuckets) throws Exception {
         String dmlStmt = "create table core.entity_history(\n" +
         "    organization_id char(15) not null, \n" + 
         "    key_prefix char(3) not null,\n" +
@@ -179,5 +181,40 @@ public class ConnectionlessUpsertTest {
         }
     }
     
+    @Test
+    public void testMultipleConnectionQueryServices() throws Exception {
+        String url1 = getUrl();
+        String url2 = url1 + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
+        Connection conn1 = DriverManager.getConnection(url1);
+        try {
+            assertEquals(StringUtil.EMPTY_STRING, conn1.getMetaData().getUserName());
+            Connection conn2 = DriverManager.getConnection(url2);
+            try {
+                assertEquals("LongRunningQueries", conn2.getMetaData().getUserName());
+                ConnectionQueryServices cqs1 = conn1.unwrap(PhoenixConnection.class).getQueryServices();
+                ConnectionQueryServices cqs2 = conn2.unwrap(PhoenixConnection.class).getQueryServices();
+                assertTrue(cqs1 != cqs2);
+                Connection conn3 = DriverManager.getConnection(url1);
+                try {
+                    ConnectionQueryServices cqs3 = conn3.unwrap(PhoenixConnection.class).getQueryServices();
+                    assertTrue(cqs1 == cqs3);
+                    Connection conn4 = DriverManager.getConnection(url2);
+                    try {
+                        ConnectionQueryServices cqs4 = conn4.unwrap(PhoenixConnection.class).getQueryServices();
+                        assertTrue(cqs2 == cqs4);
+                    } finally {
+                        conn4.close();
+                    }
+                } finally {
+                    conn3.close();
+                }
+            } finally {
+                conn2.close();
+            }
+        } finally {
+            conn1.close();
+        }
+        
+    }
 
 }

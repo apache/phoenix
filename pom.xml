@@ -112,10 +112,10 @@
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <maven.assembly.version>2.4</maven.assembly.version>
     <maven.rat.version>0.8</maven.rat.version>
-	
-    <!--  Plugin options -->
-    <numForkedIT>3</numForkedIT>
+    
+    <!-- Plugin options -->
     <numForkedUT>3</numForkedUT>
+    <numForkedIT>7</numForkedIT>
     
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

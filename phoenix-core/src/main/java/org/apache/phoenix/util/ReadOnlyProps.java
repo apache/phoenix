@@ -18,12 +18,15 @@
 
 package org.apache.phoenix.util;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.google.common.collect.*;
+import com.google.common.collect.ImmutableMap;
 
 /**
  * 
@@ -34,16 +37,24 @@ import com.google.common.collect.*;
  * @since 1.2.2
  */
 public class ReadOnlyProps implements Iterable<Entry<String, String>> {
-    public static final ReadOnlyProps EMPTY_PROPS = new ReadOnlyProps(Iterators.<Entry<String, String>>emptyIterator());
+    public static final ReadOnlyProps EMPTY_PROPS = new ReadOnlyProps();
     private final Map<String, String> props;
     
-    public ReadOnlyProps(Iterator<Entry<String, String>> iterator) {
-        Map<String, String> map = Maps.newHashMap();
+    public ReadOnlyProps(ReadOnlyProps defaultProps, Iterator<Entry<String, String>> iterator) {
+        Map<String, String> map = new HashMap<String,String>(defaultProps.asMap());
         while (iterator.hasNext()) {
             Entry<String,String> entry = iterator.next();
             map.put(entry.getKey(), entry.getValue());
         }
         this.props = ImmutableMap.copyOf(map);
+    }
+
+    public ReadOnlyProps(Iterator<Entry<String, String>> iterator) {
+        this(EMPTY_PROPS, iterator);
+    }
+
+    private ReadOnlyProps() {
+        this.props = Collections.emptyMap();
     }
 
     public ReadOnlyProps(Map<String, String> props) {

@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.query;
 
+import org.apache.phoenix.util.ReadOnlyProps;
+
 
 
 
@@ -30,7 +32,7 @@ package org.apache.phoenix.query;
  */
 public final class QueryServicesImpl extends BaseQueryServicesImpl {
     
-    public QueryServicesImpl() {
-        super(QueryServicesOptions.withDefaults());
+    public QueryServicesImpl(ReadOnlyProps defaultProps) {
+        super(defaultProps, QueryServicesOptions.withDefaults());
     }
 }
