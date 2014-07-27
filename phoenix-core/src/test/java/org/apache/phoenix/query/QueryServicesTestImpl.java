@@ -53,11 +53,11 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE =  1024L*1024L*4L; // 4 Mb
     public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE =  1024L*1024L*2L; // 2 Mb
     
-    public QueryServicesTestImpl() {
-        this(ReadOnlyProps.EMPTY_PROPS);
+    public QueryServicesTestImpl(ReadOnlyProps defaultProps) {
+        this(defaultProps, ReadOnlyProps.EMPTY_PROPS);
     }
     
-    public static QueryServicesOptions getDefaultTestServicesOptions() {
+    private static QueryServicesOptions getDefaultServicesOptions() {
     	return withDefaults()
                 .setThreadPoolSize(DEFAULT_THREAD_POOL_SIZE)
                 .setQueueSize(DEFAULT_QUEUE_SIZE)
@@ -81,7 +81,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setMaxServerMetaDataCacheSize(DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE);
     }
     
-    public QueryServicesTestImpl(ReadOnlyProps overrideProps) {
-        super(getDefaultTestServicesOptions().setAll(overrideProps));
+    public QueryServicesTestImpl(ReadOnlyProps defaultProps, ReadOnlyProps overrideProps) {
+        super(defaultProps, getDefaultServicesOptions().setAll(overrideProps));
     }    
 }
