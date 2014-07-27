@@ -46,6 +46,7 @@ import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
@@ -85,12 +86,14 @@ import com.google.common.collect.Maps;
 public class ConnectionlessQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices  {
     private PMetaData metaData;
     private final Map<SequenceKey, SequenceInfo> sequenceMap = Maps.newHashMap();
+    private final String userName;
     private KeyValueBuilder kvBuilder;
     private volatile boolean initialized;
     private volatile SQLException initializationException;
     
-    public ConnectionlessQueryServicesImpl(QueryServices queryServices) {
+    public ConnectionlessQueryServicesImpl(QueryServices queryServices, ConnectionInfo connInfo) {
         super(queryServices);
+        userName = connInfo.getPrincipal();
         metaData = newEmptyMetaData();
         // Use KeyValueBuilder that builds real KeyValues, as our test utils require this
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
@@ -406,5 +409,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public boolean supportsFeature(Feature feature) {
         return false;
+    }
+
+    @Override
+    public String getUserName() {
+        return userName;
     }
 }

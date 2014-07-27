@@ -226,4 +226,9 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public boolean supportsFeature(Feature feature) {
         return getDelegate().supportsFeature(feature);
     }
+
+    @Override
+    public String getUserName() {
+        return getDelegate().getUserName();
+    }
 }

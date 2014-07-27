@@ -58,6 +58,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.collect.Lists;
 
@@ -912,7 +913,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     @Override
     public String getUserName() throws SQLException {
-        return ""; // FIXME: what should we return here?
+        String userName = connection.getQueryServices().getUserName();
+        return userName == null ? StringUtil.EMPTY_STRING : userName;
     }
 
     @Override

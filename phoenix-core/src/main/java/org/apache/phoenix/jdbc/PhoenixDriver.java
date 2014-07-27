@@ -94,7 +94,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     		synchronized(this) {
     			result = services;
     			if(result == null) {
-    				services = result = new QueryServicesImpl();
+    				services = result = new QueryServicesImpl(getDefaultProps());
     			}
     		}
     	}
@@ -117,7 +117,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
         ConnectionQueryServices connectionQueryServices = connectionQueryServicesMap.get(normalizedConnInfo);
         if (connectionQueryServices == null) {
             if (normalizedConnInfo.isConnectionless()) {
-                connectionQueryServices = new ConnectionlessQueryServicesImpl(services);
+                connectionQueryServices = new ConnectionlessQueryServicesImpl(services, normalizedConnInfo);
             } else {
                 connectionQueryServices = new ConnectionQueryServicesImpl(services, normalizedConnInfo);
             }

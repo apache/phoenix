@@ -126,6 +126,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     // Copy of config.getProps(), but read-only to prevent synchronization that we
     // don't need.
     private final ReadOnlyProps props;
+    private final String userName;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
     private final StatsManager statsManager;
     // Cache the latest meta data here for future connections
@@ -168,6 +169,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // on the server side during testing.
         this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
         this.props = new ReadOnlyProps(this.config.iterator());
+        this.userName = connectionInfo.getPrincipal();
         this.latestMetaData = newEmptyMetaData();
         // TODO: should we track connection wide memory usage or just org-wide usage?
         // If connection-wide, create a MemoryManager here, otherwise just use the one from the delegate
@@ -1747,6 +1749,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // TODO: Keep map of Feature -> min HBase version
         // For now, only Feature is REVERSE_SCAN and it's not supported in any version yet
         return false;
+    }
+    
+    @Override
+    public String getUserName() {
+        return userName;
     }
     
 }

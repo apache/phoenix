@@ -41,7 +41,12 @@ import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
 import java.text.Format;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Properties;
 import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
@@ -132,7 +137,6 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this.isAutoCommit = connection.isAutoCommit;
     }
     
-    @SuppressWarnings("unchecked")
     public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData) throws SQLException {
         this.url = url;
         // Copy so client cannot change
@@ -149,11 +153,17 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             // TODO: we could avoid creating another wrapper if the only property
             // specified was for the tenant ID
             Map<String, String> existingProps = services.getProps().asMap();
-            Map<String, String> tmpAugmentedProps = Maps.newHashMapWithExpectedSize(existingProps.size() + info.size());
+            final Map<String, String> tmpAugmentedProps = Maps.newHashMapWithExpectedSize(existingProps.size() + info.size());
             tmpAugmentedProps.putAll(existingProps);
-            tmpAugmentedProps.putAll((Map)this.info);
-            final ReadOnlyProps augmentedProps = new ReadOnlyProps(tmpAugmentedProps);
-            this.services = new DelegateConnectionQueryServices(services) {
+            boolean needsDelegate = false;
+            for (Entry<Object, Object> entry : this.info.entrySet()) {
+                String key = entry.getKey().toString();
+                String value = entry.getValue().toString();
+                String oldValue = tmpAugmentedProps.put(key, value);
+                needsDelegate |= !Objects.equal(oldValue, value);
+            }
+            this.services = !needsDelegate ? services : new DelegateConnectionQueryServices(services) {
+                final ReadOnlyProps augmentedProps = new ReadOnlyProps(tmpAugmentedProps);
     
                 @Override
                 public ReadOnlyProps getProps() {

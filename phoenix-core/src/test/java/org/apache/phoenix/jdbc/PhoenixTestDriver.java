@@ -56,13 +56,13 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
 
     public PhoenixTestDriver() {
         this.overrideProps = ReadOnlyProps.EMPTY_PROPS;
-        queryServices = new QueryServicesTestImpl();
+        queryServices = new QueryServicesTestImpl(getDefaultProps());
     }
 
     // For tests to override the default configuration
     public PhoenixTestDriver(ReadOnlyProps props) {
         overrideProps = props;
-        queryServices = new QueryServicesTestImpl(overrideProps);
+        queryServices = new QueryServicesTestImpl(getDefaultProps(),overrideProps);
     }
 
     @Override
@@ -84,7 +84,7 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         if (connectionQueryServices != null) { return connectionQueryServices; }
         ConnectionInfo connInfo = ConnectionInfo.create(url);
         if (connInfo.isConnectionless()) {
-            connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices);
+            connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices, connInfo);
         } else {
             connectionQueryServices = new ConnectionQueryServicesTestImpl(queryServices, connInfo);
         }

@@ -513,8 +513,8 @@ public abstract class BaseTest {
     
     private static void setDefaultTestConfig(Configuration conf) {
         ConfigUtil.setReplicationConfigIfAbsent(conf);
-        QueryServicesOptions options = QueryServicesTestImpl.getDefaultTestServicesOptions();
-        for (Entry<String,String> entry : options.getProps()) {
+        QueryServices services = new PhoenixTestDriver().getQueryServices();
+        for (Entry<String,String> entry : services.getProps()) {
             conf.set(entry.getKey(), entry.getValue());
         }
         //no point doing sanity checks when running tests.
