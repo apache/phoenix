@@ -389,6 +389,12 @@ public enum PDataType {
             case DECIMAL:
                 BigDecimal d = (BigDecimal)object;
                 return d.longValueExact();
+            case DATE:
+            case UNSIGNED_DATE:
+            case TIME:
+            case UNSIGNED_TIME:
+                java.util.Date date = (java.util.Date)object;
+                return date.getTime();
             default:
                 return throwConstraintViolationException(actualType,this);
             }
@@ -412,6 +418,10 @@ public enum PDataType {
             case UNSIGNED_FLOAT:
             case DOUBLE:
             case UNSIGNED_DOUBLE:
+            case DATE:
+            case UNSIGNED_DATE:
+            case TIME:
+            case UNSIGNED_TIME:
                 return actualType.getCodec().decodeLong(b, o, sortOrder);
             case DECIMAL:
                 BigDecimal bd = (BigDecimal)actualType.toObject(b, o, l, actualType, sortOrder);
@@ -469,6 +479,11 @@ public enum PDataType {
                 }
             }
             return super.isCoercibleTo(targetType, value);
+        }
+
+        @Override
+        public boolean isCastableTo(PDataType targetType) {
+            return super.isCastableTo(targetType) || targetType.isCoercibleTo(TIMESTAMP);
         }
 
         @Override

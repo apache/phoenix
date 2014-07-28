@@ -27,13 +27,13 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-
-import com.google.common.collect.Lists;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+
+import com.google.common.collect.Lists;
 
 /**
  * 
@@ -69,9 +69,21 @@ public class RoundDecimalExpression extends ScalarFunction {
         return create(expr, 0);
     }
     
+    public static Expression create(List<Expression> exprs) throws SQLException {
+        Expression expr = exprs.get(0);
+        if (expr.getDataType().isCoercibleTo(PDataType.LONG)) {
+            return expr;
+        }
+        if (exprs.size() == 1) {
+            Expression scaleExpr = LiteralExpression.newConstant(0, PDataType.INTEGER, true);
+            exprs = Lists.newArrayList(expr, scaleExpr);
+        }
+        return new RoundDecimalExpression(exprs);
+    }
+    
     public RoundDecimalExpression() {}
     
-    public RoundDecimalExpression(List<Expression> children) {
+    protected RoundDecimalExpression(List<Expression> children) {
         super(children);
         LiteralExpression scaleChild = (LiteralExpression)children.get(1);
         PDataType scaleType = scaleChild.getDataType();
@@ -92,9 +104,9 @@ public class RoundDecimalExpression extends ScalarFunction {
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         Expression childExpr = children.get(0);
         if(childExpr.evaluate(tuple, ptr)) {
-            BigDecimal value = (BigDecimal)PDataType.DECIMAL.toObject(ptr, getDataType(), childExpr.getSortOrder());
+            BigDecimal value = (BigDecimal)PDataType.DECIMAL.toObject(ptr, childExpr.getDataType(), childExpr.getSortOrder());
             BigDecimal scaledValue = value.setScale(scale, getRoundingMode());
-            ptr.set(getDataType().toBytes(scaledValue));
+            ptr.set(PDataType.DECIMAL.toBytes(scaledValue));
             return true;
         }
         return false;
@@ -102,7 +114,7 @@ public class RoundDecimalExpression extends ScalarFunction {
 
     @Override
     public PDataType getDataType() {
-        return children.get(0).getDataType();
+        return PDataType.DECIMAL;
     }
     
     protected RoundingMode getRoundingMode() {

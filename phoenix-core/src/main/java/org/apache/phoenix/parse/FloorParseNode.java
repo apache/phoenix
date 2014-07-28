@@ -57,7 +57,7 @@ public class FloorParseNode extends FunctionParseNode {
         if(firstChildDataType.isCoercibleTo(PDataType.TIMESTAMP)) {
             return FloorDateExpression.create(children);
         } else if(firstChildDataType.isCoercibleTo(PDataType.DECIMAL)) {
-            return new FloorDecimalExpression(children);
+            return FloorDecimalExpression.create(children);
         } else {
             throw TypeMismatchException.newException(firstChildDataType, "1");
         }

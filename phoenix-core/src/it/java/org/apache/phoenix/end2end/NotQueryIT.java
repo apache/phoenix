@@ -53,7 +53,7 @@ import com.google.common.primitives.Floats;
 
 @Category(ClientManagedTimeTest.class)
 @RunWith(Parameterized.class)
-public class NotQueryIT extends QueryIT {
+public class NotQueryIT extends BaseQueryIT {
 
     public NotQueryIT(String indexDDL) {
         super(indexDDL);
