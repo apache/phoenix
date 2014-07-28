@@ -31,7 +31,7 @@ import org.apache.phoenix.util.ByteUtil;
 
 import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
-
+import com.google.protobuf.HBaseZeroCopyByteString;
 
 /**
  * 
