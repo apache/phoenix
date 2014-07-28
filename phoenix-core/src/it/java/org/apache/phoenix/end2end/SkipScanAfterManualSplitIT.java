@@ -111,7 +111,7 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
         }
         System.out.println("Region boundaries:\n" + boundaries);
     }
-    
+
     @Ignore
     @Test
     public void testManualSplit() throws Exception {
@@ -134,8 +134,8 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
             // table is accessed
             assertEquals(nRegions, nInitialRegions);
             
-            int nRows = 25;
-            String query = "SELECT count(*) FROM S WHERE a IN ('tl','jt','ju','rj','hj','vt','hh','br','ga','vn','th','sv','dl','mj','is','op','ug','sq','mv','qe','kq','xy','ek','aa','ae')";
+            int nRows = 2;
+            String query = "SELECT count(*) FROM S WHERE a IN ('tl','jt')";
             ResultSet rs1 = conn.createStatement().executeQuery(query);
             assertTrue(rs1.next());
             traceRegionBoundaries(services);
