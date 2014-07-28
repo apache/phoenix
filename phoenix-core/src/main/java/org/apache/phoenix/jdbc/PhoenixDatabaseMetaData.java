@@ -110,6 +110,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String SYSTEM_CATALOG_ALIAS = "\"SYSTEM.TABLE\"";
 
     public static final String TABLE_NAME = "TABLE_NAME";
+    public static final byte[] TABLE_NAME_BYTES = Bytes.toBytes(TABLE_NAME);
     public static final String TABLE_TYPE = "TABLE_TYPE";
     public static final byte[] TABLE_TYPE_BYTES = Bytes.toBytes(TABLE_TYPE);
     
@@ -218,6 +219,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String SUPERTABLE_NAME = "SUPERTABLE_NAME";
     
     public static final String TYPE_ID = "TYPE_ID";
+    public static final String INDEX_DISABLE_TIMESTAMP = "INDEX_DISABLE_TIMESTAMP";
+    public static final byte[] INDEX_DISABLE_TIMESTAMP_BYTES = Bytes.toBytes(INDEX_DISABLE_TIMESTAMP);
     
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;
