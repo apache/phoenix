@@ -45,7 +45,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 @Category(HBaseManagedTimeTest.class)
-public class SkipScanAfterManualSplit extends BaseHBaseManagedTimeIT {
+public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
 
     private static final int BATCH_SIZE = 25;
     private static final int MAX_FILESIZE = 1024 * 10;
