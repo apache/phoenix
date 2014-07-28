@@ -57,7 +57,7 @@ public class CeilParseNode extends FunctionParseNode {
         } else if (firstChildDataType == PDataType.TIMESTAMP || firstChildDataType == PDataType.UNSIGNED_TIMESTAMP) {
             return CeilTimestampExpression.create(children);
         } else if(firstChildDataType.isCoercibleTo(PDataType.DECIMAL)) {
-            return new CeilDecimalExpression(children);
+            return CeilDecimalExpression.create(children);
         } else {
             throw TypeMismatchException.newException(firstChildDataType, "1");
         }

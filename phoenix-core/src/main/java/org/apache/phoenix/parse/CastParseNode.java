@@ -78,17 +78,23 @@ public class CastParseNode extends UnaryParseNode {
         return scale;
     }
 
+    // TODO: don't repeat this ugly cast logic (maybe use isCastable in the last else block.
     public static Expression convertToRoundExpressionIfNeeded(PDataType fromDataType, PDataType targetDataType, List<Expression> expressions) throws SQLException {
 	    Expression firstChildExpr = expressions.get(0);
 	    if(fromDataType == targetDataType) {
 	        return firstChildExpr;
-	    } else if(fromDataType == PDataType.DECIMAL && targetDataType.isCoercibleTo(PDataType.LONG)) {
-	        return new RoundDecimalExpression(expressions);
-	    } else if((fromDataType == PDataType.TIMESTAMP || fromDataType == PDataType.UNSIGNED_TIMESTAMP) && targetDataType.isCoercibleTo(PDataType.DATE)) {
+//        } else if((fromDataType == PDataType.DATE || fromDataType == PDataType.UNSIGNED_DATE) && targetDataType.isCoercibleTo(PDataType.LONG)) {
+//            return firstChildExpr;
+//        } else if(fromDataType.isCoercibleTo(PDataType.LONG) && (targetDataType == PDataType.DATE || targetDataType == PDataType.UNSIGNED_DATE)) {
+//            return firstChildExpr;
+	    } else if((fromDataType == PDataType.DECIMAL || fromDataType == PDataType.TIMESTAMP || fromDataType == PDataType.UNSIGNED_TIMESTAMP) && targetDataType.isCoercibleTo(PDataType.LONG)) {
+	        return RoundDecimalExpression.create(expressions);
+	    } else if((fromDataType == PDataType.DECIMAL || fromDataType == PDataType.TIMESTAMP || fromDataType == PDataType.UNSIGNED_TIMESTAMP) && targetDataType.isCoercibleTo(PDataType.DATE)) {
 	        return RoundTimestampExpression.create(expressions);
-	    } else if(!fromDataType.isCoercibleTo(targetDataType)) {
-	        throw TypeMismatchException.newException(fromDataType, targetDataType, firstChildExpr.toString());
+	    } else if(fromDataType.isCastableTo(targetDataType)) {
+	        return firstChildExpr;
+        } else {
+            throw TypeMismatchException.newException(fromDataType, targetDataType, firstChildExpr.toString());
 	    }
-	    return firstChildExpr;
 	}
 }

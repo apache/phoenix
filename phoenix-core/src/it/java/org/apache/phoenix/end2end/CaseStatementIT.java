@@ -56,7 +56,7 @@ import com.google.common.collect.Lists;
 
 @Category(ClientManagedTimeTest.class)
 @RunWith(Parameterized.class)
-public class CaseStatementIT extends QueryIT {
+public class CaseStatementIT extends BaseQueryIT {
 
     public CaseStatementIT(String indexDDL) {
         super(indexDDL);
