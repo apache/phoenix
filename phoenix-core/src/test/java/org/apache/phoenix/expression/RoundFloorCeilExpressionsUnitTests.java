@@ -27,8 +27,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.junit.Test;
-
 import org.apache.phoenix.expression.function.CeilDateExpression;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
 import org.apache.phoenix.expression.function.FloorDateExpression;
@@ -39,6 +37,7 @@ import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.DateUtil;
+import org.junit.Test;
 
 /**
  * 
@@ -115,7 +114,7 @@ public class RoundFloorCeilExpressionsUnitTests {
         exprs.add(bd);
         exprs.add(scale);
         try {
-            new RoundDecimalExpression(exprs);
+            RoundDecimalExpression.create(exprs);
             fail("Evaluation should have failed because only an INTEGER is allowed for second param in a RoundDecimalExpression");
         } catch(IllegalDataException e) {
 

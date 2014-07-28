@@ -54,7 +54,7 @@ import com.google.common.collect.Lists;
 
 @Category(ClientManagedTimeTest.class)
 @RunWith(Parameterized.class)
-public class GroupByIT extends QueryIT {
+public class GroupByIT extends BaseQueryIT {
 
     public GroupByIT(String indexDDL) {
         super(indexDDL);

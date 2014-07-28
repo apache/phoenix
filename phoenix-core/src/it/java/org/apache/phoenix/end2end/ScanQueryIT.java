@@ -62,7 +62,7 @@ import com.google.common.primitives.Floats;
 
 @Category(ClientManagedTimeTest.class)
 @RunWith(Parameterized.class)
-public class ScanQueryIT extends QueryIT {
+public class ScanQueryIT extends BaseQueryIT {
     
     @Parameters(name="{0}")
     public static Collection<Object> data() {

@@ -55,11 +55,11 @@ public class RoundParseNode extends FunctionParseNode {
         final PDataType firstChildDataType = firstChild.getDataType();
         
         if(firstChildDataType.isCoercibleTo(PDataType.DATE)) {
-            return RoundDateExpression.create(children); // FIXME: remove cast
+            return RoundDateExpression.create(children);
         } else if (firstChildDataType.isCoercibleTo(PDataType.TIMESTAMP)) {
-            return RoundTimestampExpression.create(children); // FIXME: remove cast
+            return RoundTimestampExpression.create(children);
         } else if(firstChildDataType.isCoercibleTo(PDataType.DECIMAL)) {
-            return new RoundDecimalExpression(children);
+            return RoundDecimalExpression.create(children);
         } else {
             throw TypeMismatchException.newException(firstChildDataType, "1");
         }

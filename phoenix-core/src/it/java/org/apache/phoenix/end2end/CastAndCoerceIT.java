@@ -19,6 +19,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -44,7 +45,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 @Category(ClientManagedTimeTest.class)
 @RunWith(Parameterized.class)
-public class CastAndCoerceIT extends QueryIT {
+public class CastAndCoerceIT extends BaseQueryIT {
 
     public CastAndCoerceIT(String indexDDL) {
         super(indexDDL);
@@ -165,4 +166,99 @@ public class CastAndCoerceIT extends QueryIT {
         }
     }
 
+    
+    @Test
+    public void testCoerceDateToBigInt() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        PreparedStatement statement;
+        ResultSet rs;
+        String query;
+        long dateAsLong;
+        BigDecimal dateAsDecimal;
+        String url;
+        Connection conn;
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3);
+        conn = DriverManager.getConnection(url, props);
+        conn.setAutoCommit(true);
+        conn.createStatement().execute("UPSERT INTO ATABLE(organization_id,entity_id,a_time,a_timestamp) SELECT organization_id,entity_id,a_date,a_date FROM ATABLE");
+
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        conn = DriverManager.getConnection(url, props);
+        try {
+            query = "SELECT entity_id, CAST(a_date AS BIGINT) FROM ATABLE WHERE organization_id=? AND a_date IS NOT NULL LIMIT 1";
+            statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(ROW1, rs.getString(1));
+            dateAsLong = rs.getLong(2);
+            assertFalse(rs.next());
+        
+            query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND a_date = CAST(? AS DATE) LIMIT 1";
+            statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            statement.setLong(2, dateAsLong);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(ROW1, rs.getString(1));
+            assertFalse(rs.next());
+
+            query = "SELECT entity_id, CAST(a_time AS BIGINT) FROM ATABLE WHERE organization_id=? AND a_time IS NOT NULL LIMIT 1";
+            statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(ROW1, rs.getString(1));
+            dateAsLong = rs.getLong(2);
+            assertFalse(rs.next());
+        
+            query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND a_time = CAST(? AS TIME) LIMIT 1";
+            statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            statement.setLong(2, dateAsLong);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(ROW1, rs.getString(1));
+            assertFalse(rs.next());
+
+            query = "SELECT entity_id, CAST(a_timestamp AS DECIMAL) FROM ATABLE WHERE organization_id=? AND a_timestamp IS NOT NULL LIMIT 1";
+            statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(ROW1, rs.getString(1));
+            dateAsDecimal = rs.getBigDecimal(2);
+            assertFalse(rs.next());
+        
+            query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND a_timestamp = CAST(? AS TIMESTAMP) LIMIT 1";
+            statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            statement.setBigDecimal(2, dateAsDecimal);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(ROW1, rs.getString(1));
+            assertFalse(rs.next());
+
+
+            query = "SELECT entity_id, CAST(a_timestamp AS BIGINT) FROM ATABLE WHERE organization_id=? AND a_timestamp IS NOT NULL LIMIT 1";
+            statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(ROW1, rs.getString(1));
+            dateAsLong = rs.getLong(2);
+            assertFalse(rs.next());
+        
+            query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND a_timestamp = CAST(? AS TIMESTAMP) LIMIT 1";
+            statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            statement.setLong(2, dateAsLong);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(ROW1, rs.getString(1));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
 }

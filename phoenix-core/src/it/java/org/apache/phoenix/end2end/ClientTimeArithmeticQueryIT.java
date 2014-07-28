@@ -59,7 +59,7 @@ import com.google.common.collect.Lists;
 
 @Category(ClientManagedTimeTest.class)
 @RunWith(Parameterized.class)
-public class ClientTimeArithmeticQueryIT extends QueryIT {
+public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
 
     public ClientTimeArithmeticQueryIT(String indexDDL) {
         super(indexDDL);
