@@ -18,6 +18,9 @@
 package org.apache.phoenix.execute;
 
 
+import java.sql.SQLException;
+import java.util.List;
+
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.RowProjector;
@@ -40,13 +43,10 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.ScanUtil;
-
-import java.sql.SQLException;
-import java.util.List;
 
 
 
@@ -122,7 +122,7 @@ public class ScanPlan extends BasicQueryPlan {
                             QueryServicesOptions.DEFAULT_ROW_KEY_ORDER_SALTED_TABLE) ||
                      orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY ||
                      orderBy == OrderBy.REV_ROW_KEY_ORDER_BY)) { // ORDER BY was optimized out b/c query is in row key order
-                scanner = new MergeSortRowKeyResultIterator(iterators, SaltingUtil.NUM_SALTING_BYTES, orderBy == OrderBy.REV_ROW_KEY_ORDER_BY);
+                scanner = new MergeSortRowKeyResultIterator(iterators, isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0, orderBy == OrderBy.REV_ROW_KEY_ORDER_BY);
             } else {
                 scanner = new ConcatResultIterator(iterators);
             }
