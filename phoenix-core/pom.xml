@@ -303,13 +303,14 @@
   </dependencies>
 
   <profiles>
-    <!-- Profile for building against Hadoop 1. Activate using: mvn -Dhadoop.profile=1-->
+
+    <!-- Profile for building against Hadoop 1.  Active by default. Not used if another
+      Hadoop profile is specified with mvn -Dhadoop.profile=foo -->
     <profile>
       <id>hadoop-1</id>
       <activation>
         <property>
-          <name>hadoop.profile</name>
-          <value>1</value>
+          <name>!hadoop.profile</name>
         </property>
       </activation>
       <dependencies>
@@ -387,13 +388,13 @@
       </dependencies>
     </profile>
 
-    <!-- Profile for building against Hadoop 2.  Active by default. Not used if another
-      Hadoop profile is specified with mvn -Dhadoop.profile=foo -->
+    <!-- Profile for building against Hadoop 2. Activate using: mvn -Dhadoop.profile=2-->
     <profile>
       <id>hadoop-2</id>
       <activation>
         <property>
-          <name>!hadoop.profile</name>
+          <name>hadoop.profile</name>
+          <value>2</value>
         </property>
       </activation>
       <dependencies>

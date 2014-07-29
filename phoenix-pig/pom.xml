@@ -43,10 +43,6 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.pig</groupId>
-      <artifactId>pig</artifactId>
-    </dependency>
-    <dependency>
       <groupId>joda-time</groupId>
       <artifactId>joda-time</artifactId>
     </dependency>
@@ -75,6 +71,7 @@
   </build>
 
   <profiles>
+
     <!-- Profile for building against Hadoop 1. Active by default. Not used if another 
       Hadoop profile is specified with mvn -Dhadoop.profile=foo -->
     <profile>
@@ -85,6 +82,10 @@
         </property>
       </activation>
       <dependencies>
+        <dependency>
+          <groupId>org.apache.pig</groupId>
+          <artifactId>pig</artifactId>
+        </dependency>
         <dependency>
           <groupId>org.apache.hbase</groupId>
           <artifactId>hbase-testing-util</artifactId>
@@ -171,6 +172,11 @@
         </property>
       </activation>
       <dependencies>
+        <dependency>
+          <groupId>org.apache.pig</groupId>
+          <artifactId>pig</artifactId>
+          <classifier>h2</classifier>
+        </dependency>
         <dependency>
           <groupId>org.apache.hbase</groupId>
           <artifactId>hbase-testing-util</artifactId>

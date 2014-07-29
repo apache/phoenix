@@ -32,7 +32,7 @@
   <name>Phoenix - Flume</name>
 
   <dependencies>
-    <dependency>
+   <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
     </dependency>
@@ -46,6 +46,7 @@
       <groupId>org.apache.flume</groupId>
       <artifactId>flume-ng-core</artifactId>
     </dependency>
+
     <!-- Test Dependencies -->
     <dependency>
       <groupId>junit</groupId>
@@ -97,6 +98,7 @@
   </build>
   
   <profiles>
+
     <!-- Profile for building against Hadoop 1. Active by default. Not used if another 
       Hadoop profile is specified with mvn -Dhadoop.profile=foo -->
     <profile>
