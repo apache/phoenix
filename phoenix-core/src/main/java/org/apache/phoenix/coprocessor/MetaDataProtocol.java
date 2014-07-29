@@ -60,7 +60,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final long MIN_TABLE_TIMESTAMP = 0;
     // Each time a column is added to the SYSTEM.CATALOG, this should be increased.
     // Adding INDEX_TYPE column for local indexing
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_TABLE_TIMESTAMP + 2;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_TABLE_TIMESTAMP + 3;
     public static final int DEFAULT_MAX_META_DATA_VERSIONS = 1000;
 
     // TODO: pare this down to minimum, as we don't need duplicates for both table and column errors, nor should we need

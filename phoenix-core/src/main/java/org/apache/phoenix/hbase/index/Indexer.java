@@ -51,7 +51,6 @@ import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
 import org.apache.phoenix.hbase.index.builder.IndexBuilder;
@@ -67,7 +66,6 @@ import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.apache.phoenix.hbase.index.write.recovery.TrackingParallelWriterIndexCommitter;
 import org.apache.phoenix.trace.TracingCompat;
 import org.apache.phoenix.trace.util.NullSpan;
-import org.apache.phoenix.trace.util.Tracing;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
 
@@ -140,18 +138,10 @@ public class Indexer extends BaseRegionObserver {
     private static final int INDEX_WAL_COMPRESSION_MINIMUM_SUPPORTED_VERSION = VersionUtil
             .encodeVersion("0.94.9");
 
-    /**
-     * Raw configuration, for tracing. Coprocessors generally will get a subset configuration (if
-     * they are on a per-table basis), so we need the raw one from the server, so we can get the
-     * actual configuration keys
-     */
-    private Configuration rawConf;
-
   @Override
   public void start(CoprocessorEnvironment e) throws IOException {
       try {
         final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
-            this.rawConf = env.getRegionServerServices().getConfiguration();
         String serverName = env.getRegionServerServices().getServerName().getServerName();
         if (env.getConfiguration().getBoolean(CHECK_VERSION_CONF_KEY, true)) {
           // make sure the right version <-> combinations are allowed.

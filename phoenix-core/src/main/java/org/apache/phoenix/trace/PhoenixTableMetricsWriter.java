@@ -18,13 +18,13 @@
 package org.apache.phoenix.trace;
 
 import static org.apache.phoenix.metrics.MetricInfo.ANNOTATION;
-import static org.apache.phoenix.metrics.MetricInfo.TAG;
 import static org.apache.phoenix.metrics.MetricInfo.DESCRIPTION;
 import static org.apache.phoenix.metrics.MetricInfo.END;
 import static org.apache.phoenix.metrics.MetricInfo.HOSTNAME;
 import static org.apache.phoenix.metrics.MetricInfo.PARENT;
 import static org.apache.phoenix.metrics.MetricInfo.SPAN;
 import static org.apache.phoenix.metrics.MetricInfo.START;
+import static org.apache.phoenix.metrics.MetricInfo.TAG;
 import static org.apache.phoenix.metrics.MetricInfo.TRACE;
 
 import java.sql.Connection;
@@ -179,7 +179,7 @@ public class PhoenixTableMetricsWriter implements MetricsWriter {
         for (PhoenixAbstractMetric metric : record.metrics()) {
             // name of the metric is also the column name to which we write
             keys.add(MetricInfo.getColumnName(metric.getName()));
-            values.add((Long) metric.value());
+            values.add(metric.value());
         }
 
         // get the tags out so we can set them later (otherwise, need to be a single value)

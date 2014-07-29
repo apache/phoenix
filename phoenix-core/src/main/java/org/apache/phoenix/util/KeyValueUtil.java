@@ -77,17 +77,9 @@ public class KeyValueUtil {
                 value, valueOffset, valueLength);
     }
     
-    public static KeyValue newKeyValue(byte[] key, KeyValue kv, byte[] value) {
-        return newKeyValue(key, 0, key.length,
-            kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), 
-            kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), 
-            kv.getTimestamp(),
-            value, 0, value.length);
-    }
-
-    public static KeyValue newKeyValue(byte[] key, byte[] cf, byte[] cq, long ts, byte[] value) {
-        return newKeyValue(key,cf,cq,ts,value,0,value.length);
-    }
+	public static KeyValue newKeyValue(byte[] key, byte[] cf, byte[] cq, long ts, byte[] value) {
+		return newKeyValue(key, cf, cq, ts, value, 0, value.length);
+	}
 
     /**
      * Binary search for latest column value without allocating memory in the process

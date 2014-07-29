@@ -17,6 +17,7 @@ public class SequenceInfo {
     public final long maxValue;
     public final long cacheSize;
     public final boolean cycle;
+    public boolean limitReached;
 
     public SequenceInfo(long sequenceValue, long incrementBy, long minValue, long maxValue, long cacheSize, boolean cycle) {
         this.sequenceValue = sequenceValue;
@@ -25,5 +26,6 @@ public class SequenceInfo {
         this.maxValue = maxValue;
         this.cacheSize = cacheSize;
         this.cycle = cycle;
+        this.limitReached = false;
     }
 }
