@@ -135,7 +135,7 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
             assertEquals(nRegions, nInitialRegions);
             
             int nRows = 2;
-            String query = "SELECT count(*) FROM S WHERE a IN ('tl','jt')";
+            String query = "SELECT /*+ NO_INTRA_REGION_PARALLELIZATION */ count(*) FROM S WHERE a IN ('tl','jt')";
             ResultSet rs1 = conn.createStatement().executeQuery(query);
             assertTrue(rs1.next());
             traceRegionBoundaries(services);
@@ -155,4 +155,61 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
         }
 
     }
+    
+    /* HBase-level repro of above issue. I believe the two scans need
+     * to be issued in parallel to repro (that's the only difference
+     * with the above tests).
+    @Test
+    public void testReproSplitBugAtHBaseLevel() throws Exception {
+        initTable();
+        Connection conn = DriverManager.getConnection(getUrl());
+        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        traceRegionBoundaries(services);
+        int nRegions = services.getAllTableRegions(TABLE_NAME_BYTES).size();
+        int nInitialRegions = nRegions;
+        HBaseAdmin admin = services.getAdmin();
+        try {
+            admin.split(TABLE_NAME);
+            int nTries = 0;
+            while (nRegions == nInitialRegions && nTries < 10) {
+                Thread.sleep(1000);
+                nRegions = services.getAllTableRegions(TABLE_NAME_BYTES).size();
+                nTries++;
+            }
+            // Split finished by this time, but cache isn't updated until
+            // table is accessed
+            assertEquals(nRegions, nInitialRegions);
+            
+            String query = "SELECT count(*) FROM S WHERE a IN ('tl','jt')";
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            HTableInterface table = services.getTable(TABLE_NAME_BYTES);
+            Filter filter = plan.getContext().getScanRanges().getSkipScanFilter();
+            Scan scan = new Scan();
+            ResultScanner scanner;
+            int count = 0;
+            scan.setFilter(filter);
+            
+            scan.setStartRow(new byte[] {1, 't', 'l'});
+            scan.setStopRow(new byte[] {1, 't', 'l'});
+            scanner = table.getScanner(scan);
+            count = 0;
+            while (scanner.next() != null) {
+                count++;
+            }
+            assertEquals(1, count);
+
+            scan.setStartRow(new byte[] {3});
+            scan.setStopRow(new byte[] {4});
+            scanner = table.getScanner(scan);
+            count = 0;
+            while (scanner.next() != null) {
+                count++;
+            }
+            assertEquals(1, count);
+        } finally {
+            admin.close();
+        }
+    }
+    */
+
 }
