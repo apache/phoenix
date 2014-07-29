@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -49,6 +50,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PMetaDataImpl;
@@ -63,6 +65,7 @@ import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceInfo;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
@@ -356,18 +359,29 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
             SQLException[] exceptions) throws SQLException {
         int i = 0;
-        for (SequenceKey key : sequenceKeys) {
-            SequenceInfo info = sequenceMap.get(key);
-            if (info == null) {
-                exceptions[i] =
-                        new SequenceNotFoundException(key.getSchemaName(), key.getSequenceName());
-            } else {
-                values[i] = info.sequenceValue;
-                info.sequenceValue =
-                        SequenceUtil.getNextValue(key, info);
-            }
-            i++;
-        }
+		for (SequenceKey key : sequenceKeys) {
+			SequenceInfo info = sequenceMap.get(key);
+			if (info == null) {
+				exceptions[i] = new SequenceNotFoundException(
+						key.getSchemaName(), key.getSequenceName());
+			} else {
+				boolean increaseSeq = info.incrementBy > 0;
+				if (info.limitReached) {
+					SQLExceptionCode code = increaseSeq ? SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE
+							: SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE;
+					exceptions[i] = new SQLExceptionInfo.Builder(code).build().buildException();
+				} else {
+					values[i] = info.sequenceValue;
+					info.sequenceValue += info.incrementBy * info.cacheSize;
+					info.limitReached = SequenceUtil.checkIfLimitReached(info);
+					if (info.limitReached && info.cycle) {
+						info.sequenceValue = increaseSeq ? info.minValue : info.maxValue;
+						info.limitReached = false;
+					}
+				}
+			}
+			i++;
+		}
         i = 0;
         for (SQLException e : exceptions) {
             if (e != null) {

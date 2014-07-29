@@ -43,6 +43,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SequenceUtil;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -55,7 +56,7 @@ import com.google.common.collect.Maps;
 public class SequenceIT extends BaseClientManagedTimeIT {
     private static final String NEXT_VAL_SQL = "SELECT NEXT VALUE FOR foo.bar FROM SYSTEM.\"SEQUENCE\"";
     private static final long BATCH_SIZE = 3;
-    
+   
     private Connection conn;
     
     @BeforeClass
@@ -69,6 +70,13 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
     
+    @After
+    public void tearDown() throws Exception {
+    	// close any open connection between tests, so that connections are not leaked
+    	if (conn != null) {
+    		conn.close();
+    	}
+    }
 
 	@Test
 	public void testSystemTable() throws Exception {		
@@ -114,7 +122,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertTrue(rs.next());
         assertEquals("ALPHA", rs.getString("sequence_schema"));
         assertEquals("OMEGA", rs.getString("sequence_name"));
-        assertEquals(null, rs.getBytes("current_value"));
+        assertEquals(2, rs.getInt("current_value"));
         assertEquals(4, rs.getInt("increment_by"));
         assertFalse(rs.next());
 	}
@@ -152,7 +160,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertTrue(rs.next());
         assertEquals("ALPHA", rs.getString("sequence_schema"));
         assertEquals("OMEGA", rs.getString("sequence_name"));
-        assertEquals(null, rs.getBytes("current_value"));
+        assertEquals(2, rs.getInt("current_value"));
         assertEquals(4, rs.getInt("increment_by"));
         assertFalse(rs.next());
 
@@ -208,7 +216,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
                             "SELECT start_with, current_value, increment_by, cache_size, min_value, max_value, cycle_flag, sequence_schema, sequence_name FROM SYSTEM.\"SEQUENCE\"");
         assertTrue(rs.next());
         assertEquals(2, rs.getLong("start_with"));
-        assertEquals(null, rs.getBytes("current_value"));
+        assertEquals(2, rs.getInt("current_value"));
         assertEquals(3, rs.getLong("increment_by"));
         assertEquals(5, rs.getLong("cache_size"));
         assertEquals(0, rs.getLong("min_value"));
@@ -654,7 +662,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         rs = conn.createStatement().executeQuery("SELECT sequence_name, current_value FROM SYSTEM.\"SEQUENCE\" WHERE sequence_name='BAR'");
         assertTrue(rs.next());
         assertEquals("BAR", rs.getString(1));
-        assertEquals(null, rs.getBytes(2));
+        assertEquals(1, rs.getInt(2));
         conn.close();
         conn2.close();
 
@@ -690,6 +698,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals(4, rs.getInt(1));
     }
     
+    // if nextConnection() is not used to get to get a connection, make sure you call .close() so that connections are not leaked
     private void nextConnection() throws Exception {
         if (conn != null) conn.close();
         long ts = nextTimestamp();

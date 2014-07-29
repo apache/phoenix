@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
@@ -53,6 +54,10 @@ import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SequenceUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.Lists;
 
 /**
  * 
@@ -82,6 +87,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                         PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, 
                         QueryConstants.EMPTY_COLUMN_BYTES, timestamp, errorCodeBuf)));
     }
+    
     /**
      * Use PreIncrement hook of BaseRegionObserver to overcome deficiencies in Increment
      * implementation (HBASE-10254):
@@ -125,104 +131,113 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                     return result;
                 }
                 
+                KeyValue currentValueKV = Sequence.getCurrentValueKV(result);
                 KeyValue incrementByKV = Sequence.getIncrementByKV(result);
-                KeyValue currentValueKV = Sequence.getCurrentValueKV(result);               
-                KeyValue cacheSizeKV = Sequence.getCacheSizeKV(result);        
-                KeyValue cycleKV = Sequence.getCycleKV(result);
-                KeyValue minValueKV = Sequence.getMinValueKV(result);
-                KeyValue maxValueKV = Sequence.getMaxValueKV(result);
+                KeyValue cacheSizeKV = Sequence.getCacheSizeKV(result);
+                
+                long currentValue = PDataType.LONG.getCodec().decodeLong(currentValueKV.getBuffer(), currentValueKV.getValueOffset(), SortOrder.getDefault());
+                long incrementBy = PDataType.LONG.getCodec().decodeLong(incrementByKV.getBuffer(), incrementByKV.getValueOffset(), SortOrder.getDefault());
+                long cacheSize = PDataType.LONG.getCodec().decodeLong(cacheSizeKV.getBuffer(), cacheSizeKV.getValueOffset(), SortOrder.getDefault());
                 
                 // Hold timestamp constant for sequences, so that clients always only see the latest
                 // value regardless of when they connect.
-                Put put = new Put(row, currentValueKV.getTimestamp());
+                long timestamp = currentValueKV.getTimestamp();
+				Put put = new Put(row, timestamp);
                 
-                // create a copy of the key values, used for the new Return
-                List<KeyValue> newkvs = Sequence.getCells(result);
+				int numIncrementKVs = increment.getFamilyMap().get(PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES).size();
+                // creates the list of KeyValues used for the Result that will be returned
+                List<KeyValue> newkvs = Sequence.getKeyValueList(result, numIncrementKVs);
                 
-                long incrementBy =
-                        PDataType.LONG.getCodec().decodeLong(incrementByKV.getBuffer(),
-                            incrementByKV.getValueOffset(), SortOrder.getDefault());
-                     
-                long cacheSize =
-                        PDataType.LONG.getCodec().decodeLong(cacheSizeKV.getBuffer(),
-                            cacheSizeKV.getValueOffset(), SortOrder.getDefault());
-                
-                // if the minValue, maxValue, or cycle is null this sequence has been upgraded from
-                // a lower version. Set minValue, maxValue and cycle to Long.MIN_VALUE, Long.MAX_VALUE and true 
-                // respectively in order to maintain existing behavior and also update the KeyValues on the server 
-                long minValue;
-                if (minValueKV == null) {
-                    minValue = Long.MIN_VALUE;
-                    // create new key value for put
-                    byte[] newMinValueBuffer = new byte[PDataType.LONG.getByteSize()];
-                    PDataType.LONG.getCodec().encodeLong(minValue, newMinValueBuffer, 0);
-                    KeyValue newMinValueKV = KeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES,
-                                PhoenixDatabaseMetaData.MIN_VALUE_BYTES, currentValueKV.getTimestamp(), newMinValueBuffer);
-                    put.add(newMinValueKV);
-                    // update key value in returned Result
-                    Sequence.replaceMinValueKV(newkvs, newMinValueKV);
+                //if client is 3.0/4.0 preserve the old behavior (older clients won't have newer columns present in the increment)
+                if (numIncrementKVs != Sequence.NUM_SEQUENCE_KEY_VALUES) {
+                	currentValue += incrementBy * cacheSize;
+                    // Hold timestamp constant for sequences, so that clients always only see the latest value
+                    // regardless of when they connect.
+                    KeyValue newCurrentValueKV = createKeyValue(row, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, currentValue, timestamp);
+                    put.add(newCurrentValueKV);
+                    Sequence.replaceCurrentValueKV(newkvs, newCurrentValueKV);
                 }
                 else {
-                    minValue = PDataType.LONG.getCodec().decodeLong(minValueKV.getBuffer(),
-                                minValueKV.getValueOffset(), SortOrder.getDefault());
-                }           
-                long maxValue;
-                if (maxValueKV == null) {
-                    maxValue = Long.MAX_VALUE;
-                    // create new key value for put
-                    byte[] newMaxValueBuffer = new byte[PDataType.LONG.getByteSize()];
-                    PDataType.LONG.getCodec().encodeLong(maxValue, newMaxValueBuffer, 0);
-                    KeyValue newMaxValueKV = KeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES,
-                        PhoenixDatabaseMetaData.MAX_VALUE_BYTES, currentValueKV.getTimestamp(), newMaxValueBuffer);
-                    put.add(newMaxValueKV);
-                    // update key value in returned Result
-                    Sequence.replaceMaxValueKV(newkvs, newMaxValueKV);
+	                KeyValue cycleKV = Sequence.getCycleKV(result);
+	                KeyValue limitReachedKV = Sequence.getLimitReachedKV(result);
+	                KeyValue minValueKV = Sequence.getMinValueKV(result);
+	                KeyValue maxValueKV = Sequence.getMaxValueKV(result);
+	                
+	                boolean increasingSeq = incrementBy > 0 ? true : false;
+	                
+	                // if the minValue, maxValue, cycle and limitReached is null this sequence has been upgraded from
+	                // a lower version. Set minValue, maxValue, cycle and limitReached to Long.MIN_VALUE, Long.MAX_VALUE, true and false
+	                // respectively in order to maintain existing behavior and also update the KeyValues on the server 
+	                boolean limitReached;
+	                if (limitReachedKV == null) {
+	                	limitReached = false;
+	                	KeyValue newLimitReachedKV = createKeyValue(row, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, limitReached, timestamp);
+	                	put.add(newLimitReachedKV);
+	                	Sequence.replaceLimitReachedKV(newkvs, newLimitReachedKV);
+	                }
+	                else {
+	                	limitReached = (Boolean) PDataType.BOOLEAN.toObject(limitReachedKV.getBuffer(),
+	                			limitReachedKV.getValueOffset(), limitReachedKV.getValueLength());
+	                }
+	                long minValue;
+	                if (minValueKV == null) {
+	                    minValue = Long.MIN_VALUE;
+	                    KeyValue newMinValueKV = createKeyValue(row, PhoenixDatabaseMetaData.MIN_VALUE_BYTES, minValue, timestamp);
+	                    put.add(newMinValueKV);
+	                    Sequence.replaceMinValueKV(newkvs, newMinValueKV);
+	                }
+	                else {
+	                    minValue = PDataType.LONG.getCodec().decodeLong(minValueKV.getBuffer(),
+	                                minValueKV.getValueOffset(), SortOrder.getDefault());
+	                }           
+	                long maxValue;
+	                if (maxValueKV == null) {
+	                    maxValue = Long.MAX_VALUE;
+	                    KeyValue newMaxValueKV = createKeyValue(row, PhoenixDatabaseMetaData.MAX_VALUE_BYTES, maxValue, timestamp);
+	                    put.add(newMaxValueKV);
+	                    Sequence.replaceMaxValueKV(newkvs, newMaxValueKV);
+	                }
+	                else {
+	                    maxValue =  PDataType.LONG.getCodec().decodeLong(maxValueKV.getBuffer(),
+	                            maxValueKV.getValueOffset(), SortOrder.getDefault());
+	                }
+	                boolean cycle;
+	                if (cycleKV == null) {
+	                    cycle = false;
+	                    KeyValue newCycleKV = createKeyValue(row, PhoenixDatabaseMetaData.CYCLE_FLAG_BYTES, cycle, timestamp);
+	                    put.add(newCycleKV);
+	                    Sequence.replaceCycleValueKV(newkvs, newCycleKV);
+	                }
+	                else {
+	                    cycle = (Boolean) PDataType.BOOLEAN.toObject(cycleKV.getBuffer(),
+	                            cycleKV.getValueOffset(), cycleKV.getValueLength());
+	                }
+	                
+	                // return if we have run out of sequence values 
+					if (limitReached) {
+						if (cycle) {
+							// reset currentValue of the Sequence row to minValue/maxValue
+							currentValue = increasingSeq ? minValue : maxValue;
+						}
+						else {
+							SQLExceptionCode code = increasingSeq ? SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE
+									: SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE;
+							return getErrorResult(row, maxTimestamp, code.getErrorCode());
+						}
+					}
+	                
+	                // check if the limit was reached
+					limitReached = SequenceUtil.checkIfLimitReached(currentValue, minValue, maxValue, incrementBy, cacheSize);
+	                // update currentValue
+					currentValue += incrementBy * cacheSize;
+					// update the currentValue of the Result row
+					KeyValue newCurrentValueKV = createKeyValue(row, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, currentValue, timestamp);
+		            Sequence.replaceCurrentValueKV(newkvs, newCurrentValueKV);
+		            put.add(newCurrentValueKV);
+					// set the LIMIT_REACHED column to true, so that no new values can be used
+					KeyValue newLimitReachedKV = createKeyValue(row, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, limitReached, timestamp);
+		            put.add(newLimitReachedKV);
                 }
-                else {
-                    maxValue =  PDataType.LONG.getCodec().decodeLong(maxValueKV.getBuffer(),
-                            maxValueKV.getValueOffset(), SortOrder.getDefault());
-                }
-                boolean cycle;
-                if (cycleKV == null) {
-                    cycle = false;
-                    // create new key value for put
-                    KeyValue newCycleKV = KeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES,
-                        PhoenixDatabaseMetaData.CYCLE_FLAG_BYTES, currentValueKV.getTimestamp(), PDataType.FALSE_BYTES);
-                    put.add(newCycleKV);
-                    // update key value in returned Result
-                    Sequence.replaceCycleValueKV(newkvs, newCycleKV);
-                }
-                else {
-                    cycle = (Boolean) PDataType.BOOLEAN.toObject(cycleKV.getBuffer(),
-                            cycleKV.getValueOffset(), cycleKV.getValueLength());
-                }
-                long currentValue;
-                // initialize current value to start value
-                if (currentValueKV.getValueLength()==0) {
-                    KeyValue startValueKV = Sequence.getStartValueKV(result);
-                    currentValue =
-                            PDataType.LONG.getCodec().decodeLong(startValueKV.getBuffer(),
-                                startValueKV.getValueOffset(), SortOrder.getDefault());
-                }
-                else {
-                    currentValue =
-                            PDataType.LONG.getCodec().decodeLong(currentValueKV.getBuffer(),
-                                currentValueKV.getValueOffset(), SortOrder.getDefault());      
-                    try {
-                        // set currentValue to nextValue
-                        currentValue =
-                                SequenceUtil.getNextValue(currentValue, minValue, maxValue,
-                                    incrementBy, cacheSize, cycle);
-                    } catch (SQLException sqlE) {
-                        return getErrorResult(row, maxTimestamp, sqlE.getErrorCode());
-                    }
-                }
-                byte[] newCurrentValueBuffer = new byte[PDataType.LONG.getByteSize()];
-                PDataType.LONG.getCodec().encodeLong(currentValue, newCurrentValueBuffer, 0);
-                KeyValue newCurrentValueKV = KeyValueUtil.newKeyValue(row, currentValueKV, newCurrentValueBuffer);
-                put.add(newCurrentValueKV);
-                Sequence.replaceCurrentValueKV(newkvs, newCurrentValueKV);
-                
                 // update the KeyValues on the server
                 @SuppressWarnings("unchecked")
                 Pair<Mutation,Integer>[] mutations = new Pair[1];
@@ -240,6 +255,36 @@ public class SequenceRegionObserver extends BaseRegionObserver {
             region.closeRegionOperation();
         }
     }
+    
+	/**
+	 * Creates a new KeyValue for a long value
+	 * 
+	 * @param key
+	 *            key used while creating KeyValue
+	 * @param cqBytes
+	 *            column qualifier of KeyValue
+	 * @return return the KeyValue that was created
+	 */
+	KeyValue createKeyValue(byte[] key, byte[] cqBytes, long value, long timestamp) {
+		byte[] valueBuffer = new byte[PDataType.LONG.getByteSize()];
+		PDataType.LONG.getCodec().encodeLong(value, valueBuffer, 0);
+		return KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, cqBytes, timestamp, valueBuffer);
+	}
+    
+	/**
+	 * Creates a new KeyValue for a boolean value and adds it to the given put
+	 * 
+	 * @param key
+	 *            key used while creating KeyValue
+	 * @param cqBytes
+	 *            column qualifier of KeyValue
+	 * @return return the KeyValue that was created
+	 */
+	private KeyValue createKeyValue(byte[] key, byte[] cqBytes, boolean value, long timestamp) throws IOException {
+		// create new key value for put
+		return KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, cqBytes, 
+				timestamp, value ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
+	}
 
     /**
      * Override the preAppend for checkAndPut and checkAndDelete, as we need the ability to

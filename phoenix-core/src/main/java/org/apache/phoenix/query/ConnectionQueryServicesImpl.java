@@ -19,6 +19,7 @@ package org.apache.phoenix.query;
 
 import static com.google.common.io.Closeables.closeQuietly;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CYCLE_FLAG;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
@@ -1301,7 +1302,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 String newColumns =
                                         MIN_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", " 
                                                 + MAX_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", " 
-                                                + CYCLE_FLAG + " " + PDataType.BOOLEAN.getSqlTypeName();
+                                                + CYCLE_FLAG + " " + PDataType.BOOLEAN.getSqlTypeName() + ", " 
+                                                + LIMIT_REACHED_FLAG + " " + PDataType.BOOLEAN.getSqlTypeName();
                                 metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME, 
                                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, newColumns); 
                             }
