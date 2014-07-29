@@ -22,10 +22,10 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CACHE_SIZE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CYCLE_FLAG_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.START_WITH_BYTES;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -66,19 +66,19 @@ public class Sequence {
     private static final KeyValue CURRENT_VALUE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SEQUENCE_FAMILY_BYTES, CURRENT_VALUE_BYTES);
     private static final KeyValue INCREMENT_BY_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SEQUENCE_FAMILY_BYTES, INCREMENT_BY_BYTES);
     private static final KeyValue CACHE_SIZE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SEQUENCE_FAMILY_BYTES, CACHE_SIZE_BYTES);
-    private static final KeyValue START_WITH_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SEQUENCE_FAMILY_BYTES, START_WITH_BYTES);
     private static final KeyValue MIN_VALUE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SEQUENCE_FAMILY_BYTES, MIN_VALUE_BYTES);
     private static final KeyValue MAX_VALUE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SEQUENCE_FAMILY_BYTES, MAX_VALUE_BYTES);
     private static final KeyValue CYCLE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SEQUENCE_FAMILY_BYTES, CYCLE_FLAG_BYTES);
+    private static final KeyValue LIMIT_REACHED_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SEQUENCE_FAMILY_BYTES, LIMIT_REACHED_FLAG_BYTES);
     private static final List<KeyValue> SEQUENCE_KV_COLUMNS = Arrays.<KeyValue>asList(
             CURRENT_VALUE_KV,
             INCREMENT_BY_KV,
             CACHE_SIZE_KV,
-            START_WITH_KV,
-            // the following three columns were added in 3.1/4.1
+            // The following three columns were added in 3.1/4.1
             MIN_VALUE_KV,
             MAX_VALUE_KV,
-            CYCLE_KV
+            CYCLE_KV,
+            LIMIT_REACHED_KV
             );
     static {
         Collections.sort(SEQUENCE_KV_COLUMNS, KeyValue.COMPARATOR);
@@ -87,12 +87,12 @@ public class Sequence {
     private static final int CURRENT_VALUE_INDEX = SEQUENCE_KV_COLUMNS.indexOf(CURRENT_VALUE_KV);
     private static final int INCREMENT_BY_INDEX = SEQUENCE_KV_COLUMNS.indexOf(INCREMENT_BY_KV);
     private static final int CACHE_SIZE_INDEX = SEQUENCE_KV_COLUMNS.indexOf(CACHE_SIZE_KV);
-    private static final int START_WITH_INDEX = SEQUENCE_KV_COLUMNS.indexOf(START_WITH_KV);
     private static final int MIN_VALUE_INDEX = SEQUENCE_KV_COLUMNS.indexOf(MIN_VALUE_KV);
     private static final int MAX_VALUE_INDEX = SEQUENCE_KV_COLUMNS.indexOf(MAX_VALUE_KV);
     private static final int CYCLE_INDEX = SEQUENCE_KV_COLUMNS.indexOf(CYCLE_KV);
+    private static final int LIMIT_REACHED_INDEX = SEQUENCE_KV_COLUMNS.indexOf(LIMIT_REACHED_KV);
 
-    private static final int NUM_SEQUENCE_KEY_VALUES = SEQUENCE_KV_COLUMNS.size();
+    public static final int NUM_SEQUENCE_KEY_VALUES = SEQUENCE_KV_COLUMNS.size();
     private static final EmptySequenceCacheException EMPTY_SEQUENCE_CACHE_EXCEPTION = new EmptySequenceCacheException();
     
     private final SequenceKey key;
@@ -159,7 +159,6 @@ public class Sequence {
         
         long returnValue = value.currentValue;
         if (factor != 0) {
-            --value.unusedValues;
             boolean overflowOrUnderflow=false;
             // advance currentValue while checking for overflow
             try {
@@ -184,7 +183,7 @@ public class Sequence {
         if (value == null) {
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }
-        if (value.unusedValues == 0) {
+        if (value.currentValue == value.nextValue) {
             if (action == ValueOp.VALIDATE_SEQUENCE) {
                 return value.currentValue;
             }
@@ -199,7 +198,7 @@ public class Sequence {
         }
         List<Append> appends = Lists.newArrayListWithExpectedSize(values.size());
         for (SequenceValue value : values) {
-            if (value.isInitialized() && value.unusedValues>0) {
+            if (value.isInitialized() && value.currentValue != value.nextValue) {
                 appends.add(newReturn(value));
             }
         }
@@ -211,7 +210,7 @@ public class Sequence {
         if (value == null) {
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }
-        if (value.unusedValues==0) {
+        if (value.currentValue == value.nextValue) {
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }
         return newReturn(value);
@@ -222,11 +221,12 @@ public class Sequence {
         Append append = new Append(key);
         byte[] opBuf = new byte[] {(byte)MetaOp.RETURN_SEQUENCE.ordinal()};
         append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, opBuf);
-        append.setAttribute(SequenceRegionObserver.CURRENT_VALUE_ATTRIB, PDataType.LONG.toBytes(value.startValue));
+        append.setAttribute(SequenceRegionObserver.CURRENT_VALUE_ATTRIB, PDataType.LONG.toBytes(value.nextValue));
         Map<byte[], List<Cell>> familyMap = append.getFamilyCellMap();
         familyMap.put(PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, Arrays.<Cell>asList(
-                (Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, value.timestamp, ByteUtil.EMPTY_BYTE_ARRAY),
-                (Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.START_WITH_BYTES, value.timestamp, PDataType.LONG.toBytes(value.currentValue))
+        		(Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, value.timestamp, PDataType.LONG.toBytes(value.currentValue)),
+        		// set LIMIT_REACHED flag to false since we are returning unused sequence values
+        		(Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, value.timestamp, PDataType.FALSE_BYTES)
                 ));
         return append;
     }
@@ -300,12 +300,11 @@ public class Sequence {
      */
     private static KeyValue getKeyValue(Result r, KeyValue kv, int cellIndex) {
         Cell[] cells = r.rawCells();
-        // if the sequence row is from a previous version then MIN_VALUE, MAX_VALUE and CYCLE key values are not present,
-        // the sequence row has only four columns (START_VALUE, INCREMENT_BY, CACHE_SIZE and CURRENT_VALUE) and the order of the cells 
+        // if the sequence row is from a previous version then MIN_VALUE, MAX_VALUE, CYCLE and LIMIT_REACHED key values are not present,
+        // the sequence row has only three columns (INCREMENT_BY, CACHE_SIZE and CURRENT_VALUE) and the order of the cells 
         // in the array returned by rawCells() is not what what we expect so use getColumnLatestCell() to get the cell we want
-        Cell cell = cells.length != NUM_SEQUENCE_KEY_VALUES ?
-                r.getColumnLatestCell(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength()) 
-                : (cells[cellIndex]);
+        Cell cell = cells.length == NUM_SEQUENCE_KEY_VALUES ? cells[cellIndex] :
+        	r.getColumnLatestCell(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength());
         return org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(cell);
     }
     
@@ -325,10 +324,6 @@ public class Sequence {
         return getKeyValue(r, CACHE_SIZE_KV, CACHE_SIZE_INDEX);
     }
     
-    public static KeyValue getStartValueKV(Result r) {
-        return getKeyValue(r, START_WITH_KV, START_WITH_INDEX);
-    }
-    
     public static KeyValue getMinValueKV(Result r) {
         return getKeyValue(r, MIN_VALUE_KV, MIN_VALUE_INDEX);
     }
@@ -339,6 +334,10 @@ public class Sequence {
     
     public static KeyValue getCycleKV(Result r) {
         return getKeyValue(r, CYCLE_KV, CYCLE_INDEX);
+    }
+
+    public static KeyValue getLimitReachedKV(Result r) {
+        return getKeyValue(r, LIMIT_REACHED_KV, LIMIT_REACHED_INDEX);
     }
     
     public static void replaceCurrentValueKV(List<Cell> kvs, KeyValue currentValueKV) {
@@ -356,35 +355,36 @@ public class Sequence {
     public static void replaceCycleValueKV(List<Cell> kvs, KeyValue cycleValueKV) {
         kvs.set(CYCLE_INDEX, cycleValueKV);
     }
+    public static void replaceLimitReachedKV(List<Cell> kvs, KeyValue limitReachedKV) {
+        kvs.set(LIMIT_REACHED_INDEX, limitReachedKV);
+    }
     
     /**
-     * Returns a Cell[] for the result row. Handles empty MIN_VALUE, MAX_VALUE and CYCLE
-     * KeyValues if the sequence row is from a previous version 
+     * Returns the KeyValues of r if it contains the expected number of KeyValues,
+     * else returns a list of KeyValues corresponding to SEQUENCE_KV_COLUMNS 
      */
-    public static List<Cell> getCells(Result r) {
-        // if the sequence row is from a previous version 
-        if (r.rawCells().length == NUM_SEQUENCE_KEY_VALUES )
+    public static List<Cell> getCells(Result r, int numKVs) {
+        // if the sequence row is from a previous version
+        if (r.rawCells().length == numKVs )
             return Lists.newArrayList(r.rawCells());
-        // else we need to handle missing MIN_VALUE, MAX_VALUE and CYCLE KeyValues
+        // else we need to handle missing MIN_VALUE, MAX_VALUE, CYCLE and LIMIT_REACHED KeyValues
         List<Cell> cellList = Lists.newArrayListWithCapacity(NUM_SEQUENCE_KEY_VALUES);
         for (KeyValue kv : SEQUENCE_KV_COLUMNS) {
             cellList.add(getKeyValue(r,kv));
         }
         return cellList;
-    }
+    }    
     
     private static final class SequenceValue {
         public final long incrementBy;
         public final long timestamp;
+        public final long cacheSize;
         
         public long currentValue;
-        // start value of the current batch 
-        public long startValue;
+        public long nextValue;
         public long minValue;
         public long maxValue;
         public boolean cycle;
-        // number of values left in current batch
-        public long unusedValues;
         public boolean isDeleted;
         public boolean limitReached;
         
@@ -400,6 +400,7 @@ public class Sequence {
             this.isDeleted = isDeleted;
             this.incrementBy = 0;
             this.limitReached = false;
+            this.cacheSize = 0;
         }
         
         public boolean isInitialized() {
@@ -418,16 +419,14 @@ public class Sequence {
             KeyValue maxValueKV = getMaxValueKV(r);
             KeyValue cycleKV = getCycleKV(r);
             this.timestamp = currentValueKV.getTimestamp();
-            this.currentValue = PDataType.LONG.getCodec().decodeLong(currentValueKV.getValueArray(), currentValueKV.getValueOffset(), SortOrder.getDefault());
+            this.nextValue = PDataType.LONG.getCodec().decodeLong(currentValueKV.getValueArray(), currentValueKV.getValueOffset(), SortOrder.getDefault());
             this.incrementBy = PDataType.LONG.getCodec().decodeLong(incrementByKV.getValueArray(), incrementByKV.getValueOffset(), SortOrder.getDefault());
-            this.unusedValues = PDataType.LONG.getCodec().decodeLong(cacheSizeKV.getValueArray(), cacheSizeKV.getValueOffset(), SortOrder.getDefault());
+            this.cacheSize = PDataType.LONG.getCodec().decodeLong(cacheSizeKV.getValueArray(), cacheSizeKV.getValueOffset(), SortOrder.getDefault());
             this.minValue = PDataType.LONG.getCodec().decodeLong(minValueKV.getValueArray(), minValueKV.getValueOffset(), SortOrder.getDefault());
             this.maxValue = PDataType.LONG.getCodec().decodeLong(maxValueKV.getValueArray(), maxValueKV.getValueOffset(), SortOrder.getDefault());
             this.cycle = (Boolean)PDataType.BOOLEAN.toObject(cycleKV.getValueArray(), cycleKV.getValueOffset(), cycleKV.getValueLength());
             this.limitReached = false;
-            // store the start value of this batch of sequence values, so that it can be used to
-            // determine if we can return unused sequence values when we close the connection
-            this.startValue = this.currentValue;
+            currentValue = nextValue - incrementBy * cacheSize;
         }
     }
 
@@ -467,14 +466,15 @@ public class Sequence {
         Map<byte[], List<Cell>> familyMap = append.getFamilyCellMap();
         byte[] startWithBuf = PDataType.LONG.toBytes(startWith);
         familyMap.put(PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, Arrays.<Cell>asList(
-                (Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timestamp, ByteUtil.EMPTY_BYTE_ARRAY),
-                (Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, timestamp, ByteUtil.EMPTY_BYTE_ARRAY),
-                (Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.START_WITH_BYTES, timestamp, startWithBuf),
-                (Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.INCREMENT_BY_BYTES, timestamp, PDataType.LONG.toBytes(incrementBy)),
-                (Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CACHE_SIZE_BYTES, timestamp, PDataType.LONG.toBytes(cacheSize)),
-                (Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.MIN_VALUE_BYTES, timestamp, PDataType.LONG.toBytes(minValue)),
-                (Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.MAX_VALUE_BYTES, timestamp, PDataType.LONG.toBytes(maxValue)),
-                (Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CYCLE_FLAG_BYTES, timestamp, PDataType.BOOLEAN.toBytes(cycle))
+                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timestamp, ByteUtil.EMPTY_BYTE_ARRAY),
+                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, timestamp, startWithBuf),
+                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.START_WITH_BYTES, timestamp, startWithBuf),
+                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.INCREMENT_BY_BYTES, timestamp, PDataType.LONG.toBytes(incrementBy)),
+                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CACHE_SIZE_BYTES, timestamp, PDataType.LONG.toBytes(cacheSize)),
+                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.MIN_VALUE_BYTES, timestamp, PDataType.LONG.toBytes(minValue)),
+                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.MAX_VALUE_BYTES, timestamp, PDataType.LONG.toBytes(maxValue)),
+                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CYCLE_FLAG_BYTES, timestamp, PDataType.BOOLEAN.toBytes(cycle)),
+                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, timestamp, PDataType.FALSE_BYTES)
                 ));
         return append;
     }
