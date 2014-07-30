@@ -17,21 +17,25 @@
  */
 package org.apache.phoenix.join;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.io.WritableUtils;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.util.SchemaUtil;
 
 public class HashJoinInfo {
@@ -211,8 +215,17 @@ public class HashJoinInfo {
                 postJoinFilterExpression = ExpressionType.values()[expressionOrdinal].newInstance();
                 postJoinFilterExpression.readFields(input);
             }
-            int limit = WritableUtils.readVInt(input);
-            boolean forceProjection = input.readBoolean();
+            int limit = -1;
+            boolean forceProjection = false;
+            // Read these and ignore if we don't find them as they were not
+            // present in Apache Phoenix 3.0.0 release. This allows a newer
+            // 3.1 server to work with an older 3.0 client without force
+            // both to be upgraded in lock step.
+            try {
+                limit = WritableUtils.readVInt(input);
+                forceProjection = input.readBoolean();
+            } catch (EOFException ignore) {
+            }
             return new HashJoinInfo(joinedSchema, joinIds, joinExpressions, joinTypes, earlyEvaluation, schemas, fieldPositions, postJoinFilterExpression, limit >= 0 ? limit : null, forceProjection);
         } catch (IOException e) {
             throw new RuntimeException(e);
