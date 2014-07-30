@@ -177,6 +177,34 @@ public class PhoenixEncodeDecodeIT extends BaseHBaseManagedTimeIT {
 
         assertEquals(Arrays.asList(decodedValues), Arrays.asList(retrievedValues));
     }
+    
+    @Test
+    public void testEncodeDecodePaddingPks() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(
+                "CREATE TABLE T(pk1 CHAR(15) not null, pk2 CHAR(15) not null, v1 DATE " +
+                "CONSTRAINT pk PRIMARY KEY (pk1, pk2))");
+        
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO T (pk1, pk2, v1) VALUES (?, ?, ?)");
+        stmt.setString(1,  "def");
+        stmt.setString(2,  "eid");
+        stmt.setDate(3, new Date(100));
+        stmt.executeUpdate();
+        conn.commit();
+
+        stmt = conn.prepareStatement("SELECT pk1, pk2 FROM T");
+
+        Object[] retrievedValues = new Object[2];
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        retrievedValues[0] = rs.getString(1);
+        retrievedValues[1] = rs.getString(2);
+        
+        byte[] value = PhoenixRuntime.encodePK(conn, "T", retrievedValues);
+        Object[] decodedValues = PhoenixRuntime.decodePK(conn, "T", value);
+
+        assertEquals(Arrays.asList(decodedValues), Arrays.asList(retrievedValues));
+    }
 
     private static Connection getTenantSpecificConnection() throws Exception {
         Properties props = new Properties();

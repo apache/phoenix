@@ -415,7 +415,10 @@ public class PhoenixRuntime {
                     output.write(QueryConstants.SEPARATOR_BYTE);
                 }
                 type = pkColumns.get(i).getDataType();
-                byte[] value = type.toBytes(values[i - offset]);
+                
+                //for fixed width data types like CHAR and BINARY, we need to pad values to be of max length.
+                Object paddedObj = type.pad(values[i - offset], pkColumns.get(i).getMaxLength());
+                byte[] value = type.toBytes(paddedObj);
                 output.write(value);
             }
             return output.toByteArray();
