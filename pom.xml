@@ -695,6 +695,11 @@
           </dependency>
           <dependency>
             <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-common</artifactId>
+            <version>${hbase-hadoop2.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hbase</groupId>
             <artifactId>hbase-client</artifactId>
             <version>${hbase-hadoop2.version}</version>
           </dependency>
