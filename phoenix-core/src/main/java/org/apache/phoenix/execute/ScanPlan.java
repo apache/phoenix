@@ -18,6 +18,9 @@
 package org.apache.phoenix.execute;
 
 
+import java.sql.SQLException;
+import java.util.List;
+
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.RowProjector;
@@ -43,9 +46,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ScanUtil;
-
-import java.sql.SQLException;
-import java.util.List;
 
 
 

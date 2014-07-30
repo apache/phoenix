@@ -147,10 +147,15 @@ public class SkipScanFilter extends FilterBase {
         return true;
     }
     
-    private boolean intersect(byte[] lowerInclusiveKey, byte[] upperExclusiveKey, List<List<KeyRange>> newSlots) {
-        boolean lowerUnbound = (lowerInclusiveKey.length == 0);
-        Arrays.fill(position, 0);
+    private void resetState() {
         isDone = false;
+        endKeyLength = 0;
+        Arrays.fill(position, 0);
+    }
+    
+    private boolean intersect(byte[] lowerInclusiveKey, byte[] upperExclusiveKey, List<List<KeyRange>> newSlots) {
+        resetState();
+        boolean lowerUnbound = (lowerInclusiveKey.length == 0);
         int startPos = 0;
         int lastSlot = slots.size()-1;
         if (!lowerUnbound) {
