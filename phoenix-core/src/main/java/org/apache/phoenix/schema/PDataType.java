@@ -180,7 +180,7 @@ public enum PDataType {
      */
     CHAR("CHAR", Types.CHAR, String.class, null) { // Delegate to VARCHAR
         @Override
-        public Object pad(Object object, int maxLength) {
+        public Object pad(Object object, Integer maxLength) {
             String s = (String) object;
             if (s == null) {
                 return s;
@@ -3124,7 +3124,7 @@ public enum PDataType {
     },
     BINARY("BINARY", Types.BINARY, byte[].class, null) {
         @Override
-        public Object pad(Object object, int maxLength) {
+        public Object pad(Object object, Integer maxLength) {
             byte[] b = (byte[]) object;
             if (b == null) {
                 return null;
@@ -7132,7 +7132,7 @@ public enum PDataType {
         throw new UnsupportedOperationException("Operation not supported for type " + this);
     }
 
-    public Object pad(Object object, int maxLength) {
+    public Object pad(Object object, Integer maxLength) {
         return object;
     }
     
