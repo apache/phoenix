@@ -113,6 +113,17 @@ public interface QueryServices extends SQLCloseable {
     // The following config settings is to deal with SYSTEM.CATALOG moves(PHOENIX-916) among region servers
     public static final String CLOCK_SKEW_INTERVAL_ATTRIB = "phoenix.clock.skew.interval";
     
+    // A master switch if to enable auto rebuild an index which failed to be updated previously 
+    public static final String INDEX_FAILURE_HANDLING_REBUILD = "phoenix.index.failure.handling.rebuild";
+    
+    // Time interval to check if there is an index needs to be rebuild
+    public static final String INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 
+        "phoenix.index.failure.handling.rebuild.interval";
+    
+    // Index will be partially re-built from index disable time stamp - following overlap time 
+    public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME = 
+        "phoenix.index.failure.handling.rebuild.overlap.time";
+    
     /**
      * Get executor service used for parallel scans
      */
