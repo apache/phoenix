@@ -182,6 +182,8 @@
               <exclude>dev/release_files/**</exclude>
               <exclude>**/target/**</exclude>
               <exclude>**/resources/*.Driver</exclude>
+              <exclude>**/META-INF/**</exclude>
+              <exclude>**/*.properties</exclude>
               <exclude>**/*.versionsBackup</exclude>
               <!-- exclude docs -->
               <exclude>docs/**</exclude>
