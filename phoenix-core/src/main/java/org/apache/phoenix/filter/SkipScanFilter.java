@@ -211,7 +211,12 @@ public class SkipScanFilter extends FilterBase {
                 return false;
             }
         } else if (filterAllRemaining()) {
-            return true;
+            // We wrapped around the position array. We know there's an intersection, but it can only at the last
+            // slot position. So reset the position array here to the last position index for each slot. This will
+            // be used below as the end bounds to formulate the list of intersecting slots.
+            for (int i = 0; i <= lastSlot; i++) {
+                position[i] = slots.get(i).size() - 1;
+            }
         }
         // Copy inclusive all positions 
         for (int i = 0; i <= lastSlot; i++) {
