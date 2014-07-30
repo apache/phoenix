@@ -219,6 +219,8 @@ public class SkipScanFilter extends FilterBase implements Writable {
             if (Arrays.equals(lowerPosition, position) && areSlotsSingleKey(0, position.length-1)) {
                 return false;
             }
+        } else if (filterAllRemaining()) {
+            return true;
         }
         // Copy inclusive all positions 
         for (int i = 0; i <= lastSlot; i++) {
