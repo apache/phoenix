@@ -274,4 +274,26 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
         }
     }
     
-}
+    @Test
+    public void testSkipScanIntersectionAtEnd() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        
+        PreparedStatement stmt = conn.prepareStatement("create table splits_test "
+            + "(pk1 UNSIGNED_TINYINT NOT NULL, pk2 UNSIGNED_TINYINT NOT NULL, pk3 UNSIGNED_TINYINT NOT NULL, kv VARCHAR "
+            + "CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SPLIT ON (?, ?, ?)");
+        stmt.setBytes(1, new byte[] {1, 1});
+        stmt.setBytes(2, new byte[] {2, 1});
+        stmt.setBytes(3, new byte[] {3, 1});
+        stmt.execute();
+        
+        conn.createStatement().execute("upsert into splits_test values (0, 1, 1, 'a')");
+        conn.createStatement().execute("upsert into splits_test values (1, 1, 1, 'a')");
+        conn.createStatement().execute("upsert into splits_test values (2, 1, 1, 'a')");
+        conn.createStatement().execute("upsert into splits_test values (3, 1, 1, 'a')");
+        conn.commit();
+        
+        ResultSet rs = conn.createStatement().executeQuery("select count(kv) from splits_test where pk1 in (0, 1, 2, 3) AND pk2 = 1");
+        assertTrue(rs.next());
+        assertEquals(4, rs.getInt(1));
+        assertFalse(rs.next());
+    }}
