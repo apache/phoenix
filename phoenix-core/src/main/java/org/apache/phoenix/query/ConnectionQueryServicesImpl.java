@@ -26,7 +26,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 
 import java.io.IOException;
-import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
@@ -885,17 +884,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
 
                 HTableInterface ht = this.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
-                final Map<byte[], MetaDataResponse> results =
-                        ht.coprocessorService(MetaDataService.class, tableKey, tableKey, callable);
-                
-                assert(results.size() == 1);
-                MetaDataResponse result = results.values().iterator().next();
-                if (result.getReturnCode() == MetaDataProtos.MutationCode.TABLE_NOT_IN_REGION) {
-                    if (retried) return MetaDataMutationResult.constructFromProto(result);
-                    retried = true;
-                    continue;
+                try {
+                    final Map<byte[], MetaDataResponse> results =
+                            ht.coprocessorService(MetaDataService.class, tableKey, tableKey, callable);
+
+                    assert(results.size() == 1);
+                    MetaDataResponse result = results.values().iterator().next();
+                    if (result.getReturnCode() == MetaDataProtos.MutationCode.TABLE_NOT_IN_REGION) {
+                        if (retried) return MetaDataMutationResult.constructFromProto(result);
+                        retried = true;
+                        continue;
+                    }
+                    return MetaDataMutationResult.constructFromProto(result);
+                } finally {
+                    Closeables.closeQuietly(ht);
                 }
-                return MetaDataMutationResult.constructFromProto(result);
             }
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
