@@ -1091,5 +1091,141 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         assertEquals(5, rs.getInt(2));
         conn.close();
     }
+    
+    @Test 
+    public void testInListOfRVCColumnValuesSmallerLengthThanSchema() throws Exception {
+        String tenantId = "ABC";
+        String tableDDL = "CREATE TABLE t (tenantId char(15) NOT NULL, pk2 char(15) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3))";
+        createTestTable(getUrl(), tableDDL, null, nextTimestamp());
 
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'hel1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'hel2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'hel3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'hel4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'hel5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(getUrl());
+        //order by needed on the query to make the order of rows returned deterministic.
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) IN ((?, ?, ?), (?, ?, ?)) ORDER BY PK2");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "hel3");
+        stmt.setInt(3, 3);
+        stmt.setString(4, tenantId);
+        stmt.setString(5, "hel5");
+        stmt.setInt(6, 5);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("hel3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("hel5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        conn.close();
+    }
+    
+    @Test
+    public void testRVCWithColumnValuesOfSmallerLengthThanSchema() throws Exception {
+        testRVCWithComparisonOps(true);
+    }
+    
+    @Test
+    public void testRVCWithColumnValuesEqualToLengthInSchema() throws Exception {
+        testRVCWithComparisonOps(false);
+    }
+    
+    private void testRVCWithComparisonOps(boolean columnValueLengthSmaller) throws Exception {
+        String tenantId = "ABC";
+        String tableDDLFormat = "CREATE TABLE t (tenantId char(%s) NOT NULL, pk2 char(%s) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3))";
+        String tableDDL;
+        if (columnValueLengthSmaller) {
+            tableDDL = String.format(tableDDLFormat, 15, 15);
+        } else {
+            tableDDL = String.format(tableDDLFormat, 3, 5);
+        }
+        createTestTable(getUrl(), tableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(getUrl());
+        
+        // >
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) > (?, ?, ?)");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo3");
+        stmt.setInt(3, 3);
+        
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo4", rs.getString(1));
+        assertEquals(4, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        assertFalse(rs.next());
+        
+        // >=
+        stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) >= (?, ?, ?)");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo4");
+        stmt.setInt(3, 4);
+        
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo4", rs.getString(1));
+        assertEquals(4, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        assertFalse(rs.next());
+        
+        // <
+        stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) < (?, ?, ?)");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo2");
+        stmt.setInt(3, 2);
+        
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo1", rs.getString(1));
+        assertEquals(1, rs.getInt(2));
+        assertFalse(rs.next());
+        
+        // <=
+        stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) <= (?, ?, ?)");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo2");
+        stmt.setInt(3, 2);
+        rs = stmt.executeQuery(); 
+        
+        assertTrue(rs.next());
+        assertEquals("helo1", rs.getString(1));
+        assertEquals(1, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo2", rs.getString(1));
+        assertEquals(2, rs.getInt(2));
+        assertFalse(rs.next());
+        
+        // =
+        stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) = (?, ?, ?)");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo4");
+        stmt.setInt(3, 4);
+        
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo4", rs.getString(1));
+        assertEquals(4, rs.getInt(2));
+        assertFalse(rs.next());
+    }
 }

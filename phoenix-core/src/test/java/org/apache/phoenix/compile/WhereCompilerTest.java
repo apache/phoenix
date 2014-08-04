@@ -107,11 +107,11 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         PDataType.LONG.toBytes(1L, key, 1);
         key[0] = SaltingUtil.getSaltingByte(key, 1, PDataType.LONG.getByteSize(), 20);
         byte[] expectedStartKey = key;
-        byte[] expectedEndKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
+        byte[] expectedEndKey = ByteUtil.nextKey(key);
         byte[] startKey = scan.getStartRow();
         byte[] stopKey = scan.getStopRow();
-        assertTrue(Bytes.compareTo(expectedStartKey, startKey) == 0);
-        assertTrue(Bytes.compareTo(expectedEndKey, stopKey) == 0);
+        assertArrayEquals(expectedStartKey, startKey);
+        assertArrayEquals(expectedEndKey, stopKey);
     }
 
     @Test
@@ -128,7 +128,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         PDataType.VARCHAR.toBytes("a", key, 1);
         key[0] = SaltingUtil.getSaltingByte(key, 1, 1, 20);
         byte[] expectedStartKey = key;
-        byte[] expectedEndKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
+        byte[] expectedEndKey = ByteUtil.nextKey(ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY));
         byte[] startKey = scan.getStartRow();
         byte[] stopKey = scan.getStopRow();
         assertTrue(Bytes.compareTo(expectedStartKey, startKey) == 0);
@@ -389,7 +389,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Scan scan = plan.getContext().getScan();
         byte[] expectedStartRow = ByteUtil.concat(Bytes.toBytes(tenantId), StringUtil.padChar(Bytes.toBytes(keyPrefix), 15));
         assertArrayEquals(expectedStartRow,scan.getStartRow());
-        assertArrayEquals(ByteUtil.concat(expectedStartRow,QueryConstants.SEPARATOR_BYTE_ARRAY),scan.getStopRow());
+        assertArrayEquals(ByteUtil.nextKey(expectedStartRow),scan.getStopRow());
     }
 
     @Test
