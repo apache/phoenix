@@ -128,7 +128,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"), true),}},
                 new int[] {1,1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("a1A"), 3),
+                PDataType.CHAR.toBytes("a1A"),
                 Bound.LOWER
                 ));
         // 2, Lower bound, all range keys, all inclusive.
@@ -138,7 +138,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true),},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true),}},
                 new int[] {1,1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("a1A"), 3),
+                PDataType.CHAR.toBytes("a1A"),
                 Bound.LOWER
                 ));
         // 3, Lower bound, mixed single and range keys, all inclusive.
@@ -148,7 +148,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true),},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"), true),}},
                 new int[] {1,1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("a1A"), 3),
+                PDataType.CHAR.toBytes("a1A"),
                 Bound.LOWER
                 ));
         // 4, Lower bound, all range key, all exclusive on lower bound.
@@ -158,7 +158,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), false, Bytes.toBytes("2"), true),},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), false, Bytes.toBytes("B"), true),}},
                 new int[] {1,1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("b2B"), 3),
+                PDataType.CHAR.toBytes("b2B"),
                 Bound.LOWER
                 ));
         // 5, Lower bound, all range key, some exclusive.
@@ -168,7 +168,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true),},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), false, Bytes.toBytes("B"), true),}},
                 new int[] {1,1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("b1B"), 3),
+                PDataType.CHAR.toBytes("b1B"),
                 Bound.LOWER
                 ));
         // 6, Lower bound, mixed single and range key, mixed inclusive and exclusive.
@@ -178,7 +178,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true),},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), false, Bytes.toBytes("B"), true),}},
                 new int[] {1,1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("a1B"), 3),
+                PDataType.CHAR.toBytes("a1B"),
                 Bound.LOWER
                 ));
         // 7, Lower bound, unbound key in the middle, fixed length.
@@ -188,7 +188,7 @@ public class ScanUtilTest {
                         KeyRange.EVERYTHING_RANGE,},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), false, Bytes.toBytes("B"), true),}},
                 new int[] {1,1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("a"), 1),
+                PDataType.CHAR.toBytes("a"),
                 Bound.LOWER
                 ));
         // 8, Lower bound, unbound key in the middle, variable length.
@@ -197,7 +197,7 @@ public class ScanUtilTest {
                         PDataType.CHAR.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),},{
                             KeyRange.EVERYTHING_RANGE,}},
                     new int[] {1,1},
-                    ByteUtil.concat(PDataType.VARCHAR.toBytes("a")),
+                    PDataType.CHAR.toBytes("a"),
                     Bound.LOWER
                     ));
         // 9, Lower bound, unbound key at end, variable length.
@@ -207,7 +207,7 @@ public class ScanUtilTest {
                         KeyRange.EVERYTHING_RANGE,},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true),}},
                 new int[] {1,1,1},
-                ByteUtil.concat(PDataType.VARCHAR.toBytes("a")),
+                PDataType.CHAR.toBytes("a"),
                 Bound.LOWER
                 ));
         // 10, Upper bound, all single keys, all inclusive, increment at end.
@@ -217,7 +217,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"), true),}},
                 new int[] {1,1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("a1B"), 3),
+                PDataType.CHAR.toBytes("a1B"),
                 Bound.UPPER
                 ));
         // 11, Upper bound, all range keys, all inclusive, increment at end.
@@ -227,7 +227,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true),},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true),}},
                 new int[] {1,1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("b2C"), 3),
+                PDataType.CHAR.toBytes("b2C"),
                 Bound.UPPER
                 ));
         // 12, Upper bound, all range keys, all exclusive, no increment at end.
@@ -237,7 +237,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), false),},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), false),}},
                 new int[] {1,1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("b2B"), 3),
+                PDataType.CHAR.toBytes("b2B"),
                 Bound.UPPER
                 ));
         // 13, Upper bound, single inclusive, range inclusive, increment at end.
@@ -246,7 +246,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true),}},
                 new int[] {1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("a3"), 2),
+                PDataType.CHAR.toBytes("a3"),
                 Bound.UPPER
                 ));
         // 14, Upper bound, range exclusive, single inclusive, increment at end.
@@ -255,7 +255,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("b"), false),},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),}},
                 new int[] {1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("b2"), 2),
+                PDataType.CHAR.toBytes("b2"),
                 Bound.UPPER
                 ));
         // 15, Upper bound, range inclusive, single inclusive, increment at end.
@@ -264,7 +264,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("b"), true),},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),}},
                 new int[] {1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("b2"), 2),
+                PDataType.CHAR.toBytes("b2"),
                 Bound.UPPER
                 ));
         // 16, Upper bound, single inclusive, range exclusive, no increment at end.
@@ -273,7 +273,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),},{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), false),}},
                 new int[] {1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("a2"), 2),
+                PDataType.CHAR.toBytes("a2"),
                 Bound.UPPER
                 ));
         // 17, Upper bound, unbound key, fixed length;
@@ -282,7 +282,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),},{
                         KeyRange.EVERYTHING_RANGE,}},
                 new int[] {1,1},
-                ByteUtil.fillKey(PDataType.VARCHAR.toBytes("b"), 1),
+                PDataType.CHAR.toBytes("b"),
                 Bound.UPPER
                 ));
         // 18, Upper bound, unbound key, variable length;
@@ -291,7 +291,7 @@ public class ScanUtilTest {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),},{
                     KeyRange.EVERYTHING_RANGE,}},
                 new int[] {1,1},
-                ByteUtil.concat(PDataType.VARCHAR.toBytes("b")),
+                PDataType.CHAR.toBytes("b"),
                 Bound.UPPER
                 ));
         // 19, Upper bound, keys wrapped around when incrementing.

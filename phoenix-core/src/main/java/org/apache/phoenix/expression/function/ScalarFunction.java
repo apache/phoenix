@@ -19,9 +19,11 @@ package org.apache.phoenix.expression.function;
 
 import java.util.List;
 
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.util.ByteUtil;
 
 
 public abstract class ScalarFunction extends FunctionExpression {
@@ -32,6 +34,13 @@ public abstract class ScalarFunction extends FunctionExpression {
     
     public ScalarFunction(List<Expression> children) {
         super(children);
+    }
+    
+    protected static byte[] evaluateExpression(Expression rhs) {
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        rhs.evaluate(null, ptr);
+        byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
+        return key;
     }
     
     @Override

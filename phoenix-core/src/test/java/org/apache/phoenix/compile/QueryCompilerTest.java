@@ -854,7 +854,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         List<Object> binds = Collections.emptyList();
         Scan scan = compileQuery(query, binds);
         assertArrayEquals(ByteUtil.concat(Bytes.toBytes("abc")), scan.getStartRow());
-        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc")),QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc")), QueryConstants.SEPARATOR_BYTE_ARRAY),scan.getStopRow());
         assertTrue(scan.getFilter() != null);
 
         query = "SELECT host FROM ptsdb WHERE regexp_substr(inst, '[a-zA-Z]+', 0) = 'abc'";
@@ -962,8 +962,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query = "SELECT inst FROM ptsdb WHERE substr(inst, 0, 3) = 'abc'";
         List<Object> binds = Collections.emptyList();
         Scan scan = compileQuery(query, binds);
-        assertArrayEquals(ByteUtil.concat(Bytes.toBytes("abc")), scan.getStartRow());
-        assertArrayEquals(ByteUtil.concat(Bytes.toBytes("abd"),QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+        assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
+        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc")), QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
         assertTrue(scan.getFilter() == null); // Extracted.
     }
 
@@ -973,7 +973,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         List<Object> binds = Collections.emptyList();
         Scan scan = compileQuery(query, binds);
         assertArrayEquals(ByteUtil.concat(Bytes.toBytes("abc")), scan.getStartRow());
-        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc ")),QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc ")), QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
         assertNotNull(scan.getFilter());
     }
     

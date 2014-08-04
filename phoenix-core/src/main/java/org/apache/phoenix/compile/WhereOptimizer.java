@@ -61,6 +61,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterators;
@@ -830,18 +831,22 @@ public class WhereOptimizer {
             // and the key length doesn't match the column length, the expression can
             // never be true.
             // An zero length byte literal is null which can never be compared against as true
-            Integer childNodeFixedLength = node.getChildren().get(0).getMaxLength();
+            Expression firstChild = node.getChildren().get(0);
+            Integer childNodeFixedLength = firstChild.getDataType().isFixedWidth() ? firstChild.getMaxLength() : null;
             if (childNodeFixedLength != null && key.length > childNodeFixedLength) {
                 return DEGENERATE_KEY_PARTS;
             }
             // TODO: is there a case where we'd need to go through the childPart to calculate the key range?
             PColumn column = childSlot.getKeyPart().getColumn();
             PDataType type = column.getDataType();
-            KeyRange keyRange = type.getKeyRange(key, true, ByteUtil.nextKey(key), false);
+            byte[] lowerRange = key;
+            byte[] upperRange = ByteUtil.nextKey(key);
             Integer columnFixedLength = column.getMaxLength();
-            if (columnFixedLength != null) {
-                keyRange = keyRange.fill(columnFixedLength);
+            if (type.isFixedWidth() && columnFixedLength != null) {
+                lowerRange = StringUtil.padChar(lowerRange, columnFixedLength);
+                upperRange = StringUtil.padChar(upperRange, columnFixedLength);
             }
+            KeyRange keyRange = type.getKeyRange(lowerRange, true, upperRange, false);
             // Only extract LIKE expression if pattern ends with a wildcard and everything else was extracted
             return newKeyParts(childSlot, node.endsWithOnlyWildcard() ? node : null, keyRange);
         }
@@ -1081,15 +1086,16 @@ public class WhereOptimizer {
             public KeyRange getKeyRange(CompareOp op, Expression rhs) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 rhs.evaluate(null, ptr);
-                byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 // If the column is fixed width, fill is up to it's byte size
                 PDataType type = getColumn().getDataType();
                 if (type.isFixedWidth()) {
                     Integer length = getColumn().getMaxLength();
                     if (length != null) {
-                        key = ByteUtil.fillKey(key, length);
+                        // Go through type to pad as the fill character depends on the type.
+                        type.pad(ptr, length);
                     }
                 }
+                byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 return ByteUtil.getKeyRange(key, op, type);
             }
 
@@ -1216,7 +1222,8 @@ public class WhereOptimizer {
                                     // use to compute the next key when we evaluate the RHS row value constructor
                                     // below.  We could create a new childPart with a delegate column that returns
                                     // null for getByteSize().
-                                    if (lhs.getDataType().isFixedWidth() && lhs.getMaxLength() != null && key.length != lhs.getMaxLength()) {
+                                    if (lhs.getDataType().isFixedWidth() && lhs.getMaxLength() != null && key.length > lhs.getMaxLength()) {
+                                        // Don't use PDataType.pad(), as this only grows the value, while this is shrinking it.
                                         key = Arrays.copyOf(key, lhs.getMaxLength());
                                     }
                                     ptr.set(key);

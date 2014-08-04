@@ -64,8 +64,14 @@ public class ScanRanges {
                 keyRanges.add(KeyRange.getKeyRange(key));
             }
             ranges = Collections.singletonList(keyRanges);
-            schema = SchemaUtil.VAR_BINARY_SCHEMA;
-            slotSpan = ScanUtil.SINGLE_COLUMN_SLOT_SPAN;
+            if (keys.size() > 1) {
+                schema = SchemaUtil.VAR_BINARY_SCHEMA;
+                slotSpan = ScanUtil.SINGLE_COLUMN_SLOT_SPAN;
+            } else {
+                // Keep original schema and don't use skip scan as it's not necessary
+                // when there's a single key.
+                slotSpan = new int[] {schema.getMaxFields()-1};
+            }
         } else if (nBuckets != null) {
             List<List<KeyRange>> saltedRanges = Lists.newArrayListWithExpectedSize(ranges.size());
             saltedRanges.add(SaltingUtil.generateAllSaltingRanges(nBuckets));
@@ -134,7 +140,7 @@ public class ScanRanges {
         }
         boolean hasRangeKey = false, useSkipScan = false;
         for (List<KeyRange> orRanges : ranges) {
-            useSkipScan |= orRanges.size() > 1 | hasRangeKey;
+            useSkipScan |= (orRanges.size() > 1 || hasRangeKey);
             if (useSkipScan) {
                 return true;
             }

@@ -124,12 +124,6 @@ public class CaseExpression extends BaseCompoundExpression {
         return returnType;
     }
 
-//    @Override TODO: do we need this?
-//    public Integer getMaxLength() {
-//        return children.get(0).getMaxLength();
-//    }
-
-    
     @Override
     public void reset() {
         foundIndex = false;

@@ -26,6 +26,7 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.Format;
+import java.util.Arrays;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -179,6 +180,17 @@ public enum PDataType {
      * Fixed length single byte characters
      */
     CHAR("CHAR", Types.CHAR, String.class, null) { // Delegate to VARCHAR
+        @Override
+        public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+            if (ptr.getLength() >= maxLength) {
+                return;
+            }
+            byte[] newBytes = new byte[maxLength];
+            System.arraycopy(ptr.get(), ptr.getOffset(), newBytes, 0, ptr.getLength());
+            Arrays.fill(newBytes, ptr.getLength(), maxLength, StringUtil.SPACE_UTF8);
+            ptr.set(newBytes);
+        }
+
         @Override
         public Object pad(Object object, Integer maxLength) {
             String s = (String) object;
@@ -3123,6 +3135,16 @@ public enum PDataType {
         }
     },
     BINARY("BINARY", Types.BINARY, byte[].class, null) {
+        @Override
+        public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+            if (ptr.getLength() >= maxLength) {
+                return;
+            }
+            byte[] newBytes = new byte[maxLength];
+            System.arraycopy(ptr.get(), ptr.getOffset(), newBytes, 0, ptr.getLength());
+            ptr.set(newBytes);
+        }
+        
         @Override
         public Object pad(Object object, Integer maxLength) {
             byte[] b = (byte[]) object;
@@ -7134,6 +7156,9 @@ public enum PDataType {
 
     public Object pad(Object object, Integer maxLength) {
         return object;
+    }
+    
+    public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
     }
     
 }
