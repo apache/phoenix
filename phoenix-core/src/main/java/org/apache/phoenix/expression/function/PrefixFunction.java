@@ -22,13 +22,13 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.StringUtil;
 
 abstract public class PrefixFunction extends ScalarFunction {
     public PrefixFunction() {
@@ -47,13 +47,6 @@ abstract public class PrefixFunction extends ScalarFunction {
         return false;
     }
 
-    private static byte[] evaluateExpression(Expression rhs) {
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        rhs.evaluate(null, ptr);
-        byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
-        return key;
-    }
-    
     @Override
     public KeyPart newKeyPart(final KeyPart childPart) {
         return new KeyPart() {
@@ -71,27 +64,35 @@ abstract public class PrefixFunction extends ScalarFunction {
 
             @Override
             public KeyRange getKeyRange(CompareOp op, Expression rhs) {
-                byte[] key;
-                KeyRange range;
+                byte[] lowerRange = KeyRange.UNBOUND;
+                byte[] upperRange = KeyRange.UNBOUND;
+                boolean lowerInclusive = true;
                 PDataType type = getColumn().getDataType();
                 switch (op) {
                 case EQUAL:
-                    key = evaluateExpression(rhs);
-                    range = type.getKeyRange(key, true, ByteUtil.nextKey(key), false);
+                    lowerRange = evaluateExpression(rhs);
+                    upperRange = ByteUtil.nextKey(lowerRange);
                     break;
                 case GREATER:
-                    key = evaluateExpression(rhs);
-                    range = type.getKeyRange(ByteUtil.nextKey(key), true, KeyRange.UNBOUND, false);
+                    lowerRange = ByteUtil.nextKey(evaluateExpression(rhs));
                     break;
                 case LESS_OR_EQUAL:
-                    key = evaluateExpression(rhs);
-                    range = type.getKeyRange(KeyRange.UNBOUND, false, ByteUtil.nextKey(key), false);
+                    upperRange = ByteUtil.nextKey(evaluateExpression(rhs));
+                    lowerInclusive = false;
                     break;
                 default:
                     return childPart.getKeyRange(op, rhs);
                 }
                 Integer length = getColumn().getMaxLength();
-                return length == null || !type.isFixedWidth() ? range : range.fill(length);
+                if (type.isFixedWidth() && length != null) {
+                    if (lowerRange != KeyRange.UNBOUND) {
+                        lowerRange = StringUtil.padChar(lowerRange, length);
+                    }
+                    if (upperRange != KeyRange.UNBOUND) {
+                        upperRange = StringUtil.padChar(upperRange, length);
+                    }
+                }
+                return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, false);
             }
         };
     }

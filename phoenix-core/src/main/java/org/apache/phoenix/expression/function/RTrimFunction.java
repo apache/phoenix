@@ -104,24 +104,33 @@ public class RTrimFunction extends ScalarFunction {
         return new KeyPart() {
             @Override
             public KeyRange getKeyRange(CompareOp op, Expression rhs) {
-                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                rhs.evaluate(null, ptr);
-                byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                byte[] lowerRange = KeyRange.UNBOUND;
+                byte[] upperRange = KeyRange.UNBOUND;
+                boolean lowerInclusive = true;
+                
                 PDataType type = getColumn().getDataType();
-                KeyRange range;
                 switch (op) {
                 case EQUAL:
-                    range = type.getKeyRange(key, true, ByteUtil.nextKey(ByteUtil.concat(key, new byte[] {StringUtil.SPACE_UTF8})), false);
+                    lowerRange = evaluateExpression(rhs);
+                    upperRange = ByteUtil.nextKey(ByteUtil.concat(lowerRange, new byte[] {StringUtil.SPACE_UTF8}));
                     break;
                 case LESS_OR_EQUAL:
-                    range = type.getKeyRange(KeyRange.UNBOUND, false, ByteUtil.nextKey(ByteUtil.concat(key, new byte[] {StringUtil.SPACE_UTF8})), false);
+                    lowerInclusive = false;
+                    upperRange = ByteUtil.nextKey(ByteUtil.concat(evaluateExpression(rhs), new byte[] {StringUtil.SPACE_UTF8}));
                     break;
                 default:
-                    range = childPart.getKeyRange(op, rhs);
-                    break;
+                    return childPart.getKeyRange(op, rhs);
                 }
                 Integer length = getColumn().getMaxLength();
-                return length == null || !type.isFixedWidth() ? range : range.fill(length);
+                if (type.isFixedWidth() && length != null) {
+                    if (lowerRange != KeyRange.UNBOUND) {
+                        lowerRange = StringUtil.padChar(lowerRange, length);
+                    }
+                    if (upperRange != KeyRange.UNBOUND) {
+                        upperRange = StringUtil.padChar(upperRange, length);
+                    }
+                }
+                return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, false);
             }
 
             @Override

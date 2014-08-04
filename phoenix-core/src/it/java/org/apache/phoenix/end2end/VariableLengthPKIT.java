@@ -1451,13 +1451,21 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             "SELECT CASE WHEN 'a' IN (null,'b') THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
             "SELECT CASE WHEN NOT 'a' IN ('c','b') THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
             "SELECT CASE WHEN 1 IN ('foo',2,1) THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
+            "SELECT CASE WHEN NOT null IN ('c','b') THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
+            "SELECT CASE WHEN NOT null IN (null,'c','b') THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
+            "SELECT CASE WHEN null IN (null,'c','b') THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
+            "SELECT CASE WHEN 'a' IN (null,1) THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
         };
         String result[] = {
             "1",
-            "2",
+            "1",
             "2",
             "1",
             "1",
+            "2",
+            "2",
+            "2",
+            "2"
         };
         assertEquals(query.length,result.length);
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5

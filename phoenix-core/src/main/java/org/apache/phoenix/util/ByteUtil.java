@@ -462,8 +462,7 @@ public class ByteUtil {
     }
 
     /**
-     * Expand the key to length bytes using the fillByte to fill the
-     * bytes beyond the current key length.
+     * Expand the key to length bytes using a null byte.
      */
     public static byte[] fillKey(byte[] key, int length) {
         if(key.length > length) {
@@ -475,6 +474,22 @@ public class ByteUtil {
         byte[] newBound = new byte[length];
         System.arraycopy(key, 0, newBound, 0, key.length);
         return newBound;
+    }
+
+    /**
+     * Expand the key to length bytes using the fillByte to fill the
+     * bytes beyond the current key length.
+     */
+    public static void nullPad(ImmutableBytesWritable ptr, int length) {
+        if(ptr.getLength() > length) {
+            throw new IllegalStateException();
+        }
+        if (ptr.getLength() == length) {
+            return;
+        }
+        byte[] newBound = new byte[length];
+        System.arraycopy(ptr.get(), ptr.getOffset(), newBound, 0, ptr.getLength());
+        ptr.set(newBound);
     }
 
     /**

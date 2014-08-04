@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.commons.lang.StringUtils.rightPad;
 import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
@@ -95,14 +94,19 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         conn.createStatement().execute(baseDataTableDDL);
         conn.close();
         
-        //upsert rows in the history table.
+        //upsert rows in the data table.
         Map<String, List<String>> historyIdsPerTenant = createHistoryTableRows(dataTableName, tenantIds, numRowsPerTenant);
         
-        //create sequence. Use the sequence to upsert select records in cursor table.
         String tenantId = tenantIds[0];
         String cursorQueryId = "00TcursrqueryId";
         String tenantViewName = dataTableMultiTenant ? ("HISTORY_TABLE" + "_" + tenantId) : null;
         assertEquals(numRowsPerTenant, upsertSelectRecordsInCursorTableForTenant(dataTableName, dataTableMultiTenant, tenantId, tenantViewName, cursorQueryId));
+        
+        Connection conn2 = DriverManager.getConnection(getUrl());
+        ResultSet rs = conn2.createStatement().executeQuery("SELECT count(*) from " + cursorTableName);
+        rs.next();
+        assertEquals(numRowsPerTenant, rs.getInt(1));
+        conn2.close();
         
         int startOrder = 0;
         int endOrder = 5;
@@ -132,9 +136,10 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
                 List<String> parentIds = new ArrayList<String>();
                 for (int i = 0; i < numRowsPerTenant; i++) {
                     stmt.setString(1, tenantIds[j]);
-                    stmt.setString(2, rightPad("parentId", 15, 'p'));
+                    String parentId = "parentId" + i;
+                    stmt.setString(2, parentId);
                     stmt.setDate(3, new Date(100));
-                    String historyId = rightPad("history" + i, 15, 'h'); 
+                    String historyId = "historyId" + i; 
                     stmt.setString(4, historyId);
                     stmt.setString(5, "datatype");
                     stmt.setString(6, "oldval");
@@ -154,6 +159,8 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
     private int upsertSelectRecordsInCursorTableForTenant(String baseTableName, boolean dataTableMultiTenant, String tenantId, String tenantViewName, String cursorQueryId) throws Exception {
         String sequenceName = "\"" + tenantId + "_SEQ\"";
         Connection conn = dataTableMultiTenant ? getTenantSpecificConnection(tenantId) : DriverManager.getConnection(getUrl());
+        
+        // Create a sequence. This sequence is used to fill cursor_order column for each row inserted in the cursor table.
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " CACHE " + Long.MAX_VALUE);
         conn.setAutoCommit(true);
         if (dataTableMultiTenant) {
@@ -162,6 +169,8 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         try {
             String tableName = dataTableMultiTenant ? tenantViewName : baseTableName;
             String tenantIdFilter = dataTableMultiTenant ? "" : " WHERE TENANT_ID = ? ";
+            
+            // Using dynamic columns, we can use the same cursor table for storing primary keys for all the tables.  
             String upsertSelectDML = "UPSERT INTO CURSOR_TABLE " +
                                      "(TENANT_ID, QUERY_ID, CURSOR_ORDER, PARENT_ID CHAR(15), CREATED_DATE DATE, ENTITY_HISTORY_ID CHAR(15)) " + 
                                      "SELECT ?, ?, NEXT VALUE FOR " + sequenceName + ", PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID " +

@@ -621,18 +621,19 @@ public class PTableImpl implements PTable {
                 deleteQuietly(unsetValues, kvBuilder, kvBuilder.buildDeleteColumns(keyPtr, column
                         .getFamilyName().getBytesPtr(), column.getName().getBytesPtr(), ts));
             } else {
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable(byteValue);
             	Integer	maxLength = column.getMaxLength();
             	if (type.isFixedWidth() && maxLength != null) {
-    				if (byteValue.length <= maxLength) { 
-                        byteValue = StringUtil.padChar(byteValue, maxLength);
-                    } else if (byteValue.length > maxLength) {
+    				if (ptr.getLength() <= maxLength) {
+                        type.pad(ptr, maxLength);
+                    } else if (ptr.getLength() > maxLength) {
                         throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + type.toObject(byteValue) + ")");
                     }
             	}
                 removeIfPresent(unsetValues, family, qualifier);
                 addQuietly(setValues, kvBuilder, kvBuilder.buildPut(keyPtr, column.getFamilyName()
                         .getBytesPtr(),
-                        column.getName().getBytesPtr(), ts, new ImmutableBytesPtr(byteValue)));
+                        column.getName().getBytesPtr(), ts, ptr));
             }
         }
         
