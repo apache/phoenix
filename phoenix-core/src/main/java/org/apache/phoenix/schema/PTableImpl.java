@@ -116,6 +116,8 @@ public class PTableImpl implements PTable {
     private int estimatedSize;
     
     public PTableImpl() {
+        this.indexes = Collections.emptyList();
+        this.physicalNames = Collections.emptyList();
     }
 
     public PTableImpl(PName tenantId, String schemaName, String tableName, long timestamp, List<PColumnFamily> families) { // For base table of mapped VIEW
@@ -138,7 +140,7 @@ public class PTableImpl implements PTable {
             familyByString.put(family.getName().getString(), family);
         }
         this.families = families;
-        this.physicalNames = Collections.emptyList();;
+        this.physicalNames = Collections.emptyList();
     }
 
     public PTableImpl(long timeStamp) { // For delete marker

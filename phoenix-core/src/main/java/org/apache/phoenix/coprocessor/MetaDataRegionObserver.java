@@ -123,12 +123,14 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
      *
      */
     public static class BuildIndexScheduleTask extends TimerTask {
-      // inProgress is to prevent timer from invoking a new task while previous one is still running
-      private final static AtomicInteger inProgress = new AtomicInteger(0);
-      RegionCoprocessorEnvironment env;
-      public BuildIndexScheduleTask(RegionCoprocessorEnvironment env) {
-        this.env = env;
-      }
+        // inProgress is to prevent timer from invoking a new task while previous one is still
+        // running
+        private final static AtomicInteger inProgress = new AtomicInteger(0);
+        RegionCoprocessorEnvironment env;
+
+        public BuildIndexScheduleTask(RegionCoprocessorEnvironment env) {
+            this.env = env;
+        }
       
         private String getJdbcUrl() {
             String zkQuorum = this.env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
@@ -205,6 +207,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
                     byte[][] rowKeyMetaData = new byte[3][];
                     SchemaUtil.getVarChars(r.getRow(), 3, rowKeyMetaData);
+                    byte[] schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
                     byte[] indexTable = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
 
                     // validity check
@@ -216,8 +219,11 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     if (conn == null) {
                         conn = DriverManager.getConnection(getJdbcUrl()).unwrap(PhoenixConnection.class);
                     }
-                    PTable dataPTable = PhoenixRuntime.getTable(conn, Bytes.toString(dataTable));
-                    PTable indexPTable = PhoenixRuntime.getTable(conn, Bytes.toString(indexTable));
+
+                    String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTable);
+                    String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTable);
+                    PTable dataPTable = PhoenixRuntime.getTable(conn, dataTableFullName);
+                    PTable indexPTable = PhoenixRuntime.getTable(conn, indexTableFullName);
                     if (!MetaDataUtil.tableRegionsOnline(this.env.getConfiguration(), indexPTable)) {
                         LOG.debug("Index rebuild has been skipped because not all regions of index table="
                                 + indexPTable.getName() + " are online.");

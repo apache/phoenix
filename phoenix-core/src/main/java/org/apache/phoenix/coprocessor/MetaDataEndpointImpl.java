@@ -69,6 +69,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseEndpointCoprocessor;
@@ -150,6 +151,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
     private static final KeyValue MULTI_TENANT_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, MULTI_TENANT_BYTES);
     private static final KeyValue VIEW_TYPE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VIEW_TYPE_BYTES);
     private static final KeyValue VIEW_INDEX_ID_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VIEW_INDEX_ID_BYTES);
+    private static final KeyValue INDEX_DISABLE_TIMESTAMP_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
     private static final List<KeyValue> TABLE_KV_COLUMNS = Arrays.<KeyValue>asList(
             TABLE_TYPE_KV,
             TABLE_SEQ_NUM_KV,
@@ -164,7 +166,8 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             DISABLE_WAL_KV,
             MULTI_TENANT_KV,
             VIEW_TYPE_KV,
-            VIEW_INDEX_ID_KV
+            VIEW_INDEX_ID_KV,
+            INDEX_DISABLE_TIMESTAMP_KV
             );
     static {
         Collections.sort(TABLE_KV_COLUMNS, KeyValue.COMPARATOR);
@@ -374,6 +377,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                 tableKeyValues[j++] = kv;
                 i++;
             } else if (cmp > 0) {
+                timeStamp = Math.max(timeStamp, kv.getTimestamp()); 
                 tableKeyValues[j++] = null;
             } else {
                 i++; // shouldn't happen - means unexpected KV in system table header row
@@ -1138,6 +1142,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             try {
                 Get get = new Get(key);
                 get.setTimeRange(PTable.INITIAL_SEQ_NUM, timeStamp);
+                get.addColumn(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
                 get.addColumn(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
                 get.addColumn(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
                 Result currentResult = region.get(get);
@@ -1146,6 +1151,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                 }
                 KeyValue currentStateKV = currentResult.getColumnLatest(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
                 KeyValue currentDisableTimeStamp = currentResult.getColumnLatest(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
+                KeyValue dataTableKV = currentResult.getColumnLatest(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
                
                 PIndexState currentState = PIndexState.fromSerializedValue(currentStateKV.getBuffer()[currentStateKV.getValueOffset()]);
                 
@@ -1192,10 +1198,23 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                 }
                 
                 if (currentState != newState) {
-                    region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]>emptySet());
+                    byte[] dataTableKey = null;
+                    if(dataTableKV != null) {
+                        dataTableKey = SchemaUtil.getTableKey(tenantId, schemaName, dataTableKV.getValue());
+                    }
+                    if(dataTableKey != null) {
+                        // insert an empty KV to trigger time stamp update on data table row
+                        Put p = new Put(dataTableKey);
+                        p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp, ByteUtil.EMPTY_BYTE_ARRAY);
+                        tableMetadata.add(p);
+                    }
+                    region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet());
                     // Invalidate from cache
                     Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.getEnvironment()).getMetaDataCache();
                     metaDataCache.invalidate(cacheKey);
+                    if(dataTableKey != null) {
+                        metaDataCache.invalidate(new ImmutableBytesPtr(dataTableKey));
+                    }
                 }
                 // Get client timeStamp from mutations, since it may get updated by the mutateRowsWithLocks call
                 long currentTime = MetaDataUtil.getClientTimeStamp(tableMetadata);

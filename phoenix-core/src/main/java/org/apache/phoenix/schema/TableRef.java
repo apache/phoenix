@@ -22,7 +22,7 @@ import org.apache.hadoop.hbase.HConstants;
 
 
 public final class TableRef {
-    private final PTable table;
+    private PTable table;
     private final String alias;
     private final long upperBoundTimeStamp;
     private final long lowerBoundTimeStamp;
@@ -55,6 +55,10 @@ public final class TableRef {
     
     public PTable getTable() {
         return table;
+    }
+    
+    public void setTable(PTable value) {
+        this.table = value;
     }
 
     public String getTableAlias() {

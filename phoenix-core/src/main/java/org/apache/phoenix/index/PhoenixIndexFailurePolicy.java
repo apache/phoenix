@@ -72,6 +72,7 @@ public class PhoenixIndexFailurePolicy extends  KillServerOnFailurePolicy {
     @Override
     public void handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted, Exception cause) throws IOException {
         Set<HTableInterfaceReference> refs = attempted.asMap().keySet();
+        String indexTableName = "";
         try {
             for (HTableInterfaceReference ref : refs) {
                 long minTimeStamp = 0;
@@ -89,7 +90,7 @@ public class PhoenixIndexFailurePolicy extends  KillServerOnFailurePolicy {
                 }
                 
                 // Disable the index by using the updateIndexState method of MetaDataProtocol end point coprocessor.
-                String indexTableName = ref.getTableName();
+                indexTableName = ref.getTableName();
                 byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(indexTableName);
                 HTableInterface systemTable = env.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
                 MetaDataProtocol mdProxy = systemTable.coprocessorProxy(MetaDataProtocol.class, indexTableKey);
@@ -103,13 +104,14 @@ public class PhoenixIndexFailurePolicy extends  KillServerOnFailurePolicy {
                 MetaDataMutationResult result = mdProxy.updateIndexState(tableMetadata);
                 if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     LOG.warn("Attempt to disable index " + indexTableName + " failed with code = " + result.getMutationCode() + ". Will use default failure policy instead.");
-                    super.handleFailure(attempted, cause);
-                    throw new DoNotRetryIOException("Attemp to writes to " + indexTableName + " failed.", cause);
+                    throw new DoNotRetryIOException("Attemp to disable " + indexTableName + " failed.");
                 }
                 LOG.info("Successfully disabled index " + indexTableName + " due to an exception while writing updates.", cause);
             }
         } catch (Throwable t) {
+            LOG.warn("handleFailure failed", t);
             super.handleFailure(attempted, cause);
+            throw new DoNotRetryIOException("Attemp to writes to " + indexTableName + " failed.", cause);
         }
     }
 
