@@ -124,12 +124,14 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
      *
      */
     public static class BuildIndexScheduleTask extends TimerTask {
-      // inProgress is to prevent timer from invoking a new task while previous one is still running
-      private final static AtomicInteger inProgress = new AtomicInteger(0);
-      RegionCoprocessorEnvironment env;
-      public BuildIndexScheduleTask(RegionCoprocessorEnvironment env) {
-        this.env = env;
-      }
+        // inProgress is to prevent timer from invoking a new task while previous one is still
+        // running
+        private final static AtomicInteger inProgress = new AtomicInteger(0);
+        RegionCoprocessorEnvironment env;
+
+        public BuildIndexScheduleTask(RegionCoprocessorEnvironment env) {
+            this.env = env;
+        }
       
         private String getJdbcUrl() {
             String zkQuorum = this.env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
