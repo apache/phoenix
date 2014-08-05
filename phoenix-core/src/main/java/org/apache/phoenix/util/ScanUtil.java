@@ -162,21 +162,21 @@ public class ScanUtil {
                 // Intersect found: replace skip scan with intersected one
                 scan.setFilter(newFilter);
             } else if (filter instanceof FilterList) {
-                FilterList filterList = (FilterList)filter;
-                Filter firstFilter = filterList.getFilters().get(0);
-                if (firstFilter instanceof SkipScanFilter) {
-                    SkipScanFilter oldFilter = (SkipScanFilter)firstFilter;
-                    SkipScanFilter newFilter = oldFilter.intersect(startKey, stopKey);
-                    if (newFilter == null) {
-                        return false;
+                FilterList oldList = (FilterList)filter;
+                FilterList newList = new FilterList(FilterList.Operator.MUST_PASS_ALL);
+                for (Filter f : oldList.getFilters()) {
+                    if (f instanceof SkipScanFilter) {
+                        SkipScanFilter newFilter = ((SkipScanFilter)f).intersect(startKey, stopKey);
+                        if (newFilter == null) {
+                            return false;
+                        }
+                        newList.addFilter(newFilter);
+                    } else {
+                        newList.addFilter(f);
                     }
-                    // Intersect found: replace skip scan with intersected one
-                    List<Filter> allFilters = new ArrayList<Filter>(filterList.getFilters().size());
-                    allFilters.addAll(filterList.getFilters());
-                    allFilters.set(0, newFilter);
-                    scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL,allFilters));
                 }
-            }
+                scan.setFilter(newList);
+           }
         }
         return mayHaveRows;
     }
