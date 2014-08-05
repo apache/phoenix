@@ -132,7 +132,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         try {
             Trace.addReceiver(TracingCompat.newTraceMetricSource());
         } catch (RuntimeException e) {
-            LOG.error("Tracing will outputs will not be written to any metrics sink! No "
+            LOG.warn("Tracing will outputs will not be written to any metrics sink! No "
                     + "TraceMetricsSink found on the classpath", e);
         }
     }
@@ -391,6 +391,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     @Override
     public void commit() throws SQLException {
         CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
             public Void call() throws SQLException {
                 mutationState.commit();
                 return null;
