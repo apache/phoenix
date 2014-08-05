@@ -134,7 +134,7 @@ public class MutableIndexFailureIT extends BaseTest {
         conn.commit();
 
         byte[] indexTable = Bytes.toBytes(INDEX_TABLE_FULL_NAME);
-        HBaseAdmin admin = this.util.getHBaseAdmin();
+        HBaseAdmin admin = util.getHBaseAdmin();
         HTableDescriptor indexTableDesc = admin.getTableDescriptor(indexTable);
         try{
           admin.disableTable(indexTable);
