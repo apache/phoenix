@@ -121,6 +121,7 @@ public class MutationState implements SQLCloseable {
     public long getUpdateCount() {
         return sizeOffset + numRows;
     }
+    
     /**
      * Combine a newer mutation with this one, where in the event of overlaps,
      * the newer one will take precedence.
@@ -288,6 +289,7 @@ public class MutationState implements SQLCloseable {
                     serverTimeStamp = timestamp;
                     if (result.wasUpdated()) {
                         // TODO: use bitset?
+                        table = connection.getMetaDataCache().getTable(new PTableKey(tenantId, table.getName().getString()));
                         PColumn[] columns = new PColumn[table.getColumns().size()];
                         for (Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry : entry.getValue().entrySet()) {
                             Map<PColumn,byte[]> valueEntry = rowEntry.getValue();
@@ -297,12 +299,12 @@ public class MutationState implements SQLCloseable {
                                 }
                             }
                         }
-                        table = connection.getMetaDataCache().getTable(new PTableKey(tenantId, table.getName().getString()));
                         for (PColumn column : columns) {
                             if (column != null) {
                                 table.getColumnFamily(column.getFamilyName().getString()).getColumn(column.getName().getString());
                             }
                         }
+                        tableRef.setTable(table);
                     }
                 }
             }

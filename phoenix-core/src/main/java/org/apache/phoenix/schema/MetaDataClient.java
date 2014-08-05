@@ -1461,10 +1461,9 @@ public class MetaDataClient {
                         .setSchemaName(schemaName).setTableName(tableName).build().buildException();
                 default:
                     try {
-                        // TODO: should we update the parent table by removing the index?
-                        connection.removeTable(tenantId, tableName);
-                    } catch (TableNotFoundException ignore) { } // Ignore - just means wasn't cached
-                    
+                        connection.removeTable(tenantId, SchemaUtil.getTableName(schemaName, tableName));
+                    } catch (TableNotFoundException ignore) {}// Ignore - just means wasn't cached
+                                        
                     if (result.getTable() != null && tableType != PTableType.VIEW) {
                         connection.setAutoCommit(true);
                         PTable table = result.getTable();
@@ -1530,7 +1529,7 @@ public class MetaDataClient {
         PName tenantId = connection.getTenantId();
         switch (mutationCode) {
         case TABLE_NOT_FOUND:
-            connection.removeTable(tenantId, tableName);
+            connection.removeTable(tenantId, SchemaUtil.getTableName(schemaName, tableName));
             throw new TableNotFoundException(schemaName, tableName);
         case UNALLOWED_TABLE_MUTATION:
             String columnName = null;
