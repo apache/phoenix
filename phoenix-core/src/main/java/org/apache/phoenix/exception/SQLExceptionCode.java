@@ -32,6 +32,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
+import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TypeMismatchException;
@@ -259,8 +260,14 @@ public enum SQLExceptionCode {
     SPLIT_POINT_NOT_CONSTANT(1105, "XCL04", "Split points must be constants."),
     BATCH_EXCEPTION(1106, "XCL05", "Exception while executing batch."),
     EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH(1107, "XCL06", "An executeUpdate is prohibited when the batch is not empty. Use clearBatch to empty the batch first."),
-    CANNOT_SPLIT_LOCAL_INDEX(1108,"XCL07", "Local index may not be pre-split"),
-    CANNOT_SALT_LOCAL_INDEX(1109,"XCL08", "Local index may not be salted"),
+    STALE_REGION_BOUNDARY_CACHE(1108, "XCL07", "Cache of region boundaries are out of date.", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new StaleRegionBoundaryCacheException(info.getSchemaName(), info.getTableName());
+        }
+    }),
+    CANNOT_SPLIT_LOCAL_INDEX(1109,"XCL08", "Local index may not be pre-split"),
+    CANNOT_SALT_LOCAL_INDEX(1110,"XCL09", "Local index may not be salted"),
     
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).

@@ -21,11 +21,15 @@ import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ServerUtil;
 import org.cloudera.htrace.Span;
@@ -73,7 +77,22 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
         return this.getClass().getName();
     }
     
-    abstract protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws Throwable;
+    
+    private static void throwIfScanOutOfRegion(Scan scan, HRegion region) throws DoNotRetryIOException {
+        byte[] lowerInclusiveScanKey = scan.getStartRow();
+        byte[] upperExclusiveScanKey = scan.getStopRow();
+        byte[] lowerInclusiveRegionKey = region.getStartKey();
+        byte[] upperExclusiveRegionKey = region.getEndKey();
+        if (Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
+            (Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0) ) {
+            @SuppressWarnings("deprecation")
+            Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTableName());
+            throw new DoNotRetryIOException(cause.getMessage(), cause);
+        }
+    }
+
+    abstract protected boolean isRegionObserverFor(Scan scan);
+    abstract protected RegionScanner doPostScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws Throwable;
     
     /**
      * Wrapper for {@link #postScannerOpen(ObserverContext, Scan, RegionScanner)} that ensures no non IOException is thrown,
@@ -87,8 +106,15 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
         // turn on tracing, if its enabled
         final Span child = Tracing.childOnServer(scan, rawConf, SCANNER_OPENED_TRACE_INFO);
         try {
-            final RegionScanner scanner = doPostScannerOpen(c, scan, s);
-            return new DelegateRegionScanner(scanner) {
+            RegionScanner scanner;
+            boolean isApplicable = isRegionObserverFor(scan);
+            if (isApplicable) {
+                throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
+                scanner = doPostScannerOpen(c, scan, s);
+            } else {
+                scanner = s;
+            }
+            scanner = new DelegateRegionScanner(scanner) {
                 @Override
                 public void close() throws IOException {
                     if (child != null) {
@@ -96,8 +122,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                     }
                     delegate.close();
                 }
-
             };
+            return scanner;
         } catch (Throwable t) {
             if (child != null) {
                 child.stop();
