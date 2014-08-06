@@ -201,7 +201,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         long ts = scan.getTimeRange().getMax();
         HRegion region = c.getEnvironment().getRegion();
         List<Mutation> mutations = Collections.emptyList();
-        if (isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null) {
+        boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
+        if (isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
             // TODO: size better
             mutations = Lists.newArrayListWithExpectedSize(1024);
             batchSize = c.getEnvironment().getConfiguration().getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
@@ -235,8 +236,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     rowCount++;
                     result.setKeyValues(results);
                     try {
-                        if (indexMaintainers != null && dataColumns==null && !localIndexScan) {
-                            // TODO: join back to data row here if scan attribute set
+                        if (buildLocalIndex) {
                             for (IndexMaintainer maintainer : indexMaintainers) {
                                 if (!results.isEmpty()) {
                                     result.getKey(ptr);
