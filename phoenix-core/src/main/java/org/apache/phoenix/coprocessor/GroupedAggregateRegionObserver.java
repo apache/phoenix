@@ -100,9 +100,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
 
         if (expressionBytes == null) {
             expressionBytes = scan.getAttribute(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS);
-            if (expressionBytes == null) {
-                return s;
-            }
             keyOrdered = true;
         }
         List<Expression> expressions = deserializeGroupByExpressions(expressionBytes);
@@ -515,5 +512,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 return false;
             }
         };
+    }
+
+    @Override
+    protected boolean isRegionObserverFor(Scan scan) {
+        return scan.getAttribute(BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS) != null ||
+               scan.getAttribute(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS) != null;
     }
 }

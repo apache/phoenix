@@ -118,11 +118,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
-        byte[] isUngroupedAgg = scan.getAttribute(BaseScannerRegionObserver.UNGROUPED_AGG);
-        if (isUngroupedAgg == null) {
-            return s;
-        }
-        
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         RegionScanner theScanner = s;
@@ -407,5 +402,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 throw new RuntimeException(e);
             }
         }
+    }
+
+    @Override
+    protected boolean isRegionObserverFor(Scan scan) {
+        return scan.getAttribute(BaseScannerRegionObserver.UNGROUPED_AGG) != null;
     }
 }
