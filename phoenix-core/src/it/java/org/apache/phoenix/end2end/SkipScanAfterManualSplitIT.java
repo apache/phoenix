@@ -38,7 +38,6 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -71,7 +70,7 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
         // props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(64));
         props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(32));
         // enables manual splitting on salted tables
-        // props.put(QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, Boolean.toString(false));
+        props.put(QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, Boolean.toString(false));
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1000));
         setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
@@ -277,7 +276,6 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
      * See PHOENIX-1133 and PHOENIX-1136 on apache JIRA for more details.
      * @throws java.sql.SQLException  from Connection
      */
-    @Ignore
     @Test
     public void testSkipScanInListOfRVCAfterManualSplit() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
