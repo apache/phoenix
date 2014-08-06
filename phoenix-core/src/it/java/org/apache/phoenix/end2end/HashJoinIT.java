@@ -797,7 +797,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT SORTED BY [I.0:NAME]\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME +"\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME +" [-32768]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        CLIENT MERGE SORT",
                 /* 
@@ -812,7 +812,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT SORTED BY [SUM(O.QUANTITY) DESC]\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME +"\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME +" [-32768]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        CLIENT MERGE SORT",          
                 /* 
@@ -835,7 +835,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     RIGHT JOIN joinItemTable i ON o.item_id = i.item_id 
                  *     GROUP BY i.name ORDER BY i.name
                  */
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME+"\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME+" [-32768]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.0:NAME]\n" +
                 "CLIENT MERGE SORT\n" +
@@ -902,14 +902,14 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     JOIN joinOrderTable o ON o.item_id = i.item_id AND quantity < 5000 
                  *     JOIN joinSupplierTable s ON i.supplier_id = s.supplier_id
                  */
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
                 "CLIENT MERGE SORT\n" + 
                 "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0 (SKIP MERGE)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
                 "    BUILD HASH TABLE 1\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + " [-32768]\n" +
                 "        CLIENT MERGE SORT",
                 /*
                  * testSelfJoin()
@@ -920,7 +920,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +"\n"  +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER "+ MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +" [-32768]\n"  +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        CLIENT MERGE SORT",
                 /*
@@ -929,13 +929,13 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     JOIN joinItemTable i2 ON i1.item_id = i2.supplier_id 
                  *     ORDER BY i1.name, i2.name
                  */
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +"\n"  +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +" [-32768]\n"  +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER SORTED BY [I1.0:NAME, I2.0:NAME]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +"\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +" [-32768]\n" +
                 "        CLIENT MERGE SORT",
                 /*
                  * testStarJoin()
@@ -948,10 +948,10 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + "\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " [-32768]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    BUILD HASH TABLE 1\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        CLIENT MERGE SORT",
                 /*
@@ -962,7 +962,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     JOIN joinItemTable i ON o.item_id = i.item_id 
                  *     ORDER BY order_id
                  */
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER SORTED BY [O.order_id]\n"+
                 "CLIENT MERGE SORT\n" +
@@ -971,7 +971,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "            BUILD HASH TABLE 0\n" +
-                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_CUSTOMER_TABLE_DISPLAY_NAME+"\n"+
+                "                CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_CUSTOMER_TABLE_DISPLAY_NAME+" [-32768]\n"+
                 "                CLIENT MERGE SORT",
                 /*
                  * testSubJoin()
@@ -995,7 +995,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "            SERVER FILTER BY order_id != '000000000000003'\n" +
                 "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "            BUILD HASH TABLE 0\n" +
-                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +"\n" +
+                "                CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +" [-32768]\n" +
                 "                    SERVER FILTER BY NAME != 'T3'\n" +
                 "                CLIENT MERGE SORT\n" +
                 "                    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
@@ -1014,7 +1014,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT SORTED BY [I.NAME]\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME+"\n"+
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME+" [-32768]\n"+
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        CLIENT MERGE SORT",
                 /* 
@@ -1031,7 +1031,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT SORTED BY [SUM(O.QUANTITY) DESC]\n" +
                 "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0 (SKIP MERGE)\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        CLIENT MERGE SORT",
                 /* 
@@ -1042,7 +1042,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     ON o.iid = i.iid 
                  *     ORDER BY o.q DESC NULLS LAST, i.iid
                  */     
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER SORTED BY [O.Q DESC NULLS LAST, I.IID]\n"+
                 "CLIENT MERGE SORT\n" +
@@ -1059,7 +1059,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     ON o.iid = i.iid 
                  *     ORDER BY o.q DESC, i.iid
                  */     
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER SORTED BY [O.Q DESC, I.IID]\n"+
                 "CLIENT MERGE SORT\n" +
@@ -1096,7 +1096,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "            SERVER FILTER BY order_id != '000000000000003'\n" +
                 "            PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "            BUILD HASH TABLE 0\n" +
-                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " +  MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "                CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +  MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
                 "                    SERVER FILTER BY NAME != 'T3'\n" +
                 "                CLIENT MERGE SORT\n" +      
                 "                    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
@@ -1115,7 +1115,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT 4 ROW LIMIT\n" +
                 "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER "+ MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
                 "        CLIENT MERGE SORT\n" +      
                 "    BUILD HASH TABLE 1(DELAYED EVALUATION)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
@@ -1131,7 +1131,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT 4 ROW LIMIT\n" +
                 "    PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
                 "    BUILD HASH TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER "+ MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    BUILD HASH TABLE 1(DELAYED EVALUATION)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
