@@ -123,13 +123,13 @@ public class WhereOptimizer {
             // If a parameter is bound to null (as will be the case for calculating ResultSetMetaData and
             // ParameterMetaData), this will be the case. It can also happen for an equality comparison
             // for unequal lengths.
-            if (keySlots == KeyExpressionVisitor.DEGENERATE_KEY_PARTS) {
+            if (keySlots == KeyExpressionVisitor.EMPTY_KEY_SLOTS) {
                 context.setScanRanges(ScanRanges.NOTHING);
                 return null;
             }
         }
         if (keySlots == null) {
-            keySlots = KeyExpressionVisitor.DEGENERATE_KEY_PARTS;
+            keySlots = KeyExpressionVisitor.EMPTY_KEY_SLOTS;
         }
         
         if (extractNodes == null) {
@@ -347,7 +347,7 @@ public class WhereOptimizer {
      * operators, CASE statements, and string concatenation.
      */
     public static class KeyExpressionVisitor extends TraverseNoExpressionVisitor<KeyExpressionVisitor.KeySlots> {
-        private static final KeySlots DEGENERATE_KEY_PARTS = new KeySlots() {
+        private static final KeySlots EMPTY_KEY_SLOTS = new KeySlots() {
             @Override
             public Iterator<KeySlot> iterator() {
                 return Iterators.emptyIterator();
@@ -365,7 +365,7 @@ public class WhereOptimizer {
         
         private KeySlots newKeyParts(KeySlot slot, Expression extractNode, KeyRange keyRange) {
             if (keyRange == null) {
-                return DEGENERATE_KEY_PARTS;
+                return EMPTY_KEY_SLOTS;
             }
             
             List<KeyRange> keyRanges = slot.getPKSpan() == 1 ? Collections.<KeyRange>singletonList(keyRange) : EVERYTHING_RANGES;
@@ -381,7 +381,7 @@ public class WhereOptimizer {
 
         private KeySlots newKeyParts(KeySlot slot, Expression extractNode, List<KeyRange> keyRanges, KeyRange minMaxRange) {
             if (isDegenerate(keyRanges)) {
-                return DEGENERATE_KEY_PARTS;
+                return EMPTY_KEY_SLOTS;
             }
             
             List<Expression> extractNodes = extractNode == null || slot.getKeyPart().getExtractNodes().isEmpty()
@@ -392,7 +392,7 @@ public class WhereOptimizer {
 
         private KeySlots newKeyParts(KeySlot slot, List<Expression> extractNodes, List<KeyRange> keyRanges, KeyRange minMaxRange) {
             if (isDegenerate(keyRanges)) {
-                return DEGENERATE_KEY_PARTS;
+                return EMPTY_KEY_SLOTS;
             }
             
             return new SingleKeySlot(new BaseKeyPart(slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, minMaxRange, slot.getOrderPreserving());
@@ -439,7 +439,7 @@ public class WhereOptimizer {
 
         private KeySlots newScalarFunctionKeyPart(KeySlot slot, ScalarFunction node) {
             if (isDegenerate(slot.getKeyRanges())) {
-                return DEGENERATE_KEY_PARTS;
+                return EMPTY_KEY_SLOTS;
             }
             KeyPart part = node.newKeyPart(slot.getKeyPart());
             if (part == null) {
@@ -452,7 +452,7 @@ public class WhereOptimizer {
 
         private KeySlots newCoerceKeyPart(KeySlot slot, final CoerceExpression node) {
             if (isDegenerate(slot.getKeyRanges())) {
-                return DEGENERATE_KEY_PARTS;
+                return EMPTY_KEY_SLOTS;
             }
             final KeyPart childPart = slot.getKeyPart();
             final ImmutableBytesWritable ptr = context.getTempPtr();
@@ -531,8 +531,8 @@ public class WhereOptimizer {
             List<Expression> minMaxExtractNodes = Lists.<Expression>newArrayList();
             int initPosition = (table.getBucketNum() ==null ? 0 : 1) + (this.context.getConnection().getTenantId() != null && table.isMultiTenant() ? 1 : 0) + (table.getViewIndexId() == null ? 0 : 1);
             for (KeySlots childSlot : childSlots) {
-                if (childSlot == DEGENERATE_KEY_PARTS) {
-                    return DEGENERATE_KEY_PARTS;
+                if (childSlot == EMPTY_KEY_SLOTS) {
+                    return EMPTY_KEY_SLOTS;
                 }
                 // FIXME: get rid of this min/max range BS now that a key range can span multiple columns
                 if (childSlot.getMinMaxRange() != null) { // Only set if in initial pk position
@@ -549,7 +549,7 @@ public class WhereOptimizer {
                             continue;
                         }
                         if (!intersectSlots(keySlot, slot)) {
-                            return DEGENERATE_KEY_PARTS;
+                            return EMPTY_KEY_SLOTS;
                         }
                     }
                 }
@@ -592,7 +592,7 @@ public class WhereOptimizer {
             List<KeyRange> slotRanges = Lists.newArrayList();
             KeyRange minMaxRange = KeyRange.EMPTY_RANGE;
             for (KeySlots childSlot : childSlots) {
-                if (childSlot == DEGENERATE_KEY_PARTS) {
+                if (childSlot == EMPTY_KEY_SLOTS) {
                     // TODO: can this ever happen and can we safely filter the expression tree?
                     continue;
                 }
@@ -834,7 +834,7 @@ public class WhereOptimizer {
             Expression firstChild = node.getChildren().get(0);
             Integer childNodeFixedLength = firstChild.getDataType().isFixedWidth() ? firstChild.getMaxLength() : null;
             if (childNodeFixedLength != null && key.length > childNodeFixedLength) {
-                return DEGENERATE_KEY_PARTS;
+                return EMPTY_KEY_SLOTS;
             }
             // TODO: is there a case where we'd need to go through the childPart to calculate the key range?
             PColumn column = childSlot.getKeyPart().getColumn();

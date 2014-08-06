@@ -308,8 +308,8 @@ public class LocalIndexIT extends BaseIndexIT {
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             
             assertEquals(
-                "CLIENT PARALLEL " + numRegions + "-WAY FULL SCAN OVER "
-                        + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)+"\nCLIENT MERGE SORT",
+                "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
+                        + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)+" [-32768]\nCLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
             
             rs = conn1.createStatement().executeQuery(query);
@@ -546,6 +546,28 @@ public class LocalIndexIT extends BaseIndexIT {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + INDEX_TABLE_NAME);
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
+        } finally {
+            conn1.close();
+        }
+    }
+    
+    @Test
+    public void testScanWhenATableHasMultipleLocalIndexes() throws Exception {
+        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try {
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('q',3,1,1,'c')");
+            conn1.commit();
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + "2 ON " + DATA_TABLE_NAME + "(k3)");
+            conn1.commit();
+            conn1 = DriverManager.getConnection(getUrl());
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + DATA_TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
         } finally {
             conn1.close();
         }
