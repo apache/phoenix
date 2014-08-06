@@ -25,9 +25,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
-
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 
 
 public class ServerUtil {
@@ -114,9 +114,14 @@ public class ServerUtil {
             // If the message matches the standard pattern, recover the SQLException and throw it.
             Matcher matcher = PATTERN.matcher(t.getLocalizedMessage());
             if (matcher.find()) {
-                int errorCode = Integer.parseInt(matcher.group(1));
-                String sqlState = matcher.group(2);
-                return new SQLException(matcher.group(), sqlState, errorCode, t);
+                int statusCode = Integer.parseInt(matcher.group(1));
+                SQLExceptionCode code;
+                try {
+                    code = SQLExceptionCode.fromErrorCode(statusCode);
+                } catch (SQLException e) {
+                    return e;
+                }
+                return new SQLExceptionInfo.Builder(code).setMessage(matcher.group()).build().buildException();
             }
         	}
         return null;

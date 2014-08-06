@@ -131,10 +131,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
-        byte[] isUngroupedAgg = scan.getAttribute(BaseScannerRegionObserver.UNGROUPED_AGG);
-        if (isUngroupedAgg == null) {
-            return s;
-        }
         int offset = 0;
         if (ScanUtil.isLocalIndex(scan)) {
             /*
@@ -483,5 +479,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 throw new RuntimeException(e);
             }
         }
+    }
+
+    @Override
+    protected boolean isRegionObserverFor(Scan scan) {
+        return scan.getAttribute(BaseScannerRegionObserver.UNGROUPED_AGG) != null;
     }
 }

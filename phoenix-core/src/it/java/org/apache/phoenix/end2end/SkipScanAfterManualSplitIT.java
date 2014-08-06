@@ -28,10 +28,8 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -44,7 +42,6 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 @Category(HBaseManagedTimeTest.class)
@@ -71,9 +68,10 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(2);
         // needed for 64 region parallelization due to splitting
-        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(64));
+        // props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(64));
+        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(32));
         // enables manual splitting on salted tables
-        props.put(QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, Boolean.toString(false));
+        // props.put(QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, Boolean.toString(false));
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1000));
         setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
@@ -109,22 +107,11 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
         conn.close();
     }
     
-    private static void traceRegionBoundaries(ConnectionQueryServices services) throws Exception {
-        List<String> boundaries = Lists.newArrayList();
-        List<HRegionLocation> regions = services.getAllTableRegions(TABLE_NAME_BYTES);
-        for (HRegionLocation region : regions.subList(1, regions.size())) {
-            boundaries.add(Bytes.toStringBinary(region.getRegionInfo().getStartKey()));
-        }
-        System.out.println("Region boundaries:\n" + boundaries);
-    }
-
-    @Ignore
     @Test
     public void testManualSplit() throws Exception {
         initTable();
         Connection conn = DriverManager.getConnection(getUrl());
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        traceRegionBoundaries(services);
         int nRegions = services.getAllTableRegions(TABLE_NAME_BYTES).size();
         int nInitialRegions = nRegions;
         HBaseAdmin admin = services.getAdmin();
@@ -144,7 +131,6 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
             String query = "SELECT /*+ NO_INTRA_REGION_PARALLELIZATION */ count(*) FROM S WHERE a IN ('tl','jt')";
             ResultSet rs1 = conn.createStatement().executeQuery(query);
             assertTrue(rs1.next());
-            traceRegionBoundaries(services);
             nRegions = services.getAllTableRegions(TABLE_NAME_BYTES).size();
             // Region cache has been updated, as there are more regions now
             assertNotEquals(nRegions, nInitialRegions);
@@ -291,6 +277,7 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
      * See PHOENIX-1133 and PHOENIX-1136 on apache JIRA for more details.
      * @throws java.sql.SQLException  from Connection
      */
+    @Ignore
     @Test
     public void testSkipScanInListOfRVCAfterManualSplit() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());

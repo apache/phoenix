@@ -482,11 +482,42 @@ public class SchemaUtil {
     public static String getSchemaNameFromFullName(String tableName) {
         int index = tableName.indexOf(QueryConstants.NAME_SEPARATOR);
         if (index < 0) {
-            return ""; 
+            return StringUtil.EMPTY_STRING; 
         }
         return tableName.substring(0, index);
     }
     
+    private static int indexOf (byte[] bytes, byte b) {
+        for (int i = 0; i < bytes.length; i++) {
+            if (bytes[i] == b) {
+                return i;
+            }
+        }
+        return -1;
+    }
+    
+    public static String getSchemaNameFromFullName(byte[] tableName) {
+        if (tableName == null) {
+            return null;
+        }
+        int index = indexOf(tableName, QueryConstants.NAME_SEPARATOR_BYTE);
+        if (index < 0) {
+            return StringUtil.EMPTY_STRING; 
+        }
+        return Bytes.toString(tableName, 0, index);
+    }
+    
+    public static String getTableNameFromFullName(byte[] tableName) {
+        if (tableName == null) {
+            return null;
+        }
+        int index = indexOf(tableName, QueryConstants.NAME_SEPARATOR_BYTE);
+        if (index < 0) {
+            return Bytes.toString(tableName); 
+        }
+        return Bytes.toString(tableName, index+1, tableName.length);
+    }
+
     public static String getTableNameFromFullName(String tableName) {
         int index = tableName.indexOf(QueryConstants.NAME_SEPARATOR);
         if (index < 0) {
