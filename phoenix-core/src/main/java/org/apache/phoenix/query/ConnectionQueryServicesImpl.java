@@ -38,6 +38,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import javax.annotation.concurrent.GuardedBy;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -129,9 +131,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final String userName;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
     private final StatsManager statsManager;
+    
     // Cache the latest meta data here for future connections
-    private volatile PMetaData latestMetaData;
+    @GuardedBy("latestMetaDataLock")
+    private PMetaData latestMetaData;
     private final Object latestMetaDataLock = new Object();
+    
     // Lowest HBase version on the cluster.
     private int lowestClusterHBaseVersion = Integer.MAX_VALUE;
     private boolean hasInvalidIndexConfiguration = false;
@@ -139,7 +144,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private HConnection connection;
     private volatile boolean initialized;
+    
+    // writes guarded by "this"
     private volatile boolean closed;
+    
     private volatile SQLException initializationException;
     protected ConcurrentMap<SequenceKey,Sequence> sequenceMap = Maps.newConcurrentMap();
     private KeyValueBuilder kvBuilder;
@@ -275,7 +283,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 } finally {
                     try {
                         childServices.clear();
-                        latestMetaData = null;
+                        synchronized (latestMetaDataLock) {
+                            latestMetaData = null;
+                            latestMetaDataLock.notifyAll();
+                        }
                         if (connection != null) connection.close();
                     } catch (IOException e) {
                         if (sqlE == null) {
@@ -366,16 +377,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public PMetaData addTable(PTable table) throws SQLException {
-        try {
-            // If existing table isn't older than new table, don't replace
-            // If a client opens a connection at an earlier timestamp, this can happen
-            PTable existingTable = latestMetaData.getTable(new PTableKey(table.getTenantId(), table.getName().getString()));
-            if (existingTable.getTimeStamp() >= table.getTimeStamp()) {
-                return latestMetaData;
-            }
-        } catch (TableNotFoundException e) {
-        }
-        synchronized(latestMetaDataLock) {
+        synchronized (latestMetaDataLock) {
+            try {
+                throwConnectionClosedIfNullMetaData();
+                // If existing table isn't older than new table, don't replace
+                // If a client opens a connection at an earlier timestamp, this can happen
+                PTable existingTable = latestMetaData.getTable(new PTableKey(table.getTenantId(), table.getName().getString()));
+                if (existingTable.getTimeStamp() >= table.getTimeStamp()) { 
+                    return latestMetaData; 
+                }
+            } catch (TableNotFoundException e) {}
             latestMetaData = latestMetaData.addTable(table);
             latestMetaDataLock.notifyAll();
             return latestMetaData;
@@ -391,7 +402,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @param tenantId TODO
      */
     private PMetaData metaDataMutated(PName tenantId, String tableName, long tableSeqNum, Mutator mutator) throws SQLException {
-        synchronized(latestMetaDataLock) {
+        synchronized (latestMetaDataLock) {
+            throwConnectionClosedIfNullMetaData();
             PMetaData metaData = latestMetaData;
             PTable table;
             long endTime = System.currentTimeMillis() + DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS;
@@ -451,7 +463,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public PMetaData removeTable(PName tenantId, final String tableName) throws SQLException {
-        synchronized(latestMetaDataLock) {
+        synchronized (latestMetaDataLock) {
+            throwConnectionClosedIfNullMetaData();
             latestMetaData = latestMetaData.removeTable(tenantId, tableName);
             latestMetaDataLock.notifyAll();
             return latestMetaData;
@@ -476,7 +489,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public PhoenixConnection connect(String url, Properties info) throws SQLException {
-        return new PhoenixConnection(this, url, info, latestMetaData);
+        checkClosed();
+        synchronized (latestMetaDataLock) {
+            throwConnectionClosedIfNullMetaData();
+            latestMetaDataLock.notifyAll();
+            return new PhoenixConnection(this, url, info, latestMetaData);
+        }
     }
 
 
@@ -1088,7 +1106,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 MetaDataUtil.VIEW_INDEX_TABLE_PREFIX_BYTES.length,
                 physicalIndexTableName.length-MetaDataUtil.VIEW_INDEX_TABLE_PREFIX_BYTES.length);
         try {
-            table = latestMetaData.getTable(new PTableKey(tenantId, name));
+            synchronized (latestMetaDataLock) {
+                throwConnectionClosedIfNullMetaData();
+                table = latestMetaData.getTable(new PTableKey(tenantId, name));
+                latestMetaDataLock.notifyAll();
+            }
             if (table.getTimeStamp() >= timestamp) { // Table in cache is newer than client timestamp which shouldn't be the case
                 throw new TableNotFoundException(table.getSchemaName().getString(), table.getTableName().getString());
             }
@@ -1268,10 +1290,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             }
                             return null;
                         }
-                        if (closed) {
-                            throw new SQLException("The connection to the cluster has been closed.");
-                        }
-
+                        checkClosed();
                         SQLException sqlE = null;
                         PhoenixConnection metaConnection = null;
                         try {
@@ -1762,6 +1781,22 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public String getUserName() {
         return userName;
+    }
+    
+    private void checkClosed() {
+        if (closed) {
+            throwConnectionClosedException();
+        }
+    }
+    
+    private void throwConnectionClosedIfNullMetaData() {
+        if (latestMetaData == null) {
+            throwConnectionClosedException();
+        }
+    }
+    
+    private void throwConnectionClosedException() {
+        throw new IllegalStateException("Connection to the cluster is closed");
     }
     
 }
