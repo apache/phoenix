@@ -30,9 +30,9 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
-import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ServerUtil;
-import org.cloudera.htrace.Span;
+import org.cloudera.htrace.Trace;
+import org.cloudera.htrace.TraceScope;
 
 
 abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
@@ -103,31 +103,33 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public final RegionScanner postScannerOpen(
             final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan,
             final RegionScanner s) throws IOException {
-        // turn on tracing, if its enabled
-        final Span child = Tracing.childOnServer(scan, rawConf, SCANNER_OPENED_TRACE_INFO);
         try {
-            RegionScanner scanner;
-            boolean isApplicable = isRegionObserverFor(scan);
-            if (isApplicable) {
-                throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
-                scanner = doPostScannerOpen(c, scan, s);
-            } else {
-                scanner = s;
+            if (!isRegionObserverFor(scan)) {
+                return s;
             }
-            scanner = new DelegateRegionScanner(scanner) {
-                @Override
-                public void close() throws IOException {
-                    if (child != null) {
-                        child.stop();
+            throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
+            boolean success = false;
+            // turn on tracing, if its enabled
+            final TraceScope child = Trace.startSpan("Phoenix scanner openned on server");
+            try {
+                RegionScanner scanner = doPostScannerOpen(c, scan, s);
+                scanner = new DelegateRegionScanner(scanner) {
+                    @Override
+                    public void close() throws IOException {
+                        if (child.getSpan() != null) {
+                            child.getSpan().stop();
+                        }
+                        delegate.close();
                     }
-                    delegate.close();
+                };
+                success = true;
+                return scanner;
+            } finally {
+                if (!success && child.getSpan() != null) {
+                    child.getSpan().stop();
                 }
-            };
-            return scanner;
+            } 
         } catch (Throwable t) {
-            if (child != null) {
-                child.stop();
-            }
             ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
             return null; // impossible
         }
