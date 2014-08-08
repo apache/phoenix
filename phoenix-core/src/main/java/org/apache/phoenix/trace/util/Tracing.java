@@ -20,13 +20,19 @@ package org.apache.phoenix.trace.util;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.OperationWithAttributes;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.call.CallWrapper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
+import org.cloudera.htrace.TraceInfo;
 import org.cloudera.htrace.TraceScope;
 import org.cloudera.htrace.Tracer;
 import org.cloudera.htrace.impl.ProbabilitySampler;
@@ -40,10 +46,13 @@ import com.google.common.base.Function;
  */
 public class Tracing {
 
+    private static final Log LOG = LogFactory.getLog(Tracing.class);
+
     private static final String SEPARATOR = ".";
     // Constants for tracing across the wire
     public static final String TRACE_ID_ATTRIBUTE_KEY = "phoenix.trace.traceid";
     public static final String SPAN_ID_ATTRIBUTE_KEY = "phoenix.trace.spanid";
+    private static final String START_SPAN_MESSAGE = "Span received on server. Starting child";
 
     // Constants for passing into the metrics system
     public static final String TRACE_METRIC_PREFIX = "phoenix.trace.instance";
@@ -151,6 +160,60 @@ public class Tracing {
     public static String getSpanName(Span span) {
         return Tracing.TRACE_METRIC_PREFIX + span.getTraceId() + SEPARATOR + span.getParentId()
                 + SEPARATOR + span.getSpanId();
+    }
+
+    /**
+     * Check to see if tracing is current enabled. The trace for this thread is returned, if we are
+     * already tracing. Otherwise, checks to see if mutation has tracing enabled, and if so, starts
+     * a new span with the {@link Mutation}'s specified span as its parent.
+     * <p>
+     * This should only be run on the server-side as we base tracing on if we are currently tracing
+     * (started higher in the call-stack) or if the {@link Mutation} has the tracing attributes
+     * defined. As such, we would expect to continue the trace on the server-side based on the
+     * original sampling parameters.
+     * @param scan {@link Mutation} to check
+     * @param conf {@link Configuration} to read for the current sampler
+     * @param description description of the child span to start
+     * @return <tt>null</tt> if tracing is not enabled, or the parent {@link Span}
+     */
+    public static Span childOnServer(OperationWithAttributes scan, Configuration conf,
+            String description) {
+        // check to see if we are currently tracing. Generally, this will only work when we go to
+        // 0.96. CPs should always be setting up and tearing down their own tracing
+        Span current = Trace.currentSpan();
+        if (current == null) {
+            // its not tracing yet, but maybe it should be.
+            current = enable(scan, conf, description);
+        } else {
+            current = Trace.startSpan(description, current).getSpan();
+        }
+        return current;
+    }
+
+    /**
+     * Check to see if this mutation has tracing enabled, and if so, get a new span with the
+     * {@link Mutation}'s specified span as its parent.
+     * @param map mutation to check
+     * @param conf {@link Configuration} to check for the {@link Sampler} configuration, if we are
+     *            tracing
+     * @param description on the child to start
+     * @return a child span of the mutation, or <tt>null</tt> if tracing is not enabled.
+     */
+    @SuppressWarnings("unchecked")
+    private static Span enable(OperationWithAttributes map, Configuration conf, String description) {
+        byte[] traceid = map.getAttribute(TRACE_ID_ATTRIBUTE_KEY);
+        if (traceid == null) {
+            return NullSpan.INSTANCE;
+        }
+        byte[] spanid = map.getAttribute(SPAN_ID_ATTRIBUTE_KEY);
+        if (spanid == null) {
+            LOG.error("TraceID set to " + Bytes.toLong(traceid) + ", but span id was not set!");
+            return NullSpan.INSTANCE;
+        }
+        Sampler<?> sampler = SERVER_TRACE_LEVEL;
+        TraceInfo parent = new TraceInfo(Bytes.toLong(traceid), Bytes.toLong(spanid));
+        return Trace.startSpan(START_SPAN_MESSAGE + ": " + description,
+            (Sampler<TraceInfo>) sampler, parent).getSpan();
     }
 
     public static Span child(Span s, String d) {
