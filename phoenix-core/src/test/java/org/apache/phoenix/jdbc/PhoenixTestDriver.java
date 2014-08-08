@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Properties;
 
@@ -50,9 +51,8 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     @GuardedBy("this")
     private final QueryServices queryServices;
     
-    //The only place it is modified is under a lock provided by "this". 
-    //So ok to have it just as volatile.
-    private volatile boolean closed = false;
+    @GuardedBy("this")
+    private boolean closed = false;
 
     public PhoenixTestDriver() {
         this.overrideProps = ReadOnlyProps.EMPTY_PROPS;
@@ -73,11 +73,16 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
 
     @Override
     public boolean acceptsURL(String url) throws SQLException {
-        checkClosed();
         // Accept the url only if test=true attribute set
         return super.acceptsURL(url) && isTestUrl(url);
     }
-
+    
+    @Override
+    public synchronized Connection connect(String url, Properties info) throws SQLException {
+        checkClosed();
+        return super.connect(url, info);
+    }
+    
     @Override // public for testing
     public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties info) throws SQLException {
         checkClosed();
@@ -92,7 +97,7 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         return connectionQueryServices;
     }
     
-    private void checkClosed() {
+    private synchronized void checkClosed() {
         if (closed) {
             throw new IllegalStateException("The Phoenix jdbc test driver has been closed.");
         }

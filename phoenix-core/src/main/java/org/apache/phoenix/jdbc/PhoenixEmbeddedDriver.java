@@ -29,6 +29,8 @@ import java.util.Properties;
 import java.util.StringTokenizer;
 import java.util.logging.Logger;
 
+import javax.annotation.concurrent.Immutable;
+
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -50,6 +52,7 @@ import com.google.common.collect.Maps;
  * 
  * @since 0.1
  */
+@Immutable
 public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoenix.jdbc.Jdbc7Shim.Driver, SQLCloseable {
     /**
      * The protocol for Phoenix Network Client 
