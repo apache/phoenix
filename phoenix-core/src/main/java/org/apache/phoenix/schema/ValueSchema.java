@@ -56,6 +56,11 @@ public abstract class ValueSchema implements Writable {
         init(minNullable, fields);
     }
     
+    @Override
+    public String toString() {
+        return fields.toString();
+    }
+    
     public int getEstimatedSize() { // Memory size of ValueSchema
         int count = fieldIndexByPosition.length;
         return SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE + SizedUtil.INT_SIZE * (4 + count) + 
@@ -185,6 +190,15 @@ public abstract class ValueSchema implements Writable {
                     this.byteSize = datum.getMaxLength();
                 }
             }
+        }
+        
+        @Override
+        public String toString() {
+            return (count == 1 ? "" : count + " * ") 
+                    + type.toString() 
+                    + (byteSize == 0 ? "" : "(" + byteSize + ")") 
+                    + (isNullable ? "" : " NOT NULL") 
+                    + (sortOrder == SortOrder.ASC ? "" : " " + sortOrder);
         }
         
         private Field(Field field, int count) {

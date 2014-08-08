@@ -75,6 +75,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     private int endKeyLength;
     private boolean isDone;
     private int offset;
+    private Cell nextCellHint;
 
     private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
@@ -121,14 +122,29 @@ public class SkipScanFilter extends FilterBase implements Writable {
 
     @Override
     public ReturnCode filterKeyValue(Cell kv) {
-        return navigate(kv.getRowArray(), kv.getRowOffset() + offset,kv.getRowLength()- offset,Terminate.AFTER);
+        ReturnCode code = navigate(kv.getRowArray(), kv.getRowOffset() + offset,kv.getRowLength()- offset,Terminate.AFTER);
+        if (code == ReturnCode.SEEK_NEXT_USING_HINT) {
+            setNextCellHint(kv);
+        }
+        return code;
     }
 
+    private void setNextCellHint(Cell kv) {
+        if (offset == 0) {
+            nextCellHint = new KeyValue(startKey, 0, startKeyLength,
+                    null, 0, 0, null, 0, 0, HConstants.LATEST_TIMESTAMP, Type.Maximum, null, 0, 0);
+        } else { // Prepend key of NextCellHint with bytes before offset
+            byte[] nextKey = new byte[offset + startKeyLength];
+            System.arraycopy(kv.getRowArray(), kv.getRowOffset(), nextKey, 0, offset);
+            System.arraycopy(startKey, 0, nextKey, offset, startKeyLength);
+            nextCellHint = new KeyValue(nextKey, 0, nextKey.length,
+                    null, 0, 0, null, 0, 0, HConstants.LATEST_TIMESTAMP, Type.Maximum, null, 0, 0);
+        }
+    }
+    
     @Override
     public Cell getNextCellHint(Cell kv) {
-        // TODO: don't allocate new key value every time here if possible
-        return isDone ? null : new KeyValue(startKey, 0, startKeyLength,
-                null, 0, 0, null, 0, 0, HConstants.LATEST_TIMESTAMP, Type.Maximum, null, 0, 0);
+        return isDone ? null : nextCellHint;
     }
 
     public boolean hasIntersect(byte[] lowerInclusiveKey, byte[] upperExclusiveKey) {
