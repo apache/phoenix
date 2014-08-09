@@ -271,12 +271,10 @@ public class PMetaDataImpl implements PMetaData {
         PTable table;
         Cache tables = metaData.clone();
         if ((table=tables.remove(new PTableKey(tenantId, tableName))) == null) {
-            throw new TableNotFoundException(tableName);
+            return this;
         } else {
             for (PTable index : table.getIndexes()) {
-                if (tables.remove(index.getKey()) == null) {
-                    throw new TableNotFoundException(index.getName().getString());
-                }
+                tables.remove(index.getKey());
             }
             // also remove its reference from parent table
             PName parent = table.getParentName();
