@@ -109,7 +109,7 @@ public class MutableIndexFailureIT extends BaseTest {
     private static HBaseTestingUtility util;
     private Timer scheduleTimer;
 
-    private static final String SCHEMA_NAME = "";
+    private static final String SCHEMA_NAME = "S";
     private static final String INDEX_TABLE_NAME = "I";
     private static final String DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "T");
     private static final String INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "I");
@@ -178,7 +178,7 @@ public class MutableIndexFailureIT extends BaseTest {
         stmt.execute();
         conn.commit();
 
-        TableName indexTable = TableName.valueOf(INDEX_TABLE_NAME);
+        TableName indexTable = TableName.valueOf(INDEX_TABLE_FULL_NAME);
         HBaseAdmin admin = this.util.getHBaseAdmin();
         HTableDescriptor indexTableDesc = admin.getTableDescriptor(indexTable);
         try{
@@ -221,7 +221,8 @@ public class MutableIndexFailureIT extends BaseTest {
         admin.createTable(indexTableDesc);
         do {
           Thread.sleep(15 * 1000); // sleep 15 secs
-          rs = conn.getMetaData().getTables(null, "", INDEX_TABLE_NAME, new String[] {PTableType.INDEX.toString()});
+          rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(SCHEMA_NAME), INDEX_TABLE_NAME,
+              new String[] { PTableType.INDEX.toString() });
           assertTrue(rs.next());
           if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
               break;
@@ -275,7 +276,7 @@ public class MutableIndexFailureIT extends BaseTest {
         
         // find a RS which doesn't has CATALOG table
         TableName catalogTable = TableName.valueOf("SYSTEM.CATALOG");
-        TableName indexTable = TableName.valueOf(INDEX_TABLE_NAME);
+        TableName indexTable = TableName.valueOf(INDEX_TABLE_FULL_NAME);
         final HBaseCluster cluster = this.util.getHBaseCluster();
         Collection<ServerName> rss = cluster.getClusterStatus().getServers();
         HBaseAdmin admin = this.util.getHBaseAdmin();
@@ -320,7 +321,8 @@ public class MutableIndexFailureIT extends BaseTest {
         // Verify the metadata for index is correct.       
         do {
           Thread.sleep(15 * 1000); // sleep 15 secs
-          rs = conn.getMetaData().getTables(null, "", INDEX_TABLE_NAME, new String[] {PTableType.INDEX.toString()});
+          rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(SCHEMA_NAME), INDEX_TABLE_NAME,
+              new String[] { PTableType.INDEX.toString() });
           assertTrue(rs.next());
           if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
               break;
