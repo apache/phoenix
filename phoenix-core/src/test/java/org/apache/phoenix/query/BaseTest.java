@@ -115,11 +115,9 @@ import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
-import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -662,8 +660,6 @@ public abstract class BaseTest {
     
     private static void deletePriorTables(long ts, Connection globalConn, String url) throws Exception {
         DatabaseMetaData dbmd = globalConn.getMetaData();
-        PMetaData cache = globalConn.unwrap(PhoenixConnection.class).getMetaDataCache();
-        cache.getTables();
         // Drop VIEWs first, as we don't allow a TABLE with views to be dropped
         // Tables are sorted by TENANT_ID
         List<String[]> tableTypesList = Arrays.asList(new String[] {PTableType.VIEW.toString()}, new String[] {PTableType.TABLE.toString()});

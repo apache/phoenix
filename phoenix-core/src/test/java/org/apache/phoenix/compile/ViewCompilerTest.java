@@ -64,7 +64,7 @@ public class ViewCompilerTest extends BaseConnectionlessQueryTest {
         
         StringBuilder buf = new StringBuilder();
         int count = 0;
-        for (PTable table : conn.getMetaDataCache().getTables()) {
+        for (PTable table : conn.getMetaDataCache()) {
             if (table.getType() == PTableType.VIEW) {
                 assertEquals(viewType, table.getViewType());
                 conn.createStatement().execute("DROP VIEW " + table.getName().getString());
