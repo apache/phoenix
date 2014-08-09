@@ -19,6 +19,7 @@ package org.apache.phoenix.schema;
 
 import static org.junit.Assert.assertEquals;
 
+import java.sql.SQLException;
 import java.util.Set;
 
 import org.apache.phoenix.util.TimeKeeper;
@@ -28,22 +29,22 @@ import com.google.common.collect.Sets;
 
 public class PMetaDataImplTest {
     
-    private static void addToTable(PMetaData.Cache cache, String name, int size) {
+    private static PMetaData addToTable(PMetaData metaData, String name, int size) throws SQLException {
         PTable table = new PSizedTable(new PTableKey(null,name), size);
-        cache.put(table.getKey(), table);
+        return metaData.addTable(table);
     }
     
-    private static PTable removeFromTable(PMetaData.Cache cache, String name) {
-        return cache.remove(new PTableKey(null,name));
+    private static PMetaData removeFromTable(PMetaData metaData, String name) throws SQLException {
+        return metaData.removeTable(null, name);
     }
     
-    private static PTable getFromTable(PMetaData.Cache cache, String name) {
-        return cache.get(new PTableKey(null,name));
+    private static PTable getFromTable(PMetaData metaData, String name) throws TableNotFoundException {
+        return metaData.getTable(new PTableKey(null,name));
     }
     
-    private static void assertNames(PMetaData.Cache cache, String... names) {
+    private static void assertNames(PMetaData metaData, String... names) {
         Set<String> actualTables = Sets.newHashSet();
-        for (PTable table : cache) {
+        for (PTable table : metaData) {
             actualTables.add(table.getKey().getName());
         }
         Set<String> expectedTables = Sets.newHashSet(names);
@@ -64,44 +65,43 @@ public class PMetaDataImplTest {
     public void testEviction() throws Exception {
         long maxSize = 10;
         PMetaData metaData = new PMetaDataImpl(5, maxSize, new TestTimeKeeper());
-        PMetaData.Cache cache = metaData.getTables();
-        addToTable(cache, "a", 5);
-        assertEquals(1, cache.size());
-        addToTable(cache, "b", 4);
-        assertEquals(2, cache.size());
-        addToTable(cache, "c", 3);
-        assertEquals(2, cache.size());
-        assertNames(cache, "b","c");
+        metaData = addToTable(metaData, "a", 5);
+        assertEquals(1, metaData.size());
+        metaData = addToTable(metaData, "b", 4);
+        assertEquals(2, metaData.size());
+        metaData = addToTable(metaData, "c", 3);
+        assertEquals(2, metaData.size());
+        assertNames(metaData, "b","c");
 
-        addToTable(cache, "b", 8);
-        assertEquals(1, cache.size());
-        assertNames(cache, "b");
+        metaData = addToTable(metaData, "b", 8);
+        assertEquals(1, metaData.size());
+        assertNames(metaData, "b");
 
-        addToTable(cache, "d", 11);
-        assertEquals(1, cache.size());
-        assertNames(cache, "d");
+        metaData = addToTable(metaData, "d", 11);
+        assertEquals(1, metaData.size());
+        assertNames(metaData, "d");
         
-        removeFromTable(cache, "d");
-        assertNames(cache);
+        metaData = removeFromTable(metaData, "d");
+        assertNames(metaData);
         
-        addToTable(cache, "a", 4);
-        assertEquals(1, cache.size());
-        addToTable(cache, "b", 3);
-        assertEquals(2, cache.size());
-        addToTable(cache, "c", 2);
-        assertEquals(3, cache.size());
-        assertNames(cache, "a", "b","c");
+        metaData = addToTable(metaData, "a", 4);
+        assertEquals(1, metaData.size());
+        metaData = addToTable(metaData, "b", 3);
+        assertEquals(2, metaData.size());
+        metaData = addToTable(metaData, "c", 2);
+        assertEquals(3, metaData.size());
+        assertNames(metaData, "a", "b","c");
         
-        getFromTable(cache, "a");
-        addToTable(cache, "d", 3);
-        assertEquals(3, cache.size());
-        assertNames(cache, "c", "a","d");
+        getFromTable(metaData, "a");
+        metaData = addToTable(metaData, "d", 3);
+        assertEquals(3, metaData.size());
+        assertNames(metaData, "c", "a","d");
         
         // Clone maintains insert order
-        cache = cache.clone();
-        addToTable(cache, "e", 6);
-        assertEquals(2, cache.size());
-        assertNames(cache, "d","e");
+        metaData = metaData.clone();
+        metaData = addToTable(metaData, "e", 6);
+        assertEquals(2, metaData.size());
+        assertNames(metaData, "d","e");
     }
     
     private static class PSizedTable extends PTableImpl {
