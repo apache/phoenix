@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.metrics.TracingTestCompat;
 import org.apache.phoenix.trace.Hadoop1TracingTestEnabler.Hadoop1Disabled;
@@ -44,6 +45,7 @@ import org.cloudera.htrace.TraceScope;
 import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 
 /**
@@ -51,6 +53,7 @@ import org.junit.runner.RunWith;
  */
 @RunWith(Hadoop1TracingTestEnabler.class)
 @Hadoop1Disabled("tracing")
+@Category(HBaseManagedTimeTest.class)
 public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
     private static final Log LOG = LogFactory.getLog(PhoenixTracingEndToEndIT.class);
@@ -138,6 +141,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         // look for the writes to make sure they were made
         Connection conn = getConnectionWithoutTracing();
         checkStoredTraces(conn, new TraceChecker() {
+            @Override
             public boolean foundTrace(TraceHolder trace, SpanInfo info) {
                 if (info.description.equals("child 1")) {
                     assertEquals("Not all annotations present", 1, info.annotationCount);
@@ -215,6 +219,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
          * where '*' is a generically named thread (e.g phoenix-1-thread-X)
          */
         boolean indexingCompleted = checkStoredTraces(conn, new TraceChecker() {
+            @Override
             public boolean foundTrace(TraceHolder trace, SpanInfo span) {
                 String traceInfo = trace.toString();
                 // skip logging traces that are just traces about tracing
@@ -339,6 +344,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         assertTrue("Get expected updates to trace table", updated.await(200, TimeUnit.SECONDS));
         // don't trace reads either
         boolean found = checkStoredTraces(conn, new TraceChecker() {
+            @Override
             public boolean foundTrace(TraceHolder trace) {
                 String traceInfo = trace.toString();
                 return traceInfo.contains(BaseScannerRegionObserver.SCANNER_OPENED_TRACE_INFO);
@@ -386,6 +392,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     private static class CountDownConnection extends DelegatingConnection {
         private CountDownLatch commit;
 
+        @SuppressWarnings("unchecked")
         public CountDownConnection(Connection conn, CountDownLatch commit) {
             super(conn);
             this.commit = commit;

@@ -32,6 +32,7 @@ import java.util.Properties;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.metrics.PhoenixAbstractMetric;
 import org.apache.phoenix.metrics.PhoenixMetricTag;
@@ -41,6 +42,7 @@ import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
 import org.cloudera.htrace.Span;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 
 /**
@@ -49,9 +51,10 @@ import org.junit.runner.RunWith;
  */
 @RunWith(Hadoop1TracingTestEnabler.class)
 @Hadoop1Disabled("tracing")
-public class TraceReaderTest extends BaseTracingTestIT {
+@Category(HBaseManagedTimeTest.class)
+public class PhoenixTraceReaderIT extends BaseTracingTestIT {
 
-    private static final Log LOG = LogFactory.getLog(TraceReaderTest.class);
+    private static final Log LOG = LogFactory.getLog(PhoenixTraceReaderIT.class);
 
     @Test
     public void singleSpan() throws Exception {
