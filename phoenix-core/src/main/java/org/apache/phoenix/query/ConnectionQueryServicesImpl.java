@@ -431,7 +431,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     // and the next time it's used it'll be pulled over from the server.
                     if (waitTime <= 0) {
                         logger.warn("Unable to update meta data repo within " + (DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS/1000) + " seconds for " + tableName);
-                        metaData = metaData.removeTable(tenantId, tableName);
+                        // There will never be a parentTableName here, as that would only
+                        // be non null for an index an we never add/remove columns from an index.
+                        metaData = metaData.removeTable(tenantId, tableName, null, HConstants.LATEST_TIMESTAMP);
                         break;
                     }
                     latestMetaDataLock.wait(waitTime);
@@ -462,10 +464,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      }
 
     @Override
-    public PMetaData removeTable(PName tenantId, final String tableName) throws SQLException {
+    public PMetaData removeTable(PName tenantId, final String tableName, String parentTableName, long tableTimeStamp) throws SQLException {
         synchronized (latestMetaDataLock) {
             throwConnectionClosedIfNullMetaData();
-            latestMetaData = latestMetaData.removeTable(tenantId, tableName);
+            latestMetaData = latestMetaData.removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
             latestMetaDataLock.notifyAll();
             return latestMetaData;
         }
