@@ -343,7 +343,7 @@ public class MetaDataClient {
                         return result;
                     }
                     if (code == MutationCode.TABLE_NOT_FOUND && tryCount + 1 == maxTryCount) {
-                        connection.removeTable(tenantId, fullTableName);
+                        connection.removeTable(tenantId, fullTableName, table.getParentName() == null ? null : table.getParentName().getString(), table.getTimeStamp());
                     }
                 }
             }
@@ -1460,7 +1460,7 @@ public class MetaDataClient {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_TABLE)
                         .setSchemaName(schemaName).setTableName(tableName).build().buildException();
                 default:
-                    connection.removeTable(tenantId, SchemaUtil.getTableName(schemaName, tableName));
+                    connection.removeTable(tenantId, SchemaUtil.getTableName(schemaName, tableName), parentTableName, result.getMutationTime());
                                         
                     if (result.getTable() != null && tableType != PTableType.VIEW) {
                         connection.setAutoCommit(true);
@@ -1527,7 +1527,8 @@ public class MetaDataClient {
         PName tenantId = connection.getTenantId();
         switch (mutationCode) {
         case TABLE_NOT_FOUND:
-            connection.removeTable(tenantId, SchemaUtil.getTableName(schemaName, tableName));
+            // Only called for add/remove column so parentTableName will always be null
+            connection.removeTable(tenantId, SchemaUtil.getTableName(schemaName, tableName), null, HConstants.LATEST_TIMESTAMP);
             throw new TableNotFoundException(schemaName, tableName);
         case UNALLOWED_TABLE_MUTATION:
             String columnName = null;

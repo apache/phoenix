@@ -86,9 +86,9 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public PMetaData removeTable(PName tenantId, String tableName)
+    public PMetaData removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp)
             throws SQLException {
-        return getDelegate().removeTable(tenantId, tableName);
+        return getDelegate().removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
     }
 
     @Override

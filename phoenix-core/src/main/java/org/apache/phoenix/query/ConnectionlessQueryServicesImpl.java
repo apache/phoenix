@@ -160,9 +160,9 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public PMetaData removeTable(PName tenantId, String tableName)
+    public PMetaData removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp)
             throws SQLException {
-        return metaData = metaData.removeTable(tenantId, tableName);
+        return metaData = metaData.removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
     }
 
     @Override
