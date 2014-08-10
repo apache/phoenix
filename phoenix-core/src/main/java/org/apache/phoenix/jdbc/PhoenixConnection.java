@@ -726,10 +726,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
 
     @Override
-    public PMetaData removeTable(PName tenantId, String tableName) throws SQLException {
-        metaData = metaData.removeTable(tenantId, tableName);
+    public PMetaData removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp) throws SQLException {
+        metaData = metaData.removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
         //Cascade through to connectionQueryServices too
-        getQueryServices().removeTable(tenantId, tableName);
+        getQueryServices().removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
         return metaData;
     }
 

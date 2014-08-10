@@ -23,6 +23,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.util.TimeKeeper;
 
 import com.google.common.collect.Lists;
@@ -316,41 +317,60 @@ public class PMetaDataImpl implements PMetaData {
     }
 
     @Override
-    public PMetaData removeTable(PName tenantId, String tableName) throws SQLException {
-        PTable table;
-        PTableCache tables = metaData.clone();
-        if ((table=tables.remove(new PTableKey(tenantId, tableName))) == null) {
-            return this;
+    public PMetaData removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp) throws SQLException {
+        PTableCache tables = null;
+        PTableRef parentTableRef = null;
+        PTableKey key = new PTableKey(tenantId, tableName);
+        if (metaData.get(key) == null) {
+            if (parentTableName != null) {
+                parentTableRef = metaData.get(new PTableKey(tenantId, parentTableName));
+            }
+            if (parentTableRef == null) {
+                return this;
+            }
         } else {
+            tables = metaData.clone();
+            PTable table = tables.remove(key);
             for (PTable index : table.getIndexes()) {
                 tables.remove(index.getKey());
             }
-            // also remove its reference from parent table
-            PName parent = table.getParentName();
-            PTableRef parentTableRef = null;
-            if(parent != null && (parentTableRef=tables.get(new PTableKey(tenantId, parent.getString()))) != null) {
-                List<PTable> oldIndexes = parentTableRef.table.getIndexes();
-                if(oldIndexes != null && !oldIndexes.isEmpty()) {
-	                List<PTable> newIndexes = Lists.newArrayListWithExpectedSize(oldIndexes.size());
-	                newIndexes.addAll(oldIndexes);
-	                for (int i = 0; i < newIndexes.size(); i++) {
-	                    PTable index = newIndexes.get(i);
-	                    if (index.getName().equals(table.getName())) {
-	                        newIndexes.remove(i);
-	                        break;
-	                    }
-	                }
-	                PTable parentTable = PTableImpl.makePTable(parentTableRef.table, table.getTimeStamp(), newIndexes);
-	                tables.put(parentTable.getKey(), parentTable);
+            if (table.getParentName() != null) {
+                parentTableRef = tables.get(new PTableKey(tenantId, table.getParentName().getString()));
+            }
+        }
+        // also remove its reference from parent table
+        if (parentTableRef != null) {
+            List<PTable> oldIndexes = parentTableRef.table.getIndexes();
+            if(oldIndexes != null && !oldIndexes.isEmpty()) {
+                List<PTable> newIndexes = Lists.newArrayListWithExpectedSize(oldIndexes.size());
+                newIndexes.addAll(oldIndexes);
+                for (int i = 0; i < newIndexes.size(); i++) {
+                    PTable index = newIndexes.get(i);
+                    if (index.getName().getString().equals(tableName)) {
+                        newIndexes.remove(i);
+                        PTable parentTable = PTableImpl.makePTable(
+                                parentTableRef.table,
+                                tableTimeStamp == HConstants.LATEST_TIMESTAMP ? parentTableRef.table.getTimeStamp() : tableTimeStamp,
+                                newIndexes);
+                        if (tables == null) { 
+                            tables = metaData.clone();
+                        }
+                        tables.put(parentTable.getKey(), parentTable);
+                        break;
+                    }
                 }
             }
         }
-        return new PMetaDataImpl(tables);
+        return tables == null ? this : new PMetaDataImpl(tables);
     }
     
     @Override
     public PMetaData removeColumn(PName tenantId, String tableName, String familyName, String columnName, long tableTimeStamp, long tableSeqNum) throws SQLException {
-        PTable table = getTable(new PTableKey(tenantId, tableName));
+        PTableRef tableRef = metaData.get(new PTableKey(tenantId, tableName));
+        if (tableRef == null) {
+            return this;
+        }
+        PTable table = tableRef.table;
         PTableCache tables = metaData.clone();
         PColumn column;
         if (familyName == null) {

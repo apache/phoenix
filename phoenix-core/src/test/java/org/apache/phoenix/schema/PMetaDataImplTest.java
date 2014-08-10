@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import java.sql.SQLException;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.util.TimeKeeper;
 import org.junit.Test;
 
@@ -35,7 +36,7 @@ public class PMetaDataImplTest {
     }
     
     private static PMetaData removeFromTable(PMetaData metaData, String name) throws SQLException {
-        return metaData.removeTable(null, name);
+        return metaData.removeTable(null, name, null, HConstants.LATEST_TIMESTAMP);
     }
     
     private static PTable getFromTable(PMetaData metaData, String name) throws TableNotFoundException {
