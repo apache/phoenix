@@ -70,6 +70,7 @@ mv $REL_SRC.tar.gz $DIR_REL_SRC_TAR_PATH;
 
 # Copy common jars
 mvn clean apache-rat:check package -DskipTests;
+rm -rf $(find . -type d -name archive-tmp);
 cp $(find -iname phoenix-$PHOENIX-client-minimal.jar) $DIR_COMMON;
 cp $(find -iname phoenix-$PHOENIX-client-without-hbase.jar) $DIR_COMMON;
 cp $(find -iname phoenix-core-$PHOENIX.jar) $DIR_COMMON;
@@ -80,7 +81,6 @@ cp $(find -iname phoenix-pig-$PHOENIX-tests.jar) $DIR_COMMON;
 
 # Copy release docs
 cp CHANGES $DIR_REL_BIN_PATH;
-cp DISCLAIMER $DIR_REL_BIN_PATH;
 cp README $DIR_REL_BIN_PATH;
 cp $DIR_DOCS/* $DIR_REL_BIN_PATH;
 
@@ -130,4 +130,4 @@ then
 fi
 
 echo "DONE."
-echo "If all looks good in release directory then commit RC at https://dist.apache.org/repos/dist/dev/incubator/phoenix"
+echo "If all looks good in release directory then commit RC at https://dist.apache.org/repos/dist/dev/phoenix"
