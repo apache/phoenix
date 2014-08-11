@@ -27,8 +27,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -36,6 +38,8 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.master.HMaster;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -48,6 +52,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -569,6 +574,111 @@ public class LocalIndexIT extends BaseIndexIT {
             assertTrue(rs.next());
             assertEquals(4, rs.getInt(1));
         } finally {
+            conn1.close();
+        }
+    }
+
+    @Test
+    public void testLocalIndexScanWithInList() throws Exception {
+        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try{
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('q',3,1,1,'c')");
+            conn1.commit();
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1) include (k3)");
+            
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + INDEX_TABLE_NAME);
+            assertTrue(rs.next());
+            
+            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            
+            String query = "SELECT t_id FROM " + DATA_TABLE_NAME +" where (v1,k3) IN (('z',4),('a',2))";
+            rs = conn1.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("j", rs.getString("t_id"));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString("t_id"));
+            assertFalse(rs.next());
+       } finally {
+            conn1.close();
+        }
+    }
+
+    @Test
+    public void testLocalIndexScanAfterRegionSplit() throws Exception {
+        createBaseTable(DATA_TABLE_NAME, null, "('e','j','o')");
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try{
+            String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
+            for (int i = 0; i < 26; i++) {
+                conn1.createStatement().execute(
+                    "UPSERT INTO " + DATA_TABLE_NAME + " values('"+strings[i]+"'," + i + ","
+                            + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
+            }
+            conn1.commit();
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + "_2 ON " + DATA_TABLE_NAME + "(k3)");
+
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_NAME);
+            assertTrue(rs.next());
+            
+            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            HMaster master = getUtility().getHBaseCluster().getMaster();
+            for (int i = 1; i < 5; i++) {
+                
+                admin.split(Bytes.toBytes(DATA_TABLE_NAME), ByteUtil.concat(Bytes.toBytes(strings[3*i])));
+                List<HRegionInfo> regionsOfUserTable =
+                        master.getAssignmentManager().getRegionStates().getRegionsOfTable(TableName.valueOf(DATA_TABLE_NAME));
+
+                while (regionsOfUserTable.size() != (4+i)) {
+                    Thread.sleep(100);
+                    regionsOfUserTable = master.getAssignmentManager().getRegionStates().getRegionsOfTable(TableName.valueOf(DATA_TABLE_NAME));
+                }
+                assertEquals(4+i, regionsOfUserTable.size());
+                List<HRegionInfo> regionsOfIndexTable = master.getAssignmentManager().getRegionStates()
+                                .getRegionsOfTable(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
+                while (regionsOfIndexTable.size() != (4+i)) {
+                    Thread.sleep(100);
+                    regionsOfIndexTable = master.getAssignmentManager().getRegionStates()
+                            .getRegionsOfTable(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
+                }
+                assertEquals(4 + i, regionsOfIndexTable.size());
+                String query = "SELECT t_id,k1,v1 FROM " + DATA_TABLE_NAME;
+                rs = conn1.createStatement().executeQuery("EXPLAIN "+query);
+                assertEquals(
+                    "CLIENT PARALLEL " + (4+i) + "-WAY RANGE SCAN OVER "
+                            + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)+" [-32768]\n"+
+                            "CLIENT MERGE SORT",
+                    QueryUtil.getExplainPlan(rs));
+                rs = conn1.createStatement().executeQuery(query);
+                Thread.sleep(1000);
+                for (int j = 0; j < 26; j++) {
+                    assertTrue(rs.next());
+                    assertEquals(strings[25-j], rs.getString("t_id"));
+                    assertEquals(25-j, rs.getInt("k1"));
+                    assertEquals(strings[j], rs.getString("V1"));
+                }
+                
+                query = "SELECT t_id,k1,k3 FROM " + DATA_TABLE_NAME;
+                rs = conn1.createStatement().executeQuery("EXPLAIN "+query);
+                assertEquals(
+                    "CLIENT PARALLEL " + (4+i) + "-WAY RANGE SCAN OVER "
+                            + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)+" [-32767]\n"+
+                            "CLIENT MERGE SORT",
+                    QueryUtil.getExplainPlan(rs));
+                rs = conn1.createStatement().executeQuery(query);
+                Thread.sleep(1000);
+                for (int j = 0; j < 26; j++) {
+                    assertTrue(rs.next());
+                    assertEquals(strings[j], rs.getString("t_id"));
+                    assertEquals(j, rs.getInt("k1"));
+                    assertEquals(j+2, rs.getInt("k3"));
+                }
+            }
+       } finally {
             conn1.close();
         }
     }

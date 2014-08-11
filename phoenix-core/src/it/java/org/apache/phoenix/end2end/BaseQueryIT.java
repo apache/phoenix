@@ -113,6 +113,12 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
                 + "    B_STRING, " + "    A_DATE)" });
         testCases.add(new String[] { "CREATE INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer) INCLUDE ("
                 + "    A_STRING, " + "    B_STRING, " + "    A_DATE)" });
+        testCases.add(new String[] { "CREATE LOCAL INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer DESC) INCLUDE ("
+                + "    A_STRING, " + "    B_STRING, " + "    A_DATE)" });
+        testCases.add(new String[] { "CREATE LOCAL INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer, a_string) INCLUDE ("
+                + "    B_STRING, " + "    A_DATE)" });
+        testCases.add(new String[] { "CREATE LOCAL INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer) INCLUDE ("
+                + "    A_STRING, " + "    B_STRING, " + "    A_DATE)" });
         testCases.add(new String[] { "" });
         return testCases;
     }

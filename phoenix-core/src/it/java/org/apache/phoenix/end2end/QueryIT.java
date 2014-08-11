@@ -739,19 +739,17 @@ public class QueryIT extends BaseQueryIT {
             
             byte[] tableName = Bytes.toBytes(ATABLE_NAME);
             admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            if (admin.tableExists(TableName.valueOf(MetaDataUtil.getLocalIndexTableName("atable")))) {
-                HTable htable = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName);
-                htable.clearRegionCache();
-                int nRegions = htable.getRegionLocations().size();
-                admin.split(tableName, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A" + Character.valueOf((char) ('3' + nextRunCount())) + ts))); // vary split point with test run
-                int retryCount = 0;
-                do {
-                    Thread.sleep(2000);
-                    retryCount++;
-                    //htable.clearRegionCache();
-                } while (retryCount < 10 && htable.getRegionLocations().size() == nRegions);
-                assertNotEquals(nRegions, htable.getRegionLocations().size());
-            }
+            HTable htable = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName);
+            htable.clearRegionCache();
+            int nRegions = htable.getRegionLocations().size();
+            admin.split(tableName, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A" + Character.valueOf((char) ('3' + nextRunCount())) + ts))); // vary split point with test run
+            int retryCount = 0;
+            do {
+                Thread.sleep(2000);
+                retryCount++;
+                //htable.clearRegionCache();
+            } while (retryCount < 10 && htable.getRegionLocations().size() == nRegions);
+            assertNotEquals(nRegions, htable.getRegionLocations().size());
             
             statement.setString(1, tenantId);
             rs = statement.executeQuery();

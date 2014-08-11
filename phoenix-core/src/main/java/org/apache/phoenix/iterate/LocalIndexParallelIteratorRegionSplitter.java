@@ -37,6 +37,7 @@ public class LocalIndexParallelIteratorRegionSplitter extends DefaultParallelIte
 
     @Override
     protected List<HRegionLocation> getAllRegions() throws SQLException {
+        context.getConnection().getQueryServices().clearTableRegionCache(tableRef.getTable().getPhysicalName().getBytes());
         return context.getConnection().getQueryServices().getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
     }
 

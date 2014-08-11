@@ -153,7 +153,7 @@ import com.google.common.collect.Sets;
 public abstract class BaseTest {
     private static final Map<String,String> tableDDLMap;
     private static Logger logger = Logger.getLogger("BaseTest.class");
-    
+    private static HBaseTestingUtility utility = null; 
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
         builder.put(ENTITY_HISTORY_TABLE_NAME,"create table " + ENTITY_HISTORY_TABLE_NAME +
@@ -473,7 +473,7 @@ public abstract class BaseTest {
      */
     private static String initMiniCluster(Configuration conf) {
         setUpConfigForMiniCluster(conf);
-        final HBaseTestingUtility utility = new HBaseTestingUtility(conf);
+        utility = new HBaseTestingUtility(conf);
         try {
             utility.startMiniCluster();
             String clientPort = utility.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
@@ -504,6 +504,7 @@ public abstract class BaseTest {
         setTestConfigForDistribuedCluster(conf);
         try {
             IntegrationTestingUtility util =  new IntegrationTestingUtility(conf);
+            utility = util;
             util.initializeCluster(NUM_SLAVES_BASE);
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -1284,5 +1285,9 @@ public abstract class BaseTest {
         }
         assertTrue("Could not find " + errorResult + " in expected results: " + expectedResults + " with actual results: " + actualResults, errorResult == null);
         assertEquals(count, expectedCount);
+    }
+    
+    public HBaseTestingUtility getUtility() {
+        return utility;
     }
 }
