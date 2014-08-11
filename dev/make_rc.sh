@@ -70,6 +70,7 @@ mv $REL_SRC.tar.gz $DIR_REL_SRC_TAR_PATH;
 
 # Copy common jars
 mvn clean apache-rat:check package -DskipTests;
+rm -rf $(find . -type d -name archive-tmp);
 cp $(find -iname phoenix-$PHOENIX-client-minimal.jar) $DIR_COMMON;
 cp $(find -iname phoenix-$PHOENIX-client-without-hbase.jar) $DIR_COMMON;
 cp $(find -iname phoenix-core-$PHOENIX.jar) $DIR_COMMON;
@@ -102,6 +103,7 @@ function_copy_hadoop_specific_jars() {
   mkdir $DIR_HADOOP$1/$DIR_BIN;
   cp $DIR_BIN/* $DIR_HADOOP$1/$DIR_BIN;
   cp $(find -iname phoenix-$PHOENIX-client.jar) $DIR_HADOOP$1/phoenix-$PHOENIX-client-hadoop$1.jar;
+  cp $(find -iname phoenix-$PHOENIX-server.jar) $DIR_HADOOP$1/phoenix-$PHOENIX-server-hadoop$1.jar;
   cp $(find -iname phoenix-core-$PHOENIX-tests.jar) $DIR_HADOOP$1/phoenix-core-$PHOENIX-tests-hadoop$1.jar;
 }
 function_copy_hadoop_specific_jars 1;
@@ -132,11 +134,11 @@ read -p "Do you want add tag for this RC in GIT? (Y for yes or any other key to 
 if [[ $prompt =~ [yY](es)* ]]
 then
   echo "Tagging..."
-  read -p "Enter tag (Example 5.0.0-incubating-rc0):" prompt
+  read -p "Enter tag (Example 5.0.0-rc0):" prompt
   echo "Setting tag: $prompt";sleep 5s
   git tag -a $prompt -m "$prompt"; git push origin $prompt
   mv $DIR_REL_ROOT $DIR_REL_BASE/phoenix-$prompt
 fi
 
 echo "DONE."
-echo "If all looks good in release directory then commit RC at https://dist.apache.org/repos/dist/dev/incubator/phoenix"
+echo "If all looks good in release directory then commit RC at https://dist.apache.org/repos/dist/dev/phoenix"
