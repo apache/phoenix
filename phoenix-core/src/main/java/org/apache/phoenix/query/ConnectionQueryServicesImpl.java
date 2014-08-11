@@ -59,6 +59,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
+import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
+import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -620,6 +622,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts);
             }
             
+            if (descriptor.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null
+                    && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(descriptor
+                            .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+                if (!descriptor.hasCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName())) {
+                    descriptor.addCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName(),
+                        null, 1, null);
+                }
+            } else {
+                if (!descriptor.hasCoprocessor(LocalIndexSplitter.class.getName())
+                        && !SchemaUtil.isMetaTable(tableName)
+                        && !SchemaUtil.isSequenceTable(tableName)) {
+                    descriptor.addCoprocessor(LocalIndexSplitter.class.getName(), null, 1, null);
+                }
+            }
+
             // Setup split policy on Phoenix metadata table to ensure that the key values of a Phoenix table
             // stay on the same region.
             if (SchemaUtil.isMetaTable(tableName)) {
