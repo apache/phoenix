@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -91,7 +92,6 @@ public class LocalIndexIT extends BaseIndexIT {
     public void testLocalIndexRoundTrip() throws Exception {
         createBaseTable(DATA_TABLE_NAME, null, null);
         Connection conn1 = DriverManager.getConnection(getUrl());
-        Connection conn2 = DriverManager.getConnection(getUrl());
         conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
         conn1.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_FULL_NAME).next();
         PTable localIndex = conn1.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,INDEX_TABLE_NAME));
@@ -160,7 +160,7 @@ public class LocalIndexIT extends BaseIndexIT {
         assertEquals(IndexRegionSplitPolicy.class.getName(), htd.getValue(HTableDescriptor.SPLIT_POLICY));
         HTable userTable = new HTable(admin.getConfiguration(),TableName.valueOf(DATA_TABLE_NAME));
         HTable indexTable = new HTable(admin.getConfiguration(),TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
-        assertEquals("Both user region and index table should have same split keys.", userTable.getStartKeys(), indexTable.getStartKeys());
+        assertArrayEquals("Both user table and index table should have same split keys.", userTable.getStartKeys(), indexTable.getStartKeys());
     }
 
     @Test
@@ -593,8 +593,6 @@ public class LocalIndexIT extends BaseIndexIT {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + INDEX_TABLE_NAME);
             assertTrue(rs.next());
             
-            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            
             String query = "SELECT t_id FROM " + DATA_TABLE_NAME +" where (v1,k3) IN (('z',4),('a',2))";
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -647,12 +645,6 @@ public class LocalIndexIT extends BaseIndexIT {
                 }
                 assertEquals(4 + i, regionsOfIndexTable.size());
                 String query = "SELECT t_id,k1,v1 FROM " + DATA_TABLE_NAME;
-                rs = conn1.createStatement().executeQuery("EXPLAIN "+query);
-                assertEquals(
-                    "CLIENT PARALLEL " + (4+i) + "-WAY RANGE SCAN OVER "
-                            + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)+" [-32768]\n"+
-                            "CLIENT MERGE SORT",
-                    QueryUtil.getExplainPlan(rs));
                 rs = conn1.createStatement().executeQuery(query);
                 Thread.sleep(1000);
                 for (int j = 0; j < 26; j++) {
@@ -661,6 +653,11 @@ public class LocalIndexIT extends BaseIndexIT {
                     assertEquals(25-j, rs.getInt("k1"));
                     assertEquals(strings[j], rs.getString("V1"));
                 }
+                rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
+                assertEquals(
+                        "CLIENT PARALLEL " + (4 + i) + "-WAY RANGE SCAN OVER "
+                                + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME) + " [-32768]\n"
+                                + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
                 
                 query = "SELECT t_id,k1,k3 FROM " + DATA_TABLE_NAME;
                 rs = conn1.createStatement().executeQuery("EXPLAIN "+query);

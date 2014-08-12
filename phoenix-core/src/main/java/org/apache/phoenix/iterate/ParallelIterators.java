@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY;
+
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -272,7 +274,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                 }
             });
             boolean clearedCache = false;
-            byte[] tableName = tableRef.getTable().getName().getBytes();
+            byte[] tableName = tableRef.getTable().getPhysicalName().getBytes();
             for (Pair<KeyRange,Future<PeekingResultIterator>> future : futures) {
                 try {
                     PeekingResultIterator iterator = future.getSecond().get(timeoutMs, TimeUnit.MILLISECONDS);
@@ -324,7 +326,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         final ConnectionQueryServices services = context.getConnection().getQueryServices();
         ExecutorService executor = services.getExecutor();
         final boolean localIndex = this.tableRef.getTable().getType() == PTableType.INDEX && this.tableRef.getTable().getIndexType() == IndexType.LOCAL;
-        for (KeyRange split : splits) {
+        for (final KeyRange split : splits) {
             final Scan splitScan = ScanUtil.newScan(context.getScan());
             // Intersect with existing start/stop key if the table is salted
             // If not salted, we've already intersected it. If salted, we need
@@ -333,11 +335,14 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
             if (tableRef.getTable().getBucketNum() != null) {
                 KeyRange minMaxRange = context.getMinMaxRange();
                 if (minMaxRange != null) {
-                    // Add salt byte based on current split, as minMaxRange won't have it
-                    minMaxRange = SaltingUtil.addSaltByte(split.getLowerRange(), minMaxRange);
-                    split = split.intersect(minMaxRange);
+                    KeyRange splitScanRange = KeyRange.getKeyRange(splitScan.getStartRow(), splitScan.getStopRow());
+                    splitScanRange = splitScanRange.intersect(SaltingUtil.addSaltByte(split.getLowerRange(), minMaxRange));
+                    splitScan.setStartRow(splitScanRange.getLowerRange());
+                    splitScan.setStopRow(splitScanRange.getUpperRange());
                 }
             } else if (localIndex) {
+                // Used to detect stale region boundary information on server side
+                splitScan.setAttribute(EXPECTED_UPPER_REGION_KEY, split.getUpperRange());
                 if (splitScan.getStartRow().length != 0 || splitScan.getStopRow().length != 0) {
                     SaltingUtil.addRegionStartKeyToScanStartAndStopRows(split.getLowerRange(),split.getUpperRange(),
                         splitScan);
