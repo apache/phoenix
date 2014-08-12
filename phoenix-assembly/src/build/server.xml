@@ -38,5 +38,12 @@
         <include>org.apache.phoenix:phoenix-hadoop*</include>
       </includes>
     </dependencySet>
+    <dependencySet>
+      <unpack>true</unpack>
+      <outputDirectory>/</outputDirectory>
+      <includes>
+        <include>org.antlr:antlr*</include>
+      </includes>
+    </dependencySet>
   </dependencySets>
 </assembly>
