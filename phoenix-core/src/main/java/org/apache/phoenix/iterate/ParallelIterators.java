@@ -269,7 +269,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                 }
             });
             boolean clearedCache = false;
-            byte[] tableName = tableRef.getTable().getName().getBytes();
+            byte[] tableName = tableRef.getTable().getPhysicalName().getBytes();
             for (Pair<KeyRange,Future<PeekingResultIterator>> future : futures) {
                 try {
                     PeekingResultIterator iterator = future.getSecond().get(timeoutMs, TimeUnit.MILLISECONDS);
@@ -320,7 +320,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
             List<Pair<KeyRange,Future<PeekingResultIterator>>> futures) {
         final ConnectionQueryServices services = context.getConnection().getQueryServices();
         ExecutorService executor = services.getExecutor();
-        for (KeyRange split : splits) {
+        for (final KeyRange split : splits) {
             final Scan splitScan = ScanUtil.newScan(context.getScan());
             // Intersect with existing start/stop key if the table is salted
             // If not salted, we've already intersected it. If salted, we need
@@ -331,7 +331,12 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                 if (minMaxRange != null) {
                     // Add salt byte based on current split, as minMaxRange won't have it
                     minMaxRange = SaltingUtil.addSaltByte(split.getLowerRange(), minMaxRange);
-                    split = split.intersect(minMaxRange);
+                    // FIXME: seems like this should be possible when we set the scan start/stop
+                    // in StatementContext.setScanRanges(). If it doesn't intersect the range for
+                    // one salt byte, I don't see how it could intersect it with any of them.
+                    if (!ScanUtil.intersectScanRange(splitScan, minMaxRange.getLowerRange(), minMaxRange.getUpperRange())) {
+                        continue; // Skip this chunk if no intersection based on minMaxRange
+                    }
                 }
             }
             if (ScanUtil.intersectScanRange(splitScan, split.getLowerRange(), split.getUpperRange(), this.context.getScanRanges().useSkipScanFilter())) {

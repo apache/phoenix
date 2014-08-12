@@ -933,6 +933,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if (dropMetadata) {
                         admin.disableTable(physicalIndexName);
                         admin.deleteTable(physicalIndexName);
+                        clearTableRegionCache(physicalIndexName);
                         wasDeleted = true;
                     }
                 }
@@ -1066,6 +1067,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if ( admin.tableExists(tableName) ) {
                         admin.disableTable(tableName);
                         admin.deleteTable(tableName);
+                        clearTableRegionCache(tableName);
                     }
                 }
             }
