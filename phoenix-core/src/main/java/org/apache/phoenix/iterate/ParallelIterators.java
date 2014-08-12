@@ -335,10 +335,14 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
             if (tableRef.getTable().getBucketNum() != null) {
                 KeyRange minMaxRange = context.getMinMaxRange();
                 if (minMaxRange != null) {
-                    KeyRange splitScanRange = KeyRange.getKeyRange(splitScan.getStartRow(), splitScan.getStopRow());
-                    splitScanRange = splitScanRange.intersect(SaltingUtil.addSaltByte(split.getLowerRange(), minMaxRange));
-                    splitScan.setStartRow(splitScanRange.getLowerRange());
-                    splitScan.setStopRow(splitScanRange.getUpperRange());
+                    // Add salt byte based on current split, as minMaxRange won't have it
+                    minMaxRange = SaltingUtil.addSaltByte(split.getLowerRange(), minMaxRange);
+                    // FIXME: seems like this should be possible when we set the scan start/stop
+                    // in StatementContext.setScanRanges(). If it doesn't intersect the range for
+                    // one salt byte, I don't see how it could intersect it with any of them.
+                    if (!ScanUtil.intersectScanRange(splitScan, minMaxRange.getLowerRange(), minMaxRange.getUpperRange())) {
+                        continue; // Skip this chunk if no intersection based on minMaxRange
+                    }
                 }
             } else if (localIndex) {
                 // Used to detect stale region boundary information on server side
