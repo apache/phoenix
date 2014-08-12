@@ -57,6 +57,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String LOCAL_INDEX_JOIN_SCHEMA = "_LocalIndexJoinSchema";
     public static final String DATA_TABLE_COLUMNS_TO_JOIN = "_DataTableColumnsToJoin";
     public static final String VIEW_CONSTANTS = "_ViewConstants";
+    public static final String EXPECTED_UPPER_REGION_KEY = "_ExpectedUpperRegionKey";
 
     /** Exposed for testing */
     public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
@@ -83,8 +84,12 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
         byte[] upperExclusiveScanKey = scan.getStopRow();
         byte[] lowerInclusiveRegionKey = region.getStartKey();
         byte[] upperExclusiveRegionKey = region.getEndKey();
-        if (Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
-            (Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0) ) {
+        byte[] expectedUpperRegionKey = scan.getAttribute(EXPECTED_UPPER_REGION_KEY);
+        if (   (expectedUpperRegionKey != null && // local index check
+                  Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0)
+            || (expectedUpperRegionKey == null && // non local index check
+                ( Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
+                ( Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0) ) ) ) {
             @SuppressWarnings("deprecation")
             Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTableName());
             throw new DoNotRetryIOException(cause.getMessage(), cause);
