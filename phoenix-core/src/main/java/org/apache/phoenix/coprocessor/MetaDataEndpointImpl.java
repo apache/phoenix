@@ -665,7 +665,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                     acquireLock(region, key, lids);
                 }
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
-                result = doDropTable(key, tenantIdBytes, schemaName, tableName, PTableType.fromSerializedValue(tableType), tableMetadata, invalidateList, lids, tableNamesToDelete);
+                result = doDropTable(key, tenantIdBytes, schemaName, tableName, parentTableName, PTableType.fromSerializedValue(tableType), tableMetadata, invalidateList, lids, tableNamesToDelete);
                 if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     return result;
                 }
@@ -690,8 +690,8 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         }
     }
 
-    private MetaDataMutationResult doDropTable(byte[] key, byte[] tenantId, byte[] schemaName, byte[] tableName, PTableType tableType, 
-            List<Mutation> rowsToDelete, List<ImmutableBytesPtr> invalidateList, List<Integer> lids, List<byte[]> tableNamesToDelete) throws IOException, SQLException {
+    private MetaDataMutationResult doDropTable(byte[] key, byte[] tenantId, byte[] schemaName, byte[] tableName, byte[] parentTableName, 
+            PTableType tableType, List<Mutation> rowsToDelete, List<ImmutableBytesPtr> invalidateList, List<Integer> lids, List<byte[]> tableNamesToDelete) throws IOException, SQLException {
         long clientTimeStamp = MetaDataUtil.getClientTimeStamp(rowsToDelete);
 
         RegionCoprocessorEnvironment env = getEnvironment();
@@ -718,6 +718,10 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             if (buildDeletedTable(key, cacheKey, region, clientTimeStamp) != null) {
                 return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
             }
+            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
+        }
+        // Make sure we're not deleting the "wrong" child
+        if (!Arrays.equals(parentTableName, table.getParentTableName() == null ? null : table.getParentTableName().getBytes())) {
             return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
         }
         // Since we don't allow back in time DDL, we know if we have a table it's the one
@@ -769,7 +773,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             Delete delete = new Delete(indexKey, clientTimeStamp, null);
             rowsToDelete.add(delete);
             acquireLock(region, indexKey, lids);
-            MetaDataMutationResult result = doDropTable(indexKey, tenantId, schemaName, indexName, PTableType.INDEX, rowsToDelete, invalidateList, lids, tableNamesToDelete);
+            MetaDataMutationResult result = doDropTable(indexKey, tenantId, schemaName, indexName, tableName, PTableType.INDEX, rowsToDelete, invalidateList, lids, tableNamesToDelete);
             if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                 return result;
             }
@@ -971,7 +975,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                                             byte[] linkKey = MetaDataUtil.getParentLinkKey(tenantId, schemaName, tableName, index.getTableName().getBytes());
                                             // Drop the link between the data table and the index table
                                             additionalTableMetaData.add(new Delete(linkKey, clientTimeStamp, null));
-                                            doDropTable(indexKey, tenantId, index.getSchemaName().getBytes(), index.getTableName().getBytes(), index.getType(), additionalTableMetaData, invalidateList, lids, tableNamesToDelete);
+                                            doDropTable(indexKey, tenantId, index.getSchemaName().getBytes(), index.getTableName().getBytes(), tableName, index.getType(), additionalTableMetaData, invalidateList, lids, tableNamesToDelete);
                                             // TODO: return in result?
                                         } else {
                                             invalidateList.add(new ImmutableBytesPtr(indexKey));
