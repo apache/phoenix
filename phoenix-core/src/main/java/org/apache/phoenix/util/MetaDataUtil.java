@@ -141,10 +141,12 @@ public class MetaDataUtil {
         }
         byte[][] rowKeyMetaData = new byte[3][];
         getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
+        byte[] schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
         byte[] tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
         Mutation m = getParentTableHeaderRow(tableMetadata);
         getVarChars(m.getRow(), 3, rowKeyMetaData);
-        if (Bytes.compareTo(tableName, rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX]) == 0) {
+        if (   Bytes.compareTo(schemaName, rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX]) == 0
+            && Bytes.compareTo(tableName, rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX]) == 0) {
             return null;
         }
         return rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];

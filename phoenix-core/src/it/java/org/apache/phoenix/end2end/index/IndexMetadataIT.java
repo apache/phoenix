@@ -45,6 +45,7 @@ import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -115,7 +116,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
-    public void testIndexCreation() throws Exception {
+    public void testIndexCreateDrop() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -259,6 +260,15 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX2", 8, "B:INT_COL2", null);
             assertFalse(rs.next());
             
+            // Create another table in the same schema
+            String diffTableNameInSameSchema = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + "2";
+            conn.createStatement().execute("CREATE TABLE " + diffTableNameInSameSchema + "(k INTEGER PRIMARY KEY)");
+            try {
+                conn.createStatement().execute("DROP INDEX IDX1 ON " + diffTableNameInSameSchema);
+                fail("Should have realized index IDX1 is not on the table");
+            } catch (TableNotFoundException ignore) {
+                
+            }
             ddl = "DROP TABLE " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE;
             stmt = conn.prepareStatement(ddl);
             stmt.execute();

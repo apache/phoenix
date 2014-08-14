@@ -80,25 +80,25 @@ public class ViewCompilerTest extends BaseConnectionlessQueryTest {
     public void testViewInvalidation() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
-        String ct = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 VARCHAR, v VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))";
+        String ct = "CREATE TABLE s1.t (k1 INTEGER NOT NULL, k2 VARCHAR, v VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))";
         conn.createStatement().execute(ct);
-        conn.createStatement().execute("CREATE VIEW v3 AS SELECT * FROM t WHERE v = 'bar'");
+        conn.createStatement().execute("CREATE VIEW s2.v3 AS SELECT * FROM s1.t WHERE v = 'bar'");
         
         // TODO: should it be an error to remove columns from a VIEW that we're defined there?
         // TOOD: should we require an ALTER VIEW instead of ALTER TABLE?
-        conn.createStatement().execute("ALTER VIEW v3 DROP COLUMN v");
+        conn.createStatement().execute("ALTER VIEW s2.v3 DROP COLUMN v");
         try {
-            conn.createStatement().executeQuery("SELECT * FROM v3");
+            conn.createStatement().executeQuery("SELECT * FROM s2.v3");
             fail();
         } catch (ColumnNotFoundException e) {
             
         }
         
         // No error, as v still exists in t
-        conn.createStatement().execute("CREATE VIEW v4 AS SELECT * FROM t WHERE v = 'bas'");
+        conn.createStatement().execute("CREATE VIEW s2.v4 AS SELECT * FROM s1.t WHERE v = 'bas'");
 
         // No error, even though view is invalid
-        conn.createStatement().execute("DROP VIEW v3");
+        conn.createStatement().execute("DROP VIEW s2.v3");
     }
 
 

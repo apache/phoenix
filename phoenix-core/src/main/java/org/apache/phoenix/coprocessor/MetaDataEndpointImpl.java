@@ -30,6 +30,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FAMILY_NAME_INDEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED_BYTES;
@@ -50,7 +51,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT_BYTE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
@@ -928,7 +928,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 }
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 result =
-                        doDropTable(key, tenantIdBytes, schemaName, tableName,
+                        doDropTable(key, tenantIdBytes, schemaName, tableName, parentTableName,
                             PTableType.fromSerializedValue(tableType), tableMetadata,
                             invalidateList, locks, tableNamesToDelete);
                 if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
@@ -959,7 +959,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     private MetaDataMutationResult doDropTable(byte[] key, byte[] tenantId, byte[] schemaName,
-        byte[] tableName, PTableType tableType, List<Mutation> rowsToDelete,
+        byte[] tableName, byte[] parentTableName, PTableType tableType, List<Mutation> rowsToDelete,
         List<ImmutableBytesPtr> invalidateList, List<RowLock> locks,
         List<byte[]> tableNamesToDelete) throws IOException, SQLException {
         long clientTimeStamp = MetaDataUtil.getClientTimeStamp(rowsToDelete);
@@ -988,6 +988,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             if (buildDeletedTable(key, cacheKey, region, clientTimeStamp) != null) {
                 return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
             }
+            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
+        }
+        // Make sure we're not deleting the "wrong" child
+        if (!Arrays.equals(parentTableName, table.getParentTableName() == null ? null : table.getParentTableName().getBytes())) {
             return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
         }
         // Since we don't allow back in time DDL, we know if we have a table it's the one
@@ -1040,7 +1044,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             rowsToDelete.add(delete);
             acquireLock(region, indexKey, locks);
             MetaDataMutationResult result =
-                    doDropTable(indexKey, tenantId, schemaName, indexName, PTableType.INDEX,
+                    doDropTable(indexKey, tenantId, schemaName, indexName, tableName, PTableType.INDEX,
                         rowsToDelete, invalidateList, locks, tableNamesToDelete);
             if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                 return result;
@@ -1215,11 +1219,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             } catch (ColumnNotFoundException e) {
                                 if (addingPKColumn) {
                                     // Add all indexes to invalidate list, as they will all be
-                                    // adding
-                                    // the same PK column
-                                    // No need to lock them, as we have the parent table lock at
-                                    // this
-                                    // point
+                                    // adding the same PK column. No need to lock them, as we
+                                    // have the parent table lock at this point.
                                     for (PTable index : table.getIndexes()) {
                                         invalidateList.add(new ImmutableBytesPtr(SchemaUtil
                                                 .getTableKey(tenantId, index.getSchemaName()
@@ -1315,7 +1316,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                                 // Drop the link between the data table and the
                                                 // index table
                                                 additionalTableMetaData.add(new Delete(linkKey, clientTimeStamp));
-                                                doDropTable(indexKey, tenantId, index.getSchemaName().getBytes(), index.getTableName().getBytes(),
+                                                doDropTable(indexKey, tenantId, index.getSchemaName().getBytes(), index.getTableName().getBytes(), tableName,
                                                     index.getType(), additionalTableMetaData, invalidateList, locks, tableNamesToDelete);
                                                 // TODO: return in result?
                                             } else {
@@ -1384,6 +1385,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         done.run(builder.build());
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public void updateIndexState(RpcController controller, UpdateIndexStateRequest request,
             RpcCallback<MetaDataResponse> done) {
