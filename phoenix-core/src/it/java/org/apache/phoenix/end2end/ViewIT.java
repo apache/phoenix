@@ -29,6 +29,7 @@ import java.sql.SQLException;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.ReadOnlyTableException;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -232,5 +233,41 @@ public class ViewIT extends BaseViewIT {
             assertEquals(count + 5, rs.getInt(1));
         }
         assertEquals(4, count);
+    }
+    
+    @Test
+    public void testViewAndTableInDifferentSchemas() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE s1.t (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW s2.v1 (v2 VARCHAR) AS SELECT * FROM s1.t WHERE k > 5";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v2 (v2 VARCHAR) AS SELECT * FROM s1.t WHERE k > 5";
+        conn.createStatement().execute(ddl);
+        ddl = "DROP VIEW v1";
+        try {
+            conn.createStatement().execute(ddl);
+            fail();
+        } catch (TableNotFoundException ignore) {
+        }
+        ddl = "DROP VIEW s2.v1";
+        conn.createStatement().execute(ddl);
+        ddl = "DROP VIEW s2.v2";
+        try {
+            conn.createStatement().execute(ddl);
+            fail();
+        } catch (TableNotFoundException ignore) {
+        }
+        ddl = "DROP TABLE s1.t";
+        try {
+            conn.createStatement().execute(ddl);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+        }
+        ddl = "DROP VIEW v2";
+        conn.createStatement().execute(ddl);
+        ddl = "DROP TABLE s1.t";
+        conn.createStatement().execute(ddl);
     }
 }
