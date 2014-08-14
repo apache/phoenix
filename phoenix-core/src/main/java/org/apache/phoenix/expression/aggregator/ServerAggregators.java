@@ -27,7 +27,6 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.WritableUtils;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
@@ -57,7 +56,7 @@ public class ServerAggregators extends Aggregators {
     @Override
     public void aggregate(Aggregator[] aggregators, Tuple result) {
         for (int i = 0; i < expressions.length; i++) {
-            if (expressions[i].evaluate(result, ptr)) {
+            if (expressions[i].evaluate(result, ptr) && ptr.getLength() != 0) {
                 aggregators[i].aggregate(result, ptr);
             }
         }
