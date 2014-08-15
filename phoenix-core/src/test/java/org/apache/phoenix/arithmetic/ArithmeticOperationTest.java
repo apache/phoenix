@@ -18,6 +18,7 @@
 package org.apache.phoenix.arithmetic;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -123,7 +124,7 @@ public class ArithmeticOperationTest {
         boolean evaluated;
 
         op1 = LiteralExpression.newConstant(new BigDecimal("1234.111"), PDataType.DECIMAL);
-        assertEquals(Integer.valueOf(3),op1.getScale());
+        assertNull(op1.getScale());
         op2 = LiteralExpression.newConstant(1, PDataType.INTEGER);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalAddExpression(children);
@@ -254,7 +255,7 @@ public class ArithmeticOperationTest {
         
         // Decimal with no precision and scale.
         op1 = LiteralExpression.newConstant(new BigDecimal("1111.1"), PDataType.DECIMAL);
-        assertEquals(Integer.valueOf(1),op1.getScale());
+        assertNull(op1.getScale());
         op2 = LiteralExpression.newConstant(new BigDecimal("1.1111"), PDataType.DECIMAL, 5, 4);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalMultiplyExpression(children);
