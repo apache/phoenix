@@ -1333,16 +1333,7 @@ public enum PDataType {
 
         @Override
         public Integer getScale(Object o) {
-            if (o == null) {
-                return null;
-            }
-            BigDecimal v = (BigDecimal) o;
-            int scale = v.scale();
-            if (scale == 0) {
-                return null;
-            }
-            // If we have 5.0, we still want scale to be null
-            return v.remainder(BigDecimal.ONE).compareTo(BigDecimal.ZERO) == 0 ? null : scale;
+            return null;
         }
 
         @Override

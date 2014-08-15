@@ -829,4 +829,33 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         assertEquals(0, rs.getLong(1));
         assertFalse(rs.next());
     }
+    
+    @Test
+    public void testCastingOnConstantAddInArithmeticEvaluation() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE IF NOT EXISTS test_table (k1 INTEGER NOT NULL, v1 INTEGER CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO test_table (k1, v1) VALUES (2, 2)";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1 / (v1 + 0.5) FROM test_table");
+        assertTrue(rs.next());
+        double d = rs.getDouble(1);
+        assertEquals(0.8, d, 0.01);
+    }
+
+    @Test
+    public void testCastingOnConstantSubInArithmeticEvaluation() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE IF NOT EXISTS test_table (k1 INTEGER NOT NULL, v1 INTEGER CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO test_table (k1, v1) VALUES (2, 2)";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1 / (v1 - 0.5) FROM test_table");
+        assertTrue(rs.next());
+        assertEquals(1.333333333, rs.getDouble(1), 0.001);
+    }
 }
