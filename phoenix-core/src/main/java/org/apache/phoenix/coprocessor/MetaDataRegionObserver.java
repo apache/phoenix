@@ -28,6 +28,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.logging.Log;
@@ -65,14 +68,14 @@ import org.apache.phoenix.util.SchemaUtil;
  */
 public class MetaDataRegionObserver extends BaseRegionObserver {
     public static final Log LOG = LogFactory.getLog(MetaDataRegionObserver.class);
-    protected Timer scheduleTimer = new Timer(true);
+    protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
     private boolean enableRebuildIndex = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD;
     private long rebuildIndexTimeInterval = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL;
   
     @Override
     public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
             boolean abortRequested) {
-        scheduleTimer.cancel();
+        executor.shutdownNow();
         GlobalCache.getInstance(c.getEnvironment()).getMetaDataCache().invalidateAll();
     }
     
@@ -113,7 +116,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             // starts index rebuild schedule work
             BuildIndexScheduleTask task = new BuildIndexScheduleTask(e.getEnvironment());
             // run scheduled task every 10 secs
-            scheduleTimer.schedule(task, 10000, rebuildIndexTimeInterval);
+            executor.scheduleAtFixedRate(task, 10000, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
         } catch (ClassNotFoundException ex) {
             LOG.error("BuildIndexScheduleTask cannot start!", ex);
         }

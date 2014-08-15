@@ -1508,6 +1508,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         dataTableKey = SchemaUtil.getTableKey(tenantId, schemaName, dataTableKV.getValue());
                     }
                     if(dataTableKey != null) {
+                        // make a copy of tableMetadata
+                        tableMetadata = new ArrayList<Mutation>(tableMetadata);
                         // insert an empty KV to trigger time stamp update on data table row
                         Put p = new Put(dataTableKey);
                         p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp, ByteUtil.EMPTY_BYTE_ARRAY);
