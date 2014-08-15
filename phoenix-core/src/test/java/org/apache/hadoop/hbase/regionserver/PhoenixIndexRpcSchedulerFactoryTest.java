@@ -22,6 +22,7 @@ import static org.junit.Assert.fail;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.hbase.index.ipc.PhoenixIndexRpcSchedulerFactory;
+import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
 
 public class PhoenixIndexRpcSchedulerFactoryTest {
@@ -99,7 +100,7 @@ public class PhoenixIndexRpcSchedulerFactoryTest {
     }
 
     private void setMinMax(Configuration conf, int min, int max) {
-        conf.setInt(PhoenixIndexRpcSchedulerFactory.MIN_INDEX_PRIOIRTY_KEY, min);
-        conf.setInt(PhoenixIndexRpcSchedulerFactory.MAX_INDEX_PRIOIRTY_KEY, max);
+        conf.setInt(QueryServices.MIN_INDEX_PRIOIRTY_ATTRIB, min);
+        conf.setInt(QueryServices.MAX_INDEX_PRIOIRTY_ATTRIB, max);
     }
 }

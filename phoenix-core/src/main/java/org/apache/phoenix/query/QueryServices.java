@@ -123,6 +123,15 @@ public interface QueryServices extends SQLCloseable {
     // Index will be partially re-built from index disable time stamp - following overlap time 
     public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB = 
         "phoenix.index.failure.handling.rebuild.overlap.time";
+    // Constants for for configuring tracing
+    public static final String TRACING_FREQ_ATTRIB = "phoenix.trace.frequency";
+    public static final String PROBABILITY_THRESHOLD_ATTRIB = "phoenix.trace.probability.threshold";
+    public static final String MIN_INDEX_PRIOIRTY_ATTRIB =
+    "phoenix.regionserver.index.priority.min";
+    public static final String MAX_INDEX_PRIOIRTY_ATTRIB =
+    "phoenix.regionserver.index.priority.max";
+    public static final String INDEX_HANDLER_COUNT_ATTRIB =
+    "phoenix.regionserver.index.handler.count";
     
     /**
      * Get executor service used for parallel scans

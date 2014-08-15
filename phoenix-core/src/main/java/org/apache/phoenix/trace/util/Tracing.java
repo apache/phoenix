@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.call.CallWrapper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryServices;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
@@ -55,16 +56,11 @@ public class Tracing {
     private static final String START_SPAN_MESSAGE = "Span received on server. Starting child";
 
     // Constants for passing into the metrics system
-    public static final String TRACE_METRIC_PREFIX = "phoenix.trace.instance";
-    // Constants for for configuring tracing
-    public static final String TRACING_LEVEL_KEY = "org.apache.phoenix.trace.frequency";
-    protected static final String PROBABILITY_THRESHOLD_KEY =
-            "org.apache.phoenix.trace.probability.threshold";
-
+    private static final String TRACE_METRIC_PREFIX = "phoenix.trace.instance";
     /**
      * We always trace on the server, assuming the client has requested tracing on the request
      */
-    public static Sampler<?> SERVER_TRACE_LEVEL = Sampler.ALWAYS;
+    private static Sampler<?> SERVER_TRACE_LEVEL = Sampler.ALWAYS;
 
     /**
      * Manage the types of frequencies that we support. By default, we never turn on tracing.
@@ -116,19 +112,19 @@ public class Tracing {
                 @Override
                 public Sampler<?> apply(ConfigurationAdapter conn) {
                     // get the connection properties for the probability information
-                    double threshold = Double.parseDouble(conn.get(PROBABILITY_THRESHOLD_KEY));
+                    double threshold = Double.parseDouble(conn.get(QueryServices.PROBABILITY_THRESHOLD_ATTRIB));
                     return new ProbabilitySampler(threshold);
                 }
             };
 
     public static Sampler<?> getConfiguredSampler(PhoenixConnection connection) {
-        String tracelevel = connection.getClientInfo(TRACING_LEVEL_KEY);
+        String tracelevel = connection.getClientInfo(QueryServices.TRACING_FREQ_ATTRIB);
         return getSampler(tracelevel, new ConfigurationAdapter.ConnectionConfigurationAdapter(
                 connection));
     }
 
     public static Sampler<?> getConfiguredSampler(Configuration conf) {
-        String tracelevel = conf.get(TRACING_LEVEL_KEY);
+        String tracelevel = conf.get(QueryServices.TRACING_FREQ_ATTRIB);
         return getSampler(tracelevel, new ConfigurationAdapter.HadoopConfigConfigurationAdapter(
                 conf));
     }
@@ -138,7 +134,7 @@ public class Tracing {
     }
 
     public static void setSampling(Properties props, Frequency freq) {
-        props.setProperty(TRACING_LEVEL_KEY, freq.key);
+        props.setProperty(QueryServices.TRACING_FREQ_ATTRIB, freq.key);
     }
 
     /**
