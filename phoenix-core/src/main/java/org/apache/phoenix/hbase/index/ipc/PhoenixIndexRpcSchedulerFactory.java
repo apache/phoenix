@@ -26,6 +26,8 @@ import org.apache.hadoop.hbase.ipc.RpcScheduler;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.regionserver.RpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.SimpleRpcSchedulerFactory;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 
 import com.google.common.base.Preconditions;
 
@@ -36,21 +38,6 @@ import com.google.common.base.Preconditions;
 public class PhoenixIndexRpcSchedulerFactory implements RpcSchedulerFactory {
 
     private static final Log LOG = LogFactory.getLog(PhoenixIndexRpcSchedulerFactory.class);
-
-    private static final String INDEX_HANDLER_COUNT_KEY =
-            "org.apache.phoenix.regionserver.index.handler.count";
-    private static final int DEFAULT_INDEX_HANDLER_COUNT = 30;
-
-    /**
-     * HConstants#HIGH_QOS is the max we will see to a standard table. We go higher to differentiate
-     * and give some room for things in the middle
-     */
-    public static final int DEFAULT_INDEX_MIN_PRIORITY = 1000;
-    public static final int DEFAULT_INDEX_MAX_PRIORITY = 1050;
-    public static final String MIN_INDEX_PRIOIRTY_KEY =
-            "org.apache.phoenix.regionserver.index.priority.min";
-    public static final String MAX_INDEX_PRIOIRTY_KEY =
-            "org.apache.phoenix.regionserver.index.priority.max";
 
     private static final String VERSION_TOO_OLD_FOR_INDEX_RPC =
             "Running an older version of HBase (less than 0.98.4), Phoenix index RPC handling cannot be enabled.";
@@ -75,9 +62,9 @@ public class PhoenixIndexRpcSchedulerFactory implements RpcSchedulerFactory {
             return delegate;
         }
 
-        int indexHandlerCount = conf.getInt(INDEX_HANDLER_COUNT_KEY, DEFAULT_INDEX_HANDLER_COUNT);
+        int indexHandlerCount = conf.getInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_HANDLER_COUNT);
         int minPriority = getMinPriority(conf);
-        int maxPriority = conf.getInt(MAX_INDEX_PRIOIRTY_KEY, DEFAULT_INDEX_MAX_PRIORITY);
+        int maxPriority = conf.getInt(QueryServices.MAX_INDEX_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_MAX_PRIORITY);
         // make sure the ranges are outside the warning ranges
         Preconditions.checkArgument(maxPriority > minPriority, "Max index priority (" + maxPriority
                 + ") must be larger than min priority (" + minPriority + ")");
@@ -99,6 +86,6 @@ public class PhoenixIndexRpcSchedulerFactory implements RpcSchedulerFactory {
     }
 
     public static int getMinPriority(Configuration conf) {
-        return conf.getInt(MIN_INDEX_PRIOIRTY_KEY, DEFAULT_INDEX_MIN_PRIORITY);
+        return conf.getInt(QueryServices.MIN_INDEX_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_MIN_PRIORITY);
     }
 }

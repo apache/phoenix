@@ -60,7 +60,6 @@ import java.util.Map.Entry;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
-
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 
@@ -128,8 +127,16 @@ public class QueryServicesOptions {
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 10000; // 10 secs
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME = 300000; // 5 mins
     
-    private final Configuration config;
+    public static final int DEFAULT_INDEX_MAX_PRIORITY = 1050;
+    /**
+     * HConstants#HIGH_QOS is the max we will see to a standard table. We go higher to differentiate
+     * and give some room for things in the middle
+     */
+    public static final int DEFAULT_INDEX_MIN_PRIORITY = 1000;
+    public static final int DEFAULT_INDEX_HANDLER_COUNT = 30;
     
+    private final Configuration config;
+
     private QueryServicesOptions(Configuration config) {
         this.config = config;
     }
