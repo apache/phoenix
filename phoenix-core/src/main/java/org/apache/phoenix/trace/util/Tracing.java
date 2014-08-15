@@ -59,7 +59,7 @@ public class Tracing {
     // Constants for for configuring tracing
     public static final String TRACING_LEVEL_KEY = "org.apache.phoenix.trace.frequency";
     protected static final String PROBABILITY_THRESHOLD_KEY =
-            "com.salesforce.phoenix.trace.probability.threshold";
+            "org.apache.phoenix.trace.probability.threshold";
 
     /**
      * We always trace on the server, assuming the client has requested tracing on the request
