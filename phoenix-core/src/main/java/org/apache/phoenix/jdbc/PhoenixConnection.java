@@ -116,7 +116,8 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final String datePattern;
     
     private boolean isClosed = false;
-
+    private boolean readOnly = false;
+ 
     private static Properties newPropsWithSCN(long scn, Properties props) {
         props = new Properties(props);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
@@ -483,7 +484,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public boolean isReadOnly() throws SQLException {
-        return true;
+        return readOnly; 
     }
 
     @Override
@@ -595,9 +596,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public void setReadOnly(boolean readOnly) throws SQLException {
-        if (readOnly) {
-            throw new SQLFeatureNotSupportedException();
-        }
+        this.readOnly=readOnly;
     }
 
     @Override

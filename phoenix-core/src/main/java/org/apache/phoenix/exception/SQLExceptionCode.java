@@ -140,7 +140,12 @@ public enum SQLExceptionCode {
     ORDER_BY_ARRAY_NOT_SUPPORTED(515, "42893", "ORDER BY of an array type is not allowed"),
     NON_EQUALITY_ARRAY_COMPARISON(516, "42894", "Array types may only be compared using = or !="),
     INVALID_NOT_NULL_CONSTRAINT(517, "42895", "Invalid not null constraint on non primary key column"),
-    
+
+    /**
+     *  Invalid Transaction State (errorcode 05, sqlstate 25)
+     */
+     READ_ONLY_CONNECTION(518,"25502","Mutations are not permitted for a read-only connection."),
+ 
     /** 
      * HBase and Phoenix specific implementation defined sub-classes.
      * Column family related exceptions.

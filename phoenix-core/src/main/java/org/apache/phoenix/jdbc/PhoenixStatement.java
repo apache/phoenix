@@ -171,7 +171,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     private Operation lastUpdateOperation;
     private boolean isClosed = false;
     private int maxRows;
-    
+    private int fetchSize = -1;
     
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
@@ -232,6 +232,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     }
     
     protected int executeMutation(final CompilableStatement stmt) throws SQLException {
+	 if (connection.isReadOnly()) {
+            throw new SQLExceptionInfo.Builder(
+                SQLExceptionCode.READ_ONLY_CONNECTION).
+                build().buildException();
+        }
         try {
             return PhoenixContextExecutor.call(
                     new Callable<Integer>() {
@@ -1005,7 +1010,10 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     @Override
     public int getFetchSize() throws SQLException {
-        return connection.getQueryServices().getProps().getInt(QueryServices.SCAN_CACHE_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE);
+	if (fetchSize>0)
+                return fetchSize;
+        else
+        	return connection.getQueryServices().getProps().getInt(QueryServices.SCAN_CACHE_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE);
     }
 
     @Override
@@ -1113,9 +1121,9 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     }
 
     @Override
-    public void setFetchSize(int rows) throws SQLException {
+    public void setFetchSize(int fetchSize) throws SQLException {
         // TODO: map to Scan.setBatch() ?
-        throw new SQLFeatureNotSupportedException();
+        this.fetchSize = fetchSize;
     }
 
     @Override
