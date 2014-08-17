@@ -60,6 +60,7 @@ import java.util.Map.Entry;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
+import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 
@@ -140,6 +141,8 @@ public class QueryServicesOptions {
      * Configuration key to overwrite the tablename that should be used as the target table
      */
     public static final String DEFAULT_TRACING_STATS_TABLE_NAME = "SYSTEM.TRACING_STATS";
+    public static final String DEFAULT_TRACING_FREQ = Tracing.Frequency.NEVER.getKey();
+    public static final double DEFAULT_TRACING_PROBABILITY_THRESHOLD = 0.05;
 
     private final Configuration config;
 

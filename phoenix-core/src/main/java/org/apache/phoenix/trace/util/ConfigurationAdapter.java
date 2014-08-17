@@ -18,7 +18,6 @@
 package org.apache.phoenix.trace.util;
 
 import org.apache.hadoop.conf.Configuration;
-
 import org.apache.phoenix.jdbc.PhoenixConnection;
 
 /**
@@ -26,7 +25,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
  */
 abstract class ConfigurationAdapter {
 
-  public abstract String get(String key);
+  public abstract String get(String key, String defaultValue);
 
   public static class ConnectionConfigurationAdapter extends ConfigurationAdapter {
     private PhoenixConnection conn;
@@ -36,8 +35,8 @@ abstract class ConfigurationAdapter {
     }
 
     @Override
-    public String get(String key) {
-      return conn.getClientInfo(key);
+    public String get(String key, String defaultValue) {
+      return conn.getQueryServices().getProps().get(key, defaultValue);
     }
   }
 
@@ -49,8 +48,8 @@ abstract class ConfigurationAdapter {
     }
 
     @Override
-    public String get(String key) {
-      return conf.get(key);
+    public String get(String key, String defaultValue) {
+      return conf.get(key, defaultValue);
     }
   }
 }
