@@ -24,6 +24,7 @@ import java.sql.Connection;
 import java.util.Collection;
 
 import org.apache.phoenix.metrics.PhoenixMetricsRecord;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.Hadoop1TracingTestEnabler.Hadoop1Disabled;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
@@ -50,9 +51,9 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
 
         // check for existence of the tracing table
         try {
-            String ddl = "CREATE TABLE " + TracingCompat.DEFAULT_STATS_TABLE_NAME;
+            String ddl = "CREATE TABLE " + QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME;
             conn.createStatement().execute(ddl);
-            fail("Table " + TracingCompat.DEFAULT_STATS_TABLE_NAME
+            fail("Table " + QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME
                     + " was not created by the metrics sink");
         } catch (Exception e) {
             // expected

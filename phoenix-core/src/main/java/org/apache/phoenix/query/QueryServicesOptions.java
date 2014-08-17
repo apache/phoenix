@@ -135,6 +135,12 @@ public class QueryServicesOptions {
     public static final int DEFAULT_INDEX_MIN_PRIORITY = 1000;
     public static final int DEFAULT_INDEX_HANDLER_COUNT = 30;
     
+    public static final int DEFAULT_TRACING_PAGE_SIZE = 100;
+    /**
+     * Configuration key to overwrite the tablename that should be used as the target table
+     */
+    public static final String DEFAULT_TRACING_STATS_TABLE_NAME = "SYSTEM.TRACING_STATS";
+
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
