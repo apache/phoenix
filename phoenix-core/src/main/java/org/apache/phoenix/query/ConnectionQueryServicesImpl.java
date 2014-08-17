@@ -157,15 +157,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final StatsManager statsManager;
     
     // Cache the latest meta data here for future connections
-    @GuardedBy("latestMetaDataLock")
-    private PMetaData latestMetaData;
+    // writes guarded by "latestMetaDataLock"
+    private volatile PMetaData latestMetaData;
     private final Object latestMetaDataLock = new Object();
     
     // Lowest HBase version on the cluster.
     private int lowestClusterHBaseVersion = Integer.MAX_VALUE;
     private boolean hasInvalidIndexConfiguration = false;
+    
+    @GuardedBy("connectionCountLock")
     private int connectionCount = 0;
-
+    private final Object connectionCountLock = new Object();
+    
     private HConnection connection;
     private volatile boolean initialized;
     
@@ -173,7 +176,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private volatile boolean closed;
     
     private volatile SQLException initializationException;
-    protected ConcurrentMap<SequenceKey,Sequence> sequenceMap = Maps.newConcurrentMap();
+    // setting this member variable guarded by "connectionCountLock"
+    private volatile ConcurrentMap<SequenceKey,Sequence> sequenceMap = Maps.newConcurrentMap();
     private KeyValueBuilder kvBuilder;
 
     private PMetaData newEmptyMetaData() {
@@ -525,11 +529,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public PhoenixConnection connect(String url, Properties info) throws SQLException {
         checkClosed();
-        synchronized (latestMetaDataLock) {
-            throwConnectionClosedIfNullMetaData();
-            latestMetaDataLock.notifyAll();
-            return new PhoenixConnection(this, url, info, latestMetaData);
+        PMetaData metadata = latestMetaData;
+        if (metadata == null) {
+            throwConnectionClosedException();
         }
+        return new PhoenixConnection(this, url, info, metadata);
     }
 
 
@@ -1291,11 +1295,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 MetaDataUtil.VIEW_INDEX_TABLE_PREFIX_BYTES.length,
                 physicalIndexTableName.length-MetaDataUtil.VIEW_INDEX_TABLE_PREFIX_BYTES.length);
         try {
-            synchronized (latestMetaDataLock) {
-                throwConnectionClosedIfNullMetaData();
-                table = latestMetaData.getTable(new PTableKey(tenantId, name));
-                latestMetaDataLock.notifyAll();
+            PMetaData metadata = latestMetaData;
+            if (metadata == null) {
+                throwConnectionClosedException();
             }
+            table = metadata.getTable(new PTableKey(tenantId, name));
             if (table.getTimeStamp() >= timestamp) { // Table in cache is newer than client timestamp which shouldn't be the case
                 throw new TableNotFoundException(table.getSchemaName().getString(), table.getTableName().getString());
             }
@@ -1501,7 +1505,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             return null;
                         }
                         checkClosed();
-                        SQLException sqlE = null;
                         PhoenixConnection metaConnection = null;
                         try {
                             openConnection();
@@ -1542,22 +1545,26 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME, 
                                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, newColumns); 
                             }
-                        } catch (SQLException e) {
-                            sqlE = e;
+                        } catch (Exception e) {
+                            if (e instanceof SQLException) {
+                                initializationException = (SQLException)e;
+                            } else {
+                                // wrap every other exception into a SQLException
+                                initializationException = new SQLException(e);
+                            }
                         } finally {
                             try {
                                 if (metaConnection != null) metaConnection.close();
                             } catch (SQLException e) {
-                                if (sqlE != null) {
-                                    sqlE.setNextException(e);
+                                if (initializationException != null) {
+                                    initializationException.setNextException(e);
                                 } else {
-                                    sqlE = e;
+                                    initializationException = e;
                                 }
                             } finally {
                                 try {
-                                    if (sqlE != null) {
-                                        initializationException = sqlE;
-                                        throw sqlE;
+                                    if (initializationException != null) {
+                                        throw initializationException;
                                     }
                                 } finally {
                                     initialized = true;
@@ -1975,14 +1982,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     @Override
-    public synchronized void addConnection(PhoenixConnection connection) throws SQLException {
-        connectionCount++;
+    public void addConnection(PhoenixConnection connection) throws SQLException {
+        synchronized (connectionCountLock) {
+            connectionCount++;
+        }
     }
 
     @Override
     public void removeConnection(PhoenixConnection connection) throws SQLException {
         ConcurrentMap<SequenceKey,Sequence> formerSequenceMap = null;
-        synchronized(this) {
+        synchronized (connectionCountLock) {
             if (--connectionCount == 0) {
                 if (!this.sequenceMap.isEmpty()) {
                     formerSequenceMap = this.sequenceMap;
