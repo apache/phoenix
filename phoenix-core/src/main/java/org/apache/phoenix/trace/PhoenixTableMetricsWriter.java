@@ -42,6 +42,8 @@ import org.apache.phoenix.metrics.MetricsWriter;
 import org.apache.phoenix.metrics.PhoenixAbstractMetric;
 import org.apache.phoenix.metrics.PhoenixMetricTag;
 import org.apache.phoenix.metrics.PhoenixMetricsRecord;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.QueryUtil;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -84,8 +86,8 @@ public class PhoenixTableMetricsWriter implements MetricsWriter {
             conn.setAutoCommit(true);
 
             String tableName =
-                    conf.get(TracingCompat.TARGET_TABLE_CONF_KEY,
-                        TracingCompat.DEFAULT_STATS_TABLE_NAME);
+                    conf.get(QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB,
+                            QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
 
             initializeInternal(conn, tableName);
         } catch (Exception e) {
@@ -104,13 +106,13 @@ public class PhoenixTableMetricsWriter implements MetricsWriter {
      * Used for <b>TESTING ONLY</b>
      * <p>
      * Initialize the connection and setup the table to use the
-     * {@link TracingCompat#DEFAULT_STATS_TABLE_NAME}
+     * {@link TracingCompat#DEFAULT_TRACING_STATS_TABLE_NAME}
      * @param conn to store for upserts and to create the table (if necessary)
      * @throws SQLException if any phoenix operation fails
      */
     @VisibleForTesting
     public void initForTesting(Connection conn) throws SQLException {
-        initializeInternal(conn, TracingCompat.DEFAULT_STATS_TABLE_NAME);
+        initializeInternal(conn, QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
     }
 
     /**

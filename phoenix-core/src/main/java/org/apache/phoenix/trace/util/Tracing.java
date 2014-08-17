@@ -112,7 +112,7 @@ public class Tracing {
                 @Override
                 public Sampler<?> apply(ConfigurationAdapter conn) {
                     // get the connection properties for the probability information
-                    double threshold = Double.parseDouble(conn.get(QueryServices.PROBABILITY_THRESHOLD_ATTRIB));
+                    double threshold = Double.parseDouble(conn.get(QueryServices.TRACING_PROBABILITY_THRESHOLD_ATTRIB));
                     return new ProbabilitySampler(threshold);
                 }
             };

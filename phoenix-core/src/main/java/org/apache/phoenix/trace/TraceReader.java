@@ -30,7 +30,8 @@ import java.util.TreeSet;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.phoenix.metrics.MetricInfo;
-import org.apache.phoenix.trace.PhoenixTableMetricsWriter;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.cloudera.htrace.Span;
 
 import com.google.common.base.Joiner;
@@ -42,8 +43,6 @@ import com.google.common.primitives.Longs;
 public class TraceReader {
 
     private static final Log LOG = LogFactory.getLog(TraceReader.class);
-    private static final int DEFAULT_PAGE_SIZE = 100;
-    private static final String PAGE_SIZE_CONF_KEY = "phoenix.trace.read.pagesize";
     private final Joiner comma = Joiner.on(',');
     private String knownColumns;
     {
@@ -64,12 +63,12 @@ public class TraceReader {
     public TraceReader(Connection conn, String statsTableName) throws SQLException {
         this.conn = conn;
         this.table = statsTableName;
-        String ps = conn.getClientInfo(PAGE_SIZE_CONF_KEY);
-        this.pageSize = ps == null ? DEFAULT_PAGE_SIZE : Integer.parseInt(ps);
+        String ps = conn.getClientInfo(QueryServices.TRACING_PAGE_SIZE_ATTRIB);
+        this.pageSize = ps == null ? QueryServicesOptions.DEFAULT_TRACING_PAGE_SIZE : Integer.parseInt(ps);
     }
 
     public TraceReader(Connection conn) throws SQLException {
-        this(conn, TracingCompat.DEFAULT_STATS_TABLE_NAME);
+        this(conn, QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
     }
 
     /**
@@ -86,7 +85,7 @@ public class TraceReader {
         // trace
         // goes together), and then by start time (so parent spans always appear before child spans)
         String query =
-                "SELECT " + knownColumns + " FROM " + TracingCompat.DEFAULT_STATS_TABLE_NAME
+                "SELECT " + knownColumns + " FROM " + QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME
                         + " ORDER BY " + MetricInfo.TRACE.columnName + " DESC, "
                         + MetricInfo.START.columnName + " ASC" + " LIMIT " + pageSize;
         int resultCount = 0;
