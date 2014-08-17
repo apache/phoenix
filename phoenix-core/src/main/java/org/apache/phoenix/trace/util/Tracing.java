@@ -30,6 +30,7 @@ import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.call.CallWrapper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
@@ -112,19 +113,20 @@ public class Tracing {
                 @Override
                 public Sampler<?> apply(ConfigurationAdapter conn) {
                     // get the connection properties for the probability information
-                    double threshold = Double.parseDouble(conn.get(QueryServices.TRACING_PROBABILITY_THRESHOLD_ATTRIB));
+                    String probThresholdStr = conn.get(QueryServices.TRACING_PROBABILITY_THRESHOLD_ATTRIB, null);
+                    double threshold = probThresholdStr == null ? QueryServicesOptions.DEFAULT_TRACING_PROBABILITY_THRESHOLD : Double.parseDouble(probThresholdStr);
                     return new ProbabilitySampler(threshold);
                 }
             };
 
     public static Sampler<?> getConfiguredSampler(PhoenixConnection connection) {
-        String tracelevel = connection.getClientInfo(QueryServices.TRACING_FREQ_ATTRIB);
+        String tracelevel = connection.getQueryServices().getProps().get(QueryServices.TRACING_FREQ_ATTRIB, QueryServicesOptions.DEFAULT_TRACING_FREQ);
         return getSampler(tracelevel, new ConfigurationAdapter.ConnectionConfigurationAdapter(
                 connection));
     }
 
     public static Sampler<?> getConfiguredSampler(Configuration conf) {
-        String tracelevel = conf.get(QueryServices.TRACING_FREQ_ATTRIB);
+        String tracelevel = conf.get(QueryServices.TRACING_FREQ_ATTRIB, QueryServicesOptions.DEFAULT_TRACING_FREQ);
         return getSampler(tracelevel, new ConfigurationAdapter.HadoopConfigConfigurationAdapter(
                 conf));
     }
