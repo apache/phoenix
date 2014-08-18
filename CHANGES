@@ -1,5 +1,148 @@
+Release Notes - Phoenix - Version 4.1.0
 
-Release Notes - Phoenix - Version 4.0.0-incubating
+** New Feature
+    * [PHOENIX-71] - Support sub-joins
+    * [PHOENIX-983] - Add a function for getting the GMT offset for a given timezone and time
+    * [PHOENIX-984] - Add support for DECODE built-in function
+    * [PHOENIX-995] - ADD ENCODE AND LPAD functions 
+    * [PHOENIX-1000] - Support FIRST_VALUE, LAST_VALUE, and NTH_VALUE aggregate functions
+    * [PHOENIX-1002] - Add support for % operator
+    * [PHOENIX-1043] - Add function for convert date between timezones
+
+** Improvement
+    * [PHOENIX-19] - Enhance JDBC connection of Phoenix to support connecting to a Secure HBase cluster.
+    * [PHOENIX-890] - Create dev-support script for generating binary and source release tars with hadoop1 and hadoop2 profiles
+    * [PHOENIX-898] - Extend PhoenixHBaseStorage to specify upsert columns
+    * [PHOENIX-939] - Generalize SELECT expressions for Pig Loader
+    * [PHOENIX-950] - Improve Secondary Index Update Failure Handling
+    * [PHOENIX-982] - Avoid spinning up and tearing down mini cluster in tests
+    * [PHOENIX-1007] - Replace getNextKeyHint(KeyValue kv) with getNextCellHint(Cell kv) in Filters
+    * [PHOENIX-1069] - Improve CsvBulkLoadTool to build indexes when loading data.
+    * [PHOENIX-1072] - Fast fail sqlline.py when pass wrong quorum string or hbase cluster hasnt' started yet 
+    * [PHOENIX-1101] - Provide a way to create Phoenix Statements on the server side inside a CP
+    * [PHOENIX-1103] - Remove hash join special case for ChunkedResultIterator
+    * [PHOENIX-1175] - Add setReadOnly and setFetchSize options
+
+** Bug
+    * [PHOENIX-3] - TRUNC method doesn't work on column of datatype timestamp
+    * [PHOENIX-11] - Create Pig Loader
+    * [PHOENIX-41] - HBase restart ConnectionLoss
+    * [PHOENIX-63] - Can't add null value to a secondary indexed table
+    * [PHOENIX-831] - First Connection to Phoenix blows up if it is tenant specific
+    * [PHOENIX-902] - Allow family qualified names in CSVCommonsLoader
+    * [PHOENIX-909] - Handle scan time range for low time resolution OS
+    * [PHOENIX-911] - DDL containing only PK cols in the column list doesn't respect HBase specific attributes
+    * [PHOENIX-915] - Numeric functions ROUND, CEIL, FLOOR return incorrect results for DOUBLE
+    * [PHOENIX-916] - Time clock skew issue when SYSTEM.CATALOG moves between region servers
+    * [PHOENIX-920] - SqlLine shows funky characters when running on Windows
+    * [PHOENIX-924] - Classify PhoenixHBaseStorageTest as an integration test
+    * [PHOENIX-938] - Use higher priority queue for index updates to prevent deadlock
+    * [PHOENIX-948] - Pig integration tests don't get run via Maven
+    * [PHOENIX-951] - Don't push LIMIT as PageFilter for joins
+    * [PHOENIX-952] - Support ANY and ALL built-ins for ARRAYs
+    * [PHOENIX-954] - View index sequences of a non multi tenant table are not getting deleted after main table drop
+    * [PHOENIX-956] - Connection properties ignored
+    * [PHOENIX-965] - Cannot aggregate on index with NULL values
+    * [PHOENIX-966] - Phoenix needs to be on the main classpath of SQL tools
+    * [PHOENIX-969] - java.util.concurrent.TimeoutException while reading the result set
+    * [PHOENIX-979] - DELETE deletes row when WHERE contains PK fields but other than PK conditions are false
+    * [PHOENIX-981] - Joins using Phoenix client on v.3.0.0 and server 3.0 head of branch fails on backward compatibility
+    * [PHOENIX-985] - performance.py script fails to execute queries
+    * [PHOENIX-986] - Improve error message on CSV import if table not found
+    * [PHOENIX-987] - Add missing category information to integration tests
+    * [PHOENIX-989] - problem setting column type of Array to null
+    * [PHOENIX-990] - OOM caused by order by query returning all rows
+    * [PHOENIX-991] - IT tests failed on hadoop2
+    * [PHOENIX-992] - Replace hTable.getRowOrBefore with ReverseScan to get maxKey in StatsManagerImpl
+    * [PHOENIX-993] - Remove/exclude JRuby dependency
+    * [PHOENIX-1001] - Using NEXT VALUE FOR 'sequence' as an input to a function cause a NPE
+    * [PHOENIX-1005] - upsert data error after drop index
+    * [PHOENIX-1008] - Problem initiating and using FLOAT ARRAY Type
+    * [PHOENIX-1016] - Support MINVALUE, MAXVALUE, and CYCLE options in CREATE SEQUENCE
+    * [PHOENIX-1032] - Don't compile alternate plans if query is a point lookup
+    * [PHOENIX-1034] - Move validate/reserve of sequences into query compile
+    * [PHOENIX-1037] - Implement getResultSetSqlType for UNSIGNED date/time types
+    * [PHOENIX-1039] - PhoenixHBaseLoaderIT fails on hadoop-2 profile
+    * [PHOENIX-1047] - Auto cast - add/sub decimal constant and integer
+    * [PHOENIX-1048] - tables and sequences should be deleted at different times when scn set at BaseConnectedQueryIT#deletePriorTables
+    * [PHOENIX-1049] - Secondary indices can cause "ERROR 203 (22005): Type mismatch" in queries involving joins
+    * [PHOENIX-1052] - Secondary indices can cause "ERROR 504 (42703): Undefined column" in queries involving joins
+    * [PHOENIX-1075] - Mathematical order of operations are improperly evaluated.
+    * [PHOENIX-1076] - Usage of CAST producing syntax error
+    * [PHOENIX-1079] - ConnectionQueryServicesImpl : Close HTable after use
+    * [PHOENIX-1080] - Fix PhoenixRuntime.decodepk for salted tables. Add integration tests.
+    * [PHOENIX-1083] - IN list of RVC combined with AND doesn't return expected rows
+    * [PHOENIX-1088] - Cannot insert data , while Index is empty string
+    * [PHOENIX-1089] - Row value constructors performance issue with multi-tenant views
+    * [PHOENIX-1090] - Fix HTable leak in ServerCacheClient
+    * [PHOENIX-1096] - Duplicate sequence values returned when doing upsert select against a salted table.
+    * [PHOENIX-1097] - ChunkedResultIteratorFactory.newIterator is not closing the passed iterator resulting in HTable leak.
+    * [PHOENIX-1100] - Upsert Select with Sequence and Order By doesn't result in sequence getting assigned based on requested ordering 
+    * [PHOENIX-1102] - Query Finds No Rows When Using Multiple Column Families in where clause
+    * [PHOENIX-1104] - Do not shutdown threadpool when initialization fails
+    * [PHOENIX-1105] - TableNotFoundException does not get caught if SYSTEM.TABLE is not present for whitelisted upgrade
+    * [PHOENIX-1109] - PhoenixTestDriver needs to call shutdown on executor 
+    * [PHOENIX-1110] - Fix flappy MultiCfQueryExecIT
+    * [PHOENIX-1111] - Fix flapping unit tests by removing inappropriate usage of TestUtil.TEST_PROPERTIES
+    * [PHOENIX-1122] - Ensure TEST_PROPERTIES is not updated to prevent test flapping
+    * [PHOENIX-1125] - SQLException when connection string is of form jdbc:phoenix:localhost:1234:userName
+    * [PHOENIX-1128] - Fix build errors introduced by switch to hadoop2 as default profile
+    * [PHOENIX-1130] - SkipScanFilter gets IndexOutOfBoundsException when intersecting salted tables
+    * [PHOENIX-1131] - PhoenixRuntime.encodePk needs to pad row key values to max column length
+    * [PHOENIX-1133] - Skip scan intersect method not reseting state correctly
+    * [PHOENIX-1137] - SkipScanFilter.intersect not called for aggregate queries
+    * [PHOENIX-1140] - Incorrect padding for row key columns
+    * [PHOENIX-1141] - Fix HTable resource leak in ConnectionQueryServicesImpl.metaDataCoprocessorExec
+    * [PHOENIX-1143] - Prevent race condition between creating phoenix connection and closing phoenix driver/connection query services.
+    * [PHOENIX-1146] - Detect stale client region cache on server and retry scans in split regions
+    * [PHOENIX-1147] - Ensure data table is sent to client if index table changes states
+    * [PHOENIX-1149] - Index mutations should be committed as batches while building local index
+    * [PHOENIX-1150] - scan on local index(index of view) for queries with no where condition should not read other indexes data stored in the shared index table
+    * [PHOENIX-1152] - Prepend seek next hint of skip scan with region start key for local indexing
+    * [PHOENIX-1153] - Fix failing PhoenixTracingEndToEndIT test
+    * [PHOENIX-1154] - Fix hanging tests because metadata is not cleared up
+    * [PHOENIX-1155] - Rename tracing test classes for consistency
+    * [PHOENIX-1156] - Don't throw TableNotFoundException when table not found in cache
+    * [PHOENIX-1157] - Improve abstraction for meta data cache
+    * [PHOENIX-1162] - Use physical name instead of logical name when recovering from stale region cache
+    * [PHOENIX-1166] - Avoid HTable creation in coprocessors to write into local index table
+    * [PHOENIX-1171] - Dropping the index is not verifying the associated table
+    * [PHOENIX-1172] - Prevent lock contention in ConnectionQueryServicesImpl. Fix exception handling. 
+    * [PHOENIX-1174] - Rename and move properties using existing convention
+    * [PHOENIX-1176] - Allow tracing to be turned on globally through config
+
+** Task
+    * [PHOENIX-539] - Implement parallel scanner that does not spool to disk
+    * [PHOENIX-674] - Run unit tests in parallel
+    * [PHOENIX-681] - Enhance JDBC connection of Phoenix to support connecting to a Secure HBase cluster.
+    * [PHOENIX-788] - Support cast from/to DATE/TIME/TIMESTAMP to/from LONG/UNSIGNED_LONG
+    * [PHOENIX-828] - Detect if split occurs while ORDER BY query is in progress
+    * [PHOENIX-949] - Replace Filter#filterRow(List) with Filter#filterRowCells(List)
+
+** Sub-task
+    * [PHOENIX-136] - Support derived tables in from clause
+    * [PHOENIX-177] - Collect usage and performance metrics
+    * [PHOENIX-927] - Support derived tables in joins
+    * [PHOENIX-934] - Make changes to specify index is local
+    * [PHOENIX-935] - create local index table with the same split keys of user table
+    * [PHOENIX-936] - Custom load balancer to colocate user table regions and index table regions
+    * [PHOENIX-937] - Handle puts on local index table
+    * [PHOENIX-955] - Skip region start key at beginning of local index rows
+    * [PHOENIX-994] - Handle scans on local index table in case any best fit covering local index available
+    * [PHOENIX-1004] - 'drop index' should delete index data from local index table
+    * [PHOENIX-1015] - Support joining back to data table row from local index when query condition involves leading columns in local index
+    * [PHOENIX-1038] - Dynamically add INDEX_TYPE column to SYSTEM.CATALOG if not already there
+    * [PHOENIX-1058] - Support index region split on it's corresponding data region split
+    * [PHOENIX-1086] - Document local indexes
+    * [PHOENIX-1099] - Fix performance issues with unit tests.
+    * [PHOENIX-1112] - Atomically rebuild index partially when index update fails  
+    * [PHOENIX-1132] - Merge server side phoenix-hadoop2-compat.jar, phoenix-hadoop-compat.jar and phoenix-<version>.jar
+    * [PHOENIX-1161] - Prevent necessity of clearing region cache on every access for local indexing
+
+** Test
+    * [PHOENIX-1136] - Add Integration Tests to verify the fix for PHOENIX-1133
+
+Previous release - Version 4.0.0-incubating
 
 ** New Feature
     * [PHOENIX-21] - Support indexes on VIEWs including tenant-specific views
