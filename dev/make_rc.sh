@@ -123,7 +123,7 @@ read -p "Do you want add tag for this RC in GIT? (Y for yes or any other key to 
 if [[ $prompt =~ [yY](es)* ]]
 then
   echo "Tagging..."
-  read -p "Enter tag (Example 5.0.0-incubating-rc0):" prompt
+  read -p "Enter tag (Example 5.0.0-rc0):" prompt
   echo "Setting tag: $prompt";sleep 5s
   git tag -a $prompt -m "$prompt"; git push origin $prompt
   mv $DIR_REL_ROOT $DIR_REL_BASE/phoenix-$prompt
