@@ -2889,6 +2889,55 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             assertNull(rs.getDate(5));
 
             assertFalse(rs.next());
+
+            //Bug: PHOENIX-1182
+            String sourceTable = "SOURCE_TABLE";
+            String joinTable = "JOIN_TABLE";
+            conn.createStatement().execute("CREATE TABLE " + sourceTable 
+                    + "   (TID CHAR(3) NOT NULL, "
+                    + "    A UNSIGNED_INT NOT NULL, " 
+                    + "    B UNSIGNED_INT NOT NULL "
+                    + "    CONSTRAINT pk PRIMARY KEY (TID, A, B))");
+            conn.createStatement().execute("CREATE TABLE " + joinTable 
+                    + "   (TID CHAR(3) NOT NULL, "
+                    + "    A UNSIGNED_INT NOT NULL, "
+                    + "    B UNSIGNED_INT NOT NULL, "
+                    + "    COUNT UNSIGNED_INT "
+                    + "    CONSTRAINT pk PRIMARY KEY (TID, A, B))");
+            
+            PreparedStatement upsertStmt = conn.prepareStatement(
+                    "upsert into " + sourceTable + "(TID, A, B) " + "values (?, ?, ?)");
+            upsertStmt.setString(1, "1");
+            upsertStmt.setInt(2, 1);
+            upsertStmt.setInt(3, 1);
+            upsertStmt.execute();
+            upsertStmt.setString(1, "1");
+            upsertStmt.setInt(2, 1);
+            upsertStmt.setInt(3, 2);
+            upsertStmt.execute();
+            upsertStmt.setString(1, "1");
+            upsertStmt.setInt(2, 1);
+            upsertStmt.setInt(3, 3);
+            upsertStmt.execute();
+            upsertStmt.setString(1, "1");
+            upsertStmt.setInt(2, 2);
+            upsertStmt.setInt(3, 1);
+            upsertStmt.execute();
+            upsertStmt.setString(1, "1");
+            upsertStmt.setInt(2, 2);
+            upsertStmt.setInt(3, 2);
+            upsertStmt.execute();
+            conn.commit();
+            
+            upsertStmt = conn.prepareStatement(
+                    "upsert into " + joinTable + "(TID, A, B, COUNT) "
+                            + "SELECT t1.TID, t1.A, t2.A, COUNT(*) "
+                            + "FROM " + sourceTable + " t1 "
+                            + "INNER JOIN " + sourceTable + " t2 ON t1.B = t2.B "
+                            + "WHERE t1.A != t2.A AND t1.TID = '1' AND t2.TID = '1' "
+                            + "GROUP BY t1.TID, t1.A, t2.A");
+            upsertStmt.execute();
+            conn.commit();            
         } finally {
             conn.close();
         }
