@@ -640,7 +640,7 @@ public class MetaDataClient {
         boolean allocateIndexId = false;
         while (true) {
             try {
-                ColumnResolver resolver = FromCompiler.getResolverForMutation(statement, connection);
+                ColumnResolver resolver = FromCompiler.getResolver(statement, connection);
                 tableRef = resolver.getTables().get(0);
                 PTable dataTable = tableRef.getTable();
                 boolean isTenantConnection = connection.getTenantId() != null;
@@ -1635,7 +1635,7 @@ public class MetaDataClient {
             boolean retried = false;
             while (true) {
                 List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize(2);
-                ColumnResolver resolver = FromCompiler.getResolverForMutation(statement, connection);
+                ColumnResolver resolver = FromCompiler.getResolver(statement, connection);
                 PTable table = resolver.getTables().get(0).getTable();
                 if (logger.isDebugEnabled()) {
                     logger.debug("Resolved table to " + table.getName().getString() + " with seqNum " + table.getSequenceNumber() + " at timestamp " + table.getTimeStamp() + " with " + table.getColumns().size() + " columns: " + table.getColumns());
@@ -1949,7 +1949,7 @@ public class MetaDataClient {
             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
             boolean retried = false;
             while (true) {
-                final ColumnResolver resolver = FromCompiler.getResolverForMutation(statement, connection);
+                final ColumnResolver resolver = FromCompiler.getResolver(statement, connection);
                 PTable table = resolver.getTables().get(0).getTable();
                 List<ColumnName> columnRefs = statement.getColumnRefs();
                 if(columnRefs == null) {
@@ -2123,7 +2123,7 @@ public class MetaDataClient {
             }
             connection.setAutoCommit(false);
             // Confirm index table is valid and up-to-date
-            TableRef indexRef = FromCompiler.getResolverForMutation(statement, connection).getTables().get(0);
+            TableRef indexRef = FromCompiler.getResolver(statement, connection).getTables().get(0);
             PreparedStatement tableUpsert = null;
             try {
                 if(newIndexState == PIndexState.ACTIVE){
