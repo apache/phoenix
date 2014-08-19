@@ -20,6 +20,7 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
@@ -37,6 +38,8 @@ import org.apache.phoenix.execute.BasicQueryPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -57,6 +60,8 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ScanUtil;
+
+import com.google.common.collect.Lists;
 
 
 
@@ -83,6 +88,8 @@ public class QueryCompiler {
     private final List<? extends PDatum> targetColumns;
     private final ParallelIteratorFactory parallelIteratorFactory;
     private final SequenceManager sequenceManager;
+    private final boolean forceJoinScanRangeOptimization;
+    private final boolean disableJoinScanRangeOptimization;
     
     public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver) throws SQLException {
         this(statement, select, resolver, Collections.<PDatum>emptyList(), null, new SequenceManager(statement));
@@ -104,6 +111,8 @@ public class QueryCompiler {
         }
 
         this.originalScan = ScanUtil.newScan(scan);
+        this.forceJoinScanRangeOptimization = select.getHint().hasHint(Hint.JOIN_SCAN_RANGE_OPTIMIZATION);
+        this.disableJoinScanRangeOptimization = select.getHint().hasHint(Hint.NO_JOIN_SCAN_RANGE_OPTIMIZATION);
     }
 
     /**
@@ -179,6 +188,8 @@ public class QueryCompiler {
             ImmutableBytesPtr[] joinIds = new ImmutableBytesPtr[count];
             List<Expression>[] joinExpressions = new List[count];
             List<Expression>[] hashExpressions = new List[count];
+            Expression[] scanRangeOptimizationLhsExpressions = new Expression[count];
+            Expression[] scanRangeOptimizationRhsExpressions = new Expression[count];
             JoinType[] joinTypes = new JoinType[count];
             PTable[] tables = new PTable[count];
             int[] fieldPositions = new int[count];
@@ -211,6 +222,9 @@ public class QueryCompiler {
                 Pair<List<Expression>, List<Expression>> joinConditions = joinSpec.compileJoinConditions(context, leftResolver, resolver);
                 joinExpressions[i] = joinConditions.getFirst();
                 hashExpressions[i] = joinConditions.getSecond();
+                Pair<Expression, Expression> scanRangeOptimizationExpressions = extractScanRangeOptimizationExpressions(context, tableRef.getTable(), joinSpec.getType(), joinSpec.getJoinTable(), joinExpressions[i], hashExpressions[i]);
+                scanRangeOptimizationLhsExpressions[i] = scanRangeOptimizationExpressions.getFirst();
+                scanRangeOptimizationRhsExpressions[i] = scanRangeOptimizationExpressions.getSecond();
                 joinTypes[i] = joinSpec.getType();
                 if (i < count - 1) {
                     fieldPositions[i + 1] = fieldPositions[i] + (tables[i] == null ? 0 : (tables[i].getColumns().size() - tables[i].getPKColumns().size()));
@@ -228,7 +242,7 @@ public class QueryCompiler {
                 limit = LimitCompiler.compile(context, query);
             }
             HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, joinExpressions, joinTypes, starJoinVector, tables, fieldPositions, postJoinFilterExpression, limit, forceProjection);
-            return new HashJoinPlan(joinTable.getStatement(), plan, joinInfo, hashExpressions, joinPlans, clientProjectors);
+            return new HashJoinPlan(joinTable.getStatement(), plan, joinInfo, hashExpressions, scanRangeOptimizationLhsExpressions, scanRangeOptimizationRhsExpressions, joinPlans, clientProjectors);
         }
         
         JoinSpec lastJoinSpec = joinSpecs.get(joinSpecs.size() - 1);
@@ -283,11 +297,58 @@ public class QueryCompiler {
                 limit = LimitCompiler.compile(context, rhs);
             }
             HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, new List[] {joinExpressions}, new JoinType[] {type == JoinType.Inner ? type : JoinType.Left}, new boolean[] {true}, new PTable[] {lhsProjTable.getTable()}, new int[] {fieldPosition}, postJoinFilterExpression, limit, forceProjection);
-            return new HashJoinPlan(joinTable.getStatement(), rhsPlan, joinInfo, new List[] {hashExpressions}, new QueryPlan[] {lhsPlan}, new TupleProjector[] {clientProjector});
+            Pair<Expression, Expression> scanRangeOptimizationExpressions = extractScanRangeOptimizationExpressions(context, rhsTableRef.getTable(), type, lhsJoin, joinExpressions, hashExpressions);
+            return new HashJoinPlan(joinTable.getStatement(), rhsPlan, joinInfo, new List[] {hashExpressions}, new Expression[] {scanRangeOptimizationExpressions.getFirst()}, new Expression[] {scanRangeOptimizationExpressions.getSecond()}, new QueryPlan[] {lhsPlan}, new TupleProjector[] {clientProjector});
         }
         
         // Do not support queries like "A right join B left join C" with hash-joins.
         throw new SQLFeatureNotSupportedException("Joins with pattern 'A right join B left join C' not supported.");
+    }
+    
+    private Pair<Expression, Expression> extractScanRangeOptimizationExpressions(StatementContext context, PTable table, JoinType type, JoinTable joinTable, final List<Expression> joinExpressions, final List<Expression> hashExpressions) {
+        if (type != JoinType.Inner || 
+                (!forceJoinScanRangeOptimization 
+                        && (disableJoinScanRangeOptimization || !joinTable.hasFilters())))
+            return new Pair<Expression, Expression>(null, null);
+        
+        List<Integer> rowkeyColumnIndexes = Lists.newArrayList();
+        for (int i = 0; i < joinExpressions.size(); i++) {
+            Expression joinExpression = joinExpressions.get(i);
+            if (joinExpression instanceof RowKeyColumnExpression) {
+                rowkeyColumnIndexes.add(i);
+            }
+        }
+        Collections.sort(rowkeyColumnIndexes, new Comparator<Integer>() {
+            @Override
+            public int compare(Integer l, Integer r) {
+                return ((RowKeyColumnExpression) joinExpressions.get(l)).getPosition() - ((RowKeyColumnExpression) joinExpressions.get(r)).getPosition();
+            }
+        });
+        int positionOffset = (table.getBucketNum() ==null ? 0 : 1) + (context.getConnection().getTenantId() != null && table.isMultiTenant() ? 1 : 0) + (table.getViewIndexId() == null ? 0 : 1);
+        int position = 0;
+        for (Integer index : rowkeyColumnIndexes) {
+            RowKeyColumnExpression exp = (RowKeyColumnExpression) joinExpressions.get(index);
+            if (exp.getPosition() != position + positionOffset) {
+                break;
+            }
+            position++;
+        }
+        
+        if (position == 0)
+            return new Pair<Expression, Expression>(null, null);
+        
+        if (position == 1)
+            return new Pair<Expression, Expression>(joinExpressions.get(rowkeyColumnIndexes.get(0)), hashExpressions.get(rowkeyColumnIndexes.get(0)));
+        
+        List<Expression> lChildren = Lists.newArrayList();
+        List<Expression> rChildren = Lists.newArrayList();
+        for (int i = 0; i < position; i++) {
+            Integer index = rowkeyColumnIndexes.get(i);
+            lChildren.add(joinExpressions.get(index));
+            rChildren.add(hashExpressions.get(index));
+        }
+        
+        return new Pair<Expression, Expression>(new RowValueConstructorExpression(lChildren, false), new RowValueConstructorExpression(rChildren, false));
     }
     
     protected QueryPlan compileSubquery(SelectStatement subquery) throws SQLException {
