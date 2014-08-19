@@ -20,7 +20,7 @@ package org.apache.phoenix.parse;
 import java.util.Collections;
 import java.util.List;
 
-public class UpsertStatement extends SingleTableStatement { 
+public class UpsertStatement extends DMLStatement { 
     private final List<ColumnName> columns;
     private final List<ParseNode> values;
     private final SelectStatement select;

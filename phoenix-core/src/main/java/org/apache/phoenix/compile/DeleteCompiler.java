@@ -33,6 +33,7 @@ import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
@@ -50,6 +51,7 @@ import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SelectStatement;
@@ -58,6 +60,8 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PRow;
@@ -179,39 +183,68 @@ public class DeleteCompiler {
     public MutationPlan compile(DeleteStatement delete) throws SQLException {
         final PhoenixConnection connection = statement.getConnection();
         final boolean isAutoCommit = connection.getAutoCommit();
-        final ConnectionQueryServices services = connection.getQueryServices();
-        final ColumnResolver resolver = FromCompiler.getResolverForMutation(delete, connection);
-        final TableRef tableRef = resolver.getTables().get(0);
-        final PTable table = tableRef.getTable();
-        if (table.getType() == PTableType.VIEW && table.getViewType().isReadOnly()) {
-            throw new ReadOnlyTableException(table.getSchemaName().getString(),table.getTableName().getString());
-        }
-        
         final boolean hasLimit = delete.getLimit() != null;
-        boolean noQueryReqd = !hasLimit && !hasImmutableIndex(tableRef);
-        boolean runOnServer = isAutoCommit && noQueryReqd;
-        HintNode hint = delete.getHint();
-        if (runOnServer && !delete.getHint().hasHint(Hint.USE_INDEX_OVER_DATA_TABLE)) {
-            hint = HintNode.create(hint, Hint.USE_DATA_OVER_INDEX_TABLE);
+        final ConnectionQueryServices services = connection.getQueryServices();
+        QueryPlan planToBe = null;
+        NamedTableNode tableNode = delete.getTable();
+        String tableName = tableNode.getName().getTableName();
+        String schemaName = tableNode.getName().getSchemaName();
+        boolean retryOnce = !isAutoCommit;
+        TableRef tableRefToBe;
+        boolean noQueryReqd = false;
+        boolean runOnServer = false;
+        SelectStatement select = null;
+        DeletingParallelIteratorFactory parallelIteratorFactory = null;
+        while (true) {
+            try {
+                ColumnResolver resolver = FromCompiler.getResolverForMutation(delete, connection);
+                tableRefToBe = resolver.getTables().get(0);
+                PTable table = tableRefToBe.getTable();
+                if (table.getType() == PTableType.VIEW && table.getViewType().isReadOnly()) {
+                    throw new ReadOnlyTableException(table.getSchemaName().getString(),table.getTableName().getString());
+                }
+                
+                noQueryReqd = !hasLimit && !hasImmutableIndex(tableRefToBe);
+                runOnServer = isAutoCommit && noQueryReqd;
+                HintNode hint = delete.getHint();
+                if (runOnServer && !delete.getHint().hasHint(Hint.USE_INDEX_OVER_DATA_TABLE)) {
+                    hint = HintNode.create(hint, Hint.USE_DATA_OVER_INDEX_TABLE);
+                }
+        
+                List<AliasedNode> aliasedNodes = Lists.newArrayListWithExpectedSize(table.getPKColumns().size());
+                boolean isSalted = table.getBucketNum() != null;
+                boolean isMultiTenant = connection.getTenantId() != null && table.isMultiTenant();
+                boolean isSharedViewIndex = table.getViewIndexId() != null;
+                for (int i = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0); i < table.getPKColumns().size(); i++) {
+                    PColumn column = table.getPKColumns().get(i);
+                    aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(null, '"' + column.getName().getString() + '"', null)));
+                }
+                select = FACTORY.select(
+                        Collections.singletonList(delete.getTable()), 
+                        hint, false, aliasedNodes, delete.getWhere(), 
+                        Collections.<ParseNode>emptyList(), null, 
+                        delete.getOrderBy(), delete.getLimit(),
+                        delete.getBindCount(), false, false);
+                select = StatementNormalizer.normalize(select, resolver);
+                parallelIteratorFactory = hasLimit ? null : new DeletingParallelIteratorFactory(connection, tableRefToBe);
+                planToBe = new QueryOptimizer(services).optimize(statement, select, resolver, Collections.<PColumn>emptyList(), parallelIteratorFactory);
+            } catch (MetaDataEntityNotFoundException e) {
+                // Catch column/column family not found exception, as our meta data may
+                // be out of sync. Update the cache once and retry if we were out of sync.
+                // Otherwise throw, as we'll just get the same error next time.
+                if (retryOnce) {
+                    retryOnce = false;
+                    MetaDataMutationResult result = new MetaDataClient(connection).updateCache(schemaName, tableName);
+                    if (result.wasUpdated()) {
+                        continue;
+                    }
+                }
+                throw e;
+            }
+            break;
         }
-
-        List<AliasedNode> aliasedNodes = Lists.newArrayListWithExpectedSize(table.getPKColumns().size());
-        boolean isSalted = table.getBucketNum() != null;
-        boolean isMultiTenant = connection.getTenantId() != null && table.isMultiTenant();
-        boolean isSharedViewIndex = table.getViewIndexId() != null;
-        for (int i = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0); i < table.getPKColumns().size(); i++) {
-            PColumn column = table.getPKColumns().get(i);
-            aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(null, '"' + column.getName().getString() + '"', null)));
-        }
-        SelectStatement select = FACTORY.select(
-                Collections.singletonList(delete.getTable()), 
-                hint, false, aliasedNodes, delete.getWhere(), 
-                Collections.<ParseNode>emptyList(), null, 
-                delete.getOrderBy(), delete.getLimit(),
-                delete.getBindCount(), false, false);
-        select = StatementNormalizer.normalize(select, resolver);
-        DeletingParallelIteratorFactory parallelIteratorFactory = hasLimit ? null : new DeletingParallelIteratorFactory(connection, tableRef);
-        final QueryPlan plan = new QueryOptimizer(services).optimize(statement, select, resolver, Collections.<PColumn>emptyList(), parallelIteratorFactory);
+        final TableRef tableRef = tableRefToBe;
+        final QueryPlan plan = planToBe;
         if (!plan.getTableRef().equals(tableRef)) {
             runOnServer = false;
             noQueryReqd = false;
