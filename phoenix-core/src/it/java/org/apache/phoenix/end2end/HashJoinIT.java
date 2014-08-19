@@ -229,7 +229,8 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
                 "    BUILD HASH TABLE 1\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "    DYNAMIC SERVER FILTER BY item_id IN (O.item_id)",
                 /*
                  * testSelfJoin()
                  *     SELECT i2.item_id, i1.name FROM joinItemTable i1 
@@ -310,7 +311,8 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "                    SERVER FILTER BY NAME != 'T3'\n" +
                 "                    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "                    BUILD HASH TABLE 0\n" +
-                "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
+                "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "    DYNAMIC SERVER FILTER BY customer_id IN (O.customer_id)",
                 /* 
                  * testJoinWithSubqueryAndAggregation()
                  *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
@@ -440,6 +442,44 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    BUILD HASH TABLE 1(DELAYED EVALUATION)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    JOIN-SCANNER 4 ROW LIMIT",
+                /*
+                 * testJoinWithScanRangeOptimization()
+                 *     SELECT (*JOIN_SCAN_RANGE_OPTIMIZATION*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
+                 *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col1 = rhs.col2
+                 */
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "        CLIENT MERGE SORT",
+                /*
+                 * testJoinWithScanRangeOptimization()
+                 *     SELECT (*JOIN_SCAN_RANGE_OPTIMIZATION*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
+                 *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col2
+                 */
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "        CLIENT MERGE SORT\n" +
+                "    DYNAMIC SERVER FILTER BY COL0 IN (RHS.COL2)",
+                /*
+                 * testJoinWithScanRangeOptimization()
+                 *     SELECT (*JOIN_SCAN_RANGE_OPTIMIZATION*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
+                 *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col1 AND lhs.col1 = rhs.col2
+                 */
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "        CLIENT MERGE SORT\n" +
+                "    DYNAMIC SERVER FILTER BY (COL0, COL1) IN ((RHS.COL1, RHS.COL2))",
                 }});
         testCases.add(new String[][] {
                 {
@@ -647,7 +687,8 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "                    SERVER FILTER BY NAME != 'T3'\n" +
                 "                    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "                    BUILD HASH TABLE 0\n" +
-                "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
+                "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "    DYNAMIC SERVER FILTER BY customer_id IN (O.customer_id)",
                 /* 
                  * testJoinWithSubqueryAndAggregation()
                  *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
@@ -778,6 +819,44 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    BUILD HASH TABLE 1(DELAYED EVALUATION)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    JOIN-SCANNER 4 ROW LIMIT",
+                /*
+                 * testJoinWithScanRangeOptimization()
+                 *     SELECT (*JOIN_SCAN_RANGE_OPTIMIZATION*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
+                 *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col1 = rhs.col2
+                 */
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "        CLIENT MERGE SORT",
+                /*
+                 * testJoinWithScanRangeOptimization()
+                 *     SELECT (*JOIN_SCAN_RANGE_OPTIMIZATION*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
+                 *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col2
+                 */
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "        CLIENT MERGE SORT\n" +
+                "    DYNAMIC SERVER FILTER BY COL0 IN (RHS.COL2)",
+                /*
+                 * testJoinWithScanRangeOptimization()
+                 *     SELECT (*JOIN_SCAN_RANGE_OPTIMIZATION*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
+                 *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col1 AND lhs.col1 = rhs.col2
+                 */
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "        CLIENT MERGE SORT\n" +
+                "    DYNAMIC SERVER FILTER BY (COL0, COL1) IN ((RHS.COL1, RHS.COL2))",
                 }});
         testCases.add(new String[][] {
                 {
@@ -1000,7 +1079,8 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "                CLIENT MERGE SORT\n" +
                 "                    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
                 "                    BUILD HASH TABLE 0\n" +
-                "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
+                "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "    DYNAMIC SERVER FILTER BY customer_id IN (O.customer_id)",
                 /* 
                  * testJoinWithSubqueryAndAggregation()
                  *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
@@ -1136,6 +1216,44 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    BUILD HASH TABLE 1(DELAYED EVALUATION)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    JOIN-SCANNER 4 ROW LIMIT",
+                /*
+                 * testJoinWithScanRangeOptimization()
+                 *     SELECT (*JOIN_SCAN_RANGE_OPTIMIZATION*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
+                 *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col1 = rhs.col2
+                 */
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "        CLIENT MERGE SORT",
+                /*
+                 * testJoinWithScanRangeOptimization()
+                 *     SELECT (*JOIN_SCAN_RANGE_OPTIMIZATION*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
+                 *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col2
+                 */
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "        CLIENT MERGE SORT\n" +
+                "    DYNAMIC SERVER FILTER BY COL0 IN (RHS.COL2)",
+                /*
+                 * testJoinWithScanRangeOptimization()
+                 *     SELECT (*JOIN_SCAN_RANGE_OPTIMIZATION*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
+                 *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col1 AND lhs.col1 = rhs.col2
+                 */
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+                "    BUILD HASH TABLE 0\n" +
+                "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+                "        CLIENT MERGE SORT\n" +
+                "    DYNAMIC SERVER FILTER BY (COL0, COL1) IN ((RHS.COL1, RHS.COL2))",
                 }});
         return testCases;
     }
@@ -3592,6 +3710,104 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query2);
             assertEquals(plans[20], QueryUtil.getExplainPlan(rs));
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testJoinWithScanRangeOptimization() throws Exception {
+        String tempTableWithCompositePK = "TEMP_TABLE_COMPOSITE_PK";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute("CREATE TABLE " + tempTableWithCompositePK 
+                    + "   (col0 INTEGER NOT NULL, " 
+                    + "    col1 INTEGER NOT NULL, " 
+                    + "    col2 INTEGER " 
+                    + "   CONSTRAINT pk PRIMARY KEY (col0, col1)) " 
+                    + "   SALT_BUCKETS=4");
+            
+            PreparedStatement upsertStmt = conn.prepareStatement(
+                    "upsert into " + tempTableWithCompositePK + "(col0, col1, col2) " + "values (?, ?, ?)");
+            for (int i = 0; i < 3; i++) {
+                upsertStmt.setInt(1, i + 1);
+                upsertStmt.setInt(2, i + 2);
+                upsertStmt.setInt(3, i + 3);
+                upsertStmt.execute();
+            }
+            conn.commit();
+            
+            // No leading part of PK
+            String query = "SELECT /*+ JOIN_SCAN_RANGE_OPTIMIZATION*/ lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 FROM " 
+                    + tempTableWithCompositePK + " lhs JOIN "
+                    + tempTableWithCompositePK + " rhs ON lhs.col1 = rhs.col2";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 2);
+            assertEquals(rs.getInt(2), 3);
+            assertEquals(rs.getInt(3), 4);
+            assertEquals(rs.getInt(4), 1);
+            assertEquals(rs.getInt(5), 2);
+            assertEquals(rs.getInt(6), 3);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 3);
+            assertEquals(rs.getInt(2), 4);
+            assertEquals(rs.getInt(3), 5);
+            assertEquals(rs.getInt(4), 2);
+            assertEquals(rs.getInt(5), 3);
+            assertEquals(rs.getInt(6), 4);
+
+            assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals(plans[21], QueryUtil.getExplainPlan(rs));
+            
+            // Leading park of PK
+            query = "SELECT /*+ JOIN_SCAN_RANGE_OPTIMIZATION*/ lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 FROM " 
+                    + tempTableWithCompositePK + " lhs JOIN "
+                    + tempTableWithCompositePK + " rhs ON lhs.col0 = rhs.col2";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 3);
+            assertEquals(rs.getInt(2), 4);
+            assertEquals(rs.getInt(3), 5);
+            assertEquals(rs.getInt(4), 1);
+            assertEquals(rs.getInt(5), 2);
+            assertEquals(rs.getInt(6), 3);
+
+            assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals(plans[22], QueryUtil.getExplainPlan(rs));
+            
+            // All parts of PK
+            query = "SELECT /*+ JOIN_SCAN_RANGE_OPTIMIZATION*/ lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 FROM " 
+                    + tempTableWithCompositePK + " lhs JOIN "
+                    + tempTableWithCompositePK + " rhs ON lhs.col0 = rhs.col1 AND lhs.col1 = rhs.col2";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 2);
+            assertEquals(rs.getInt(2), 3);
+            assertEquals(rs.getInt(3), 4);
+            assertEquals(rs.getInt(4), 1);
+            assertEquals(rs.getInt(5), 2);
+            assertEquals(rs.getInt(6), 3);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 3);
+            assertEquals(rs.getInt(2), 4);
+            assertEquals(rs.getInt(3), 5);
+            assertEquals(rs.getInt(4), 2);
+            assertEquals(rs.getInt(5), 3);
+            assertEquals(rs.getInt(6), 4);
+
+            assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals(plans[23], QueryUtil.getExplainPlan(rs));
         } finally {
             conn.close();
         }

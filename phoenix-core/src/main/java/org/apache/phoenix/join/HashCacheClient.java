@@ -69,16 +69,16 @@ public class HashCacheClient  {
      * @throws MaxServerCacheSizeExceededException if size of hash cache exceeds max allowed
      * size
      */
-    public ServerCache addHashCache(ScanRanges keyRanges, ResultIterator iterator, TupleProjector projector, long estimatedSize, List<Expression> onExpressions, TableRef cacheUsingTableRef) throws SQLException {
+    public ServerCache addHashCache(ScanRanges keyRanges, ResultIterator iterator, TupleProjector projector, long estimatedSize, List<Expression> onExpressions, TableRef cacheUsingTableRef, Expression inListRhsExpression, List<ImmutableBytesWritable> inListRhsValues) throws SQLException {
         /**
          * Serialize and compress hashCacheTable
          */
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        serialize(ptr, iterator, projector, estimatedSize, onExpressions);
+        serialize(ptr, iterator, projector, estimatedSize, onExpressions, inListRhsExpression, inListRhsValues);
         return serverCache.addServerCache(keyRanges, ptr, new HashCacheFactory(), cacheUsingTableRef);
     }
     
-    private void serialize(ImmutableBytesWritable ptr, ResultIterator iterator, TupleProjector projector, long estimatedSize, List<Expression> onExpressions) throws SQLException {
+    private void serialize(ImmutableBytesWritable ptr, ResultIterator iterator, TupleProjector projector, long estimatedSize, List<Expression> onExpressions, Expression inListRhsExpression, List<ImmutableBytesWritable> inListRhsValues) throws SQLException {
         long maxSize = serverCache.getConnection().getQueryServices().getProps().getLong(QueryServices.MAX_SERVER_CACHE_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_SIZE);
         estimatedSize = Math.min(estimatedSize, maxSize);
         if (estimatedSize > Integer.MAX_VALUE) {
@@ -104,6 +104,13 @@ public class HashCacheClient  {
                 TupleUtil.write(result, out);
                 if (baOut.size() > maxSize) {
                     throw new MaxServerCacheSizeExceededException("Size of hash cache (" + baOut.size() + " bytes) exceeds the maximum allowed size (" + maxSize + " bytes)");
+                }
+                if (inListRhsExpression != null) {
+                    ImmutableBytesWritable value = new ImmutableBytesWritable();
+                    inListRhsExpression.reset();
+                    if (inListRhsExpression.evaluate(result, value)) {
+                        inListRhsValues.add(value);
+                    }
                 }
                 nRows++;
             }

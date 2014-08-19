@@ -20,6 +20,7 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
@@ -106,6 +107,42 @@ public class WhereCompiler {
         
         expression = WhereOptimizer.pushKeyExpressionsToScan(context, statement, expression, extractedNodes);
         setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily);
+
+        return expression;
+    }
+    
+    /**
+     * Optimize scan ranges by applying dynamically generated filter expressions.
+     * @param context the shared context during query compilation
+     * @param statement TODO
+     * @throws SQLException if mismatched types are found, bind value do not match binds,
+     * or invalid function arguments are encountered.
+     * @throws SQLFeatureNotSupportedException if an unsupported expression is encountered.
+     * @throws ColumnNotFoundException if column name could not be resolved
+     * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
+     */
+    public static Expression optimize(StatementContext context, FilterableStatement statement, ParseNode viewWhere, List<Expression> dynamicFilters) throws SQLException {
+        List<Expression> filters = Lists.newArrayList(dynamicFilters);
+        Set<Expression> extractedNodes = Sets.<Expression>newHashSet();
+        WhereExpressionCompiler whereCompiler = new WhereExpressionCompiler(context);
+        ParseNode where = statement.getWhere();
+        if (where != null) {
+            filters.add(where.accept(whereCompiler));
+        }
+        Expression expression = filters.size() == 1 ? filters.get(0) : AndExpression.create(filters);
+        if (whereCompiler.isAggregate()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_IN_WHERE).build().buildException();
+        }
+        if (expression.getDataType() != PDataType.BOOLEAN) {
+            throw TypeMismatchException.newException(PDataType.BOOLEAN, expression.getDataType(), expression.toString());
+        }
+        if (viewWhere != null) {
+            WhereExpressionCompiler viewWhereCompiler = new WhereExpressionCompiler(context, true);
+            Expression viewExpression = viewWhere.accept(viewWhereCompiler);
+            expression = AndExpression.create(Lists.newArrayList(expression, viewExpression));
+        }
+        
+        expression = WhereOptimizer.pushKeyExpressionsToScan(context, statement, expression, extractedNodes);
 
         return expression;
     }

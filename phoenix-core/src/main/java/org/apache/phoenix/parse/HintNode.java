@@ -92,6 +92,14 @@ public class HintNode {
         * between 2 selected columns this will be give better performance.
         */
       NO_SEEK_TO_COLUMN,
+      /**
+       * Forces dynamic scan range optimization for join queries.
+       */
+      JOIN_SCAN_RANGE_OPTIMIZATION,
+      /**
+       * Avoids dynamic scan range optimization for join queries.
+       */
+      NO_JOIN_SCAN_RANGE_OPTIMIZATION,
     };
 
     private final Map<Hint,String> hints;

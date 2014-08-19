@@ -29,15 +29,20 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.InListExpression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.job.JobManager.JobCallable;
@@ -45,10 +50,15 @@ import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
@@ -62,17 +72,22 @@ public class HashJoinPlan implements QueryPlan {
     private final BasicQueryPlan plan;
     private final HashJoinInfo joinInfo;
     private final List<Expression>[] hashExpressions;
+    private final Expression[] inListLhsExpressions;
+    private final Expression[] inListRhsExpressions;
     private final QueryPlan[] hashPlans;
     private final TupleProjector[] clientProjectors;
 
     public HashJoinPlan(FilterableStatement statement, 
             BasicQueryPlan plan, HashJoinInfo joinInfo,
-            List<Expression>[] hashExpressions, QueryPlan[] hashPlans, 
+            List<Expression>[] hashExpressions, Expression[] inListLhsExpressions,
+            Expression[] inListRhsExpressions, QueryPlan[] hashPlans, 
             TupleProjector[] clientProjectors) {
         this.statement = statement;
         this.plan = plan;
         this.joinInfo = joinInfo;
         this.hashExpressions = hashExpressions;
+        this.inListLhsExpressions = inListLhsExpressions;
+        this.inListRhsExpressions = inListRhsExpressions;
         this.hashPlans = hashPlans;
         this.clientProjectors = clientProjectors;
     }
@@ -106,18 +121,24 @@ public class HashJoinPlan implements QueryPlan {
         ExecutorService executor = services.getExecutor();
         List<Future<ServerCache>> futures = new ArrayList<Future<ServerCache>>(count);
         List<SQLCloseable> dependencies = new ArrayList<SQLCloseable>(count);
+        List<Expression> inListExpressions = new ArrayList<Expression>();
+        @SuppressWarnings("unchecked")
+        final List<ImmutableBytesWritable>[] inListRhsValues = new List[count];  
         final int maxServerCacheTimeToLive = services.getProps().getInt(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
         final AtomicLong firstJobEndTime = new AtomicLong(0);
         SQLException firstException = null;
         for (int i = 0; i < count; i++) {
             final int index = i;
+            if (inListRhsExpressions[index] != null) {
+                inListRhsValues[index] = new ArrayList<ImmutableBytesWritable>();
+            }
             futures.add(executor.submit(new JobCallable<ServerCache>() {
 
                 @Override
                 public ServerCache call() throws Exception {
                     QueryPlan hashPlan = hashPlans[index];
                     ServerCache cache = hashClient.addHashCache(ranges, hashPlan.iterator(), 
-                            clientProjectors[index], hashPlan.getEstimatedSize(), hashExpressions[index], plan.getTableRef());
+                            clientProjectors[index], hashPlan.getEstimatedSize(), hashExpressions[index], plan.getTableRef(), inListRhsExpressions[index], inListRhsValues[index]);
                     long endTime = System.currentTimeMillis();
                     boolean isSet = firstJobEndTime.compareAndSet(0, endTime);
                     if (!isSet && (endTime - firstJobEndTime.get()) > maxServerCacheTimeToLive) {
@@ -137,6 +158,9 @@ public class HashJoinPlan implements QueryPlan {
                 ServerCache cache = futures.get(i).get();
                 joinIds[i].set(cache.getId());
                 dependencies.add(cache);
+                if (inListRhsExpressions[i] != null) {
+                    inListExpressions.add(createInListExpression(inListLhsExpressions[i], inListRhsExpressions[i], inListRhsValues[i], plan.getContext().getTempPtr()));
+                }
             } catch (InterruptedException e) {
                 if (firstException == null) {
                     firstException = new SQLException("Hash plan [" + i + "] execution interrupted.", e);
@@ -154,8 +178,30 @@ public class HashJoinPlan implements QueryPlan {
         }
 
         HashJoinInfo.serializeHashJoinIntoScan(scan, joinInfo);
+        if (!inListExpressions.isEmpty()) {
+            StatementContext context = plan.getContext();
+            PTable table = context.getCurrentTable().getTable();
+            ParseNode viewWhere = table.getViewStatement() == null ? null : new SQLParser(table.getViewStatement()).parseQuery().getWhere();
+            context.setResolver(FromCompiler.getResolverForQuery((SelectStatement) (plan.getStatement()), plan.getContext().getConnection()));
+            WhereCompiler.optimize(plan.getContext(), plan.getStatement(), viewWhere, inListExpressions);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("DYNAMIC SCAN RANGE: " + plan.getExplainPlan().getPlanSteps().get(0));
+            }
+        }
 
         return plan.iterator(dependencies);
+    }
+
+    private Expression createInListExpression(Expression lhsExpression,
+            Expression rhsExpression, List<ImmutableBytesWritable> rhsValues, 
+            ImmutableBytesWritable ptr) throws SQLException {
+        List<Expression> children = Lists.newArrayList(lhsExpression);
+        PDataType type = rhsExpression.getDataType();
+        for (ImmutableBytesWritable value : rhsValues) {
+            children.add(LiteralExpression.newConstant(type.toObject(value), type));
+        }
+        
+        return InListExpression.create(children, false, ptr);
     }
 
     @Override
@@ -182,6 +228,21 @@ public class HashJoinPlan implements QueryPlan {
             for (String step : steps) {
                 planSteps.add("        " + step);
             }
+        }
+        String dynamicFilters = null;
+        int filterCount = 0;
+        for (int i = 0; i < count; i++) {
+            if (inListLhsExpressions[i] != null) {
+                if (filterCount == 1) {
+                    dynamicFilters = "(" + dynamicFilters + ")";
+                }
+                String filter = inListLhsExpressions[i].toString() + " IN (" + inListRhsExpressions[i].toString() + ")";
+                dynamicFilters = dynamicFilters == null ? filter : (dynamicFilters + " AND (" + filter + ")");
+                filterCount++;
+            }
+        }
+        if (dynamicFilters != null) {
+            planSteps.add("    DYNAMIC SERVER FILTER BY " + dynamicFilters);
         }
         if (joinInfo.getPostJoinFilterExpression() != null) {
             planSteps.add("    AFTER-JOIN SERVER FILTER BY " + joinInfo.getPostJoinFilterExpression().toString());
