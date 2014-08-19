@@ -18,7 +18,6 @@
 
 package org.apache.phoenix.iterate;
 
-import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -26,11 +25,11 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ScanUtil;
 
 /**
  * {@code PeekingResultIterator} implementation that loads data in chunks. This is intended for
@@ -58,9 +57,9 @@ public class ChunkedResultIterator implements PeekingResultIterator {
         }
 
         @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner) throws SQLException {
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException {
             scanner.close(); //close the iterator since we don't need it anymore.
-            return new ChunkedResultIterator(delegateFactory, context, tableRef,
+            return new ChunkedResultIterator(delegateFactory, context, tableRef, scan,
                     context.getConnection().getQueryServices().getProps().getLong(
                                         QueryServices.SCAN_RESULT_CHUNK_SIZE,
                                         QueryServicesOptions.DEFAULT_SCAN_RESULT_CHUNK_SIZE));
@@ -68,11 +67,11 @@ public class ChunkedResultIterator implements PeekingResultIterator {
     }
 
     public ChunkedResultIterator(ParallelIterators.ParallelIteratorFactory delegateIteratorFactory,
-            StatementContext context, TableRef tableRef, long chunkSize) {
+            StatementContext context, TableRef tableRef, Scan scan, long chunkSize) {
         this.delegateIteratorFactory = delegateIteratorFactory;
         this.context = context;
         this.tableRef = tableRef;
-        this.scan = context.getScan();
+        this.scan = scan;
         this.chunkSize = chunkSize;
     }
 
@@ -105,18 +104,14 @@ public class ChunkedResultIterator implements PeekingResultIterator {
         if (resultIterator == null) {
             singleChunkResultIterator = new SingleChunkResultIterator(
                     new TableResultIterator(context, tableRef, scan), chunkSize);
-            resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator);
+            resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan);
         } else if (resultIterator.peek() == null && !singleChunkResultIterator.isEndOfStreamReached()) {
             singleChunkResultIterator.close();
-            try {
-                this.scan = new Scan(scan);
-            } catch (IOException e) {
-                throw new PhoenixIOException(e);
-            }
+            scan = ScanUtil.newScan(scan);
             scan.setStartRow(Bytes.add(singleChunkResultIterator.getLastKey(), new byte[]{0}));
             singleChunkResultIterator = new SingleChunkResultIterator(
                     new TableResultIterator(context, tableRef, scan), chunkSize);
-            resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator);
+            resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan);
         }
         return resultIterator;
     }
