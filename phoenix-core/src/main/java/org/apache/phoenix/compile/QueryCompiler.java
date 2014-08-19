@@ -129,7 +129,7 @@ public class QueryCompiler {
             JoinTable joinTable = JoinCompiler.compile(statement, select, context.getResolver());
             return compileJoinQuery(context, binds, joinTable, false);
         } else {
-            return compileSingleQuery(context, select, binds, parallelIteratorFactory, true);
+            return compileSingleQuery(context, select, binds, false, true);
         }
     }
     
@@ -146,7 +146,7 @@ public class QueryCompiler {
                 context.setCurrentTable(table.getTableRef());
                 context.setResolver(projectedTable.createColumnResolver());
                 table.projectColumns(context.getScan());
-                return compileSingleQuery(context, subquery, binds, null, true);
+                return compileSingleQuery(context, subquery, binds, asSubquery, true);
             }
             QueryPlan plan = compileSubquery(subquery);
             ProjectedPTableWrapper projectedTable = table.createProjectedTable(plan.getProjector());
@@ -221,7 +221,7 @@ public class QueryCompiler {
             }
             context.setCurrentTable(tableRef);
             context.setResolver(needsProject ? projectedTable.createColumnResolver() : joinTable.getOriginalResolver());
-            BasicQueryPlan plan = compileSingleQuery(context, query, binds, parallelIteratorFactory, joinTable.isAllLeftJoin());
+            BasicQueryPlan plan = compileSingleQuery(context, query, binds, asSubquery, joinTable.isAllLeftJoin());
             Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context);
             Integer limit = null;
             if (query.getLimit() != null && !query.isAggregate() && !query.isDistinct() && query.getOrderBy().isEmpty()) {
@@ -276,7 +276,7 @@ public class QueryCompiler {
             TupleProjector.serializeProjectorIntoScan(context.getScan(), rhsProjTable.createTupleProjector());
             context.setCurrentTable(rhsTableRef);
             context.setResolver(projectedTable.createColumnResolver());
-            BasicQueryPlan rhsPlan = compileSingleQuery(context, rhs, binds, parallelIteratorFactory, type == JoinType.Right);
+            BasicQueryPlan rhsPlan = compileSingleQuery(context, rhs, binds, asSubquery, type == JoinType.Right);
             Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context);
             Integer limit = null;
             if (rhs.getLimit() != null && !rhs.isAggregate() && !rhs.isDistinct() && rhs.getOrderBy().isEmpty()) {
@@ -297,7 +297,7 @@ public class QueryCompiler {
         return statement.getConnection().getQueryServices().getOptimizer().optimize(statement, plan);
     }
     
-    protected BasicQueryPlan compileSingleQuery(StatementContext context, SelectStatement select, List<Object> binds, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) throws SQLException{
+    protected BasicQueryPlan compileSingleQuery(StatementContext context, SelectStatement select, List<Object> binds, boolean asSubquery, boolean allowPageFilter) throws SQLException{
         PhoenixConnection connection = statement.getConnection();
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
@@ -324,7 +324,7 @@ public class QueryCompiler {
         WhereCompiler.compile(context, select, viewWhere);
         context.setResolver(resolver); // recover resolver
         OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit); 
-        RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, targetColumns);
+        RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, asSubquery ? Collections.<PDatum>emptyList() : targetColumns);
         
         // Final step is to build the query plan
         int maxRows = statement.getMaxRows();
@@ -335,6 +335,7 @@ public class QueryCompiler {
                 limit = maxRows;
             }
         }
+        ParallelIteratorFactory parallelIteratorFactory = asSubquery ? null : this.parallelIteratorFactory;
         if (select.isAggregate() || select.isDistinct()) {
             return new AggregatePlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, groupBy, having);
         } else {
