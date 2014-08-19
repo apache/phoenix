@@ -72,7 +72,7 @@
               <tarLongFileMode>gnu</tarLongFileMode>
               <appendAssemblyId>false</appendAssemblyId>
               <descriptors>
-                <descriptor>src/build/all.xml</descriptor>
+                <descriptor>src/build/${assembly.descriptor}</descriptor>
               </descriptors>
             </configuration>
           </execution>

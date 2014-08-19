@@ -45,6 +45,9 @@ public class TracingCompat {
     /** Set context to enable filtering */
     public static final String METRICS_CONTEXT = "tracing";
 
+    /** Marker metric to ensure that we register the tracing mbeans */
+    public static final String METRICS_MARKER_CONTEXT = "marker";
+
     public static void addAnnotation(Span span, String message, int value) {
         span.addKVAnnotation(message.getBytes(), Bytes.toBytes(value));
     }

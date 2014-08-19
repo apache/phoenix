@@ -32,6 +32,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -44,6 +45,7 @@ import org.apache.phoenix.metrics.PhoenixMetricTag;
 import org.apache.phoenix.metrics.PhoenixMetricsRecord;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.QueryUtil;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -78,20 +80,35 @@ public class PhoenixTableMetricsWriter implements MetricsWriter {
 
     @Override
     public void initialize() {
-        try {
-            // create the phoenix connection
-            Configuration conf = HBaseConfiguration.create();
-            Connection conn = QueryUtil.getConnection(conf);
-            // enable bulk loading when we have enough data
-            conn.setAutoCommit(true);
+        LOG.info("Phoenix tracing writer started");
+    }
 
-            String tableName =
-                    conf.get(QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB,
+    /**
+     * Initialize <tt>this</tt> only when we need it
+     */
+    private void lazyInitialize() {
+        synchronized (this) {
+            if (this.conn != null) {
+                return;
+            }
+            try {
+                // create the phoenix connection
+                Properties props = new Properties();
+                props.setProperty(QueryServices.TRACING_FREQ_ATTRIB,
+                    Tracing.Frequency.NEVER.getKey());
+                Configuration conf = HBaseConfiguration.create();
+                Connection conn = QueryUtil.getConnection(props, conf);
+                // enable bulk loading when we have enough data
+                conn.setAutoCommit(true);
+
+                String tableName =
+                        conf.get(QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB,
                             QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
 
-            initializeInternal(conn, tableName);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+                initializeInternal(conn, tableName);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
@@ -163,6 +180,10 @@ public class PhoenixTableMetricsWriter implements MetricsWriter {
         if (!record.name().startsWith(TracingCompat.METRIC_SOURCE_KEY)) {
             return;
         }
+
+        // don't initialize until we actually have something to write
+        lazyInitialize();
+
         String stmt = "UPSERT INTO " + table + " (";
         // drop it into the queue of things that should be written
         List<String> keys = new ArrayList<String>();
