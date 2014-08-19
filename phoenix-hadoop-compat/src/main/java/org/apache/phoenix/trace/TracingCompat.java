@@ -40,14 +40,6 @@ public class TracingCompat {
         return CompatibilityFactory.getInstance(PhoenixSpanReceiver.class);
     }
 
-    public static final String DEFAULT_STATS_TABLE_NAME = "PHOENIX.TRACING_STATS";
-
-    /**
-     * Configuration key to overwrite the tablename that should be used as the target table
-     */
-    public static final String TARGET_TABLE_CONF_KEY =
-            "org.apache.phoenix._internal.trace.tablename";
-
     public static final String METRIC_SOURCE_KEY = "phoenix.";
 
     /** Set context to enable filtering */

@@ -32,8 +32,12 @@ import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.metrics.PhoenixAbstractMetric;
 import org.apache.phoenix.metrics.PhoenixMetricTag;
 import org.apache.phoenix.metrics.PhoenixMetricsRecord;
+import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.trace.util.Tracing.Frequency;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.Before;
 
 /**
  * Base test for tracing tests - helps manage getting tracing/non-tracing
@@ -62,8 +66,18 @@ public class BaseTracingTestIT extends BaseHBaseManagedTimeIT {
         return true;
     }
 
+    @Before
+    public void resetTracingTableIfExists() throws Exception {
+        Connection conn = getConnectionWithoutTracing();
+        conn.setAutoCommit(true);
+        try {
+            conn.createStatement().executeUpdate("DELETE FROM " + QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
+        } catch (TableNotFoundException ignore) {
+        }
+    }
+    
     public static Connection getConnectionWithoutTracing() throws SQLException {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         return getConnectionWithoutTracing(props);
     }
 
@@ -74,7 +88,7 @@ public class BaseTracingTestIT extends BaseHBaseManagedTimeIT {
     }
 
     public static Connection getTracingConnection() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         return getConnectionWithTracingFrequency(props, Tracing.Frequency.ALWAYS);
     }
 

@@ -34,6 +34,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.metrics.TracingTestCompat;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.Hadoop1TracingTestEnabler.Hadoop1Disabled;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
@@ -223,7 +224,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
             public boolean foundTrace(TraceHolder trace, SpanInfo span) {
                 String traceInfo = trace.toString();
                 // skip logging traces that are just traces about tracing
-                if (traceInfo.contains(TracingCompat.DEFAULT_STATS_TABLE_NAME)) {
+                if (traceInfo.contains(QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME)) {
                     return false;
                 }
                 if (traceInfo.contains("Completing index")) {
