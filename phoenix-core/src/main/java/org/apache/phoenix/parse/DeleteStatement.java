@@ -22,7 +22,7 @@ import java.util.List;
 
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 
-public class DeleteStatement extends SingleTableStatement implements FilterableStatement {
+public class DeleteStatement extends DMLStatement implements FilterableStatement {
     private final ParseNode whereNode;
     private final List<OrderByNode> orderBy;
     private final LimitNode limit;

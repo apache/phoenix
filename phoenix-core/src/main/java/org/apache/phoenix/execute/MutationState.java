@@ -266,8 +266,9 @@ public class MutationState implements SQLCloseable {
     }
         
     /**
-     * Validates that the meta data is still valid based on the current server time
-     * and returns the server time to use for the upsert for each table.
+     * Validates that the meta data is valid against the server meta data if we haven't yet done so.
+     * Otherwise, for every UPSERT VALUES call, we'd need to hit the server to see if the meta data
+     * has changed.
      * @param connection
      * @return the server time to use for the upsert
      * @throws SQLException if the table or any columns no longer exist
@@ -282,6 +283,8 @@ public class MutationState implements SQLCloseable {
             TableRef tableRef = entry.getKey();
             long serverTimeStamp = tableRef.getTimeStamp();
             PTable table = tableRef.getTable();
+            // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
+            // so no need to do it again here.
             if (!connection.getAutoCommit()) {
                 MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(), table.getTableName().getString());
                 long timestamp = result.getMutationTime();

@@ -845,4 +845,33 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
         }
     }
    
- }
+    @Test
+    public void alterTableFromDifferentClient() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn3 = DriverManager.getConnection(getUrl(), props);
+
+        // here we insert into the orig schema with one column
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        conn1.createStatement().execute("create table test_simpletable(id VARCHAR PRIMARY KEY, field1 BIGINT)");
+        PreparedStatement stmtInsert1 = conn1.prepareStatement("upsert into test_simpletable (id, field1) values ( ?, ?)");
+        stmtInsert1.setString(1, "key1");
+        stmtInsert1.setLong(2, 1L);
+        stmtInsert1.execute();
+        conn1.commit();
+        stmtInsert1.close();
+        conn1.close();
+
+        // Do the alter through a separate client.
+        conn3.createStatement().execute("alter table test_simpletable add field2 BIGINT");
+        
+        //Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement pstmt2 = conn1.prepareStatement("upsert into test_simpletable (id, field1, field2) values ( ?, ?, ?)");
+        pstmt2.setString(1, "key2");
+        pstmt2.setLong(2, 2L);
+        pstmt2.setLong(3, 2L);
+        pstmt2.execute();
+        conn1.commit();
+        pstmt2.close();
+        conn1.close();
+    }
+}
