@@ -31,6 +31,7 @@ import org.apache.phoenix.call.CallWrapper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.trace.TracingCompat;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
@@ -276,5 +277,26 @@ public class Tracing {
         public void after() {
             scope.close();
         }
+    }
+
+    /**
+     * Track if the tracing system has been initialized for phoenix
+     */
+    private static boolean initialized = false;
+
+    /**
+     * Add the phoenix span receiver so we can log the traces. We have a single trace source for the
+     * whole JVM
+     */
+    public synchronized static void addTraceMetricsSource() {
+        try {
+            if (!initialized) {
+                Trace.addReceiver(TracingCompat.newTraceMetricSource());
+            }
+        } catch (RuntimeException e) {
+            LOG.warn("Tracing will outputs will not be written to any metrics sink! No "
+                    + "TraceMetricsSink found on the classpath", e);
+        }
+        initialized = true;
     }
 }

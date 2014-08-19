@@ -52,7 +52,7 @@ public class PhoenixMetricsWriterTest {
     MetricsWriter mockSink = Mockito.mock(MetricsWriter.class);
 
     // writer that will translate to the sink (specific to hadoop version used)
-    PhoenixMetricsWriter writer = new PhoenixMetricsWriter();
+    PhoenixMetricsSink writer = new PhoenixMetricsSink();
     writer.setWriterForTesting(mockSink);
 
     // create a simple metrics record

@@ -26,6 +26,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Properties;
 
 import javax.annotation.Nullable;
 
@@ -33,6 +34,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 
@@ -181,16 +183,33 @@ public final class QueryUtil {
         }
         return buf.toString();
     }
+
     public static Connection getConnection(Configuration conf) throws ClassNotFoundException,
-          SQLException {
-        // read the hbase properties from the configuration
-        String server = ZKConfig.getZKQuorumServersString(conf);
+            SQLException {
+        return getConnection(new Properties(), conf);
+    }
+
+    public static Connection getConnection(Properties props, Configuration conf)
+            throws ClassNotFoundException, SQLException {
         // make sure we load the phoenix driver
         Class.forName(PhoenixDriver.class.getName());
-        int port =
-            conf.getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT);
+
+        // read the hbase properties from the configuration
+        String server = ZKConfig.getZKQuorumServersString(conf);
+        int port;
+        // if it has a port, don't try to add one
+        try {
+            server = Addressing.parseHostname(server);
+            port = Addressing.parsePort(server);
+        } catch (IllegalArgumentException e) {
+            // port isn't set
+            port =
+                    conf.getInt(HConstants.ZOOKEEPER_CLIENT_PORT,
+                        HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT);
+        }
+
         String jdbcUrl = getUrl(server, port);
         LOG.info("Creating connection with the jdbc url:" + jdbcUrl);
-        return DriverManager.getConnection(jdbcUrl);
-      }
+        return DriverManager.getConnection(jdbcUrl, props);
+    }
 }

@@ -25,10 +25,13 @@ import javax.annotation.Nullable;
 
 import org.apache.commons.configuration.Configuration;
 import org.apache.commons.configuration.SubsetConfiguration;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hadoop.metrics2.MetricsRecord;
 import org.apache.hadoop.metrics2.MetricsSink;
 import org.apache.hadoop.metrics2.MetricsTag;
+import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.metrics.MetricsWriter;
 import org.apache.phoenix.metrics.PhoenixAbstractMetric;
 import org.apache.phoenix.metrics.PhoenixMetricTag;
@@ -45,12 +48,18 @@ import com.google.common.collect.Iterators;
  * <p>
  * This class becomes unnecessary once we drop Hadoop1 support.
  */
-public class PhoenixMetricsWriter implements MetricsSink, TestableMetricsWriter {
+public class PhoenixMetricsSink implements MetricsSink, TestableMetricsWriter {
 
+  private static final Log LOG = LogFactory.getLog(PhoenixMetricsSink.class);
   /**
-   * Metrics configuration key for the class that should be used for writing the output
+   * Metrics configuration key for the class that should be used for writing the output.
+   * <p>
+   * This would actually be set as: <code>
+   * phoenix.sink.&ltsome instance name&gt.writer-class
+   * </code> Where <tt>some instance name</tt> is just any unique name, so properties can be
+   * differentiated
    */
-  public static final String PHOENIX_METRICS_WRITER_CLASS = "phoenix.sink.writer-class";
+  public static final String PHOENIX_METRICS_WRITER_CLASS = "writer-class";
 
   public static void setWriterClass(MetricsWriter writer, Configuration conf) {
     conf.setProperty(PHOENIX_METRICS_WRITER_CLASS, writer.getClass().getName());
@@ -58,10 +67,16 @@ public class PhoenixMetricsWriter implements MetricsSink, TestableMetricsWriter 
 
   private MetricsWriter writer;
 
+  public PhoenixMetricsSink() {
+    LOG.info("Writing tracing metrics to phoenix table");
+    Metrics.markSinkInitialized();
+  }
+
   @Override
   public void init(SubsetConfiguration config) {
     // instantiate the configured writer class
     String clazz = config.getString(PHOENIX_METRICS_WRITER_CLASS);
+    LOG.info("Instantiating writer class: " + clazz);
     this.writer = TracingCompat.initializeWriter(clazz);
     Preconditions.checkNotNull(writer, "Could not correctly initialize metrics writer!");
   }
