@@ -35,11 +35,11 @@ import org.junit.runners.Parameterized.Parameters;
 import org.apache.phoenix.schema.PDataType;
 
 @RunWith(Parameterized.class)
-public class KeyRangeCoalesceTests extends TestCase {
+public class KeyRangeCoalesceTest extends TestCase {
     private static final Random RANDOM = new Random(1);
     private final List<KeyRange> expected, input;
 
-    public KeyRangeCoalesceTests(List<KeyRange> expected, List<KeyRange> input) {
+    public KeyRangeCoalesceTest(List<KeyRange> expected, List<KeyRange> input) {
         this.expected = expected;
         this.input = input;
     }
