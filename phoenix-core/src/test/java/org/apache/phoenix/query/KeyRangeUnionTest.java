@@ -35,10 +35,10 @@ import org.junit.runners.Parameterized.Parameters;
 import org.apache.phoenix.schema.PDataType;
 
 @RunWith(Parameterized.class)
-public class KeyRangeUnionTests extends TestCase {
+public class KeyRangeUnionTest extends TestCase {
     private final KeyRange a, b, union;
 
-    public KeyRangeUnionTests(KeyRange a, KeyRange b, KeyRange union) {
+    public KeyRangeUnionTest(KeyRange a, KeyRange b, KeyRange union) {
         this.a = a;
         this.b = b;
         this.union = union;

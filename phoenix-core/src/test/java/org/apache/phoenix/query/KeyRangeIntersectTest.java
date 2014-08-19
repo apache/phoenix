@@ -35,10 +35,10 @@ import org.junit.runners.Parameterized.Parameters;
 import org.apache.phoenix.schema.PDataType;
 
 @RunWith(Parameterized.class)
-public class KeyRangeIntersectTests extends TestCase {
+public class KeyRangeIntersectTest extends TestCase {
     private final KeyRange a, b, intersection;
 
-    public KeyRangeIntersectTests(KeyRange a, KeyRange b, KeyRange intersection) {
+    public KeyRangeIntersectTest(KeyRange a, KeyRange b, KeyRange intersection) {
         this.a = a;
         this.b = b;
         this.intersection = intersection;
