@@ -47,7 +47,7 @@ import org.junit.Test;
  * 
  * @since 3.0.0
  */
-public class RoundFloorCeilExpressionsUnitTests {
+public class RoundFloorCeilExpressionsTest {
 
     @Test
     public void testRoundDecimalExpression() throws Exception {

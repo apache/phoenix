@@ -85,7 +85,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
     private final ParallelIteratorFactory iteratorFactory;
     
     public static interface ParallelIteratorFactory {
-        PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner) throws SQLException;
+        PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException;
     }
 
     private static final int DEFAULT_THREAD_TIMEOUT_MS = 60000; // 1min
@@ -347,13 +347,12 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
 
                     @Override
                     public PeekingResultIterator call() throws Exception {
-                        StatementContext scanContext = new StatementContext(context, splitScan);
                         long startTime = System.currentTimeMillis();
-                        ResultIterator scanner = new TableResultIterator(scanContext, tableRef, splitScan);
+                        ResultIterator scanner = new TableResultIterator(context, tableRef, splitScan);
                         if (logger.isDebugEnabled()) {
                             logger.debug("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + splitScan);
                         }
-                        return iteratorFactory.newIterator(scanContext, scanner);
+                        return iteratorFactory.newIterator(context, scanner, splitScan);
                     }
 
                     /**

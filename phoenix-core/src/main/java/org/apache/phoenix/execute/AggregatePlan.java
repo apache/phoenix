@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.RowProjector;
@@ -94,7 +95,7 @@ public class AggregatePlan extends BasicQueryPlan {
             this.services = services;
         }
         @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner) throws SQLException {
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException {
             Expression expression = RowKeyExpression.INSTANCE;
             OrderByExpression orderByExpression = new OrderByExpression(expression, false, true);
             int threshold = services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
@@ -111,9 +112,9 @@ public class AggregatePlan extends BasicQueryPlan {
             this.outerFactory = outerFactory;
         }
         @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner) throws SQLException {
-            PeekingResultIterator iterator = innerFactory.newIterator(context, scanner);
-            return outerFactory.newIterator(context, iterator);
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException {
+            PeekingResultIterator iterator = innerFactory.newIterator(context, scanner, scan);
+            return outerFactory.newIterator(context, iterator, scan);
         }
     }
 

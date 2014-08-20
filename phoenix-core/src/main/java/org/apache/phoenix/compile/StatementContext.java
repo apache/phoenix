@@ -93,29 +93,6 @@ public class StatementContext {
         this.whereConditionColumns = new ArrayList<Pair<byte[],byte[]>>();
     }
 
-    /**
-     * Copy constructor where an altered scan can be set.
-     *
-     * @param stmtContext the {@code StatementContext} to be copied
-     * @param scan the customized scan
-     */
-    public StatementContext(StatementContext stmtContext, Scan scan) {
-        this.statement = stmtContext.statement;
-        this.resolver = stmtContext.resolver;
-        this.scan = scan;
-        this.sequences = stmtContext.sequences;
-        this.binds = stmtContext.binds;
-        this.aggregates = stmtContext.aggregates;
-        this.expressions = stmtContext.expressions;
-        this.dateFormat = stmtContext.dateFormat;
-        this.dateFormatter = stmtContext.dateFormatter;
-        this.dateParser = stmtContext.dateParser;
-        this.numberFormat = stmtContext.numberFormat;
-        this.tempPtr = new ImmutableBytesWritable();
-        this.currentTable = stmtContext.currentTable;
-        this.whereConditionColumns = stmtContext.whereConditionColumns;
-    }
-
     public String getDateFormat() {
         return dateFormat;
     }

@@ -395,6 +395,19 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             } catch (SQLFeatureNotSupportedException e) {                
                 assertEquals(MSG, e.getMessage());
             }
+            
+            // (groupby orderby) limit
+            query = "SELECT a, s FROM (SELECT a_string a, sum(a_byte) s FROM aTable GROUP BY a_string ORDER BY sum(a_byte)) LIMIT 2";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(C_VALUE,rs.getString(1));
+            assertEquals(9,rs.getInt(2));
+            assertTrue (rs.next());
+            assertEquals(A_VALUE,rs.getString(1));
+            assertEquals(10,rs.getInt(2));
+
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }
