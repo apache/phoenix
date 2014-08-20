@@ -177,19 +177,14 @@ public class FromCompiler {
 
     public static ColumnResolver getResolverForMutation(DMLStatement statement, PhoenixConnection connection)
             throws SQLException {
-        return getResolverForMutation(statement, connection, false);
-    }
-    
-    public static ColumnResolver getResolverForMutation(DMLStatement statement, PhoenixConnection connection, boolean updateCacheImmediately)
-            throws SQLException {
         /*
          * We validate the meta data at commit time for mutations, as this allows us to do many UPSERT VALUES calls
          * without hitting the server each time to check if the meta data is up-to-date.
          */
-        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), updateCacheImmediately);
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), false);
         return visitor;
     }
-
+    
     private static class SingleTableColumnResolver extends BaseColumnResolver {
         	private final List<TableRef> tableRefs;
         	private final String alias;
