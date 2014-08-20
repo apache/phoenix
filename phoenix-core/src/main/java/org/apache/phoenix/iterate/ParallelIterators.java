@@ -360,13 +360,12 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
 
                     @Override
                     public PeekingResultIterator call() throws Exception {
-                        StatementContext scanContext = new StatementContext(context, splitScan);
                         long startTime = System.currentTimeMillis();
-                        ResultIterator scanner = new TableResultIterator(scanContext, tableRef, splitScan);
+                        ResultIterator scanner = new TableResultIterator(context, tableRef, splitScan);
                         if (logger.isDebugEnabled()) {
                             logger.debug("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + splitScan);
                         }
-                        return iteratorFactory.newIterator(scanContext, scanner, splitScan);
+                        return iteratorFactory.newIterator(context, scanner, splitScan);
                     }
 
                     /**

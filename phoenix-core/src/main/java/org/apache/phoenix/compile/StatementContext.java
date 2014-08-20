@@ -102,30 +102,6 @@ public class StatementContext {
     }
 
     /**
-     * Copy constructor where an altered scan can be set.
-     *
-     * @param stmtContext the {@code StatementContext} to be copied
-     * @param scan the customized scan
-     */
-    public StatementContext(StatementContext stmtContext, Scan scan) {
-        this.statement = stmtContext.statement;
-        this.resolver = stmtContext.resolver;
-        this.scan = scan;
-        this.sequences = stmtContext.sequences;
-        this.binds = stmtContext.binds;
-        this.aggregates = stmtContext.aggregates;
-        this.expressions = stmtContext.expressions;
-        this.dateFormat = stmtContext.dateFormat;
-        this.dateFormatter = stmtContext.dateFormatter;
-        this.dateParser = stmtContext.dateParser;
-        this.numberFormat = stmtContext.numberFormat;
-        this.tempPtr = new ImmutableBytesWritable();
-        this.currentTable = stmtContext.currentTable;
-        this.whereConditionColumns = stmtContext.whereConditionColumns;
-        this.dataColumns = stmtContext.getDataColumnsMap();
-    }
-
-    /**
      * build map from dataColumn to what will be its position in single KeyValue value bytes
      * returned from the coprocessor that joins from the index row back to the data row.
      * @param column
