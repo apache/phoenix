@@ -1,4 +1,5 @@
-Release Notes - Phoenix - Version 4.1.0
+
+Release Notes - Phoenix - Version 4.1
 
 ** New Feature
     * [PHOENIX-71] - Support sub-joins
@@ -22,6 +23,30 @@ Release Notes - Phoenix - Version 4.1.0
     * [PHOENIX-1101] - Provide a way to create Phoenix Statements on the server side inside a CP
     * [PHOENIX-1103] - Remove hash join special case for ChunkedResultIterator
     * [PHOENIX-1175] - Add setReadOnly and setFetchSize options
+    * [PHOENIX-1198] - Add ability to pass custom tags to be added to log lines
+
+** Sub-task
+    * [PHOENIX-136] - Support derived tables in from clause
+    * [PHOENIX-177] - Collect usage and performance metrics
+    * [PHOENIX-927] - Support derived tables in joins
+    * [PHOENIX-934] - Make changes to specify index is local
+    * [PHOENIX-935] - create local index table with the same split keys of user table
+    * [PHOENIX-936] - Custom load balancer to colocate user table regions and index table regions
+    * [PHOENIX-937] - Handle puts on local index table
+    * [PHOENIX-955] - Skip region start key at beginning of local index rows
+    * [PHOENIX-994] - Handle scans on local index table in case any best fit covering local index available
+    * [PHOENIX-1004] - 'drop index' should delete index data from local index table
+    * [PHOENIX-1015] - Support joining back to data table row from local index when query condition involves leading columns in local index
+    * [PHOENIX-1038] - Dynamically add INDEX_TYPE column to SYSTEM.CATALOG if not already there
+    * [PHOENIX-1058] - Support index region split on it's corresponding data region split
+    * [PHOENIX-1086] - Document local indexes
+    * [PHOENIX-1099] - Fix performance issues with unit tests.
+    * [PHOENIX-1112] - Atomically rebuild index partially when index update fails  
+    * [PHOENIX-1114] - Add user-level documentation for tracing
+    * [PHOENIX-1129] - NotCompliantMBeanException
+    * [PHOENIX-1132] - Merge server side phoenix-hadoop2-compat.jar, phoenix-hadoop-compat.jar and phoenix-<version>.jar
+    * [PHOENIX-1161] - Prevent necessity of clearing region cache on every access for local indexing
+    * [PHOENIX-1196] - Add ability to add custom tracing tags for connections and/or upserts and selects
 
 ** Bug
     * [PHOENIX-3] - TRUNC method doesn't work on column of datatype timestamp
@@ -110,6 +135,11 @@ Release Notes - Phoenix - Version 4.1.0
     * [PHOENIX-1172] - Prevent lock contention in ConnectionQueryServicesImpl. Fix exception handling. 
     * [PHOENIX-1174] - Rename and move properties using existing convention
     * [PHOENIX-1176] - Allow tracing to be turned on globally through config
+    * [PHOENIX-1180] - Rename test classes so they are properly picked up by the test runner
+    * [PHOENIX-1181] - client cache fails to update itself after a table was altered from a diff client
+    * [PHOENIX-1187] - Enable tracing on server
+    * [PHOENIX-1188] - Performance regression for non-aggregate queries
+    * [PHOENIX-1192] - Re-enable reverse scan to prevent order by
 
 ** Task
     * [PHOENIX-539] - Implement parallel scanner that does not spool to disk
@@ -118,26 +148,6 @@ Release Notes - Phoenix - Version 4.1.0
     * [PHOENIX-788] - Support cast from/to DATE/TIME/TIMESTAMP to/from LONG/UNSIGNED_LONG
     * [PHOENIX-828] - Detect if split occurs while ORDER BY query is in progress
     * [PHOENIX-949] - Replace Filter#filterRow(List) with Filter#filterRowCells(List)
-
-** Sub-task
-    * [PHOENIX-136] - Support derived tables in from clause
-    * [PHOENIX-177] - Collect usage and performance metrics
-    * [PHOENIX-927] - Support derived tables in joins
-    * [PHOENIX-934] - Make changes to specify index is local
-    * [PHOENIX-935] - create local index table with the same split keys of user table
-    * [PHOENIX-936] - Custom load balancer to colocate user table regions and index table regions
-    * [PHOENIX-937] - Handle puts on local index table
-    * [PHOENIX-955] - Skip region start key at beginning of local index rows
-    * [PHOENIX-994] - Handle scans on local index table in case any best fit covering local index available
-    * [PHOENIX-1004] - 'drop index' should delete index data from local index table
-    * [PHOENIX-1015] - Support joining back to data table row from local index when query condition involves leading columns in local index
-    * [PHOENIX-1038] - Dynamically add INDEX_TYPE column to SYSTEM.CATALOG if not already there
-    * [PHOENIX-1058] - Support index region split on it's corresponding data region split
-    * [PHOENIX-1086] - Document local indexes
-    * [PHOENIX-1099] - Fix performance issues with unit tests.
-    * [PHOENIX-1112] - Atomically rebuild index partially when index update fails  
-    * [PHOENIX-1132] - Merge server side phoenix-hadoop2-compat.jar, phoenix-hadoop-compat.jar and phoenix-<version>.jar
-    * [PHOENIX-1161] - Prevent necessity of clearing region cache on every access for local indexing
 
 ** Test
     * [PHOENIX-1136] - Add Integration Tests to verify the fix for PHOENIX-1133
