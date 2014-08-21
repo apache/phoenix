@@ -1,15 +1,5 @@
 Release Notes - Phoenix - Version 3.1
 
-** New Feature
-    * [PHOENIX-71] - Support sub-joins
-    * [PHOENIX-983] - Add a function for getting the GMT offset for a given timezone and time
-    * [PHOENIX-984] - Add support for DECODE built-in function
-    * [PHOENIX-995] - ADD ENCODE AND LPAD functions 
-    * [PHOENIX-1000] - Support FIRST_VALUE, LAST_VALUE, and NTH_VALUE aggregate functions
-    * [PHOENIX-1002] - Add support for % operator
-    * [PHOENIX-1043] - Add function for convert date between timezones
-    * [PHOENIX-1062] - A SQL Trimmer for log sql execute times
-
 ** Improvement
     * [PHOENIX-19] - Enhance JDBC connection of Phoenix to support connecting to a Secure HBase cluster.
     * [PHOENIX-890] - Create dev-support script for generating binary and source release tars with hadoop1 and hadoop2 profiles
@@ -22,6 +12,24 @@ Release Notes - Phoenix - Version 3.1
     * [PHOENIX-1101] - Provide a way to create Phoenix Statements on the server side inside a CP
     * [PHOENIX-1103] - Remove hash join special case for ChunkedResultIterator
     * [PHOENIX-1175] - Add setReadOnly and setFetchSize options
+
+** New Feature
+    * [PHOENIX-71] - Support sub-joins
+    * [PHOENIX-983] - Add a function for getting the GMT offset for a given timezone and time
+    * [PHOENIX-984] - Add support for DECODE built-in function
+    * [PHOENIX-995] - ADD ENCODE AND LPAD functions 
+    * [PHOENIX-1000] - Support FIRST_VALUE, LAST_VALUE, and NTH_VALUE aggregate functions
+    * [PHOENIX-1002] - Add support for % operator
+    * [PHOENIX-1043] - Add function for convert date between timezones
+    * [PHOENIX-1062] - A SQL Trimmer for log sql execute times
+
+** Sub-task
+    * [PHOENIX-136] - Support derived tables in from clause
+    * [PHOENIX-927] - Support derived tables in joins
+    * [PHOENIX-1038] - Dynamically add INDEX_TYPE column to SYSTEM.CATALOG if not already there
+    * [PHOENIX-1112] - Atomically rebuild index partially when index update fails  
+    * [PHOENIX-1132] - Merge server side phoenix-hadoop2-compat.jar, phoenix-hadoop-compat.jar and phoenix-<version>.jar
+    * [PHOENIX-1161] - Prevent necessity of clearing region cache on every access for local indexing
 
 ** Bug
     * [PHOENIX-3] - TRUNC method doesn't work on column of datatype timestamp
@@ -104,6 +112,9 @@ Release Notes - Phoenix - Version 3.1
     * [PHOENIX-1162] - Use physical name instead of logical name when recovering from stale region cache
     * [PHOENIX-1171] - Dropping the index is not verifying the associated table
     * [PHOENIX-1172] - Prevent lock contention in ConnectionQueryServicesImpl. Fix exception handling. 
+    * [PHOENIX-1180] - Rename test classes so they are properly picked up by the test runner
+    * [PHOENIX-1181] - client cache fails to update itself after a table was altered from a diff client
+    * [PHOENIX-1188] - Performance regression for non-aggregate queries
 
 ** Task
     * [PHOENIX-539] - Implement parallel scanner that does not spool to disk
@@ -113,17 +124,8 @@ Release Notes - Phoenix - Version 3.1
     * [PHOENIX-828] - Detect if split occurs while ORDER BY query is in progress
     * [PHOENIX-1056] - A ImportTsv tool for phoenix to build table data and all index data.
 
-** Sub-task
-    * [PHOENIX-136] - Support derived tables in from clause
-    * [PHOENIX-927] - Support derived tables in joins
-    * [PHOENIX-1038] - Dynamically add INDEX_TYPE column to SYSTEM.CATALOG if not already there
-    * [PHOENIX-1112] - Atomically rebuild index partially when index update fails  
-    * [PHOENIX-1132] - Merge server side phoenix-hadoop2-compat.jar, phoenix-hadoop-compat.jar and phoenix-<version>.jar
-    * [PHOENIX-1161] - Prevent necessity of clearing region cache on every access for local indexing
-
 ** Test
     * [PHOENIX-1136] - Add Integration Tests to verify the fix for PHOENIX-1133
-
 
 Previous release - Version 3.0.0-incubating
 
