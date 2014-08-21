@@ -27,11 +27,13 @@ import java.util.Map;
 import java.util.NavigableSet;
 import java.util.TreeMap;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -56,7 +58,14 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class ScanUtil {
-
+    /*
+     * Max length that we fill our key when we turn an inclusive key
+     * into a exclusive key.
+     */
+    private static final byte[] MAX_FILL_LENGTH_FOR_PREVIOUS_KEY = new byte[16];
+    static {
+        Arrays.fill(MAX_FILL_LENGTH_FOR_PREVIOUS_KEY, (byte)-1);
+    }
     public static final int[] SINGLE_COLUMN_SLOT_SPAN = new int[1];
 
     private ScanUtil() {
@@ -95,6 +104,8 @@ public class ScanUtil {
             TreeMap<byte [], NavigableSet<byte []>> existingMap = (TreeMap<byte[], NavigableSet<byte[]>>)scan.getFamilyMap();
             Map<byte [], NavigableSet<byte []>> clonedMap = new TreeMap<byte [], NavigableSet<byte []>>(existingMap);
             newScan.setFamilyMap(clonedMap);
+            // Carry over the reversed attribute
+            newScan.setReversed(scan.isReversed());
             return newScan;
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -220,6 +231,14 @@ public class ScanUtil {
     public static void setTimeRange(Scan scan, long ts) {
         try {
             scan.setTimeRange(MetaDataProtocol.MIN_TABLE_TIMESTAMP, ts);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static void setTimeRange(Scan scan, TimeRange range) {
+        try {
+            scan.setTimeRange(range.getMin(), range.getMax());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -429,28 +448,48 @@ public class ScanUtil {
         return key;
     }
 
-    private static final String REVERSED_ATTR = "_reversed_";
+    public static boolean isReversed(Scan scan) {
+        return scan.getAttribute(BaseScannerRegionObserver.REVERSE_SCAN) != null;
+    }
     
     public static void setReversed(Scan scan) {
-        // TODO: set attribute dynamically here to prevent dependency on newer HBase release
-        scan.setAttribute(REVERSED_ATTR, PDataType.TRUE_BYTES);
+        scan.setAttribute(BaseScannerRegionObserver.REVERSE_SCAN, PDataType.TRUE_BYTES);
     }
 
     // Start/stop row must be swapped if scan is being done in reverse
-    public static void swapStartStopRowIfReversed(Scan scan) {
+    public static void setupReverseScan(Scan scan) {
         if (isReversed(scan)) {
             byte[] startRow = scan.getStartRow();
             byte[] stopRow = scan.getStopRow();
-            scan.setStartRow(stopRow);
-            scan.setStopRow(startRow);
+            byte[] newStartRow = startRow;
+            byte[] newStopRow = stopRow;
+            if (startRow.length != 0) {
+                /*
+                 * Must get previous key because this is going from an inclusive start key to an exclusive stop key, and
+                 * we need the start key to be included. We get the previous key by decrementing the last byte by one.
+                 * However, with variable length data types, we need to fill with the max byte value, otherwise, if the
+                 * start key is 'ab', we lower it to 'aa' which would cause 'aab' to be included (which isn't correct).
+                 * So we fill with a 0xFF byte to prevent this. A single 0xFF would be enough for our primitive types (as
+                 * that byte wouldn't occur), but for an arbitrary VARBINARY key we can't know how many bytes to tack
+                 * on. It's lame of HBase to force us to do this.
+                 */
+                newStartRow = Arrays.copyOf(startRow, startRow.length + MAX_FILL_LENGTH_FOR_PREVIOUS_KEY.length);
+                if (ByteUtil.previousKey(newStartRow, startRow.length)) {
+                    System.arraycopy(MAX_FILL_LENGTH_FOR_PREVIOUS_KEY, 0, newStartRow, startRow.length, MAX_FILL_LENGTH_FOR_PREVIOUS_KEY.length);
+                } else {
+                    newStartRow = HConstants.EMPTY_START_ROW;
+                }
+            }
+            if (stopRow.length != 0) {
+                // Must add null byte because we need the start to be exclusive while it was inclusive
+                newStopRow = ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY);
+            }
+            scan.setStartRow(newStopRow);
+            scan.setStopRow(newStartRow);
+            scan.setReversed(true);
         }
     }
 
-    public static boolean isReversed(Scan scan) {
-        byte[] reversed = scan.getAttribute(REVERSED_ATTR);
-        return (PDataType.TRUE_BYTES.equals(reversed));
-    }
-    
     private static void setRowKeyOffset(Filter filter, int offset) {
         if (filter instanceof BooleanExpressionFilter) {
             BooleanExpressionFilter boolFilter = (BooleanExpressionFilter)filter;

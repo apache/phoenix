@@ -23,7 +23,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -113,7 +112,7 @@ public class ChunkedResultIterator implements PeekingResultIterator {
         } else if (resultIterator.peek() == null && !singleChunkResultIterator.isEndOfStreamReached()) {
             singleChunkResultIterator.close();
             scan = ScanUtil.newScan(scan);
-            scan.setStartRow(Bytes.add(singleChunkResultIterator.getLastKey(), new byte[]{0}));
+            scan.setStartRow(singleChunkResultIterator.getLastKey());
             if (logger.isDebugEnabled()) logger.debug("Get next chunked result iterator over " + tableRef.getTable().getName().getString() + " with " + scan);
             singleChunkResultIterator = new SingleChunkResultIterator(
                     new TableResultIterator(context, tableRef, scan), chunkSize);
@@ -152,6 +151,7 @@ public class ChunkedResultIterator implements PeekingResultIterator {
                 // be able to start the next chunk on the next row key
                 if (rowCount >= chunkSize && rowKeyChanged(lastTuple, next)) {
                     chunkComplete = true;
+                    lastTuple = next;
                     return null;
                 }
                 lastTuple = next;

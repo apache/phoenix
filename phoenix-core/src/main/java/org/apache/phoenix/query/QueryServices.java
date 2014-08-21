@@ -133,6 +133,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String TRACING_PROBABILITY_THRESHOLD_ATTRIB = "phoenix.trace.probability.threshold";
     public static final String TRACING_STATS_TABLE_NAME_ATTRIB = "phoenix.trace.statsTableName";
 
+    public static final String USE_REVERSE_SCAN_ATTRIB = "phoenix.query.useReverseScan";
     
     /**
      * Get executor service used for parallel scans

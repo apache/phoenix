@@ -32,9 +32,9 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
@@ -53,13 +53,13 @@ import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.trace.TracingIterator;
 import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
@@ -76,7 +76,7 @@ import com.google.common.collect.Lists;
  * 
  * @since 0.1
  */
-public abstract class BasicQueryPlan implements QueryPlan {
+public abstract class BaseQueryPlan implements QueryPlan {
     protected static final long DEFAULT_ESTIMATED_SIZE = 10 * 1024; // 10 K
     
     protected final TableRef tableRef;
@@ -89,7 +89,7 @@ public abstract class BasicQueryPlan implements QueryPlan {
     protected final GroupBy groupBy;
     protected final ParallelIteratorFactory parallelIteratorFactory;
 
-    protected BasicQueryPlan(
+    protected BaseQueryPlan(
             StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projection, ParameterMetaData paramMetaData, Integer limit, OrderBy orderBy,
             GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory) {
@@ -158,6 +158,10 @@ public abstract class BasicQueryPlan implements QueryPlan {
         // Set miscellaneous scan attributes. This is the last chance to set them before we
         // clone the scan for each parallelized chunk.
         Scan scan = context.getScan();
+        
+        if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
+            ScanUtil.setReversed(scan);
+        }
         // Set producer on scan so HBase server does round robin processing
         //setProducer(scan);
         // Set the time range on the scan so we don't get back rows newer than when the statement was compiled
@@ -177,11 +181,7 @@ public abstract class BasicQueryPlan implements QueryPlan {
           }
           ScanUtil.setTimeRange(scan, scn);
         } else {
-          try {
-            scan.setTimeRange(context.getScanTimeRange().getMin(), context.getScanTimeRange().getMax());
-          } catch (IOException e) {
-            throw new SQLException(e);
-          }
+            ScanUtil.setTimeRange(scan, context.getScanTimeRange());
         }
         ScanUtil.setTenantId(scan, connection.getTenantId() == null ? null : connection.getTenantId().getBytes());
         // Set local index related scan attributes. 

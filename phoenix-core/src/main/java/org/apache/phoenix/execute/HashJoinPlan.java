@@ -59,14 +59,14 @@ public class HashJoinPlan implements QueryPlan {
     private static final Log LOG = LogFactory.getLog(HashJoinPlan.class);
 
     private final FilterableStatement statement;
-    private final BasicQueryPlan plan;
+    private final BaseQueryPlan plan;
     private final HashJoinInfo joinInfo;
     private final List<Expression>[] hashExpressions;
     private final QueryPlan[] hashPlans;
     private final TupleProjector[] clientProjectors;
 
     public HashJoinPlan(FilterableStatement statement, 
-            BasicQueryPlan plan, HashJoinInfo joinInfo,
+            BaseQueryPlan plan, HashJoinInfo joinInfo,
             List<Expression>[] hashExpressions, QueryPlan[] hashPlans, 
             TupleProjector[] clientProjectors) {
         this.statement = statement;

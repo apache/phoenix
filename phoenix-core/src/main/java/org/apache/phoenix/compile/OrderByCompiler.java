@@ -31,7 +31,8 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.OrderByNode;
-import org.apache.phoenix.query.ConnectionQueryServices.Feature;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SortOrder;
 
 import com.google.common.collect.ImmutableList;
@@ -116,7 +117,9 @@ public class OrderByCompiler {
         // If we're ordering by the order returned by the scan, we don't need an order by
         if (visitor.isOrderPreserving()) {
             if (visitor.isReverse()) {
-                if (context.getConnection().getQueryServices().supportsFeature(Feature.REVERSE_SCAN)) {
+                // Don't use reverse scan if we're using a skip scan, as our skip scan doesn't support this yet.
+                if (context.getConnection().getQueryServices().getProps().getBoolean(QueryServices.USE_REVERSE_SCAN_ATTRIB, QueryServicesOptions.DEFAULT_USE_REVERSE_SCAN)
+                        && !context.getScanRanges().useSkipScanFilter()) {
                     return OrderBy.REV_ROW_KEY_ORDER_BY;
                 }
             } else {

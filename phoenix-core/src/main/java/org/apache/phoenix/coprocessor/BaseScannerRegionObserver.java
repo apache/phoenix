@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.cloudera.htrace.Span;
 
@@ -58,6 +59,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String DATA_TABLE_COLUMNS_TO_JOIN = "_DataTableColumnsToJoin";
     public static final String VIEW_CONSTANTS = "_ViewConstants";
     public static final String EXPECTED_UPPER_REGION_KEY = "_ExpectedUpperRegionKey";
+    public static final String REVERSE_SCAN = "_ReverseScan";
 
     /** Exposed for testing */
     public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
@@ -99,6 +101,19 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     abstract protected boolean isRegionObserverFor(Scan scan);
     abstract protected RegionScanner doPostScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws Throwable;
     
+    @Override
+    public final RegionScanner preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
+        final Scan scan, final RegionScanner s) throws IOException {
+        if (isRegionObserverFor(scan)) {
+            throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
+            // Muck with the start/stop row of the scan and set as reversed at the
+            // last possible moment. You need to swap the start/stop and make the
+            // start exclusive and the stop inclusive.
+            ScanUtil.setupReverseScan(scan);
+        }
+        return s;
+    }
+
     /**
      * Wrapper for {@link #postScannerOpen(ObserverContext, Scan, RegionScanner)} that ensures no non IOException is thrown,
      * to prevent the coprocessor from becoming blacklisted.
@@ -112,7 +127,6 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             if (!isRegionObserverFor(scan)) {
                 return s;
             }
-            throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
             boolean success =false;
             // turn on tracing, if its enabled
             final Span child = Tracing.childOnServer(scan, rawConf, SCANNER_OPENED_TRACE_INFO);
