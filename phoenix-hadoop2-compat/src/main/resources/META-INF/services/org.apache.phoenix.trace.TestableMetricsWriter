@@ -1,1 +1,1 @@
-org.apache.phoenix.trace.PhoenixMetricsWriter
+org.apache.phoenix.trace.PhoenixMetricsSink
