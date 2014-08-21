@@ -18,11 +18,11 @@
 package org.apache.phoenix.trace;
 
 import static org.apache.phoenix.metrics.MetricInfo.ANNOTATION;
-import static org.apache.phoenix.metrics.MetricInfo.TAG;
 import static org.apache.phoenix.metrics.MetricInfo.END;
 import static org.apache.phoenix.metrics.MetricInfo.PARENT;
 import static org.apache.phoenix.metrics.MetricInfo.SPAN;
 import static org.apache.phoenix.metrics.MetricInfo.START;
+import static org.apache.phoenix.metrics.MetricInfo.TAG;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -136,7 +136,7 @@ public class TraceMetricSource implements PhoenixSpanReceiver, MetricsSource {
     // this is also necessary to ensure that we register the metrics source as an MBean (avoiding a
     // runtime warning)
     MetricsRecordBuilder marker = collector.addRecord(TracingCompat.METRICS_MARKER_CONTEXT);
-    marker.add(new MetricsTag((MetricsInfo) new MetricsInfoImpl("stat", "num spans"), Integer
+    marker.add(new MetricsTag(new MetricsInfoImpl("stat", "num spans"), Integer
         .toString(spans.size())));
 
     // actually convert the known spans into metric records as well
