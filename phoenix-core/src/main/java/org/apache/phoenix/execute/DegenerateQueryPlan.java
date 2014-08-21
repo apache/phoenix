@@ -30,7 +30,7 @@ import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.*;
 import org.apache.phoenix.schema.TableRef;
 
-public class DegenerateQueryPlan extends BasicQueryPlan {
+public class DegenerateQueryPlan extends BaseQueryPlan {
 
     public DegenerateQueryPlan(StatementContext context, FilterableStatement statement, TableRef table) {
         super(context, statement, table, RowProjector.EMPTY_PROJECTOR, PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA, null, OrderBy.EMPTY_ORDER_BY, GroupBy.EMPTY_GROUP_BY, null);

@@ -46,7 +46,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.util.ScanUtil;
 
 
 
@@ -57,7 +56,7 @@ import org.apache.phoenix.util.ScanUtil;
  *
  * @since 0.1
  */
-public class ScanPlan extends BasicQueryPlan {
+public class ScanPlan extends BaseQueryPlan {
     private List<KeyRange> splits;
     private boolean allowPageFilter;
 
@@ -100,9 +99,6 @@ public class ScanPlan extends BasicQueryPlan {
     protected ResultIterator newIterator() throws SQLException {
         // Set any scan attributes before creating the scanner, as it will be too late afterwards
         context.getScan().setAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY, QueryConstants.TRUE);
-        if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
-            ScanUtil.setReversed(context.getScan());
-        }
         ResultIterator scanner;
         TableRef tableRef = this.getTableRef();
         PTable table = tableRef.getTable();

@@ -353,8 +353,6 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                 }
             } 
             if (ScanUtil.intersectScanRange(splitScan, split.getLowerRange(), split.getUpperRange(), this.context.getScanRanges().useSkipScanFilter())) {
-                // Delay the swapping of start/stop row until row so we don't muck with the intersect logic
-                ScanUtil.swapStartStopRowIfReversed(splitScan);
                 Future<PeekingResultIterator> future =
                     executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
 

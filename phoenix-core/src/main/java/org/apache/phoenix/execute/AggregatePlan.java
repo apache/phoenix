@@ -65,7 +65,7 @@ import org.apache.phoenix.schema.TableRef;
  * 
  * @since 0.1
  */
-public class AggregatePlan extends BasicQueryPlan {
+public class AggregatePlan extends BaseQueryPlan {
     private final Aggregators aggregators;
     private final Expression having;
     private List<KeyRange> splits;

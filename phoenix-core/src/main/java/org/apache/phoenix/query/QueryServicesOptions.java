@@ -143,6 +143,8 @@ public class QueryServicesOptions {
     public static final String DEFAULT_TRACING_STATS_TABLE_NAME = "SYSTEM.TRACING_STATS";
     public static final String DEFAULT_TRACING_FREQ = Tracing.Frequency.NEVER.getKey();
     public static final double DEFAULT_TRACING_PROBABILITY_THRESHOLD = 0.05;
+    
+    public static final boolean DEFAULT_USE_REVERSE_SCAN = true;
 
     private final Configuration config;
 

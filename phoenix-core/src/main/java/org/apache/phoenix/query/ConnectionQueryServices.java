@@ -101,7 +101,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      */
     public KeyValueBuilder getKeyValueBuilder();
     
-    public enum Feature {REVERSE_SCAN};
+    public enum Feature {};
     public boolean supportsFeature(Feature feature);
     
     public String getUserName();
