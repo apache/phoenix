@@ -29,9 +29,12 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Preconditions;
 
 /**
  * {@code PeekingResultIterator} implementation that loads data in chunks. This is intended for
@@ -41,7 +44,7 @@ public class ChunkedResultIterator implements PeekingResultIterator {
     private static final Logger logger = LoggerFactory.getLogger(ChunkedResultIterator.class);
 
     private final ParallelIterators.ParallelIteratorFactory delegateIteratorFactory;
-    private SingleChunkResultIterator singleChunkResultIterator;
+    private ImmutableBytesWritable lastKey = new ImmutableBytesWritable();
     private final StatementContext context;
     private final TableRef tableRef;
     private Scan scan;
@@ -71,12 +74,19 @@ public class ChunkedResultIterator implements PeekingResultIterator {
     }
 
     public ChunkedResultIterator(ParallelIterators.ParallelIteratorFactory delegateIteratorFactory,
-            StatementContext context, TableRef tableRef, Scan scan, long chunkSize) {
+            StatementContext context, TableRef tableRef, Scan scan, long chunkSize) throws SQLException {
         this.delegateIteratorFactory = delegateIteratorFactory;
         this.context = context;
         this.tableRef = tableRef;
         this.scan = scan;
         this.chunkSize = chunkSize;
+        // Instantiate single chunk iterator and the delegate iterator in constructor
+        // to get parallel scans kicked off in separate threads. If we delay this,
+        // we'll get serialized behavior (see PHOENIX-
+        if (logger.isDebugEnabled()) logger.debug("Get first chunked result iterator over " + tableRef.getTable().getName().getString() + " with " + scan);
+        ResultIterator singleChunkResultIterator = new SingleChunkResultIterator(
+                new TableResultIterator(context, tableRef, scan), chunkSize);
+        resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan);
     }
 
     @Override
@@ -96,26 +106,16 @@ public class ChunkedResultIterator implements PeekingResultIterator {
 
     @Override
     public void close() throws SQLException {
-        if (resultIterator != null) {
-            resultIterator.close();
-        }
-        if (singleChunkResultIterator != null) {
-            singleChunkResultIterator.close();
-        }
+        resultIterator.close();
     }
 
     private PeekingResultIterator getResultIterator() throws SQLException {
-        if (resultIterator == null) {
-            if (logger.isDebugEnabled()) logger.debug("Get first chunked result iterator over " + tableRef.getTable().getName().getString() + " with " + scan);
-            singleChunkResultIterator = new SingleChunkResultIterator(
-                    new TableResultIterator(context, tableRef, scan), chunkSize);
-            resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan);
-        } else if (resultIterator.peek() == null && !singleChunkResultIterator.isEndOfStreamReached()) {
-            singleChunkResultIterator.close();
+        if (resultIterator.peek() == null && lastKey != null) {
+            resultIterator.close();
             scan = ScanUtil.newScan(scan);
-            scan.setStartRow(Bytes.add(singleChunkResultIterator.getLastKey(), new byte[]{0}));
+            scan.setStartRow(ByteUtil.copyKeyBytesIfNecessary(lastKey));
             if (logger.isDebugEnabled()) logger.debug("Get next chunked result iterator over " + tableRef.getTable().getName().getString() + " with " + scan);
-            singleChunkResultIterator = new SingleChunkResultIterator(
+            ResultIterator singleChunkResultIterator = new SingleChunkResultIterator(
                     new TableResultIterator(context, tableRef, scan), chunkSize);
             resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan);
         }
@@ -125,23 +125,22 @@ public class ChunkedResultIterator implements PeekingResultIterator {
     /**
      * ResultIterator that runs over a single chunk of results (i.e. a portion of a scan).
      */
-    private static class SingleChunkResultIterator implements ResultIterator {
+    private class SingleChunkResultIterator implements ResultIterator {
 
         private int rowCount = 0;
         private boolean chunkComplete;
-        private boolean endOfStreamReached;
-        private Tuple lastTuple;
         private final ResultIterator delegate;
         private final long chunkSize;
 
         private SingleChunkResultIterator(ResultIterator delegate, long chunkSize) {
+            Preconditions.checkArgument(chunkSize > 0);
             this.delegate = delegate;
             this.chunkSize = chunkSize;
         }
 
         @Override
         public Tuple next() throws SQLException {
-            if (isChunkComplete() || isEndOfStreamReached()) {
+            if (chunkComplete || lastKey == null) {
                 return null;
             }
             Tuple next = delegate.next();
@@ -150,14 +149,15 @@ public class ChunkedResultIterator implements PeekingResultIterator {
                 // necessary for (at least) hash joins, as they can return multiple rows with the
                 // same row key. Stopping a chunk at a row key boundary is necessary in order to
                 // be able to start the next chunk on the next row key
-                if (rowCount >= chunkSize && rowKeyChanged(lastTuple, next)) {
+                if (rowCount == chunkSize) {
+                    next.getKey(lastKey);
+                } else if (rowCount > chunkSize && rowKeyChanged(next)) {
                     chunkComplete = true;
                     return null;
                 }
-                lastTuple = next;
                 rowCount++;
             } else {
-                endOfStreamReached = true;
+                lastKey = null;
             }
             return next;
         }
@@ -172,36 +172,13 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             delegate.close();
         }
 
-        /**
-         * Returns true if the current chunk has been fully iterated over.
-         */
-        public boolean isChunkComplete() {
-            return chunkComplete;
-        }
+        private boolean rowKeyChanged(Tuple newTuple) {
+            byte[] currentKey = lastKey.get();
+            int offset = lastKey.getOffset();
+            int length = lastKey.getLength();
+            newTuple.getKey(lastKey);
 
-        /**
-         * Returns true if the end of all chunks has been reached.
-         */
-        public boolean isEndOfStreamReached() {
-            return endOfStreamReached;
-        }
-
-        /**
-         * Returns the last-encountered key.
-         */
-        public byte[] getLastKey() {
-            ImmutableBytesWritable keyPtr = new ImmutableBytesWritable();
-            lastTuple.getKey(keyPtr);
-            return keyPtr.get();
-        }
-
-        private boolean rowKeyChanged(Tuple lastTuple, Tuple newTuple) {
-            ImmutableBytesWritable oldKeyPtr = new ImmutableBytesWritable();
-            ImmutableBytesWritable newKeyPtr = new ImmutableBytesWritable();
-            lastTuple.getKey(oldKeyPtr);
-            newTuple.getKey(newKeyPtr);
-
-            return oldKeyPtr.compareTo(newKeyPtr) != 0;
+            return Bytes.compareTo(currentKey, offset, length, lastKey.get(), lastKey.getOffset(), lastKey.getLength()) != 0;
         }
     }
 }
