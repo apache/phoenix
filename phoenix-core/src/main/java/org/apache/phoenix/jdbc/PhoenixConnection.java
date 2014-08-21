@@ -51,8 +51,6 @@ import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -75,7 +73,6 @@ import org.apache.phoenix.schema.PMetaData.Pruner;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.trace.TracingCompat;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.JDBCUtil;
@@ -86,7 +83,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.cloudera.htrace.Sampler;
-import org.cloudera.htrace.Trace;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
@@ -108,8 +104,6 @@ import com.google.common.collect.Maps;
  * @since 0.1
  */
 public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jdbc7Shim.Connection, MetaDataMutated  {
-    private static final Log LOG = LogFactory.getLog(PhoenixConnection.class);
-
     private final String url;
     private final ConnectionQueryServices services;
     private final Properties info;
