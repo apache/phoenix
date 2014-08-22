@@ -22,23 +22,116 @@ import java.util.Map;
 import org.apache.hadoop.hbase.HRegionInfo;
 
 
-/**
- * Interface for Phoenix table statistics. Statistics is collected on the server
- * side and can be used for various purpose like splitting region for scanning, etc.
- * 
- * The table is defined on the client side, but it is populated on the server side. The client
- * should not populate any data to the statistics object.
+/*
+ * The table is defined on the client side, but it is populated on the server side. The client should not populate any data to the
+ * statistics object.
  */
 public interface PTableStats {
 
     /**
-     * Given the region info, returns an array of bytes that is the current estimate of key
-     * distribution inside that region. The keys should split that region into equal chunks.
+     * Given the region info, returns an array of bytes that is the current estimate of key distribution inside that region. The keys should
+     * split that region into equal chunks.
      * 
      * @param region
      * @return array of keys
      */
-    byte[][] getRegionGuidePosts(HRegionInfo region);
+    byte[] getRegionGuidePostsOfARegion(HRegionInfo region);
 
-    Map<String, byte[][]> getGuidePosts();
+    /**
+     * Returns a map of with key as the regions of the table and the guide posts collected as byte[] created from VARBINARY ARRAY
+     * 
+     * @return map of region and the guide posts as VARBINARY array
+     */
+    Map<String, byte[]> getGuidePosts();
+
+    /**
+     * Returns the max key of a region
+     * 
+     * @param region
+     * @return maxkey of a region
+     */
+    byte[] getMaxKeyOfARegion(HRegionInfo region);
+
+    /**
+     * Returns the min key of a region
+     * 
+     * @param region
+     * @return min key of a region
+     */
+    byte[] getMinKeyOfARegion(HRegionInfo region);
+
+    /**
+     * Returns a map with key as the regions of the table and the max key in that region
+     * 
+     * @return
+     */
+    Map<String, byte[]> getMaxKey();
+
+    /**
+     * Returns a map with key as the regions of the table and the min key in that region
+     * 
+     * @return
+     */
+    Map<String, byte[]> getMinKey();
+
+    /**
+     * Set the min key of a region
+     * 
+     * @param region
+     * @param minKey
+     * @param offset
+     * @param length
+     */
+    void setMinKey(HRegionInfo region, byte[] minKey, int offset, int length);
+
+    /**
+     * Set the min key of the region. Here the region name is represented as the Bytes.toBytes(region.getRegionNameAsString).
+     * 
+     * @param region
+     * @param minKey
+     * @param offset
+     * @param length
+     */
+    void setMinKey(byte[] region, byte[] minKey, int offset, int length);
+
+    /**
+     * Set the max key of a region
+     * 
+     * @param region
+     * @param maxKey
+     * @param offset
+     * @param length
+     */
+    void setMaxKey(HRegionInfo region, byte[] maxKey, int offset, int length);
+
+    /**
+     * Set the max key of a region. Here the region name is represented as the Bytes.toBytes(region.getRegionNameAsString).
+     * 
+     * @param region
+     * @param maxKey
+     * @param offset
+     * @param length
+     */
+    void setMaxKey(byte[] region, byte[] maxKey, int offset, int length);
+
+    /**
+     * Set the guide posts for a region
+     * 
+     * @param region
+     * @param guidePosts
+     * @param offset
+     * @param length
+     */
+    void setGuidePosts(HRegionInfo region, byte[] guidePosts, int offset, int length);
+
+    /**
+     * Set the guide posts of a region. Here the region name is represented as the Bytes.toBytes(region.getRegionNameAsString).
+     * 
+     * @param region
+     * @param guidePosts
+     * @param offset
+     * @param length
+     */
+    void setGuidePosts(byte[] region, byte[] guidePosts, int offset, int length);
+
 }

@@ -62,20 +62,30 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.Chore;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
@@ -90,6 +100,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion.RowLock;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
@@ -109,7 +120,10 @@ import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.protobuf.ProtobufUtil;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -128,11 +142,15 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.stat.PTableStats;
+import org.apache.phoenix.schema.stat.PTableStatsImpl;
+import org.apache.phoenix.schema.stat.StatisticsUtils;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
@@ -159,7 +177,7 @@ import com.google.protobuf.Service;
  * 
  * @since 0.1
  */
-public class MetaDataEndpointImpl extends MetaDataProtocol implements CoprocessorService, Coprocessor {
+public class MetaDataEndpointImpl extends MetaDataProtocol implements CoprocessorService, Coprocessor, Stoppable {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataEndpointImpl.class);
 
     // KeyValues for Table
@@ -273,6 +291,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     private RegionCoprocessorEnvironment env;
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final ConcurrentMap<String,PTableStats> tableStatsMap = new ConcurrentHashMap<String,PTableStats>();
+         
+    Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+    // TODO : Check if this way is needed
+    private final ReadOnlyProps props = new ReadOnlyProps(this.config.iterator());
+    int statsUpdateFrequencyMs;
+    int maxStatsAgeMs;
+    private Chore statsUpdator;
+    private volatile boolean stop = false;
+    private volatile AtomicInteger statsCollectorInProgress = new AtomicInteger(0);
 
     private static final Log LOG = LogFactory.getLog(MetaDataEndpointImpl.class);
 
@@ -294,6 +323,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             throw new CoprocessorException("Must be loaded on a table region!");
         }
 
+        // Can we just get from configuration that is obtained from the env?
+        statsUpdateFrequencyMs = props.getInt(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
+        maxStatsAgeMs = props.getInt(QueryServices.MAX_STATS_AGE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_STATS_AGE_MS);
+        statsUpdator = new StatsUpdator(this, statsUpdateFrequencyMs, statsCollectorInProgress);
+        Threads.setDaemonThreadRunning(statsUpdator.getThread());
         LOG.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
@@ -664,14 +698,161 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
           } else {
               addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
           }
+        }        
+        byte[] tenIdBytes = QueryConstants.EMPTY_BYTE_ARRAY;
+        if (tenantId != null) {
+            tenIdBytes = tenantId.getBytes();
         }
-
+        byte[] schNameInBytes = QueryConstants.EMPTY_BYTE_ARRAY;
+        if (schemaName != null) {
+            schNameInBytes = Bytes.toBytes(schemaName.getString());
+        }
+        PTableStats stats = updateStats(SchemaUtil.getTableKey(tenIdBytes, schNameInBytes, tableNameBytes));
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, 
             tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? dataTableName : null, 
             indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement, disableWAL, 
-            multiTenant, viewType, viewIndexId, indexType);
+            multiTenant, viewType, viewIndexId, indexType, stats);
     }
 
+    private PTableStats updateStats(final byte[] tableNameBytes) {
+        lock.readLock().lock();
+        try {
+            PTableStats stats = tableStatsMap.get(Bytes.toString(tableNameBytes));
+            return stats;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+    
+    private void updateStatsInternal(byte[] tableNameBytes, RegionCoprocessorEnvironment env)
+            throws IOException {
+        HTable statsTable = null;
+        try {
+            PTableStats newStats = null;
+            // Can we do a new HTable instance here?
+            statsTable = new HTable(this.env.getConfiguration(),
+                    PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+            Scan s = new Scan();
+            boolean extractTableName = true;
+            if (tableNameBytes != null) {
+                s.setStartRow(Bytes.add(tableNameBytes, tableNameBytes));
+                s.setStopRow(Bytes.add(tableNameBytes, createStopRow(tableNameBytes)));
+                extractTableName = false;
+            }
+            ResultScanner scanner = statsTable.getScanner(s);
+            Result result = null;
+            while ((result = scanner.next()) != null) {
+                CellScanner cellScanner = result.cellScanner();
+                while (cellScanner.advance()) {
+                    Cell current = cellScanner.current();
+                    // Extract the table name
+                    if (extractTableName) {
+                        byte[] temp = StatisticsUtils.getTableNameFromRowKey(current);
+                        if (!Bytes.equals(tableNameBytes, temp)) {
+                            if (tableNameBytes != null) {
+                                if (invalidateCache(tableNameBytes, newStats)) {
+                                    lock.writeLock().lock();
+                                    try {
+                                        tableStatsMap.put(Bytes.toString(tableNameBytes), newStats);
+                                    } finally {
+                                        lock.writeLock().unlock();
+                                    }
+                                }
+                            }
+                            // change the table name
+                            // Reset the stats
+                            newStats = new PTableStatsImpl();
+                            tableNameBytes = temp;
+                        }
+                    }
+                    if (Bytes.equals(current.getQualifierArray(), current.getQualifierOffset(),
+                            current.getQualifierLength(), PhoenixDatabaseMetaData.MIN_KEY_BYTES, 0,
+                            PhoenixDatabaseMetaData.MIN_KEY_BYTES.length)) {
+                        newStats.setMinKey(
+                                StatisticsUtils.getRegionFromRowKey(tableNameBytes, current),
+                                current.getValueArray(), current.getValueOffset(),
+                                current.getValueLength());
+                    } else if (Bytes.equals(current.getQualifierArray(),
+                            current.getQualifierOffset(), current.getQualifierLength(),
+                            PhoenixDatabaseMetaData.MAX_KEY_BYTES, 0,
+                            PhoenixDatabaseMetaData.MAX_KEY_BYTES.length)) {
+                        newStats.setMaxKey(
+                                StatisticsUtils.getRegionFromRowKey(tableNameBytes, current),
+                                current.getValueArray(), current.getValueOffset(),
+                                current.getValueLength());
+                    } else if (Bytes.equals(current.getQualifierArray(),
+                            current.getQualifierOffset(), current.getQualifierLength(),
+                            PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES, 0,
+                            PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES.length)) {
+                        newStats.setGuidePosts(
+                                StatisticsUtils.getRegionFromRowKey(tableNameBytes, current),
+                                current.getValueArray(), current.getValueOffset(),
+                                current.getValueLength());
+                    }
+                }
+            }
+            // Update the new stats here
+            if (tableNameBytes != null && newStats != null) {
+                if (invalidateCache(tableNameBytes, newStats)) {
+                    lock.writeLock().lock();
+                    try {
+                        tableStatsMap.put(Bytes.toString(tableNameBytes), newStats);
+                    } finally {
+                        lock.writeLock().unlock();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            if (e instanceof org.apache.hadoop.hbase.TableNotFoundException) {
+                logger.warn("Stats table not yet online", e);
+            } else {
+                throw new IOException(e);
+            }
+        } finally {
+            if (statsTable != null) {
+                statsTable.close();
+            }
+        }
+    }
+
+    private boolean invalidateCache(byte[] tableNameBytes, PTableStats newStats) {
+        lock.readLock().lock();
+        PTableStats oldStats = null;
+        try {
+            oldStats = tableStatsMap.get(Bytes.toString(tableNameBytes));
+        } finally {
+            lock.readLock().unlock();
+        }
+        if (oldStats != null) {
+            if (!oldStats.equals(newStats)) {
+                invalidate(tableNameBytes);
+                return true;
+            }
+        } else {
+            invalidate(tableNameBytes);
+            return true;
+        }
+        return false;
+    }
+
+    private void invalidate(byte[] tableNameBytes) {
+        Cache<ImmutableBytesPtr, PTable> metaDataCache = GlobalCache.getInstance(this.env)
+                .getMetaDataCache();
+        ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(tableNameBytes);
+        // Cache docs says they are thread safe. So no locking needed from our side
+        metaDataCache.invalidate((cacheKey));
+    }
+
+
+    private byte[] createStopRow(byte[] tableNameBytes) {
+        byte[] newTableName = new byte[tableNameBytes.length];
+        System.arraycopy(tableNameBytes, 0, newTableName, 0, newTableName.length);
+        byte b = newTableName[tableNameBytes.length-1];
+        b = (byte)(b + 1);
+        newTableName[newTableName.length-1] = b;
+        return newTableName;
+    }
+    
     private PTable buildDeletedTable(byte[] key, ImmutableBytesPtr cacheKey, HRegion region,
         long clientTimeStamp) throws IOException {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
@@ -1593,5 +1774,43 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     this.suffix.length, this.suffix, 0, this.suffix.length);
             return cmp != 0;
         }
+    }
+    private static class StatsUpdator extends Chore {
+        // Core should keep scanning the table stats and collecting the info per
+        // table
+        MetaDataEndpointImpl metaData;
+        AtomicInteger inProgress;
+
+        public StatsUpdator(MetaDataEndpointImpl metaData, int statsUpdateFrequencyMs, AtomicInteger statsCollectorInProgress) {
+            super("StatsUpdator", statsUpdateFrequencyMs, metaData);
+            this.metaData = metaData;
+            this.inProgress = statsCollectorInProgress;
+        }
+
+        @Override
+        protected void chore() {
+            if(inProgress.get() > 0) {
+                logger.debug("Already in progress.");
+                return;
+            }
+            try {
+                inProgress.incrementAndGet();
+                this.metaData.updateStatsInternal(null, this.metaData.env);
+            } catch (IOException e) {
+                logger.error("Failed to fetch the updated stats from the stats table", e);
+            } finally {
+                inProgress.decrementAndGet();
+            }
+        }
+    }
+
+    @Override
+    public boolean isStopped() {
+        return stop;
+    }
+
+    @Override
+    public void stop(String arg0) {
+
     }
 }

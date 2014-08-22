@@ -84,7 +84,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_TARGET_QUERY_CONCURRENCY = 32;
     public static final int DEFAULT_MAX_QUERY_CONCURRENCY = 64;
     public static final String DEFAULT_DATE_FORMAT = DateUtil.DEFAULT_DATE_FORMAT;
-    public static final int DEFAULT_STATS_UPDATE_FREQ_MS = 15 * 60000; // 15min
+    public static final int DEFAULT_STATS_UPDATE_FREQ_MS = 500; // 15min
     public static final int DEFAULT_MAX_STATS_AGE_MS = 24 * 60 * 60000; // 1 day
     public static final boolean DEFAULT_CALL_QUEUE_ROUND_ROBIN = true; 
     public static final int DEFAULT_MAX_MUTATION_SIZE = 500000;

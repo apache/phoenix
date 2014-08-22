@@ -1593,19 +1593,15 @@ public final class PTableProtos {
     com.google.protobuf.ByteString
         getKeyBytes();
 
-    // repeated bytes values = 2;
+    // required bytes values = 2;
     /**
-     * <code>repeated bytes values = 2;</code>
+     * <code>required bytes values = 2;</code>
      */
-    java.util.List<com.google.protobuf.ByteString> getValuesList();
+    boolean hasValues();
     /**
-     * <code>repeated bytes values = 2;</code>
+     * <code>required bytes values = 2;</code>
      */
-    int getValuesCount();
-    /**
-     * <code>repeated bytes values = 2;</code>
-     */
-    com.google.protobuf.ByteString getValues(int index);
+    com.google.protobuf.ByteString getValues();
   }
   /**
    * Protobuf type {@code PTableStats}
@@ -1664,11 +1660,8 @@ public final class PTableProtos {
               break;
             }
             case 18: {
-              if (!((mutable_bitField0_ & 0x00000002) == 0x00000002)) {
-                values_ = new java.util.ArrayList<com.google.protobuf.ByteString>();
-                mutable_bitField0_ |= 0x00000002;
-              }
-              values_.add(input.readBytes());
+              bitField0_ |= 0x00000002;
+              values_ = input.readBytes();
               break;
             }
           }
@@ -1679,9 +1672,6 @@ public final class PTableProtos {
         throw new com.google.protobuf.InvalidProtocolBufferException(
             e.getMessage()).setUnfinishedMessage(this);
       } finally {
-        if (((mutable_bitField0_ & 0x00000002) == 0x00000002)) {
-          values_ = java.util.Collections.unmodifiableList(values_);
-        }
         this.unknownFields = unknownFields.build();
         makeExtensionsImmutable();
       }
@@ -1757,32 +1747,25 @@ public final class PTableProtos {
       }
     }
 
-    // repeated bytes values = 2;
+    // required bytes values = 2;
     public static final int VALUES_FIELD_NUMBER = 2;
-    private java.util.List<com.google.protobuf.ByteString> values_;
+    private com.google.protobuf.ByteString values_;
     /**
-     * <code>repeated bytes values = 2;</code>
+     * <code>required bytes values = 2;</code>
      */
-    public java.util.List<com.google.protobuf.ByteString>
-        getValuesList() {
+    public boolean hasValues() {
+      return ((bitField0_ & 0x00000002) == 0x00000002);
+    }
+    /**
+     * <code>required bytes values = 2;</code>
+     */
+    public com.google.protobuf.ByteString getValues() {
       return values_;
-    }
-    /**
-     * <code>repeated bytes values = 2;</code>
-     */
-    public int getValuesCount() {
-      return values_.size();
-    }
-    /**
-     * <code>repeated bytes values = 2;</code>
-     */
-    public com.google.protobuf.ByteString getValues(int index) {
-      return values_.get(index);
     }
 
     private void initFields() {
       key_ = "";
-      values_ = java.util.Collections.emptyList();
+      values_ = com.google.protobuf.ByteString.EMPTY;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -1790,6 +1773,10 @@ public final class PTableProtos {
       if (isInitialized != -1) return isInitialized == 1;
 
       if (!hasKey()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasValues()) {
         memoizedIsInitialized = 0;
         return false;
       }
@@ -1803,8 +1790,8 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00000001) == 0x00000001)) {
         output.writeBytes(1, getKeyBytes());
       }
-      for (int i = 0; i < values_.size(); i++) {
-        output.writeBytes(2, values_.get(i));
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        output.writeBytes(2, values_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -1819,14 +1806,9 @@ public final class PTableProtos {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(1, getKeyBytes());
       }
-      {
-        int dataSize = 0;
-        for (int i = 0; i < values_.size(); i++) {
-          dataSize += com.google.protobuf.CodedOutputStream
-            .computeBytesSizeNoTag(values_.get(i));
-        }
-        size += dataSize;
-        size += 1 * getValuesList().size();
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(2, values_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -1856,8 +1838,11 @@ public final class PTableProtos {
         result = result && getKey()
             .equals(other.getKey());
       }
-      result = result && getValuesList()
-          .equals(other.getValuesList());
+      result = result && (hasValues() == other.hasValues());
+      if (hasValues()) {
+        result = result && getValues()
+            .equals(other.getValues());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -1875,9 +1860,9 @@ public final class PTableProtos {
         hash = (37 * hash) + KEY_FIELD_NUMBER;
         hash = (53 * hash) + getKey().hashCode();
       }
-      if (getValuesCount() > 0) {
+      if (hasValues()) {
         hash = (37 * hash) + VALUES_FIELD_NUMBER;
-        hash = (53 * hash) + getValuesList().hashCode();
+        hash = (53 * hash) + getValues().hashCode();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -1990,7 +1975,7 @@ public final class PTableProtos {
         super.clear();
         key_ = "";
         bitField0_ = (bitField0_ & ~0x00000001);
-        values_ = java.util.Collections.emptyList();
+        values_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x00000002);
         return this;
       }
@@ -2024,9 +2009,8 @@ public final class PTableProtos {
           to_bitField0_ |= 0x00000001;
         }
         result.key_ = key_;
-        if (((bitField0_ & 0x00000002) == 0x00000002)) {
-          values_ = java.util.Collections.unmodifiableList(values_);
-          bitField0_ = (bitField0_ & ~0x00000002);
+        if (((from_bitField0_ & 0x00000002) == 0x00000002)) {
+          to_bitField0_ |= 0x00000002;
         }
         result.values_ = values_;
         result.bitField0_ = to_bitField0_;
@@ -2050,15 +2034,8 @@ public final class PTableProtos {
           key_ = other.key_;
           onChanged();
         }
-        if (!other.values_.isEmpty()) {
-          if (values_.isEmpty()) {
-            values_ = other.values_;
-            bitField0_ = (bitField0_ & ~0x00000002);
-          } else {
-            ensureValuesIsMutable();
-            values_.addAll(other.values_);
-          }
-          onChanged();
+        if (other.hasValues()) {
+          setValues(other.getValues());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -2066,6 +2043,10 @@ public final class PTableProtos {
 
       public final boolean isInitialized() {
         if (!hasKey()) {
+          
+          return false;
+        }
+        if (!hasValues()) {
           
           return false;
         }
@@ -2165,74 +2146,38 @@ public final class PTableProtos {
         return this;
       }
 
-      // repeated bytes values = 2;
-      private java.util.List<com.google.protobuf.ByteString> values_ = java.util.Collections.emptyList();
-      private void ensureValuesIsMutable() {
-        if (!((bitField0_ & 0x00000002) == 0x00000002)) {
-          values_ = new java.util.ArrayList<com.google.protobuf.ByteString>(values_);
-          bitField0_ |= 0x00000002;
-         }
+      // required bytes values = 2;
+      private com.google.protobuf.ByteString values_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>required bytes values = 2;</code>
+       */
+      public boolean hasValues() {
+        return ((bitField0_ & 0x00000002) == 0x00000002);
       }
       /**
-       * <code>repeated bytes values = 2;</code>
+       * <code>required bytes values = 2;</code>
        */
-      public java.util.List<com.google.protobuf.ByteString>
-          getValuesList() {
-        return java.util.Collections.unmodifiableList(values_);
+      public com.google.protobuf.ByteString getValues() {
+        return values_;
       }
       /**
-       * <code>repeated bytes values = 2;</code>
+       * <code>required bytes values = 2;</code>
        */
-      public int getValuesCount() {
-        return values_.size();
-      }
-      /**
-       * <code>repeated bytes values = 2;</code>
-       */
-      public com.google.protobuf.ByteString getValues(int index) {
-        return values_.get(index);
-      }
-      /**
-       * <code>repeated bytes values = 2;</code>
-       */
-      public Builder setValues(
-          int index, com.google.protobuf.ByteString value) {
+      public Builder setValues(com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
-  ensureValuesIsMutable();
-        values_.set(index, value);
+  bitField0_ |= 0x00000002;
+        values_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>repeated bytes values = 2;</code>
-       */
-      public Builder addValues(com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  ensureValuesIsMutable();
-        values_.add(value);
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>repeated bytes values = 2;</code>
-       */
-      public Builder addAllValues(
-          java.lang.Iterable<? extends com.google.protobuf.ByteString> values) {
-        ensureValuesIsMutable();
-        super.addAll(values, values_);
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>repeated bytes values = 2;</code>
+       * <code>required bytes values = 2;</code>
        */
       public Builder clearValues() {
-        values_ = java.util.Collections.emptyList();
         bitField0_ = (bitField0_ & ~0x00000002);
+        values_ = getDefaultInstance().getValues();
         onChanged();
         return this;
       }
@@ -2524,6 +2469,56 @@ public final class PTableProtos {
      * <code>optional bytes indexType = 22;</code>
      */
     com.google.protobuf.ByteString getIndexType();
+
+    // repeated .PTableStats minKey = 23;
+    /**
+     * <code>repeated .PTableStats minKey = 23;</code>
+     */
+    java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> 
+        getMinKeyList();
+    /**
+     * <code>repeated .PTableStats minKey = 23;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats getMinKey(int index);
+    /**
+     * <code>repeated .PTableStats minKey = 23;</code>
+     */
+    int getMinKeyCount();
+    /**
+     * <code>repeated .PTableStats minKey = 23;</code>
+     */
+    java.util.List<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> 
+        getMinKeyOrBuilderList();
+    /**
+     * <code>repeated .PTableStats minKey = 23;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder getMinKeyOrBuilder(
+        int index);
+
+    // repeated .PTableStats maxKey = 24;
+    /**
+     * <code>repeated .PTableStats maxKey = 24;</code>
+     */
+    java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> 
+        getMaxKeyList();
+    /**
+     * <code>repeated .PTableStats maxKey = 24;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats getMaxKey(int index);
+    /**
+     * <code>repeated .PTableStats maxKey = 24;</code>
+     */
+    int getMaxKeyCount();
+    /**
+     * <code>repeated .PTableStats maxKey = 24;</code>
+     */
+    java.util.List<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> 
+        getMaxKeyOrBuilderList();
+    /**
+     * <code>repeated .PTableStats maxKey = 24;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder getMaxKeyOrBuilder(
+        int index);
   }
   /**
    * Protobuf type {@code PTable}
@@ -2704,6 +2699,22 @@ public final class PTableProtos {
               indexType_ = input.readBytes();
               break;
             }
+            case 186: {
+              if (!((mutable_bitField0_ & 0x00400000) == 0x00400000)) {
+                minKey_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats>();
+                mutable_bitField0_ |= 0x00400000;
+              }
+              minKey_.add(input.readMessage(org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.PARSER, extensionRegistry));
+              break;
+            }
+            case 194: {
+              if (!((mutable_bitField0_ & 0x00800000) == 0x00800000)) {
+                maxKey_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats>();
+                mutable_bitField0_ |= 0x00800000;
+              }
+              maxKey_.add(input.readMessage(org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.PARSER, extensionRegistry));
+              break;
+            }
           }
         }
       } catch (com.google.protobuf.InvalidProtocolBufferException e) {
@@ -2723,6 +2734,12 @@ public final class PTableProtos {
         }
         if (((mutable_bitField0_ & 0x00040000) == 0x00040000)) {
           physicalNames_ = java.util.Collections.unmodifiableList(physicalNames_);
+        }
+        if (((mutable_bitField0_ & 0x00400000) == 0x00400000)) {
+          minKey_ = java.util.Collections.unmodifiableList(minKey_);
+        }
+        if (((mutable_bitField0_ & 0x00800000) == 0x00800000)) {
+          maxKey_ = java.util.Collections.unmodifiableList(maxKey_);
         }
         this.unknownFields = unknownFields.build();
         makeExtensionsImmutable();
@@ -3202,6 +3219,78 @@ public final class PTableProtos {
       return indexType_;
     }
 
+    // repeated .PTableStats minKey = 23;
+    public static final int MINKEY_FIELD_NUMBER = 23;
+    private java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> minKey_;
+    /**
+     * <code>repeated .PTableStats minKey = 23;</code>
+     */
+    public java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> getMinKeyList() {
+      return minKey_;
+    }
+    /**
+     * <code>repeated .PTableStats minKey = 23;</code>
+     */
+    public java.util.List<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> 
+        getMinKeyOrBuilderList() {
+      return minKey_;
+    }
+    /**
+     * <code>repeated .PTableStats minKey = 23;</code>
+     */
+    public int getMinKeyCount() {
+      return minKey_.size();
+    }
+    /**
+     * <code>repeated .PTableStats minKey = 23;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats getMinKey(int index) {
+      return minKey_.get(index);
+    }
+    /**
+     * <code>repeated .PTableStats minKey = 23;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder getMinKeyOrBuilder(
+        int index) {
+      return minKey_.get(index);
+    }
+
+    // repeated .PTableStats maxKey = 24;
+    public static final int MAXKEY_FIELD_NUMBER = 24;
+    private java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> maxKey_;
+    /**
+     * <code>repeated .PTableStats maxKey = 24;</code>
+     */
+    public java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> getMaxKeyList() {
+      return maxKey_;
+    }
+    /**
+     * <code>repeated .PTableStats maxKey = 24;</code>
+     */
+    public java.util.List<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> 
+        getMaxKeyOrBuilderList() {
+      return maxKey_;
+    }
+    /**
+     * <code>repeated .PTableStats maxKey = 24;</code>
+     */
+    public int getMaxKeyCount() {
+      return maxKey_.size();
+    }
+    /**
+     * <code>repeated .PTableStats maxKey = 24;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats getMaxKey(int index) {
+      return maxKey_.get(index);
+    }
+    /**
+     * <code>repeated .PTableStats maxKey = 24;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder getMaxKeyOrBuilder(
+        int index) {
+      return maxKey_.get(index);
+    }
+
     private void initFields() {
       schemaNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       tableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -3225,6 +3314,8 @@ public final class PTableProtos {
       tenantId_ = com.google.protobuf.ByteString.EMPTY;
       viewIndexId_ = 0;
       indexType_ = com.google.protobuf.ByteString.EMPTY;
+      minKey_ = java.util.Collections.emptyList();
+      maxKey_ = java.util.Collections.emptyList();
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -3281,6 +3372,18 @@ public final class PTableProtos {
       }
       for (int i = 0; i < getGuidePostsCount(); i++) {
         if (!getGuidePosts(i).isInitialized()) {
+          memoizedIsInitialized = 0;
+          return false;
+        }
+      }
+      for (int i = 0; i < getMinKeyCount(); i++) {
+        if (!getMinKey(i).isInitialized()) {
+          memoizedIsInitialized = 0;
+          return false;
+        }
+      }
+      for (int i = 0; i < getMaxKeyCount(); i++) {
+        if (!getMaxKey(i).isInitialized()) {
           memoizedIsInitialized = 0;
           return false;
         }
@@ -3357,6 +3460,12 @@ public final class PTableProtos {
       }
       if (((bitField0_ & 0x00020000) == 0x00020000)) {
         output.writeBytes(22, indexType_);
+      }
+      for (int i = 0; i < minKey_.size(); i++) {
+        output.writeMessage(23, minKey_.get(i));
+      }
+      for (int i = 0; i < maxKey_.size(); i++) {
+        output.writeMessage(24, maxKey_.get(i));
       }
       getUnknownFields().writeTo(output);
     }
@@ -3459,6 +3568,14 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00020000) == 0x00020000)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(22, indexType_);
+      }
+      for (int i = 0; i < minKey_.size(); i++) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(23, minKey_.get(i));
+      }
+      for (int i = 0; i < maxKey_.size(); i++) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(24, maxKey_.get(i));
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -3581,6 +3698,10 @@ public final class PTableProtos {
         result = result && getIndexType()
             .equals(other.getIndexType());
       }
+      result = result && getMinKeyList()
+          .equals(other.getMinKeyList());
+      result = result && getMaxKeyList()
+          .equals(other.getMaxKeyList());
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -3681,6 +3802,14 @@ public final class PTableProtos {
       if (hasIndexType()) {
         hash = (37 * hash) + INDEXTYPE_FIELD_NUMBER;
         hash = (53 * hash) + getIndexType().hashCode();
+      }
+      if (getMinKeyCount() > 0) {
+        hash = (37 * hash) + MINKEY_FIELD_NUMBER;
+        hash = (53 * hash) + getMinKeyList().hashCode();
+      }
+      if (getMaxKeyCount() > 0) {
+        hash = (37 * hash) + MAXKEY_FIELD_NUMBER;
+        hash = (53 * hash) + getMaxKeyList().hashCode();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -3786,6 +3915,8 @@ public final class PTableProtos {
           getColumnsFieldBuilder();
           getIndexesFieldBuilder();
           getGuidePostsFieldBuilder();
+          getMinKeyFieldBuilder();
+          getMaxKeyFieldBuilder();
         }
       }
       private static Builder create() {
@@ -3850,6 +3981,18 @@ public final class PTableProtos {
         bitField0_ = (bitField0_ & ~0x00100000);
         indexType_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x00200000);
+        if (minKeyBuilder_ == null) {
+          minKey_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00400000);
+        } else {
+          minKeyBuilder_.clear();
+        }
+        if (maxKeyBuilder_ == null) {
+          maxKey_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00800000);
+        } else {
+          maxKeyBuilder_.clear();
+        }
         return this;
       }
 
@@ -3982,6 +4125,24 @@ public final class PTableProtos {
           to_bitField0_ |= 0x00020000;
         }
         result.indexType_ = indexType_;
+        if (minKeyBuilder_ == null) {
+          if (((bitField0_ & 0x00400000) == 0x00400000)) {
+            minKey_ = java.util.Collections.unmodifiableList(minKey_);
+            bitField0_ = (bitField0_ & ~0x00400000);
+          }
+          result.minKey_ = minKey_;
+        } else {
+          result.minKey_ = minKeyBuilder_.build();
+        }
+        if (maxKeyBuilder_ == null) {
+          if (((bitField0_ & 0x00800000) == 0x00800000)) {
+            maxKey_ = java.util.Collections.unmodifiableList(maxKey_);
+            bitField0_ = (bitField0_ & ~0x00800000);
+          }
+          result.maxKey_ = maxKey_;
+        } else {
+          result.maxKey_ = maxKeyBuilder_.build();
+        }
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -4142,6 +4303,58 @@ public final class PTableProtos {
         if (other.hasIndexType()) {
           setIndexType(other.getIndexType());
         }
+        if (minKeyBuilder_ == null) {
+          if (!other.minKey_.isEmpty()) {
+            if (minKey_.isEmpty()) {
+              minKey_ = other.minKey_;
+              bitField0_ = (bitField0_ & ~0x00400000);
+            } else {
+              ensureMinKeyIsMutable();
+              minKey_.addAll(other.minKey_);
+            }
+            onChanged();
+          }
+        } else {
+          if (!other.minKey_.isEmpty()) {
+            if (minKeyBuilder_.isEmpty()) {
+              minKeyBuilder_.dispose();
+              minKeyBuilder_ = null;
+              minKey_ = other.minKey_;
+              bitField0_ = (bitField0_ & ~0x00400000);
+              minKeyBuilder_ = 
+                com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                   getMinKeyFieldBuilder() : null;
+            } else {
+              minKeyBuilder_.addAllMessages(other.minKey_);
+            }
+          }
+        }
+        if (maxKeyBuilder_ == null) {
+          if (!other.maxKey_.isEmpty()) {
+            if (maxKey_.isEmpty()) {
+              maxKey_ = other.maxKey_;
+              bitField0_ = (bitField0_ & ~0x00800000);
+            } else {
+              ensureMaxKeyIsMutable();
+              maxKey_.addAll(other.maxKey_);
+            }
+            onChanged();
+          }
+        } else {
+          if (!other.maxKey_.isEmpty()) {
+            if (maxKeyBuilder_.isEmpty()) {
+              maxKeyBuilder_.dispose();
+              maxKeyBuilder_ = null;
+              maxKey_ = other.maxKey_;
+              bitField0_ = (bitField0_ & ~0x00800000);
+              maxKeyBuilder_ = 
+                com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                   getMaxKeyFieldBuilder() : null;
+            } else {
+              maxKeyBuilder_.addAllMessages(other.maxKey_);
+            }
+          }
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
       }
@@ -4197,6 +4410,18 @@ public final class PTableProtos {
         }
         for (int i = 0; i < getGuidePostsCount(); i++) {
           if (!getGuidePosts(i).isInitialized()) {
+            
+            return false;
+          }
+        }
+        for (int i = 0; i < getMinKeyCount(); i++) {
+          if (!getMinKey(i).isInitialized()) {
+            
+            return false;
+          }
+        }
+        for (int i = 0; i < getMaxKeyCount(); i++) {
+          if (!getMaxKey(i).isInitialized()) {
             
             return false;
           }
@@ -5680,6 +5905,486 @@ public final class PTableProtos {
         return this;
       }
 
+      // repeated .PTableStats minKey = 23;
+      private java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> minKey_ =
+        java.util.Collections.emptyList();
+      private void ensureMinKeyIsMutable() {
+        if (!((bitField0_ & 0x00400000) == 0x00400000)) {
+          minKey_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats>(minKey_);
+          bitField0_ |= 0x00400000;
+         }
+      }
+
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> minKeyBuilder_;
+
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> getMinKeyList() {
+        if (minKeyBuilder_ == null) {
+          return java.util.Collections.unmodifiableList(minKey_);
+        } else {
+          return minKeyBuilder_.getMessageList();
+        }
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public int getMinKeyCount() {
+        if (minKeyBuilder_ == null) {
+          return minKey_.size();
+        } else {
+          return minKeyBuilder_.getCount();
+        }
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats getMinKey(int index) {
+        if (minKeyBuilder_ == null) {
+          return minKey_.get(index);
+        } else {
+          return minKeyBuilder_.getMessage(index);
+        }
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public Builder setMinKey(
+          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats value) {
+        if (minKeyBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureMinKeyIsMutable();
+          minKey_.set(index, value);
+          onChanged();
+        } else {
+          minKeyBuilder_.setMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public Builder setMinKey(
+          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder builderForValue) {
+        if (minKeyBuilder_ == null) {
+          ensureMinKeyIsMutable();
+          minKey_.set(index, builderForValue.build());
+          onChanged();
+        } else {
+          minKeyBuilder_.setMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public Builder addMinKey(org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats value) {
+        if (minKeyBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureMinKeyIsMutable();
+          minKey_.add(value);
+          onChanged();
+        } else {
+          minKeyBuilder_.addMessage(value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public Builder addMinKey(
+          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats value) {
+        if (minKeyBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureMinKeyIsMutable();
+          minKey_.add(index, value);
+          onChanged();
+        } else {
+          minKeyBuilder_.addMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public Builder addMinKey(
+          org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder builderForValue) {
+        if (minKeyBuilder_ == null) {
+          ensureMinKeyIsMutable();
+          minKey_.add(builderForValue.build());
+          onChanged();
+        } else {
+          minKeyBuilder_.addMessage(builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public Builder addMinKey(
+          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder builderForValue) {
+        if (minKeyBuilder_ == null) {
+          ensureMinKeyIsMutable();
+          minKey_.add(index, builderForValue.build());
+          onChanged();
+        } else {
+          minKeyBuilder_.addMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public Builder addAllMinKey(
+          java.lang.Iterable<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> values) {
+        if (minKeyBuilder_ == null) {
+          ensureMinKeyIsMutable();
+          super.addAll(values, minKey_);
+          onChanged();
+        } else {
+          minKeyBuilder_.addAllMessages(values);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public Builder clearMinKey() {
+        if (minKeyBuilder_ == null) {
+          minKey_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00400000);
+          onChanged();
+        } else {
+          minKeyBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public Builder removeMinKey(int index) {
+        if (minKeyBuilder_ == null) {
+          ensureMinKeyIsMutable();
+          minKey_.remove(index);
+          onChanged();
+        } else {
+          minKeyBuilder_.remove(index);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder getMinKeyBuilder(
+          int index) {
+        return getMinKeyFieldBuilder().getBuilder(index);
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder getMinKeyOrBuilder(
+          int index) {
+        if (minKeyBuilder_ == null) {
+          return minKey_.get(index);  } else {
+          return minKeyBuilder_.getMessageOrBuilder(index);
+        }
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public java.util.List<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> 
+           getMinKeyOrBuilderList() {
+        if (minKeyBuilder_ != null) {
+          return minKeyBuilder_.getMessageOrBuilderList();
+        } else {
+          return java.util.Collections.unmodifiableList(minKey_);
+        }
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder addMinKeyBuilder() {
+        return getMinKeyFieldBuilder().addBuilder(
+            org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder addMinKeyBuilder(
+          int index) {
+        return getMinKeyFieldBuilder().addBuilder(
+            index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .PTableStats minKey = 23;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder> 
+           getMinKeyBuilderList() {
+        return getMinKeyFieldBuilder().getBuilderList();
+      }
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> 
+          getMinKeyFieldBuilder() {
+        if (minKeyBuilder_ == null) {
+          minKeyBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+              org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder>(
+                  minKey_,
+                  ((bitField0_ & 0x00400000) == 0x00400000),
+                  getParentForChildren(),
+                  isClean());
+          minKey_ = null;
+        }
+        return minKeyBuilder_;
+      }
+
+      // repeated .PTableStats maxKey = 24;
+      private java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> maxKey_ =
+        java.util.Collections.emptyList();
+      private void ensureMaxKeyIsMutable() {
+        if (!((bitField0_ & 0x00800000) == 0x00800000)) {
+          maxKey_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats>(maxKey_);
+          bitField0_ |= 0x00800000;
+         }
+      }
+
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> maxKeyBuilder_;
+
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> getMaxKeyList() {
+        if (maxKeyBuilder_ == null) {
+          return java.util.Collections.unmodifiableList(maxKey_);
+        } else {
+          return maxKeyBuilder_.getMessageList();
+        }
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public int getMaxKeyCount() {
+        if (maxKeyBuilder_ == null) {
+          return maxKey_.size();
+        } else {
+          return maxKeyBuilder_.getCount();
+        }
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats getMaxKey(int index) {
+        if (maxKeyBuilder_ == null) {
+          return maxKey_.get(index);
+        } else {
+          return maxKeyBuilder_.getMessage(index);
+        }
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public Builder setMaxKey(
+          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats value) {
+        if (maxKeyBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureMaxKeyIsMutable();
+          maxKey_.set(index, value);
+          onChanged();
+        } else {
+          maxKeyBuilder_.setMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public Builder setMaxKey(
+          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder builderForValue) {
+        if (maxKeyBuilder_ == null) {
+          ensureMaxKeyIsMutable();
+          maxKey_.set(index, builderForValue.build());
+          onChanged();
+        } else {
+          maxKeyBuilder_.setMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public Builder addMaxKey(org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats value) {
+        if (maxKeyBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureMaxKeyIsMutable();
+          maxKey_.add(value);
+          onChanged();
+        } else {
+          maxKeyBuilder_.addMessage(value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public Builder addMaxKey(
+          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats value) {
+        if (maxKeyBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureMaxKeyIsMutable();
+          maxKey_.add(index, value);
+          onChanged();
+        } else {
+          maxKeyBuilder_.addMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public Builder addMaxKey(
+          org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder builderForValue) {
+        if (maxKeyBuilder_ == null) {
+          ensureMaxKeyIsMutable();
+          maxKey_.add(builderForValue.build());
+          onChanged();
+        } else {
+          maxKeyBuilder_.addMessage(builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public Builder addMaxKey(
+          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder builderForValue) {
+        if (maxKeyBuilder_ == null) {
+          ensureMaxKeyIsMutable();
+          maxKey_.add(index, builderForValue.build());
+          onChanged();
+        } else {
+          maxKeyBuilder_.addMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public Builder addAllMaxKey(
+          java.lang.Iterable<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> values) {
+        if (maxKeyBuilder_ == null) {
+          ensureMaxKeyIsMutable();
+          super.addAll(values, maxKey_);
+          onChanged();
+        } else {
+          maxKeyBuilder_.addAllMessages(values);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public Builder clearMaxKey() {
+        if (maxKeyBuilder_ == null) {
+          maxKey_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00800000);
+          onChanged();
+        } else {
+          maxKeyBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public Builder removeMaxKey(int index) {
+        if (maxKeyBuilder_ == null) {
+          ensureMaxKeyIsMutable();
+          maxKey_.remove(index);
+          onChanged();
+        } else {
+          maxKeyBuilder_.remove(index);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder getMaxKeyBuilder(
+          int index) {
+        return getMaxKeyFieldBuilder().getBuilder(index);
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder getMaxKeyOrBuilder(
+          int index) {
+        if (maxKeyBuilder_ == null) {
+          return maxKey_.get(index);  } else {
+          return maxKeyBuilder_.getMessageOrBuilder(index);
+        }
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public java.util.List<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> 
+           getMaxKeyOrBuilderList() {
+        if (maxKeyBuilder_ != null) {
+          return maxKeyBuilder_.getMessageOrBuilderList();
+        } else {
+          return java.util.Collections.unmodifiableList(maxKey_);
+        }
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder addMaxKeyBuilder() {
+        return getMaxKeyFieldBuilder().addBuilder(
+            org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder addMaxKeyBuilder(
+          int index) {
+        return getMaxKeyFieldBuilder().addBuilder(
+            index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .PTableStats maxKey = 24;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder> 
+           getMaxKeyBuilderList() {
+        return getMaxKeyFieldBuilder().getBuilderList();
+      }
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> 
+          getMaxKeyFieldBuilder() {
+        if (maxKeyBuilder_ == null) {
+          maxKeyBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+              org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder>(
+                  maxKey_,
+                  ((bitField0_ & 0x00800000) == 0x00800000),
+                  getParentForChildren(),
+                  isClean());
+          maxKey_ = null;
+        }
+        return maxKeyBuilder_;
+      }
+
       // @@protoc_insertion_point(builder_scope:PTable)
     }
 
@@ -5722,7 +6427,7 @@ public final class PTableProtos {
       " \002(\005\022\021\n\tsortOrder\030\010 \002(\005\022\021\n\tarraySize\030\t \001" +
       "(\005\022\024\n\014viewConstant\030\n \001(\014\022\026\n\016viewReferenc" +
       "ed\030\013 \001(\010\"*\n\013PTableStats\022\013\n\003key\030\001 \002(\t\022\016\n\006" +
-      "values\030\002 \003(\014\"\212\004\n\006PTable\022\027\n\017schemaNameByt" +
+      "values\030\002 \002(\014\"\306\004\n\006PTable\022\027\n\017schemaNameByt" +
       "es\030\001 \002(\014\022\026\n\016tableNameBytes\030\002 \002(\014\022\036\n\ttabl" +
       "eType\030\003 \002(\0162\013.PTableType\022\022\n\nindexState\030\004",
       " \001(\t\022\026\n\016sequenceNumber\030\005 \002(\003\022\021\n\ttimeStam" +
@@ -5735,10 +6440,12 @@ public final class PTableProtos {
       "ltiTenant\030\020 \002(\010\022\020\n\010viewType\030\021 \001(\014\022\025\n\rvie" +
       "wStatement\030\022 \001(\014\022\025\n\rphysicalNames\030\023 \003(\014\022" +
       "\020\n\010tenantId\030\024 \001(\014\022\023\n\013viewIndexId\030\025 \001(\005\022\021",
-      "\n\tindexType\030\026 \001(\014*A\n\nPTableType\022\n\n\006SYSTE" +
-      "M\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JO" +
-      "IN\020\004B@\n(org.apache.phoenix.coprocessor.g" +
-      "eneratedB\014PTableProtosH\001\210\001\001\240\001\001"
+      "\n\tindexType\030\026 \001(\014\022\034\n\006minKey\030\027 \003(\0132\014.PTab" +
+      "leStats\022\034\n\006maxKey\030\030 \003(\0132\014.PTableStats*A\n" +
+      "\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIE" +
+      "W\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache.p" +
+      "hoenix.coprocessor.generatedB\014PTableProt" +
+      "osH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -5762,7 +6469,7 @@ public final class PTableProtos {
           internal_static_PTable_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTable_descriptor,
-              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", });
+              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "MinKey", "MaxKey", });
           return null;
         }
       };

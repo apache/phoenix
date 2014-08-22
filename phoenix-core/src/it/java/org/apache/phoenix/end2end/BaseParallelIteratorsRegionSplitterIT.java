@@ -29,6 +29,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -86,10 +87,14 @@ public class BaseParallelIteratorsRegionSplitterIT extends BaseClientManagedTime
         conn.close();
     }
 
-    protected static TableRef getTableRef(Connection conn, long ts) throws SQLException {
+    protected static TableRef getTableRef(Connection conn, long ts, PTable pTable) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        TableRef table = new TableRef(null,pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), STABLE_NAME)),ts, false);
-        return table;
+        if (pTable == null) {
+            return new TableRef(null, pconn.getMetaDataCache()
+                    .getTable(new PTableKey(pconn.getTenantId(), STABLE_NAME)), ts, false);
+        } else {
+            return new TableRef(null, pTable, ts, false);
+        }
     }
     
 }

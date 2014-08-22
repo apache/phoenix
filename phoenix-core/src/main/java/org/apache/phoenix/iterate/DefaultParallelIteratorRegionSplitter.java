@@ -21,11 +21,25 @@ import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PhoenixArray;
+import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.stat.PTableStats;
+import org.apache.phoenix.schema.stat.StatisticsConstants;
+import org.apache.phoenix.util.ReadOnlyProps;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
@@ -33,18 +47,6 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
-import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.parse.HintNode.Hint;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.query.StatsManager;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.util.ReadOnlyProps;
 
 
 /**
@@ -58,6 +60,7 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
 
     protected final int targetConcurrency;
     protected final int maxConcurrency;
+    protected final long guidePostsDepth;
     protected final int maxIntraRegionParallelization;
     protected final StatementContext context;
     protected final TableRef tableRef;
@@ -71,9 +74,15 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         this.tableRef = table;
         ReadOnlyProps props = context.getConnection().getQueryServices().getProps();
         this.targetConcurrency = props.getInt(QueryServices.TARGET_QUERY_CONCURRENCY_ATTRIB,
-                QueryServicesOptions.DEFAULT_TARGET_QUERY_CONCURRENCY);
+            QueryServicesOptions.DEFAULT_TARGET_QUERY_CONCURRENCY);
         this.maxConcurrency = props.getInt(QueryServices.MAX_QUERY_CONCURRENCY_ATTRIB,
-                QueryServicesOptions.DEFAULT_MAX_QUERY_CONCURRENCY);
+            QueryServicesOptions.DEFAULT_MAX_QUERY_CONCURRENCY);
+        Preconditions.checkArgument(targetConcurrency >= 1, "Invalid target concurrency: "
+            + targetConcurrency);
+        Preconditions.checkArgument(maxConcurrency >= targetConcurrency, "Invalid max concurrency: "
+            + maxConcurrency);
+        this.guidePostsDepth = props.getLong(StatisticsConstants.HISTOGRAM_BYTE_DEPTH_CONF_KEY,
+                StatisticsConstants.HISTOGRAM_DEFAULT_BYTE_DEPTH);
         Preconditions.checkArgument(targetConcurrency >= 1, "Invalid target concurrency: " + targetConcurrency);
         Preconditions.checkArgument(maxConcurrency >= targetConcurrency , "Invalid max concurrency: " + maxConcurrency);
         this.maxIntraRegionParallelization = hintNode.hasHint(Hint.NO_INTRA_REGION_PARALLELIZATION) ? 1 : props.getInt(QueryServices.MAX_INTRA_REGION_PARALLELIZATION_ATTRIB,
@@ -120,8 +129,7 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         if (regions.isEmpty()) {
             return Collections.emptyList();
         }
-        
-        StatsManager statsManager = context.getConnection().getQueryServices().getStatsManager();
+        PTableStats tableStats = this.tableRef.getTable().getTableStats();
         // the splits are computed as follows:
         //
         // let's suppose:
@@ -138,14 +146,10 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         //    split each region in s splits such that:
         //    s = max(x) where s * x < t
         //
-        // The idea is to align splits with region boundaries. If rows are not evenly
-        // distributed across regions, using this scheme compensates for regions that
-        // have more rows than others, by applying tighter splits and therefore spawning
-        // off more scans over the overloaded regions.
-        int splitsPerRegion = getSplitsPerRegion(regions.size());
         // Create a multi-map of ServerName to List<KeyRange> which we'll use to round robin from to ensure
         // that we keep each region server busy for each query.
-        ListMultimap<HRegionLocation,KeyRange> keyRangesPerRegion = ArrayListMultimap.create(regions.size(),regions.size() * splitsPerRegion);;
+        int splitsPerRegion = getSplitsPerRegion(regions.size());
+        ListMultimap<HRegionLocation,KeyRange> keyRangesPerRegion = ArrayListMultimap.create(regions.size(),regions.size() * splitsPerRegion);
         if (splitsPerRegion == 1) {
             for (HRegionLocation region : regions) {
                 keyRangesPerRegion.put(region, ParallelIterators.TO_KEY_RANGE.apply(region));
@@ -165,33 +169,70 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
                  * of date).
                  */
                 if (lowerUnbound) {
-                    startKey = statsManager.getMinKey(tableRef);
-                    if (startKey == null) {
+                    startKey = tableStats.getMinKeyOfARegion(region.getRegionInfo());
+                    if (startKey == null || startKey.length == 0) {
                         keyRangesPerRegion.put(region,ParallelIterators.TO_KEY_RANGE.apply(region));
                         continue;
                     }
                 }
                 if (upperUnbound) {
-                    stopKey = statsManager.getMaxKey(tableRef);
-                    if (stopKey == null) {
+                    stopKey = tableStats.getMaxKeyOfARegion(region.getRegionInfo());
+                    if (stopKey == null || stopKey.length == 0) {
                         keyRangesPerRegion.put(region,ParallelIterators.TO_KEY_RANGE.apply(region));
                         continue;
                     }
                 }
-                
-                byte[][] boundaries = null;
-                // Both startKey and stopKey will be empty the first time
-                if (Bytes.compareTo(startKey, stopKey) >= 0 || (boundaries = Bytes.split(startKey, stopKey, splitsPerRegion - 1)) == null) {
-                    // Bytes.split may return null if the key space
-                    // between start and end key is too small
-                    keyRangesPerRegion.put(region,ParallelIterators.TO_KEY_RANGE.apply(region));
-                } else {
-                    keyRangesPerRegion.put(region,KeyRange.getKeyRange(lowerUnbound ? KeyRange.UNBOUND : boundaries[0], boundaries[1]));
-                    if (boundaries.length > 1) {
-                        for (int i = 1; i < boundaries.length-2; i++) {
-                            keyRangesPerRegion.put(region,KeyRange.getKeyRange(boundaries[i], true, boundaries[i+1], false));
+                Map<String, byte[]> guidePosts = tableStats.getGuidePosts();
+                // Already we have the splits per region
+                byte[] bs = guidePosts.get(Bytes.toString(region.getRegionInfo().getRegionName()));
+                PhoenixArray array = null;
+                if (bs != null) {
+                  array = (PhoenixArray) PDataType.VARBINARY_ARRAY.toObject(bs);
+                }
+                if (array == null || array.getDimensions() <= 1) {
+                    // If there are no guide posts.. go with the old impl
+                    byte[][] boundaries = null;
+                    // Both startKey and stopKey will be empty the first time
+                    if (Bytes.compareTo(startKey, stopKey) >= 0
+                            || (boundaries = Bytes.split(startKey, stopKey, splitsPerRegion - 1)) == null) {
+                        keyRangesPerRegion.put(region, ParallelIterators.TO_KEY_RANGE.apply(region));
+                    } else {
+                        keyRangesPerRegion.put(region,
+                                KeyRange.getKeyRange(lowerUnbound ? KeyRange.UNBOUND : boundaries[0], boundaries[1]));
+                        if (boundaries.length > 1) {
+                            for (int i = 1; i < boundaries.length - 2; i++) {
+                                keyRangesPerRegion.put(region,
+                                        KeyRange.getKeyRange(boundaries[i], true, boundaries[i + 1], false));
+                            }
+                            keyRangesPerRegion.put(region, KeyRange.getKeyRange(boundaries[boundaries.length - 2],
+                                    true, upperUnbound ? KeyRange.UNBOUND : boundaries[boundaries.length - 1], false));
                         }
-                        keyRangesPerRegion.put(region,KeyRange.getKeyRange(boundaries[boundaries.length-2], true, upperUnbound ? KeyRange.UNBOUND : boundaries[boundaries.length-1], false));
+                    }
+                } else {
+                    if (Bytes.compareTo(startKey, stopKey) >= 0) {
+                        // Bytes.split may return null if the key space
+                        // between start and end key is too small
+                        keyRangesPerRegion.put(region, ParallelIterators.TO_KEY_RANGE.apply(region));
+                    } else {
+                        if (array != null && array.getDimensions() > 1) {
+                            // Should we really do like this or as we already have the byte[]
+                            // of guide posts just use them
+                            // per region?
+                            keyRangesPerRegion.put(
+                                    region,
+                                    KeyRange.getKeyRange(lowerUnbound ? KeyRange.UNBOUND : array.toBytes(0),
+                                            array.toBytes(1)));
+                            if (array.getDimensions() > 1) {
+                                for (int i = 1; i < array.getDimensions() - 2; i++) {
+                                    keyRangesPerRegion.put(region,
+                                            KeyRange.getKeyRange(array.toBytes(i), true, array.toBytes(i + 1), false));
+                                }
+                                keyRangesPerRegion.put(region, KeyRange.getKeyRange(
+                                        array.toBytes(array.getDimensions() - 2), true, upperUnbound ? KeyRange.UNBOUND
+                                                : array.toBytes(array.getDimensions() - 1), false));
+                            }
+                        }
+
                     }
                 }
             }
@@ -228,10 +269,10 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
 
     @Override
     public int getSplitsPerRegion(int numRegions) {
-        int splitsPerRegion =
-                numRegions >= targetConcurrency ? 1
-                        : (numRegions > targetConcurrency / 2 ? maxConcurrency : targetConcurrency)
-                                / numRegions;
-        return Math.min(splitsPerRegion, maxIntraRegionParallelization);
+      int splitsPerRegion =
+          numRegions >= targetConcurrency ? 1
+                  : (numRegions > targetConcurrency / 2 ? maxConcurrency : targetConcurrency)
+                          / numRegions;
+  return Math.min(splitsPerRegion, maxIntraRegionParallelization);
     }
 }
