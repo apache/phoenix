@@ -35,13 +35,7 @@ import org.apache.hadoop.io.Closeable;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 
 /**
- * Wrapper to access the statistics table for an HTable.
- * <p>
- * Each {@link StatisticsTable} is bound to access the statistics for a single
- * 'primary' table. This helps decrease the chances of reading/writing the wrong
- * statistic for the source table
- * <p>
- * Each statistic is prefixed with the tablename and region from whence it came.
+ * Wrapper to access the statistics table SYSTEM.STATS using the HTable.
  */
 public class StatisticsTable implements Closeable {
 

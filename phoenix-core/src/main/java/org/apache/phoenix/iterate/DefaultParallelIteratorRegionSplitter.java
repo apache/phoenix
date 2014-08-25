@@ -218,6 +218,8 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
                             // Should we really do like this or as we already have the byte[]
                             // of guide posts just use them
                             // per region?
+                            
+                            // Adding all the collected guideposts to the key ranges
                             keyRangesPerRegion.put(
                                     region,
                                     KeyRange.getKeyRange(lowerUnbound ? KeyRange.UNBOUND : array.toBytes(0),

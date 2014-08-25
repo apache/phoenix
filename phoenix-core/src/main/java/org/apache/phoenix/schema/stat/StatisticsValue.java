@@ -21,9 +21,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 
 /**
  * Simple holder class for a single statistics on a column in a region.
- * <p>
- * If you are build a histogram, should use the HistogramStat to store information, which internally uses a collection of
- * {@link StatisticsValue}s to build a larger histogram
  */
 public class StatisticsValue {
 

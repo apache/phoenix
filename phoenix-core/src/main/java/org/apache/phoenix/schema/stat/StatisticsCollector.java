@@ -109,8 +109,8 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
       List<Cell> results = new ArrayList<Cell>();
       boolean hasMore = true;
       while (hasMore) {
+        // Am getting duplicates here?  Need to avoid that
         hasMore = scanner.next(results);
-        // This is the place to invoke the code to collect the stat
         updateStat(results);
         count += results.size();
         results.clear();
@@ -292,32 +292,4 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     return null;
   }
 
-  /**
-   * Abstraction of a statistic that combines two {@link StatisticValue}s to
-   * generate a single min/max stat for a single column family of a region.
-   */
-  public static class MinMaxStat {
-
-    public final byte[] region;
-    public final byte[] family;
-    public final byte[] max;
-    public final byte[] min;
-
-    /**
-     * @param region
-     *          region where the stat was obtained
-     * @param columnfamily
-     *          column family for which the stat was calculated
-     * @param min
-     *          the min key as a {@link StatisticValue}
-     * @param max
-     *          the max key as a {@link StatisticValue}
-     */
-    public MinMaxStat(byte[] region, byte[] columnfamily, StatisticsValue max, StatisticsValue min) {
-      this.region = region;
-      this.family = columnfamily;
-      this.max = max.getValue();
-      this.min = min.getValue();
-    }
-  }
 }

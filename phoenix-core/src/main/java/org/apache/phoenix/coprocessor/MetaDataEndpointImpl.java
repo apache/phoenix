@@ -326,7 +326,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // Can we just get from configuration that is obtained from the env?
         statsUpdateFrequencyMs = props.getInt(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
         maxStatsAgeMs = props.getInt(QueryServices.MAX_STATS_AGE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_STATS_AGE_MS);
-        statsUpdator = new StatsUpdator(this, statsUpdateFrequencyMs, statsCollectorInProgress);
+        statsUpdator = new StatisticsUpdator(this, statsUpdateFrequencyMs, statsCollectorInProgress);
         Threads.setDaemonThreadRunning(statsUpdator.getThread());
         LOG.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
@@ -729,7 +729,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         HTable statsTable = null;
         try {
             PTableStats newStats = null;
-            // Can we do a new HTable instance here?
+            // Can we do a new HTable instance here? Or get it from a pool or cache of these instances?
             statsTable = new HTable(this.env.getConfiguration(),
                     PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
             Scan s = new Scan();
@@ -1775,13 +1775,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             return cmp != 0;
         }
     }
-    private static class StatsUpdator extends Chore {
+    /**
+     * A thread (Chore) that keeps reading the updated stats and invalidates the Meta cache incase there is 
+     * a change in the stats
+     */
+    private static class StatisticsUpdator extends Chore {
         // Core should keep scanning the table stats and collecting the info per
         // table
         MetaDataEndpointImpl metaData;
         AtomicInteger inProgress;
 
-        public StatsUpdator(MetaDataEndpointImpl metaData, int statsUpdateFrequencyMs, AtomicInteger statsCollectorInProgress) {
+        public StatisticsUpdator(MetaDataEndpointImpl metaData, int statsUpdateFrequencyMs, AtomicInteger statsCollectorInProgress) {
             super("StatsUpdator", statsUpdateFrequencyMs, metaData);
             this.metaData = metaData;
             this.inProgress = statsCollectorInProgress;

@@ -23,10 +23,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 
 /**
- * Simple serializer that always puts generates the same formatted key for an
- * individual statistic. This writer is used to write a single
- * {@link StatisticValue} to the statistics table. They should be read back via
- * an {@link IndividualStatisticReader}.
+ * A simple StatisticsWriter that updates the SYSTEM.STATS table directly using HTable APIs
  */
 public class StatisticsWriter {
   private final byte[] source;
@@ -42,10 +39,7 @@ public class StatisticsWriter {
     // TODO : Check if we need the column name also
     byte[] prefix = StatisticsUtils.getRowKey(source, region, fam);
     Put put = new Put(prefix);
-    // The stats table cannot update it to the CF directly. We need to update
-    // the corresponding column
-    // So get the CF name for the stats table and then do put.add() for each of
-    // the column
+    //TODO : Use Phoenix-1101 and use upsert stmt to insert into the SYSTEM.STATS table
     if (guidePosts != null) {
       put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
           PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES, (guidePosts.getValue()));
