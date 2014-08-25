@@ -139,6 +139,8 @@ Release Notes - Phoenix - Version 4.1
     * [PHOENIX-1181] - client cache fails to update itself after a table was altered from a diff client
     * [PHOENIX-1187] - Enable tracing on server
     * [PHOENIX-1188] - Performance regression for non-aggregate queries
+    * [PHOENIX-1183] - phoenix-pig does not work with CDH 5.1
+    * [PHOENIX-1184] - Phoenix 4.0 will not compile agaist CDH HBase 5.1
     * [PHOENIX-1192] - Re-enable reverse scan to prevent order by
 
 ** Task

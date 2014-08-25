@@ -74,10 +74,6 @@ rm -rf $(find . -type d -name archive-tmp);
 cp $(find -iname phoenix-$PHOENIX-client-minimal.jar) $DIR_COMMON;
 cp $(find -iname phoenix-$PHOENIX-client-without-hbase.jar) $DIR_COMMON;
 cp $(find -iname phoenix-core-$PHOENIX.jar) $DIR_COMMON;
-cp $(find -iname phoenix-flume-$PHOENIX.jar) $DIR_COMMON;
-cp $(find -iname phoenix-flume-$PHOENIX-tests.jar) $DIR_COMMON;
-cp $(find -iname phoenix-pig-$PHOENIX.jar) $DIR_COMMON;
-cp $(find -iname phoenix-pig-$PHOENIX-tests.jar) $DIR_COMMON;
 
 # Copy release docs
 cp CHANGES $DIR_REL_BIN_PATH;
@@ -95,6 +91,10 @@ function_copy_hadoop_specific_jars() {
   cp $(find -iname phoenix-$PHOENIX-client.jar) $DIR_HADOOP$1/phoenix-$PHOENIX-client-hadoop$1.jar;
   cp $(find -iname phoenix-$PHOENIX-server.jar) $DIR_HADOOP$1/phoenix-$PHOENIX-server-hadoop$1.jar;
   cp $(find -iname phoenix-core-$PHOENIX-tests.jar) $DIR_HADOOP$1/phoenix-core-$PHOENIX-tests-hadoop$1.jar;
+  cp $(find -iname phoenix-flume-$PHOENIX.jar) $DIR_HADOOP$1/phoenix-flume-$PHOENIX-hadoop$1.jar;
+  cp $(find -iname phoenix-flume-$PHOENIX-tests.jar) $DIR_HADOOP$1/phoenix-flume-$PHOENIX-tests-hadoop$1.jar;
+  cp $(find -iname phoenix-pig-$PHOENIX.jar) $DIR_HADOOP$1/phoenix-pig-$PHOENIX-hadoop$1.jar;
+  cp $(find -iname phoenix-pig-$PHOENIX-tests.jar) $DIR_HADOOP$1/phoenix-pig-$PHOENIX-tests-hadoop$1.jar;
 }
 function_copy_hadoop_specific_jars 1;
 mvn clean package -Dhadoop.profile=2 -DskipTests;
