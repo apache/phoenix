@@ -114,6 +114,7 @@ Release Notes - Phoenix - Version 3.1
     * [PHOENIX-1172] - Prevent lock contention in ConnectionQueryServicesImpl. Fix exception handling. 
     * [PHOENIX-1180] - Rename test classes so they are properly picked up by the test runner
     * [PHOENIX-1181] - client cache fails to update itself after a table was altered from a diff client
+    * [PHOENIX-1183] - phoenix-pig does not work with CDH 5.1
     * [PHOENIX-1188] - Performance regression for non-aggregate queries
 
 ** Task
