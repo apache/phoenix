@@ -26,63 +26,80 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.PDataType;
 
 import com.google.common.collect.Lists;
+import java.math.BigDecimal;
+import org.apache.phoenix.query.KeyRange;
+import static org.apache.phoenix.schema.PDataType.DECIMAL;
 
 /**
- * 
+ *
  * Class encapsulating the CEIL operation on a {@link org.apache.phoenix.schema.PDataType#DECIMAL}
  *
- * 
+ *
  * @since 3.0.0
  */
 public class CeilDecimalExpression extends RoundDecimalExpression {
-    
+
     public CeilDecimalExpression() {}
-    
+
     private CeilDecimalExpression(List<Expression> children) {
         super(children);
     }
-    
-  /**
-   * Creates a {@link CeilDecimalExpression} with rounding scale given by @param scale.
-   *
-   */
-   public static Expression create(Expression expr, int scale) throws SQLException {
+
+    /**
+     * Creates a {@link CeilDecimalExpression} with rounding scale given by @param scale.
+     *
+     */
+    public static Expression create(Expression expr, int scale) throws SQLException {
        if (expr.getDataType().isCoercibleTo(PDataType.LONG)) {
-           return expr;
-       }
-       Expression scaleExpr = LiteralExpression.newConstant(scale, PDataType.INTEGER, true);
-       List<Expression> expressions = Lists.newArrayList(expr, scaleExpr);
-       return new CeilDecimalExpression(expressions);
-   }
-   
-   public static Expression create(List<Expression> exprs) throws SQLException {
-       Expression expr = exprs.get(0);
+            return expr;
+        }
+        Expression scaleExpr = LiteralExpression.newConstant(scale, PDataType.INTEGER, true);
+        List<Expression> expressions = Lists.newArrayList(expr, scaleExpr);
+        return new CeilDecimalExpression(expressions);
+    }
+
+    public static Expression create(List<Expression> exprs) throws SQLException {
+        Expression expr = exprs.get(0);
        if (expr.getDataType().isCoercibleTo(PDataType.LONG)) {
-           return expr;
-       }
+            return expr;
+        }
        if (exprs.size() == 1) {
-           Expression scaleExpr = LiteralExpression.newConstant(0, PDataType.INTEGER, true);
-           exprs = Lists.newArrayList(expr, scaleExpr);
-       }
-       return new CeilDecimalExpression(exprs);
-   }
-   
-   /**
-    * Creates a {@link CeilDecimalExpression} with a default scale of 0 used for rounding. 
-    *
-    */
-   public static Expression create(Expression expr) throws SQLException {
-       return create(expr, 0);
-   }
-    
+            Expression scaleExpr = LiteralExpression.newConstant(0, PDataType.INTEGER, true);
+            exprs = Lists.newArrayList(expr, scaleExpr);
+        }
+        return new CeilDecimalExpression(exprs);
+    }
+
+    /**
+     * Creates a {@link CeilDecimalExpression} with a default scale of 0 used for rounding.
+     *
+     */
+    public static Expression create(Expression expr) throws SQLException {
+        return create(expr, 0);
+    }
+
     @Override
     protected RoundingMode getRoundingMode() {
         return RoundingMode.CEILING;
     }
-    
+
     @Override
     public String getName() {
         return CeilFunction.NAME;
     }
     
+    /**
+     * {@inheritDoc }
+     */
+    @Override
+    protected KeyRange getInputRangeProducing(BigDecimal result) {
+        if(!hasEnoughPrecisionToProduce(result)) {
+            throw new IllegalArgumentException("Cannot produce input range for decimal " + result 
+                + ", not enough precision with scale " + getRoundingScale());
+        }
+        byte[] lowerRange = DECIMAL.toBytes(stepPrevInScale(result));
+        byte[] upperRange = DECIMAL.toBytes(result);
+        return KeyRange.getKeyRange(lowerRange, false, upperRange, true);
+    }
+
 }

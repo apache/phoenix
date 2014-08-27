@@ -26,25 +26,28 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.PDataType;
 
 import com.google.common.collect.Lists;
+import java.math.BigDecimal;
+import org.apache.phoenix.query.KeyRange;
+import static org.apache.phoenix.schema.PDataType.DECIMAL;
 
 /**
- * 
+ *
  * Class encapsulating the FLOOR operation on 
  * a column/literal of type {@link org.apache.phoenix.schema.PDataType#DECIMAL}.
  *
- * 
+ *
  * @since 3.0.0
  */
 public class FloorDecimalExpression extends RoundDecimalExpression {
-    
+
     public FloorDecimalExpression() {}
-    
+
     private FloorDecimalExpression(List<Expression> children) {
         super(children);
     }
-    
+
     /**
-     * Creates a {@link FloorDecimalExpression} with rounding scale given by @param scale. 
+     * Creates a {@link FloorDecimalExpression} with rounding scale given by @param scale.
      *
      */
     public static Expression create(Expression expr, int scale) throws SQLException {
@@ -55,7 +58,7 @@ public class FloorDecimalExpression extends RoundDecimalExpression {
         List<Expression> expressions = Lists.newArrayList(expr, scaleExpr);
         return new FloorDecimalExpression(expressions);
     }
-    
+
     public static Expression create(List<Expression> exprs) throws SQLException {
         Expression expr = exprs.get(0);
         if (expr.getDataType().isCoercibleTo(PDataType.LONG)) {
@@ -67,22 +70,37 @@ public class FloorDecimalExpression extends RoundDecimalExpression {
         }
         return new FloorDecimalExpression(exprs);
     }
-    
+
     /**
-     * Creates a {@link FloorDecimalExpression} with a default scale of 0 used for rounding. 
+     * Creates a {@link FloorDecimalExpression} with a default scale of 0 used for rounding.
      *
      */
     public static Expression create(Expression expr) throws SQLException {
         return create(expr, 0);
     }
-    
+
     @Override
     protected RoundingMode getRoundingMode() {
         return RoundingMode.FLOOR;
     }
-    
+
     @Override
     public String getName() {
         return FloorFunction.NAME;
     }
+
+    /**
+     * {@inheritDoc }
+     */
+    @Override
+    protected KeyRange getInputRangeProducing(BigDecimal result) {
+        if(!hasEnoughPrecisionToProduce(result)) {
+            throw new IllegalArgumentException("Cannot produce input range for decimal " + result 
+                + ", not enough precision with scale " + getRoundingScale());
+        }
+        byte[] lowerRange = DECIMAL.toBytes(result);
+        byte[] upperRange = DECIMAL.toBytes(stepNextInScale(result));
+        return KeyRange.getKeyRange(lowerRange, upperRange);
+    }
+
 }
