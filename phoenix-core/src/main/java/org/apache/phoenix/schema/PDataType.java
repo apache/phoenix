@@ -6596,7 +6596,7 @@ public enum PDataType {
             } else {
                 // Adjust length and offset down because we don't have enough room
                 length = MAX_BIG_DECIMAL_BYTES;
-                index = offset + length - 1;
+                index = offset + length;
             }
         }
         BigInteger bi = v.unscaledValue();
@@ -6605,7 +6605,7 @@ public enum PDataType {
             BigInteger[] dandr = bi.divideAndRemainder(divideBy);
             bi = dandr[0];
             int digit = dandr[1].intValue();
-            result[--index] = (byte)(signum * digit * multiplyBy + digitOffset);
+            result[--index] = (byte)(digit * multiplyBy + digitOffset);
             multiplyBy = 1;
             divideBy = ONE_HUNDRED;
         }

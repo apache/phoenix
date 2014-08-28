@@ -37,7 +37,7 @@ public class NumberUtil {
      * @return new {@link BigDecimal} instance
      */
     public static BigDecimal normalize(BigDecimal bigDecimal) {
-        return bigDecimal.stripTrailingZeros().round(PDataType.DEFAULT_MATH_CONTEXT);
+        return bigDecimal.round(PDataType.DEFAULT_MATH_CONTEXT).stripTrailingZeros();
     }
 
     public static BigDecimal setDecimalWidthAndScale(BigDecimal decimal, Integer precisionOrNull, Integer scaleOrNull) {

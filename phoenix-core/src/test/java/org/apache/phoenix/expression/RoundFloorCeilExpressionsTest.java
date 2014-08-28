@@ -327,19 +327,24 @@ public class RoundFloorCeilExpressionsTest {
     // value doesn't matter because we only use those expressions to produce a keypart
     private static final LiteralExpression DUMMY_DECIMAL = LiteralExpression.newConstant(new BigDecimal("2.5"));
     
-    // this should be PDataType#MAX_PRECISION (38)
-    // but there are rounding errors in DECIMAL.toBytes() and DECIMAL.toObject()
-    // with precisions of 20 or greater. See https://issues.apache.org/jira/browse/PHOENIX-1206
-    private static final int MAX_RELIABLE_PRECISION = 18;
-    
-    // once PHOENIX-1206 is fixed, we should add more precise decimals to these tests
     private static final List<BigDecimal> DECIMALS = Collections.unmodifiableList(
         Arrays.asList(
-            new BigDecimal("-200300"), new BigDecimal("-8.44"), new BigDecimal("-2.00"), 
-            new BigDecimal("-0.6"), new BigDecimal("-0.00032"), 
-            BigDecimal.ZERO, BigDecimal.ONE, 
-            new BigDecimal("0.00000984"), new BigDecimal("0.74"), new BigDecimal("2.00"), 
-            new BigDecimal("7.09"), new BigDecimal("84900800")
+            BigDecimal.valueOf(Long.MIN_VALUE * 17L - 13L, 9),
+            BigDecimal.valueOf(Long.MIN_VALUE, 8),
+            new BigDecimal("-200300"), 
+            new BigDecimal("-8.44"), 
+            new BigDecimal("-2.00"), 
+            new BigDecimal("-0.6"), 
+            new BigDecimal("-0.00032"), 
+            BigDecimal.ZERO, 
+            BigDecimal.ONE, 
+            new BigDecimal("0.00000984"), 
+            new BigDecimal("0.74"), 
+            new BigDecimal("2.00"), 
+            new BigDecimal("7.09"), 
+            new BigDecimal("84900800"),
+            BigDecimal.valueOf(Long.MAX_VALUE, 8),
+            BigDecimal.valueOf(Long.MAX_VALUE * 31L + 17L, 7)
         ));
     
     private static final List<Integer> SCALES = Collections.unmodifiableList(Arrays.asList(0, 1, 2, 3, 8));
@@ -482,10 +487,10 @@ public class RoundFloorCeilExpressionsTest {
      * @throws IllegalArgumentException if decimal requires more than the maximum reliable precision
      */
     private static BigDecimal getSmallestUnit(BigDecimal decimal) {
-        if (decimal.precision() > MAX_RELIABLE_PRECISION) {
+        if (decimal.precision() > PDataType.MAX_PRECISION) {
             throw new IllegalArgumentException("rounding errors mean that we cannot reliably test " + decimal);
         }
-        int minScale = decimal.scale() + (MAX_RELIABLE_PRECISION - decimal.precision());
+        int minScale = decimal.scale() + (PDataType.MAX_PRECISION - decimal.precision());
         return BigDecimal.valueOf(1, minScale);
     }
     
