@@ -17,19 +17,21 @@
  */
 package org.apache.phoenix.expression;
 
-import java.math.BigDecimal;
+import static org.apache.phoenix.schema.PDataType.DECIMAL;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.function.CeilDateExpression;
@@ -44,9 +46,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PDataType;
-import static org.apache.phoenix.schema.PDataType.DECIMAL;
 import org.apache.phoenix.util.DateUtil;
-import static org.junit.Assert.assertFalse;
 import org.junit.Test;
 
 /**
@@ -233,22 +233,17 @@ public class RoundFloorCeilExpressionsTest {
          * @param scale  the scale to round the decimal to
          * @return  the expression containing the above parameters
          */
-        public Expression getExpression(byte[] key, int scale) {
-            try {
-                LiteralExpression decimalLiteral = LiteralExpression.newConstant(DECIMAL.toObject(key), DECIMAL);
-                switch(this) {
-                    case ROUND:
-                        return RoundDecimalExpression.create(decimalLiteral, scale);
-                    case FLOOR:
-                        return FloorDecimalExpression.create(decimalLiteral, scale);
-                    case CEIL:
-                        return CeilDecimalExpression.create(decimalLiteral, scale);
-                    default:
-                        throw new AssertionError("Unknown RoundingType");
-                }
-            }
-            catch (SQLException ex) {
-                throw new AssertionError("Should never happen when creating decimal literal", ex);
+        public Expression getExpression(byte[] key, int scale) throws SQLException {
+            LiteralExpression decimalLiteral = LiteralExpression.newConstant(DECIMAL.toObject(key), DECIMAL);
+            switch(this) {
+                case ROUND:
+                    return RoundDecimalExpression.create(decimalLiteral, scale);
+                case FLOOR:
+                    return FloorDecimalExpression.create(decimalLiteral, scale);
+                case CEIL:
+                    return CeilDecimalExpression.create(decimalLiteral, scale);
+                default:
+                    throw new AssertionError("Unknown RoundingType");
             }
         }
     }
