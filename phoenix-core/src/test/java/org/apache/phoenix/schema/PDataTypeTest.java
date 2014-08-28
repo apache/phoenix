@@ -848,6 +848,28 @@ public class PDataTypeTest {
         nb = (BigDecimal)PDataType.DECIMAL.toObject(b);
         TestUtil.assertRoundEquals(na,nb);
         assertTrue(b.length <= PDataType.DECIMAL.estimateByteSize(na));
+        
+        // test for negative serialization using biginteger
+        na = new BigDecimal("-5.00000000000000000000000001");
+        b = PDataType.DECIMAL.toBytes(na);
+        nb = (BigDecimal)PDataType.DECIMAL.toObject(b);
+        TestUtil.assertRoundEquals(na,nb);
+        assertTrue(b.length <= PDataType.DECIMAL.estimateByteSize(na));
+        
+        // test for serialization of 38 digits
+        na = new BigDecimal("-2.4999999999999999999999999999999999999");
+        b = PDataType.DECIMAL.toBytes(na);
+        nb = (BigDecimal)PDataType.DECIMAL.toObject(b);
+        TestUtil.assertRoundEquals(na,nb);
+        assertTrue(b.length <= PDataType.DECIMAL.estimateByteSize(na));
+        
+        // test for serialization of 39 digits, should round to -2.5
+        na = new BigDecimal("-2.499999999999999999999999999999999999999");
+        b = PDataType.DECIMAL.toBytes(na);
+        nb = (BigDecimal)PDataType.DECIMAL.toObject(b);
+        assertTrue(nb.compareTo(new BigDecimal("-2.5")) == 0);
+        assertEquals(new BigDecimal("-2.5"), nb);
+        assertTrue(b.length <= PDataType.DECIMAL.estimateByteSize(na));
 
         na = new BigDecimal(2.5);
         b = PDataType.DECIMAL.toBytes(na);
