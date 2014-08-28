@@ -83,11 +83,15 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
+import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
+import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -100,6 +104,9 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
+import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectRequest;
+import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectResponse;
+import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectService;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -123,6 +130,7 @@ import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -142,6 +150,8 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Ints;
+import com.google.protobuf.HBaseZeroCopyByteString;
+import com.google.protobuf.ServiceException;
 
 public class MetaDataClient {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataClient.class);
@@ -460,6 +470,57 @@ public class MetaDataClient {
         byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
         MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), emptyCF, null, null, tableRef.getTimeStamp());
         return connection.getQueryServices().updateData(plan);
+    }
+    
+    public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt) throws SQLException {
+        String tableName = updateStatisticsStmt.getTable().getName().getTableName();
+        HTableInterface ht = null;
+        byte[] tenIdBytes = QueryConstants.EMPTY_BYTE_ARRAY;
+        if (connection.getTenantId() != null) {
+            tenIdBytes = connection.getTenantId().getBytes();
+        }
+        byte[] schNameInBytes = QueryConstants.EMPTY_BYTE_ARRAY;
+        if (connection.getSchema() != null) {
+            schNameInBytes = Bytes.toBytes(connection.getSchema());
+        }
+        final byte[] tenantIdBytes = tenIdBytes;
+        final byte[] schemaNameInBytes = schNameInBytes;
+        try {
+            ht = connection.getQueryServices().getTable(Bytes.toBytes(tableName));
+            Batch.Call<StatCollectService, StatCollectResponse> callable = new Batch.Call<StatCollectService, StatCollectResponse>() {
+                ServerRpcController controller = new ServerRpcController();
+                BlockingRpcCallback<StatCollectResponse> rpcCallback = new BlockingRpcCallback<StatCollectResponse>();
+
+                @Override
+                public StatCollectResponse call(StatCollectService service) throws IOException {
+                    StatCollectRequest.Builder builder = StatCollectRequest.newBuilder();
+                    builder.setTenantIdBytes(HBaseZeroCopyByteString.wrap(tenantIdBytes));
+                    builder.setSchemaNameBytes(HBaseZeroCopyByteString.wrap(schemaNameInBytes));
+                    service.collectStat(controller, builder.build(), rpcCallback);
+                    if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
+                    return rpcCallback.get();
+                }
+            };
+            Map<byte[], StatCollectResponse> result = ht.coprocessorService(StatCollectService.class,
+                    HConstants.EMPTY_BYTE_ARRAY, HConstants.EMPTY_BYTE_ARRAY, callable);
+            StatCollectResponse next = result.values().iterator().next();
+            long rowsScanned = next.getRowsScanned();
+            return new MutationState((int)rowsScanned, connection);
+        } catch (ServiceException e) {
+            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
+        } catch (TableNotFoundException e) {
+            throw new SQLException("Table not found " + tableName, e);
+        } catch (Throwable e) {
+            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
+        } finally {
+            if (ht != null) {
+                try {
+                    ht.close();
+                } catch (IOException e) {
+                    throw new SQLException("Unable to close the table " + tableName + " after collecting stats", e);
+                }
+            }
+        }
     }
 
     private MutationState buildIndexAtTimeStamp(PTable index, NamedTableNode dataTableNode) throws SQLException {

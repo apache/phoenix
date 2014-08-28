@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Comparator;
@@ -34,6 +35,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.iterate.DefaultParallelIteratorRegionSplitter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -41,6 +43,7 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -58,9 +61,9 @@ import org.junit.experimental.categories.Category;
 @Category(ClientManagedTimeTest.class)
 public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIteratorsRegionSplitterIT {
     
-    private static List<KeyRange> getSplits(Connection conn, long ts, final Scan scan)
+    private static List<KeyRange> getSplits(Connection conn, long ts, final Scan scan, PTable pTable)
             throws SQLException {
-        TableRef tableRef = getTableRef(conn, ts);
+        TableRef tableRef = getTableRef(conn, ts, pTable);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         final List<HRegionLocation> regions =  pconn.getQueryServices().getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
         PhoenixStatement statement = new PhoenixStatement(pconn);
@@ -94,7 +97,7 @@ public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIterat
         // number of regions > target query concurrency
         scan.setStartRow(K1);
         scan.setStopRow(K12);
-        List<KeyRange> keyRanges = getSplits(conn, ts, scan);
+        List<KeyRange> keyRanges = getSplits(conn, ts, scan, null);
         assertEquals("Unexpected number of splits: " + keyRanges, 5, keyRanges.size());
         assertEquals(newKeyRange(KeyRange.UNBOUND, K3), keyRanges.get(0));
         assertEquals(newKeyRange(K3, K4), keyRanges.get(1));
@@ -105,7 +108,7 @@ public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIterat
         // (number of regions / 2) > target query concurrency
         scan.setStartRow(K3);
         scan.setStopRow(K6);
-        keyRanges = getSplits(conn, ts, scan);
+        keyRanges = getSplits(conn, ts, scan, null);
         assertEquals("Unexpected number of splits: " + keyRanges, 3, keyRanges.size());
         // note that we get a single split from R2 due to small key space
         assertEquals(newKeyRange(K3, K4), keyRanges.get(0));
@@ -115,7 +118,7 @@ public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIterat
         // (number of regions / 2) <= target query concurrency
         scan.setStartRow(K5);
         scan.setStopRow(K6);
-        keyRanges = getSplits(conn, ts, scan);
+        keyRanges = getSplits(conn, ts, scan, null);
         assertEquals("Unexpected number of splits: " + keyRanges, 3, keyRanges.size());
         assertEquals(newKeyRange(K4, K5), keyRanges.get(0));
         assertEquals(newKeyRange(K5, K6), keyRanges.get(1));
@@ -124,21 +127,25 @@ public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIterat
     }
 
     @Test
-    public void testGetLowerUnboundSplits() throws Exception {
+    public void testGetLowerUnboundSplits() throws Throwable {
         long ts = nextTimestamp();
         initTableValues(ts);
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
-
+        // CAll the update statistics query here
+        PreparedStatement stmt = conn.prepareStatement("UPDATE_STATISTICS STABLE");
+        stmt.execute();
+        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        // This getRef does not have the stats. We may need to update the stats using getTable
+        TableRef table = getTableRef(conn,ts, null);
         Scan scan = new Scan();
         
-        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
-        TableRef table = getTableRef(conn,ts);
-        services.getStatsManager().updateStats(table);
+        MetaDataMutationResult result = services.getTable(null, table.getTable().getSchemaName().getBytes(), table.getTable().getName().getBytes(),
+                table.getTimeStamp(), ((PhoenixConnection)conn).getSCN());
         scan.setStartRow(HConstants.EMPTY_START_ROW);
         scan.setStopRow(K1);
-        List<KeyRange> keyRanges = getSplits(conn, ts, scan);
+        List<KeyRange> keyRanges = getSplits(conn, ts, scan, result.getTable());
         assertEquals("Unexpected number of splits: " + keyRanges, 3, keyRanges.size());
         assertEquals(newKeyRange(KeyRange.UNBOUND, new byte[] {'7'}), keyRanges.get(0));
         assertEquals(newKeyRange(new byte[] {'7'}, new byte[] {'M'}), keyRanges.get(1));

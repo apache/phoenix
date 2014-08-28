@@ -63,8 +63,6 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException;
 
-    public StatsManager getStatsManager();
-
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException;
 
     public PhoenixConnection connect(String url, Properties info) throws SQLException;

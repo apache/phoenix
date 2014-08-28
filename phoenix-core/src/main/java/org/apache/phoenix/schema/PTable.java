@@ -316,4 +316,6 @@ public interface PTable {
     
     int getEstimatedSize();
     IndexType getIndexType();
+    
+    void setPTableStats(PTableStats stats);
 }

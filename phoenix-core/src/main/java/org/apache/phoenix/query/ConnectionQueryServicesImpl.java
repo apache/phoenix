@@ -124,6 +124,7 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.stat.StatisticsCollector;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -154,7 +155,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final ReadOnlyProps props;
     private final String userName;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
-    private final StatsManager statsManager;
     
     // Cache the latest meta data here for future connections
     // writes guarded by "latestMetaDataLock"
@@ -214,8 +214,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         this.childServices = new ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices>(INITIAL_CHILD_SERVICES_CAPACITY);
         int statsUpdateFrequencyMs = this.getProps().getInt(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
         int maxStatsAgeMs = this.getProps().getInt(QueryServices.MAX_STATS_AGE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_STATS_AGE_MS);
-        this.statsManager = new StatsManagerImpl(this, statsUpdateFrequencyMs, maxStatsAgeMs);
-        
         // find the HBase version and use that to determine the KeyValueBuilder that should be used
         String hbaseVersion = VersionInfo.getVersion();
         this.kvBuilder = KeyValueBuilder.get(hbaseVersion);
@@ -242,11 +240,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
-    @Override
-    public StatsManager getStatsManager() {
-        return this.statsManager;
-    }
-    
     @Override
     public HTableInterface getTable(byte[] tableName) throws SQLException {
         try {
@@ -308,42 +301,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sqlE = e;
             } finally {
                 try {
-                    // Clear any client-side caches.  
-                    statsManager.clearStats();
-                } catch (SQLException e) {
+                    childServices.clear();
+                    synchronized (latestMetaDataLock) {
+                        latestMetaData = null;
+                        latestMetaDataLock.notifyAll();
+                    }
+                    if (connection != null) connection.close();
+                } catch (IOException e) {
                     if (sqlE == null) {
-                        sqlE = e;
+                        sqlE = ServerUtil.parseServerException(e);
                     } else {
-                        sqlE.setNextException(e);
+                        sqlE.setNextException(ServerUtil.parseServerException(e));
                     }
                 } finally {
                     try {
-                        childServices.clear();
-                        synchronized (latestMetaDataLock) {
-                            latestMetaData = null;
-                            latestMetaDataLock.notifyAll();
-                        }
-                        if (connection != null) connection.close();
-                    } catch (IOException e) {
+                        super.close();
+                    } catch (SQLException e) {
                         if (sqlE == null) {
-                            sqlE = ServerUtil.parseServerException(e);
+                            sqlE = e;
                         } else {
-                            sqlE.setNextException(ServerUtil.parseServerException(e));
+                            sqlE.setNextException(e);
                         }
                     } finally {
-                        try {
-                            super.close();
-                        } catch (SQLException e) {
-                            if (sqlE == null) {
-                                sqlE = e;
-                            } else {
-                                sqlE.setNextException(e);
-                            }
-                        } finally {
-                            if (sqlE != null) {
-                                throw sqlE;
-                            }
-                        }
+                        if (sqlE != null) { throw sqlE; }
                     }
                 }
             }
@@ -616,7 +596,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, 1, null);
             }
-            
+
+            if (!descriptor.hasCoprocessor(StatisticsCollector.class.getName())) {
+                descriptor.addCoprocessor(StatisticsCollector.class.getName(), null, 1, null);
+            }
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes. Also,
             // don't install on the metadata table until we fix the TODO there.
@@ -1531,6 +1514,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             }
                             try {
                                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
+                                
+                                // TODO : Get this from a configuration
+                                metaConnection.createStatement().executeUpdate(
+                                        QueryConstants.CREATE_STATS_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
                                 // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.

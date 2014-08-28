@@ -65,11 +65,6 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public StatsManager getStatsManager() {
-        return getDelegate().getStatsManager();
-    }
-
-    @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
         return getDelegate().getAllTableRegions(tableName);
     }
