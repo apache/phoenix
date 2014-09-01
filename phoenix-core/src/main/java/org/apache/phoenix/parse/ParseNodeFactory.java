@@ -344,7 +344,7 @@ public class ParseNodeFactory {
         if (CountAggregateFunction.NAME.equals(SchemaUtil.normalizeIdentifier(name))) {
             BuiltInFunctionInfo info = getInfo(
                     SchemaUtil.normalizeIdentifier(DistinctCountAggregateFunction.NAME), args);
-            return new DistinctCountParseNode(name, args, info);
+            return new DistinctCountParseNode(DistinctCountAggregateFunction.NAME, args, info);
         } else {
             throw new UnsupportedOperationException("DISTINCT not supported with " + name);
         }
