@@ -45,6 +45,7 @@ import java.sql.ResultSet;
 import java.sql.Types;
 import java.util.Properties;
 
+import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -454,6 +455,50 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
                 stmt.execute();
             }
             conn.commit();
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testDistinctCountOnIndexTab() throws Exception {
+        String ddl = "create table personal_details (id integer not null, first_name char(15),\n"
+                + "    last_name char(15), CONSTRAINT pk PRIMARY KEY (id))";
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement stmt = conn.prepareStatement(ddl);
+            stmt.execute(ddl);
+            conn.createStatement().execute("CREATE INDEX personal_details_idx ON personal_details(first_name)");
+        } catch (TableAlreadyExistsException e) {
+
+        } finally {
+            conn.close();
+        }
+
+        conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement stmt = conn.prepareStatement("upsert into personal_details(id, first_name, "
+                    + "last_name) VALUES (?, ?, ?)");
+            stmt.setInt(1, 1);
+            stmt.setString(2, "NAME1");
+            stmt.setString(3, "LN");
+            stmt.execute();
+            stmt.setInt(1, 2);
+            stmt.setString(2, "NAME1");
+            stmt.setString(3, "LN2");
+            stmt.execute();
+            stmt.setInt(1, 3);
+            stmt.setString(2, "NAME2");
+            stmt.setString(3, "LN3");
+            stmt.execute();
+            conn.commit();
+
+            String query = "SELECT COUNT (DISTINCT first_name) FROM personal_details";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
         } finally {
             conn.close();
         }
