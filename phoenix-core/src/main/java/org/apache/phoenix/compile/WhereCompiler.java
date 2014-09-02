@@ -19,7 +19,9 @@ package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
@@ -88,6 +90,20 @@ public class WhereCompiler {
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */
     public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere) throws SQLException {
+        return compile(context, statement, viewWhere, Collections.<Expression>emptyList(), false);
+    }
+    
+    /**
+     * Optimize scan ranges by applying dynamically generated filter expressions.
+     * @param context the shared context during query compilation
+     * @param statement TODO
+     * @throws SQLException if mismatched types are found, bind value do not match binds,
+     * or invalid function arguments are encountered.
+     * @throws SQLFeatureNotSupportedException if an unsupported expression is encountered.
+     * @throws ColumnNotFoundException if column name could not be resolved
+     * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
+     */    
+    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, List<Expression> dynamicFilters, boolean hashJoinOptimization) throws SQLException {
         Set<Expression> extractedNodes = Sets.<Expression>newHashSet();
         WhereExpressionCompiler whereCompiler = new WhereExpressionCompiler(context);
         ParseNode where = statement.getWhere();
@@ -103,9 +119,14 @@ public class WhereCompiler {
             Expression viewExpression = viewWhere.accept(viewWhereCompiler);
             expression = AndExpression.create(Lists.newArrayList(expression, viewExpression));
         }
+        if (!dynamicFilters.isEmpty()) {
+            List<Expression> filters = Lists.newArrayList(expression);
+            filters.addAll(dynamicFilters);
+            expression = AndExpression.create(filters);
+        }
         
         expression = WhereOptimizer.pushKeyExpressionsToScan(context, statement, expression, extractedNodes);
-        setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily);
+        setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily, hashJoinOptimization);
 
         return expression;
     }
@@ -189,14 +210,14 @@ public class WhereCompiler {
      * @param context the shared context during query compilation
      * @param whereClause the final where clause expression.
      */
-    private static void setScanFilter(StatementContext context, FilterableStatement statement, Expression whereClause, boolean disambiguateWithFamily) {
-        Filter filter = null;
+    private static void setScanFilter(StatementContext context, FilterableStatement statement, Expression whereClause, boolean disambiguateWithFamily, boolean hashJoinOptimization) {
         Scan scan = context.getScan();
         assert scan.getFilter() == null;
 
         if (LiteralExpression.isFalse(whereClause)) {
             context.setScanRanges(ScanRanges.NOTHING);
-        } else if (whereClause != null && !LiteralExpression.isTrue(whereClause)) {
+        } else if (whereClause != null && !LiteralExpression.isTrue(whereClause) && !hashJoinOptimization) {
+            Filter filter = null;
             final Counter counter = new Counter();
             whereClause.accept(new KeyValueExpressionVisitor() {
 
@@ -230,11 +251,11 @@ public class WhereCompiler {
                 filter = disambiguateWithFamily ? new MultiCFCQKeyValueComparisonFilter(whereClause) : new MultiCQKeyValueComparisonFilter(whereClause);
                 break;
             }
+            scan.setFilter(filter);
         }
 
-        scan.setFilter(filter);
         ScanRanges scanRanges = context.getScanRanges();
-        boolean forcedSkipScan = statement.getHint().hasHint(Hint.SKIP_SCAN);
+        boolean forcedSkipScan =  statement.getHint().hasHint(Hint.SKIP_SCAN);
         boolean forcedRangeScan = statement.getHint().hasHint(Hint.RANGE_SCAN);
         if (forcedSkipScan || (scanRanges.useSkipScanFilter() && !forcedRangeScan)) {
             ScanUtil.andFilterAtBeginning(scan, scanRanges.getSkipScanFilter());

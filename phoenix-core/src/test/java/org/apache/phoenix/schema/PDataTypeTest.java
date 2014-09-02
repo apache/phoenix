@@ -1644,6 +1644,25 @@ public class PDataTypeTest {
             startWith = next;
         }
     }
+    
+    @Test
+    public void testGetSampleValue() {
+        PDataType[] types = PDataType.values();
+        // Test validity of 10 sample values for each type
+        for (int i = 0; i < 10; i++) {
+            for (PDataType type : types) {
+                Integer maxLength = 
+                        (type == PDataType.CHAR 
+                        || type == PDataType.BINARY 
+                        || type == PDataType.CHAR_ARRAY 
+                        || type == PDataType.BINARY_ARRAY) ? 10 : null;
+                int arrayLength = 10;
+                Object sampleValue = type.getSampleValue(maxLength, arrayLength);
+                byte[] b = type.toBytes(sampleValue);
+                type.toObject(b, 0, b.length, type, SortOrder.getDefault(), maxLength, null);
+            }
+        }
+    }
 
     // Simulate what an HBase Increment does with the value encoded as a long
     private long nextValueFor(long startWith, long incrementBy) {
