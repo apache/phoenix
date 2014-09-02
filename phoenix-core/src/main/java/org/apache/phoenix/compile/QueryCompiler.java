@@ -37,6 +37,7 @@ import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -57,6 +58,8 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ScanUtil;
+
+import com.google.common.collect.Lists;
 
 
 
@@ -179,6 +182,9 @@ public class QueryCompiler {
             ImmutableBytesPtr[] joinIds = new ImmutableBytesPtr[count];
             List<Expression>[] joinExpressions = new List[count];
             List<Expression>[] hashExpressions = new List[count];
+            Expression[] keyRangeLhsExpressions = new Expression[count];
+            Expression[] keyRangeRhsExpressions = new Expression[count];
+            boolean[] hasFilters = new boolean[count];
             JoinType[] joinTypes = new JoinType[count];
             PTable[] tables = new PTable[count];
             int[] fieldPositions = new int[count];
@@ -211,6 +217,10 @@ public class QueryCompiler {
                 Pair<List<Expression>, List<Expression>> joinConditions = joinSpec.compileJoinConditions(context, leftResolver, resolver);
                 joinExpressions[i] = joinConditions.getFirst();
                 hashExpressions[i] = joinConditions.getSecond();
+                Pair<Expression, Expression> keyRangeExpressions = getKeyExpressionCombinations(context, tableRef, joinSpec.getType(), joinExpressions[i], hashExpressions[i]);
+                keyRangeLhsExpressions[i] = keyRangeExpressions.getFirst();
+                keyRangeRhsExpressions[i] = keyRangeExpressions.getSecond();
+                hasFilters[i] = joinSpec.getJoinTable().hasFilters();
                 joinTypes[i] = joinSpec.getType();
                 if (i < count - 1) {
                     fieldPositions[i + 1] = fieldPositions[i] + (tables[i] == null ? 0 : (tables[i].getColumns().size() - tables[i].getPKColumns().size()));
@@ -228,7 +238,7 @@ public class QueryCompiler {
                 limit = LimitCompiler.compile(context, query);
             }
             HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, joinExpressions, joinTypes, starJoinVector, tables, fieldPositions, postJoinFilterExpression, limit, forceProjection);
-            return new HashJoinPlan(joinTable.getStatement(), plan, joinInfo, hashExpressions, joinPlans, clientProjectors);
+            return new HashJoinPlan(joinTable.getStatement(), plan, joinInfo, hashExpressions, keyRangeLhsExpressions, keyRangeRhsExpressions, joinPlans, clientProjectors, hasFilters);
         }
         
         JoinSpec lastJoinSpec = joinSpecs.get(joinSpecs.size() - 1);
@@ -283,11 +293,40 @@ public class QueryCompiler {
                 limit = LimitCompiler.compile(context, rhs);
             }
             HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, new List[] {joinExpressions}, new JoinType[] {type == JoinType.Inner ? type : JoinType.Left}, new boolean[] {true}, new PTable[] {lhsProjTable.getTable()}, new int[] {fieldPosition}, postJoinFilterExpression, limit, forceProjection);
-            return new HashJoinPlan(joinTable.getStatement(), rhsPlan, joinInfo, new List[] {hashExpressions}, new QueryPlan[] {lhsPlan}, new TupleProjector[] {clientProjector});
+            Pair<Expression, Expression> keyRangeExpressions = getKeyExpressionCombinations(context, rhsTableRef, type, joinExpressions, hashExpressions);
+            return new HashJoinPlan(joinTable.getStatement(), rhsPlan, joinInfo, new List[] {hashExpressions}, new Expression[] {keyRangeExpressions.getFirst()}, new Expression[] {keyRangeExpressions.getSecond()}, new QueryPlan[] {lhsPlan}, new TupleProjector[] {clientProjector}, new boolean[] {lhsJoin.hasFilters()});
         }
         
         // Do not support queries like "A right join B left join C" with hash-joins.
         throw new SQLFeatureNotSupportedException("Joins with pattern 'A right join B left join C' not supported.");
+    }
+    
+    private Pair<Expression, Expression> getKeyExpressionCombinations(StatementContext context, TableRef table, JoinType type, final List<Expression> joinExpressions, final List<Expression> hashExpressions) throws SQLException {
+        if (type != JoinType.Inner)
+            return new Pair<Expression, Expression>(null, null);
+        
+        Scan scanCopy = ScanUtil.newScan(context.getScan());
+        StatementContext contextCopy = new StatementContext(statement, context.getResolver(), scanCopy, new SequenceManager(statement));
+        contextCopy.setCurrentTable(table);
+        List<Expression> lhsCombination = WhereOptimizer.getKeyExpressionCombination(contextCopy, this.select, joinExpressions);
+        if (lhsCombination.isEmpty())
+            return new Pair<Expression, Expression>(null, null);
+        
+        List<Expression> rhsCombination = Lists.newArrayListWithExpectedSize(lhsCombination.size());
+        for (int i = 0; i < lhsCombination.size(); i++) {
+            Expression lhs = lhsCombination.get(i);
+            for (int j = 0; j < joinExpressions.size(); j++) {
+                if (lhs == joinExpressions.get(j)) {
+                    rhsCombination.add(hashExpressions.get(j));
+                    break;
+                }
+            }
+        }
+        
+        if (lhsCombination.size() == 1)
+            return new Pair<Expression, Expression>(lhsCombination.get(0), rhsCombination.get(0));
+        
+        return new Pair<Expression, Expression>(new RowValueConstructorExpression(lhsCombination, false), new RowValueConstructorExpression(rhsCombination, false));
     }
     
     protected QueryPlan compileSubquery(SelectStatement subquery) throws SQLException {

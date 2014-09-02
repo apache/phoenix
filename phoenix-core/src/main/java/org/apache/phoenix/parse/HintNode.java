@@ -47,6 +47,14 @@ public class HintNode {
          */
         SKIP_SCAN,
         /**
+         * Forces a range scan when full or partial primary key is used as join keys.
+         */
+        RANGE_SCAN_HASH_JOIN,
+        /**
+         * Forces a skip scan when full or partial primary key is used as join keys.
+         */
+        SKIP_SCAN_HASH_JOIN,
+        /**
          * Prevents the spawning of multiple threads during
          * query processing.
          */

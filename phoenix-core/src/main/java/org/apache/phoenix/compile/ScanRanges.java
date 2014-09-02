@@ -258,7 +258,11 @@ public class ScanRanges {
             return false;
         }
         return filter.hasIntersect(lowerInclusiveKey, upperExclusiveKey);
-   }
+    }
+    
+    public int getPkColumnSpan() {
+        return this == ScanRanges.NOTHING ? 0 : ScanUtil.calculateSlotSpan(ranges, slotSpan);
+    }
 
     @Override
     public String toString() {
