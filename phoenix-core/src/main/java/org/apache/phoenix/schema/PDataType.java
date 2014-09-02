@@ -28,6 +28,7 @@ import java.sql.Types;
 import java.text.Format;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.Random;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Base64;
@@ -174,6 +175,20 @@ public enum PDataType {
                 return "'" + formatter.format(o) + "'";
             }
             return "'" + Bytes.toStringBinary(b, offset, length) + "'";
+        }
+
+        private char[] sampleChars = new char[1];
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            Preconditions.checkArgument(maxLength == null || maxLength >= 0);
+            int length = maxLength != null ? maxLength : 1;
+            if (length != sampleChars.length) {
+                sampleChars = new char[length];
+            }
+            for (int i = 0; i < length; i++) {
+                sampleChars[i] = (char) RANDOM.get().nextInt(Byte.MAX_VALUE);
+            }
+            return new String(sampleChars);
         }
     },
     /**
@@ -338,6 +353,11 @@ public enum PDataType {
         @Override
         public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
             return VARCHAR.toStringLiteral(b, offset, length, formatter);
+        }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return VARCHAR.getSampleValue(maxLength, arrayLength);
         }
     },
     LONG("BIGINT", Types.BIGINT, Long.class, new LongCodec()) {
@@ -534,6 +554,11 @@ public enum PDataType {
                 throw new IllegalDataException(e);
             }
         }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return RANDOM.get().nextLong();
+        }
     },
     INTEGER("INTEGER", Types.INTEGER, Integer.class, new IntCodec()) {
         @Override
@@ -667,6 +692,11 @@ public enum PDataType {
                 throw new IllegalDataException(e);
             }
         }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return RANDOM.get().nextInt();
+        }
     },
     SMALLINT("SMALLINT", Types.SMALLINT, Short.class, new ShortCodec()){
         @Override
@@ -795,7 +825,12 @@ public enum PDataType {
       public boolean isCoercibleTo(PDataType targetType) {
           return this == targetType || INTEGER.isCoercibleTo(targetType);
       }
-      
+
+      @Override
+      public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+          return ((Integer) INTEGER.getSampleValue(maxLength, arrayLength)).shortValue();
+      }
+
     },
     TINYINT("TINYINT", Types.TINYINT, Byte.class, new ByteCodec()) {
         @Override
@@ -920,6 +955,11 @@ public enum PDataType {
           return this == targetType || SMALLINT.isCoercibleTo(targetType);
       }
       
+      @Override
+      public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+          return ((Integer) INTEGER.getSampleValue(maxLength, arrayLength)).byteValue();
+      }
+
     },
     FLOAT("FLOAT", Types.FLOAT, Float.class, new FloatCodec()) {
 
@@ -1091,6 +1131,11 @@ public enum PDataType {
         @Override
         public boolean isCoercibleTo(PDataType targetType) {
             return this == targetType || DOUBLE.isCoercibleTo(targetType);
+        }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return RANDOM.get().nextFloat();
         }
     },
     DOUBLE("DOUBLE", Types.DOUBLE, Double.class, new DoubleCodec()) {
@@ -1268,6 +1313,11 @@ public enum PDataType {
         public boolean isCoercibleTo(PDataType targetType) {
             return this == targetType || targetType == DECIMAL
                     || targetType == VARBINARY || targetType == BINARY;
+        }
+        
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return RANDOM.get().nextDouble();
         }
     },
     DECIMAL("DECIMAL", Types.DECIMAL, BigDecimal.class, null) {
@@ -1631,6 +1681,11 @@ public enum PDataType {
             }
             return super.toStringLiteral(b,offset, length, formatter);
         }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return new BigDecimal((Long) LONG.getSampleValue(maxLength, arrayLength));
+        }
     },
     TIMESTAMP("TIMESTAMP", Types.TIMESTAMP, Timestamp.class, new DateCodec()) {
 
@@ -1803,6 +1858,11 @@ public enum PDataType {
             long millis = PDataType.LONG.getCodec().decodeLong(ptr.get(),ptr.getOffset(), sortOrder);
             return millis;
         }
+        
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return new Timestamp((Long) LONG.getSampleValue(maxLength, arrayLength));
+        }
 
     },
     TIME("TIME", Types.TIME, Time.class, new DateCodec()) {
@@ -1912,6 +1972,11 @@ public enum PDataType {
         public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
             // TODO: different default formatter for TIME?
             return DATE.toStringLiteral(b, offset, length, formatter);
+        }
+        
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return new Time((Long) LONG.getSampleValue(maxLength, arrayLength));
         }
     },
     DATE("DATE", Types.DATE, Date.class, new DateCodec()) { // After TIMESTAMP and DATE to ensure toLiteral finds those first
@@ -2060,6 +2125,11 @@ public enum PDataType {
             }
             super.coerceBytes(ptr, object, actualType, maxLength, scale, actualModifier, desiredMaxLength, desiredScale, expectedModifier);
         }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return new Date((Long) LONG.getSampleValue(maxLength, arrayLength));
+        }
     },
     UNSIGNED_TIMESTAMP("UNSIGNED_TIMESTAMP", 19, Timestamp.class, null) {
 
@@ -2166,6 +2236,11 @@ public enum PDataType {
         public int getResultSetSqlType() {
             return Types.TIMESTAMP;
         }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return new Timestamp((Long) UNSIGNED_LONG.getSampleValue(maxLength, arrayLength));
+        }
     },
     UNSIGNED_TIME("UNSIGNED_TIME", 18, Time.class, new UnsignedDateCodec()) {
 
@@ -2241,6 +2316,11 @@ public enum PDataType {
         @Override
         public int getResultSetSqlType() {
             return Types.TIME;
+        }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return new Time((Long) UNSIGNED_LONG.getSampleValue(maxLength, arrayLength));
         }
     },
     UNSIGNED_DATE("UNSIGNED_DATE", 19, Date.class, new UnsignedDateCodec()) { // After TIMESTAMP and DATE to ensure toLiteral finds those first
@@ -2345,6 +2425,11 @@ public enum PDataType {
         public int getResultSetSqlType() {
             return Types.DATE;
         }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return new Date((Long) UNSIGNED_LONG.getSampleValue(maxLength, arrayLength));
+        }
     },
     /**
      * Unsigned long type that restricts values to be from 0 to {@link java.lang.Long#MAX_VALUE} inclusive. May be used to map to existing HTable values created through {@link org.apache.hadoop.hbase.util.Bytes#toBytes(long)}
@@ -2441,6 +2526,11 @@ public enum PDataType {
         public int getResultSetSqlType() {
             return LONG.getResultSetSqlType();
         }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return Math.abs((Long) LONG.getSampleValue(maxLength, arrayLength));
+        }
     },
     /**
      * Unsigned integer type that restricts values to be from 0 to {@link java.lang.Integer#MAX_VALUE} inclusive. May be used to map to existing HTable values created through {@link org.apache.hadoop.hbase.util.Bytes#toBytes(int)}
@@ -2531,6 +2621,11 @@ public enum PDataType {
         @Override
         public int getResultSetSqlType() {
             return INTEGER.getResultSetSqlType();
+        }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return Math.abs((Integer) INTEGER.getSampleValue(maxLength, arrayLength));
         }
     },
     UNSIGNED_SMALLINT("UNSIGNED_SMALLINT", 13, Short.class, new UnsignedShortCodec()) {
@@ -2626,6 +2721,11 @@ public enum PDataType {
       public int getResultSetSqlType() {
           return SMALLINT.getResultSetSqlType();
       }
+
+      @Override
+      public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+          return ((Integer) RANDOM.get().nextInt(Short.MAX_VALUE)).shortValue();
+      }
     },
     UNSIGNED_TINYINT("UNSIGNED_TINYINT", 11, Byte.class, new UnsignedByteCodec()) {
         @Override
@@ -2718,6 +2818,11 @@ public enum PDataType {
       public int getResultSetSqlType() {
           return TINYINT.getResultSetSqlType();
       }
+
+      @Override
+      public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+          return ((Integer) RANDOM.get().nextInt(Byte.MAX_VALUE)).byteValue();
+      }
     },
     UNSIGNED_FLOAT("UNSIGNED_FLOAT", 14, Float.class, new UnsignedFloatCodec()) {
 
@@ -2807,6 +2912,11 @@ public enum PDataType {
         @Override
         public int getResultSetSqlType() {
             return FLOAT.getResultSetSqlType();
+        }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return Math.abs((Float) FLOAT.getSampleValue(maxLength, arrayLength));
         }
     },
     UNSIGNED_DOUBLE("UNSIGNED_DOUBLE", 15, Double.class, new UnsignedDoubleCodec()) {
@@ -2900,6 +3010,11 @@ public enum PDataType {
         @Override
         public int getResultSetSqlType() {
             return  DOUBLE.getResultSetSqlType();
+        }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return Math.abs((Double) DOUBLE.getSampleValue(maxLength, arrayLength));
         }
     },
     BOOLEAN("BOOLEAN", Types.BOOLEAN, Boolean.class, null) {
@@ -2998,6 +3113,11 @@ public enum PDataType {
                 return toObject(bytes, 0, bytes.length);
             }
             return throwConstraintViolationException(actualType,this);
+        }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return RANDOM.get().nextBoolean();
         }
     },
     VARBINARY("VARBINARY", Types.VARBINARY, byte[].class, null) {
@@ -3123,6 +3243,14 @@ public enum PDataType {
             }
             buf.setCharAt(buf.length()-1, ']');
             return buf.toString();
+        }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            int length = maxLength != null && maxLength > 0 ? maxLength : 1;
+            byte[] b = new byte[length];
+            RANDOM.get().nextBytes(b);
+            return b;
         }
     },
     BINARY("BINARY", Types.BINARY, byte[].class, null) {
@@ -3268,6 +3396,11 @@ public enum PDataType {
             }
             return VARBINARY.toStringLiteral(b, offset, length, formatter);
         }
+
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return VARBINARY.getSampleValue(maxLength, arrayLength);
+        }
     },
     INTEGER_ARRAY("INTEGER_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.INTEGER.getSqlType(), PhoenixArray.class, null) {
     	@Override
@@ -3350,6 +3483,11 @@ public enum PDataType {
         @Override
         public int getResultSetSqlType() {
             return Types.ARRAY;
+        }
+        
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.INTEGER, arrayLength, maxLength);
         }
 		
 	},
@@ -3434,6 +3572,10 @@ public enum PDataType {
                 SortOrder desiredModifier) {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
                     this, actualModifer, desiredModifier);
+        }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.BOOLEAN, arrayLength, maxLength);
         }
 		
 	},
@@ -3524,6 +3666,10 @@ public enum PDataType {
         @Override
         public int getResultSetSqlType() {
             return Types.ARRAY;
+        }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.VARCHAR, arrayLength, maxLength);
         }
 		
 	},
@@ -3616,6 +3762,10 @@ public enum PDataType {
         public int getResultSetSqlType() {
             return Types.ARRAY;
         }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.VARBINARY, arrayLength, maxLength);
+        }
 	},
 	BINARY_ARRAY("BINARY_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.BINARY.getSqlType(), PhoenixArray.class, null) {
 		@Override
@@ -3705,6 +3855,10 @@ public enum PDataType {
         @Override
         public int getResultSetSqlType() {
             return Types.ARRAY;
+        }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.BINARY, arrayLength, maxLength);
         }
     },
 	CHAR_ARRAY("CHAR_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.CHAR.getSqlType(), PhoenixArray.class, null) {
@@ -3796,6 +3950,10 @@ public enum PDataType {
         public int getResultSetSqlType() {
             return Types.ARRAY;
         }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.CHAR, arrayLength, maxLength);
+        }
 		
 	},
 	LONG_ARRAY("LONG_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.LONG.getSqlType(), PhoenixArray.class, null) {
@@ -3878,6 +4036,10 @@ public enum PDataType {
                 SortOrder desiredModifier) {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
                     this, actualModifer, desiredModifier);
+        }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.LONG, arrayLength, maxLength);
         }
 		
 	},
@@ -3962,6 +4124,10 @@ public enum PDataType {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
                     this, actualModifer, desiredModifier);
         }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.SMALLINT, arrayLength, maxLength);
+        }
 		
 	},
 	TINYINT_ARRAY("TINYINT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TINYINT.getSqlType(), PhoenixArray.class, null) {
@@ -4044,6 +4210,10 @@ public enum PDataType {
         @Override
         public int getResultSetSqlType() {
             return Types.ARRAY;
+        }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.TINYINT, arrayLength, maxLength);
         }
 		
 	},
@@ -4129,6 +4299,10 @@ public enum PDataType {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
                     this, actualModifer, desiredModifier);
         }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.FLOAT, arrayLength, maxLength);
+        }
 		
 	},
 	DOUBLE_ARRAY("DOUBLE_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DOUBLE.getSqlType(), PhoenixArray.class, null) {
@@ -4212,6 +4386,10 @@ public enum PDataType {
         @Override
         public int getResultSetSqlType() {
             return Types.ARRAY;
+        }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.DOUBLE, arrayLength, maxLength);
         }
 
 	},
@@ -4305,6 +4483,10 @@ public enum PDataType {
         public int getResultSetSqlType() {
             return Types.ARRAY;
         }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.DECIMAL, arrayLength, maxLength);
+        }
 	
 	},
 	TIMESTAMP_ARRAY("TIMESTAMP_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TIMESTAMP.getSqlType(), PhoenixArray.class,
@@ -4388,6 +4570,10 @@ public enum PDataType {
                 SortOrder desiredModifier) {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
                     this, actualModifer, desiredModifier);
+        }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.TIMESTAMP, arrayLength, maxLength);
         }
 
 	},
@@ -4473,6 +4659,10 @@ public enum PDataType {
         public int getResultSetSqlType() {
             return Types.ARRAY;
         }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.UNSIGNED_TIMESTAMP, arrayLength, maxLength);
+        }
 
 	},
 	TIME_ARRAY("TIME_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TIME.getSqlType(), PhoenixArray.class, null) {
@@ -4555,6 +4745,10 @@ public enum PDataType {
                 SortOrder desiredModifier) {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
                     this, actualModifer, desiredModifier);
+        }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.TIME, arrayLength, maxLength);
         }
 
 	},
@@ -4639,6 +4833,10 @@ public enum PDataType {
         public int getResultSetSqlType() {
             return Types.ARRAY;
         }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.UNSIGNED_TIME, arrayLength, maxLength);
+        }
 
 	},
 	DATE_ARRAY("DATE_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DATE.getSqlType(), PhoenixArray.class, null) {
@@ -4721,6 +4919,10 @@ public enum PDataType {
                 SortOrder desiredModifier) {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
                     this, actualModifer, desiredModifier);
+        }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.DATE, arrayLength, maxLength);
         }
 
 	},
@@ -4805,6 +5007,10 @@ public enum PDataType {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
                     this, actualModifer, desiredModifier);
         }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.UNSIGNED_DATE, arrayLength, maxLength);
+        }
 
 	},
 	UNSIGNED_LONG_ARRAY("UNSIGNED_LONG_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_LONG.getSqlType(), PhoenixArray.class, null) {
@@ -4888,6 +5094,10 @@ public enum PDataType {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
                     this, actualModifer, desiredModifier);
         }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.UNSIGNED_LONG, arrayLength, maxLength);
+        }
 	
 	},
 	UNSIGNED_INT_ARRAY("UNSIGNED_INT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_INT.getSqlType(), PhoenixArray.class, null) {
@@ -4970,6 +5180,10 @@ public enum PDataType {
                 SortOrder desiredModifier) {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
                     this, actualModifer, desiredModifier);
+        }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.UNSIGNED_INT, arrayLength, maxLength);
         }
 
 	},
@@ -5055,6 +5269,10 @@ public enum PDataType {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
                     this, actualModifer, desiredModifier);
         }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.UNSIGNED_SMALLINT, arrayLength, maxLength);
+        }
 
 	},
 	UNSIGNED_TINYINT_ARRAY("UNSIGNED_TINYINT__ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TINYINT.getSqlType(), PhoenixArray.class,
@@ -5139,6 +5357,10 @@ public enum PDataType {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
                     this, actualModifer, desiredModifier);
         }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.UNSIGNED_TINYINT, arrayLength, maxLength);
+        }
 	},
 	UNSIGNED_FLOAT_ARRAY("UNSIGNED_FLOAT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_FLOAT.getSqlType(), PhoenixArray.class, null) {
 		@Override
@@ -5220,6 +5442,10 @@ public enum PDataType {
                 SortOrder desiredModifier) {
             pDataTypeForArray.coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
                     this, actualModifer, desiredModifier);
+        }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.UNSIGNED_FLOAT, arrayLength, maxLength);
         }
 
 	},
@@ -5305,6 +5531,10 @@ public enum PDataType {
         @Override
         public int getResultSetSqlType() {
             return Types.ARRAY;
+        }
+        @Override
+        public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+            return pDataTypeForArray.getSampleValue(PDataType.UNSIGNED_DOUBLE, arrayLength, maxLength);
         }
 		
 	};
@@ -6538,6 +6768,13 @@ public enum PDataType {
 
     public static final int ARRAY_TYPE_BASE = 3000;
     
+    private static final ThreadLocal<Random> RANDOM = new ThreadLocal<Random>(){
+        @Override 
+        protected Random initialValue() {
+            return new Random();
+        }
+    };
+    
     /**
      * Serialize a BigDecimal into a variable length byte array in such a way that it is
      * binary comparable.
@@ -6909,6 +7146,19 @@ public enum PDataType {
      * Each enum must override this to define the set of objects it may create
      */
     public abstract Object toObject(byte[] bytes, int offset, int length, PDataType actualType, SortOrder sortOrder, Integer maxLength, Integer scale);
+
+    /*
+     * Return a valid object of this enum type
+     */
+    public abstract Object getSampleValue(Integer maxLength, Integer arrayLength);
+    
+    public final Object getSampleValue() {
+        return getSampleValue(null);
+    }
+    
+    public final Object getSampleValue(Integer maxLength) {
+        return getSampleValue(maxLength, null);
+    }
     
     public final Object toObject(byte[] bytes, int offset, int length, PDataType actualType, SortOrder sortOrder) {
         return toObject(bytes, offset, length, actualType, sortOrder, null, null);

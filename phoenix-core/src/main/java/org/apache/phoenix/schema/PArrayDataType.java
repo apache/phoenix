@@ -31,6 +31,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 
 /**
  * The datatype for PColummns that are Arrays. Any variable length array would follow the below order. 
@@ -642,6 +643,18 @@ public class PArrayDataType {
             return size * ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
         }
         
+    }
+    
+    public Object getSampleValue(PDataType baseType, Integer arrayLength, Integer elemLength) {
+        Preconditions.checkArgument(arrayLength == null || arrayLength >= 0);
+        if (arrayLength == null) {
+            arrayLength = 1;
+        }
+        Object[] array = new Object[arrayLength];
+        for (int i = 0; i < arrayLength; i++) {
+            array[i] = baseType.getSampleValue(elemLength, arrayLength);
+        }
+        return instantiatePhoenixArray(baseType, array);
     }
 
 }

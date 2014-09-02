@@ -420,6 +420,21 @@ public class JoinCompiler {
             
             return false;
         }
+        
+        public boolean hasFilters() {
+           if (!postFilters.isEmpty())
+               return true;
+           
+           if (!hasRightJoin && table.hasFilters())
+               return true;
+           
+           for (JoinTable joinTable : prefilterAcceptedTables) {
+               if (joinTable.hasFilters())
+                   return true;
+           }
+           
+           return false;
+        }
     }
     
     public static class JoinSpec {
@@ -661,6 +676,10 @@ public class JoinCompiler {
             
             List<TableNode> from = Collections.<TableNode>singletonList(tableNode);
             return NODE_FACTORY.select(from, select.getHint(), false, selectNodes, getPreFiltersCombined(), null, null, null, null, 0, false, select.hasSequence());
+        }
+        
+        public boolean hasFilters() {
+            return isSubselect() ? (!postFilters.isEmpty() || subselect.getWhere() != null || subselect.getHaving() != null) : !preFilters.isEmpty();
         }
         
         public boolean isFlat() {
