@@ -242,6 +242,10 @@
       <groupId>net.sourceforge.findbugs</groupId>
       <artifactId>annotations</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-csv</artifactId>
+    </dependency>
 
     <!-- Test Dependencies -->
     <dependency>

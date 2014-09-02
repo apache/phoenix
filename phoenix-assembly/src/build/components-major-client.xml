@@ -45,6 +45,7 @@
         <include>commons-logging:commons-logging</include>
         <include>commons-lang:commons-lang</include>
         <include>commons-cli:commons-cli</include>
+        <include>org.apache.commons:commons-csv</include>
         <include>org.codehaus.jackson:jackson-mapper-asl</include>
         <include>org.codehaus.jackson:jackson-core-asl</include>
         <include>org.xerial.snappy:snappy-java</include>

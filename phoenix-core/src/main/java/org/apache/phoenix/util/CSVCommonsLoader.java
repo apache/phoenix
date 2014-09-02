@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import com.google.common.base.Charsets;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -133,7 +134,7 @@ public class CSVCommonsLoader {
         CSVFormat format = CSVFormat.DEFAULT
                 .withIgnoreEmptyLines(true)
                 .withDelimiter(asControlCharacter(fieldDelimiter))
-                .withQuoteChar(asControlCharacter(quoteCharacter));
+                .withQuote(asControlCharacter(quoteCharacter));
 
         if (escapeCharacter != null) {
             format = format.withEscape(asControlCharacter(escapeCharacter));
@@ -187,8 +188,7 @@ public class CSVCommonsLoader {
      * @throws Exception
      */
     public void upsert(String fileName) throws Exception {
-        CSVParser parser = CSVParser.parse(new File(fileName),
-                format);
+        CSVParser parser = CSVParser.parse(new File(fileName), Charsets.UTF_8, format);
         upsert(parser);
     }
 
