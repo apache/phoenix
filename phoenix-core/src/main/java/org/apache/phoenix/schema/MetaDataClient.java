@@ -527,8 +527,18 @@ public class MetaDataClient {
                 // Define the LOCAL_INDEX_BUILD as a new static in BaseScannerRegionObserver
                 Scan scan = plan.getContext().getScan();
                 try {
-                    scan.setTimeRange(dataTableRef.getLowerBoundTimeStamp(), Long.MAX_VALUE);
-                    plan.getContext().setScanTimeRange(scan.getTimeRange());
+                    if(plan.getContext().getScanTimeRange()==null) {
+                        Long scn = connection.getSCN();
+                        if (scn == null) {
+                            scn = plan.getContext().getCurrentTime();
+                            // Add one to server time since max of time range is exclusive
+                            // and we need to account of OSs with lower resolution clocks.
+                            if (scn < HConstants.LATEST_TIMESTAMP) {
+                                scn++;
+                            }
+                        }
+                        plan.getContext().setScanTimeRange(new TimeRange(dataTableRef.getLowerBoundTimeStamp(),scn));
+                    }
                 } catch (IOException e) {
                     throw new SQLException(e);
                 }
