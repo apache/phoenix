@@ -27,13 +27,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
@@ -44,52 +41,36 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseCluster;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.Waiter;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.CompareFilter;
-import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
-import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
+import org.apache.hadoop.hbase.master.LoadBalancer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.hbase.index.balancer.IndexLoadBalancer;
+import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 /**
@@ -122,6 +103,9 @@ public class MutableIndexFailureIT extends BaseTest {
         conf.setInt("hbase.client.pause", 5000);
         conf.setInt("hbase.balancer.period", Integer.MAX_VALUE);
         conf.setLong(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB, 0);
+        conf.set(CoprocessorHost.MASTER_COPROCESSOR_CONF_KEY, IndexMasterObserver.class.getName());
+        conf.setClass(HConstants.HBASE_MASTER_LOADBALANCER_CLASS, IndexLoadBalancer.class,
+            LoadBalancer.class);
         util = new HBaseTestingUtility(conf);
         util.startMiniCluster(NUM_SLAVES);
         String clientPort = util.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
@@ -144,7 +128,16 @@ public class MutableIndexFailureIT extends BaseTest {
     }
 
     @Test(timeout=300000)
+    public void testWriteFailureDisablesLocalIndex() throws Exception {
+        testWriteFailureDisablesIndex(true);
+    }
+ 
+    @Test(timeout=300000)
     public void testWriteFailureDisablesIndex() throws Exception {
+        testWriteFailureDisablesIndex(false);
+    }
+    
+    public void testWriteFailureDisablesIndex(boolean localIndex) throws Exception {
         String query;
         ResultSet rs;
 
@@ -157,8 +150,16 @@ public class MutableIndexFailureIT extends BaseTest {
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
 
-        conn.createStatement().execute(
+        if(localIndex) {
+            conn.createStatement().execute(
+                "CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) INCLUDE (v2)");
+            conn.createStatement().execute(
+                "CREATE LOCAL INDEX " + INDEX_TABLE_NAME+ "_2" + " ON " + DATA_TABLE_FULL_NAME + " (v2) INCLUDE (v1)");
+        } else {
+            conn.createStatement().execute(
                 "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) INCLUDE (v2)");
+        }
+            
         query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
@@ -178,7 +179,9 @@ public class MutableIndexFailureIT extends BaseTest {
         stmt.execute();
         conn.commit();
 
-        TableName indexTable = TableName.valueOf(INDEX_TABLE_FULL_NAME);
+        TableName indexTable =
+                TableName.valueOf(localIndex ? MetaDataUtil
+                        .getLocalIndexTableName(DATA_TABLE_FULL_NAME) : INDEX_TABLE_FULL_NAME);
         HBaseAdmin admin = this.util.getHBaseAdmin();
         HTableDescriptor indexTableDesc = admin.getTableDescriptor(indexTable);
         try{
@@ -202,7 +205,15 @@ public class MutableIndexFailureIT extends BaseTest {
         assertEquals(INDEX_TABLE_NAME, rs.getString(3));
         assertEquals(PIndexState.DISABLE.toString(), rs.getString("INDEX_STATE"));
         assertFalse(rs.next());
-        
+        if(localIndex) {
+            rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(SCHEMA_NAME), INDEX_TABLE_NAME+"_2",
+                new String[] { PTableType.INDEX.toString() });
+            assertTrue(rs.next());
+            assertEquals(INDEX_TABLE_NAME+"_2", rs.getString(3));
+            assertEquals(PIndexState.DISABLE.toString(), rs.getString("INDEX_STATE"));
+            assertFalse(rs.next());
+        }
+
         // Verify UPSERT on data table still work after index is disabled       
         stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
         stmt.setString(1, "a3");
@@ -226,6 +237,14 @@ public class MutableIndexFailureIT extends BaseTest {
           assertTrue(rs.next());
           if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
               break;
+          }
+          if(localIndex) {
+              rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(SCHEMA_NAME), INDEX_TABLE_NAME+"_2",
+                  new String[] { PTableType.INDEX.toString() });
+              assertTrue(rs.next());
+              if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
+                  break;
+              }
           }
         } while(true);
         
