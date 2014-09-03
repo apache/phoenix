@@ -643,7 +643,7 @@ public class IndexLoadBalancer implements LoadBalancer {
             indexTableVsUserTable.remove(other);
         } else {
             other = indexTableVsUserTable.remove(table);
-            if (other != null) userTableVsIndexTable.remove(table);
+            if (other != null) userTableVsIndexTable.remove(other);
         }
     }
 

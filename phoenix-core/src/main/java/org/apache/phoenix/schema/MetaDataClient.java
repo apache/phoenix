@@ -528,11 +528,18 @@ public class MetaDataClient {
                 Scan scan = plan.getContext().getScan();
                 try {
                     scan.setTimeRange(dataTableRef.getLowerBoundTimeStamp(), Long.MAX_VALUE);
+                    plan.getContext().setScanTimeRange(scan.getTimeRange());
                 } catch (IOException e) {
                     throw new SQLException(e);
                 }
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 PTable dataTable = tableRef.getTable();
+                for(PTable idx: dataTable.getIndexes()) {
+                    if(idx.getName().equals(index.getName())) {
+                        index = idx;
+                        break;
+                    }
+                }
                 List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
                 // Only build newly created index.
                 indexes.add(index);
