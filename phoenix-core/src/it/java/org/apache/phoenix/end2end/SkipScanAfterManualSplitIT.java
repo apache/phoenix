@@ -346,4 +346,31 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
         assertFalse(rs.next());
     }
 
+    
+    @Test
+    public void testMinMaxRangeIntersection() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        
+        PreparedStatement stmt = conn.prepareStatement("create table splits_test "
+            + "(pk1 UNSIGNED_TINYINT NOT NULL, pk2 UNSIGNED_TINYINT NOT NULL, kv VARCHAR "
+            + "CONSTRAINT pk PRIMARY KEY (pk1, pk2)) SALT_BUCKETS=4 SPLIT ON (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        // Split each salt bucket into multiple regions
+        stmt.setBytes(1, new byte[] {0, 1, 1});
+        stmt.setBytes(2, new byte[] {0, 2, 1});
+        stmt.setBytes(3, new byte[] {0, 3, 1});
+        stmt.setBytes(4, new byte[] {1, 1, 1});
+        stmt.setBytes(5, new byte[] {1, 2, 1});
+        stmt.setBytes(6, new byte[] {1, 3, 1});
+        stmt.setBytes(7, new byte[] {2, 1, 1});
+        stmt.setBytes(8, new byte[] {2, 2, 1});
+        stmt.setBytes(9, new byte[] {2, 3, 1});
+        stmt.setBytes(10, new byte[] {3, 1, 1});
+        stmt.setBytes(11, new byte[] {3, 2, 1});
+        stmt.setBytes(12, new byte[] {3, 3, 1});
+        stmt.execute();
+        
+        // Use a query with a RVC in a non equality expression
+        ResultSet rs = conn.createStatement().executeQuery("select count(kv) from splits_test where pk1 < 3 and (pk1,PK2) >= (3, 1)");
+        assertTrue(rs.next());
+    }
 }

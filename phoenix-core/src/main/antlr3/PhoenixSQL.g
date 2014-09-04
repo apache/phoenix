@@ -104,6 +104,7 @@ tokens
     MINVALUE='minvalue';
     MAXVALUE='maxvalue';
     CYCLE='cycle';
+    CASCADE='cascade';
 }
 
 
@@ -470,8 +471,8 @@ column_names returns [List<ColumnName> ret]
 	
 // Parse a drop table statement.
 drop_table_node returns [DropTableStatement ret]
-    :   DROP (v=VIEW | TABLE) (IF ex=EXISTS)? t=from_table_name
-        {ret = factory.dropTable(t, v==null ? PTableType.TABLE : PTableType.VIEW, ex!=null); }
+    :   DROP (v=VIEW | TABLE) (IF ex=EXISTS)? t=from_table_name (c=CASCADE)?
+        {ret = factory.dropTable(t, v==null ? PTableType.TABLE : PTableType.VIEW, ex!=null, c!=null); }
     ;
 
 // Parse a drop index statement
