@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Comparator;
@@ -38,7 +39,6 @@ import org.apache.phoenix.iterate.DefaultParallelIteratorRegionSplitter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.TableRef;
@@ -124,25 +124,22 @@ public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIterat
     }
 
     @Test
-    public void testGetLowerUnboundSplits() throws Exception {
+    public void testGetLowerUnboundSplits() throws Throwable {
         long ts = nextTimestamp();
         initTableValues(ts);
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
-
+        PreparedStatement stmt = conn.prepareStatement("ANALYZE STABLE");
+        stmt.execute();
+        conn.close();
+        conn = DriverManager.getConnection(url, props);
+        conn.createStatement().executeQuery("SELECT * FROM STABLE");
         Scan scan = new Scan();
-        
-        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
-        TableRef table = getTableRef(conn,ts);
-        services.getStatsManager().updateStats(table);
         scan.setStartRow(HConstants.EMPTY_START_ROW);
         scan.setStopRow(K1);
         List<KeyRange> keyRanges = getSplits(conn, ts, scan);
-        assertEquals("Unexpected number of splits: " + keyRanges, 3, keyRanges.size());
-        assertEquals(newKeyRange(KeyRange.UNBOUND, new byte[] {'7'}), keyRanges.get(0));
-        assertEquals(newKeyRange(new byte[] {'7'}, new byte[] {'M'}), keyRanges.get(1));
-        assertEquals(newKeyRange(new byte[] {'M'}, K3), keyRanges.get(2));
+        assertEquals("Unexpected number of splits: " + keyRanges, 1, keyRanges.size());
     }
 
     private static KeyRange newKeyRange(byte[] lowerRange, byte[] upperRange) {

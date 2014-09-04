@@ -74,8 +74,8 @@ public class GlobalCache extends TenantCacheImpl {
                 if(result == null) {
                     long maxSize = config.getLong(QueryServices.MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB,
                             QueryServicesOptions.DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE);
-                    long maxTTL = config.getLong(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB,
-                            QueryServicesOptions.DEFAULT_MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS);
+                    long maxTTL = config.getLong(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
+                            QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
                     metaDataCache = result = CacheBuilder.newBuilder()
                             .maximumWeight(maxSize)
                             .expireAfterAccess(maxTTL, TimeUnit.MILLISECONDS)
