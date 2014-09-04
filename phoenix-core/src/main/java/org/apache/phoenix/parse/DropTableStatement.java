@@ -24,11 +24,14 @@ public class DropTableStatement extends MutableStatement {
     private final TableName tableName;
     private final boolean ifExists;
     private final PTableType tableType;
+    private final boolean cascade;
+    
 
-    protected DropTableStatement(TableName tableName, PTableType tableType, boolean ifExists) {
+    protected DropTableStatement(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
         this.tableName = tableName;
         this.tableType = tableType;
         this.ifExists = ifExists;
+        this.cascade = cascade;
     }
     
     @Override
@@ -46,6 +49,10 @@ public class DropTableStatement extends MutableStatement {
 
     public boolean ifExists() {
         return ifExists;
+    }
+    
+    public boolean cascade() {
+    	return cascade;
     }
     
     @Override

@@ -2629,6 +2629,16 @@ public final class MetaDataProtos {
      */
     com.google.protobuf.ByteString
         getTableTypeBytes();
+
+    // required bool cascade = 3;
+    /**
+     * <code>required bool cascade = 3;</code>
+     */
+    boolean hasCascade();
+    /**
+     * <code>required bool cascade = 3;</code>
+     */
+    boolean getCascade();
   }
   /**
    * Protobuf type {@code DropTableRequest}
@@ -2692,6 +2702,11 @@ public final class MetaDataProtos {
             case 18: {
               bitField0_ |= 0x00000001;
               tableType_ = input.readBytes();
+              break;
+            }
+            case 24: {
+              bitField0_ |= 0x00000002;
+              cascade_ = input.readBool();
               break;
             }
           }
@@ -2803,9 +2818,26 @@ public final class MetaDataProtos {
       }
     }
 
+    // required bool cascade = 3;
+    public static final int CASCADE_FIELD_NUMBER = 3;
+    private boolean cascade_;
+    /**
+     * <code>required bool cascade = 3;</code>
+     */
+    public boolean hasCascade() {
+      return ((bitField0_ & 0x00000002) == 0x00000002);
+    }
+    /**
+     * <code>required bool cascade = 3;</code>
+     */
+    public boolean getCascade() {
+      return cascade_;
+    }
+
     private void initFields() {
       tableMetadataMutations_ = java.util.Collections.emptyList();
       tableType_ = "";
+      cascade_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -2813,6 +2845,10 @@ public final class MetaDataProtos {
       if (isInitialized != -1) return isInitialized == 1;
 
       if (!hasTableType()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasCascade()) {
         memoizedIsInitialized = 0;
         return false;
       }
@@ -2828,6 +2864,9 @@ public final class MetaDataProtos {
       }
       if (((bitField0_ & 0x00000001) == 0x00000001)) {
         output.writeBytes(2, getTableTypeBytes());
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        output.writeBool(3, cascade_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -2850,6 +2889,10 @@ public final class MetaDataProtos {
       if (((bitField0_ & 0x00000001) == 0x00000001)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(2, getTableTypeBytes());
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(3, cascade_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -2881,6 +2924,11 @@ public final class MetaDataProtos {
         result = result && getTableType()
             .equals(other.getTableType());
       }
+      result = result && (hasCascade() == other.hasCascade());
+      if (hasCascade()) {
+        result = result && (getCascade()
+            == other.getCascade());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -2901,6 +2949,10 @@ public final class MetaDataProtos {
       if (hasTableType()) {
         hash = (37 * hash) + TABLETYPE_FIELD_NUMBER;
         hash = (53 * hash) + getTableType().hashCode();
+      }
+      if (hasCascade()) {
+        hash = (37 * hash) + CASCADE_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getCascade());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -3015,6 +3067,8 @@ public final class MetaDataProtos {
         bitField0_ = (bitField0_ & ~0x00000001);
         tableType_ = "";
         bitField0_ = (bitField0_ & ~0x00000002);
+        cascade_ = false;
+        bitField0_ = (bitField0_ & ~0x00000004);
         return this;
       }
 
@@ -3052,6 +3106,10 @@ public final class MetaDataProtos {
           to_bitField0_ |= 0x00000001;
         }
         result.tableType_ = tableType_;
+        if (((from_bitField0_ & 0x00000004) == 0x00000004)) {
+          to_bitField0_ |= 0x00000002;
+        }
+        result.cascade_ = cascade_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -3083,12 +3141,19 @@ public final class MetaDataProtos {
           tableType_ = other.tableType_;
           onChanged();
         }
+        if (other.hasCascade()) {
+          setCascade(other.getCascade());
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
       }
 
       public final boolean isInitialized() {
         if (!hasTableType()) {
+          
+          return false;
+        }
+        if (!hasCascade()) {
           
           return false;
         }
@@ -3256,6 +3321,39 @@ public final class MetaDataProtos {
   }
   bitField0_ |= 0x00000002;
         tableType_ = value;
+        onChanged();
+        return this;
+      }
+
+      // required bool cascade = 3;
+      private boolean cascade_ ;
+      /**
+       * <code>required bool cascade = 3;</code>
+       */
+      public boolean hasCascade() {
+        return ((bitField0_ & 0x00000004) == 0x00000004);
+      }
+      /**
+       * <code>required bool cascade = 3;</code>
+       */
+      public boolean getCascade() {
+        return cascade_;
+      }
+      /**
+       * <code>required bool cascade = 3;</code>
+       */
+      public Builder setCascade(boolean value) {
+        bitField0_ |= 0x00000004;
+        cascade_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bool cascade = 3;</code>
+       */
+      public Builder clearCascade() {
+        bitField0_ = (bitField0_ & ~0x00000004);
+        cascade_ = false;
         onChanged();
         return this;
       }
@@ -7020,35 +7118,36 @@ public final class MetaDataProtos {
       "\022\022\n\nschemaName\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022" +
       "\026\n\016tableTimestamp\030\004 \002(\003\022\027\n\017clientTimesta" +
       "mp\030\005 \002(\003\"4\n\022CreateTableRequest\022\036\n\026tableM" +
-      "etadataMutations\030\001 \003(\014\"E\n\020DropTableReque",
+      "etadataMutations\030\001 \003(\014\"V\n\020DropTableReque",
       "st\022\036\n\026tableMetadataMutations\030\001 \003(\014\022\021\n\tta" +
-      "bleType\030\002 \002(\t\"2\n\020AddColumnRequest\022\036\n\026tab" +
-      "leMetadataMutations\030\001 \003(\014\"3\n\021DropColumnR" +
-      "equest\022\036\n\026tableMetadataMutations\030\001 \003(\014\"9" +
-      "\n\027UpdateIndexStateRequest\022\036\n\026tableMetada" +
-      "taMutations\030\001 \003(\014\"\023\n\021ClearCacheRequest\"\024" +
-      "\n\022ClearCacheResponse\"\023\n\021GetVersionReques" +
-      "t\"%\n\022GetVersionResponse\022\017\n\007version\030\001 \002(\003" +
-      "*\212\002\n\014MutationCode\022\030\n\024TABLE_ALREADY_EXIST" +
-      "S\020\000\022\023\n\017TABLE_NOT_FOUND\020\001\022\024\n\020COLUMN_NOT_F",
-      "OUND\020\002\022\031\n\025COLUMN_ALREADY_EXISTS\020\003\022\035\n\031CON" +
-      "CURRENT_TABLE_MUTATION\020\004\022\027\n\023TABLE_NOT_IN" +
-      "_REGION\020\005\022\025\n\021NEWER_TABLE_FOUND\020\006\022\034\n\030UNAL" +
-      "LOWED_TABLE_MUTATION\020\007\022\021\n\rNO_PK_COLUMNS\020" +
-      "\010\022\032\n\026PARENT_TABLE_NOT_FOUND\020\t2\303\003\n\017MetaDa" +
-      "taService\022/\n\010getTable\022\020.GetTableRequest\032" +
-      "\021.MetaDataResponse\0225\n\013createTable\022\023.Crea" +
-      "teTableRequest\032\021.MetaDataResponse\0221\n\tdro" +
-      "pTable\022\021.DropTableRequest\032\021.MetaDataResp" +
-      "onse\0221\n\taddColumn\022\021.AddColumnRequest\032\021.M",
-      "etaDataResponse\0223\n\ndropColumn\022\022.DropColu" +
-      "mnRequest\032\021.MetaDataResponse\022?\n\020updateIn" +
-      "dexState\022\030.UpdateIndexStateRequest\032\021.Met" +
-      "aDataResponse\0225\n\nclearCache\022\022.ClearCache" +
-      "Request\032\023.ClearCacheResponse\0225\n\ngetVersi" +
-      "on\022\022.GetVersionRequest\032\023.GetVersionRespo" +
-      "nseBB\n(org.apache.phoenix.coprocessor.ge" +
-      "neratedB\016MetaDataProtosH\001\210\001\001\240\001\001"
+      "bleType\030\002 \002(\t\022\017\n\007cascade\030\003 \002(\010\"2\n\020AddCol" +
+      "umnRequest\022\036\n\026tableMetadataMutations\030\001 \003" +
+      "(\014\"3\n\021DropColumnRequest\022\036\n\026tableMetadata" +
+      "Mutations\030\001 \003(\014\"9\n\027UpdateIndexStateReque" +
+      "st\022\036\n\026tableMetadataMutations\030\001 \003(\014\"\023\n\021Cl" +
+      "earCacheRequest\"\024\n\022ClearCacheResponse\"\023\n" +
+      "\021GetVersionRequest\"%\n\022GetVersionResponse" +
+      "\022\017\n\007version\030\001 \002(\003*\212\002\n\014MutationCode\022\030\n\024TA" +
+      "BLE_ALREADY_EXISTS\020\000\022\023\n\017TABLE_NOT_FOUND\020",
+      "\001\022\024\n\020COLUMN_NOT_FOUND\020\002\022\031\n\025COLUMN_ALREAD" +
+      "Y_EXISTS\020\003\022\035\n\031CONCURRENT_TABLE_MUTATION\020" +
+      "\004\022\027\n\023TABLE_NOT_IN_REGION\020\005\022\025\n\021NEWER_TABL" +
+      "E_FOUND\020\006\022\034\n\030UNALLOWED_TABLE_MUTATION\020\007\022" +
+      "\021\n\rNO_PK_COLUMNS\020\010\022\032\n\026PARENT_TABLE_NOT_F" +
+      "OUND\020\t2\303\003\n\017MetaDataService\022/\n\010getTable\022\020" +
+      ".GetTableRequest\032\021.MetaDataResponse\0225\n\013c" +
+      "reateTable\022\023.CreateTableRequest\032\021.MetaDa" +
+      "taResponse\0221\n\tdropTable\022\021.DropTableReque" +
+      "st\032\021.MetaDataResponse\0221\n\taddColumn\022\021.Add",
+      "ColumnRequest\032\021.MetaDataResponse\0223\n\ndrop" +
+      "Column\022\022.DropColumnRequest\032\021.MetaDataRes" +
+      "ponse\022?\n\020updateIndexState\022\030.UpdateIndexS" +
+      "tateRequest\032\021.MetaDataResponse\0225\n\nclearC" +
+      "ache\022\022.ClearCacheRequest\032\023.ClearCacheRes" +
+      "ponse\0225\n\ngetVersion\022\022.GetVersionRequest\032" +
+      "\023.GetVersionResponseBB\n(org.apache.phoen" +
+      "ix.coprocessor.generatedB\016MetaDataProtos" +
+      "H\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -7078,7 +7177,7 @@ public final class MetaDataProtos {
           internal_static_DropTableRequest_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_DropTableRequest_descriptor,
-              new java.lang.String[] { "TableMetadataMutations", "TableType", });
+              new java.lang.String[] { "TableMetadataMutations", "TableType", "Cascade", });
           internal_static_AddColumnRequest_descriptor =
             getDescriptor().getMessageTypes().get(4);
           internal_static_AddColumnRequest_fieldAccessorTable = new

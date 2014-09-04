@@ -530,8 +530,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     private static class ExecutableDropTableStatement extends DropTableStatement implements CompilableStatement {
 
-        ExecutableDropTableStatement(TableName tableName, PTableType tableType, boolean ifExists) {
-            super(tableName, tableType, ifExists);
+        ExecutableDropTableStatement(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
+            super(tableName, tableType, ifExists, cascade);
         }
 
         @SuppressWarnings("unchecked")
@@ -788,8 +788,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
         
         @Override
-        public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists) {
-            return new ExecutableDropTableStatement(tableName, tableType, ifExists);
+        public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
+            return new ExecutableDropTableStatement(tableName, tableType, ifExists, cascade);
         }
         
         @Override

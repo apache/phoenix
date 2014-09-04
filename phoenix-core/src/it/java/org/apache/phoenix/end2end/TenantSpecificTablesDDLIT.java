@@ -331,7 +331,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     }
     
     @Test
-    public void testDropParentTableWithExistingTenantTable() throws Exception {
+    public void testDisallowDropParentTableWithExistingTenantTable() throws Exception {
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -346,6 +346,112 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             conn.close();
         }
     }
+    
+    @Test
+    public void testAllowDropParentTableWithCascadeAndSingleTenantTable() throws Exception {
+	    long ts = nextTimestamp();
+	    Properties props = new Properties();
+	    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+	    Connection conn = DriverManager.getConnection(getUrl(), props);
+	    Connection connTenant = null;
+    
+		try {
+			// Drop Parent Table 
+			conn.createStatement().executeUpdate("DROP TABLE " + PARENT_TABLE_NAME + " CASCADE");
+			conn.close();
+		      
+			props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+			connTenant = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
+			
+	        validateTenantViewIsDropped(conn);		
+	    } finally {
+	    	if (conn != null) {
+	    		conn.close();
+	    	}
+	    	if (connTenant != null) {
+	    		connTenant.close();
+	    	}
+	    }
+    }
+    
+    
+    @Test
+    public void testAllDropParentTableWithCascadeWithMultipleTenantTablesAndIndexes() throws Exception {
+        // Create a second tenant table
+    	createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL2, TENANT_TABLE_DDL, null, nextTimestamp());
+    	//TODO Create some tenant specific table indexes
+        
+	    long ts = nextTimestamp();
+	    Properties props = new Properties();
+	    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+	    Connection conn = null;
+	    Connection connTenant1 = null;
+	    Connection connTenant2 = null;
+    
+		try {
+			conn = DriverManager.getConnection(getUrl(), props);
+	        DatabaseMetaData meta = conn.getMetaData();
+            ResultSet rs = meta.getSuperTables(null, null, StringUtil.escapeLike(TENANT_TABLE_NAME) + "%");
+            assertTrue(rs.next());
+            assertEquals(TENANT_ID2, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
+            assertEquals(TENANT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+            assertEquals(PARENT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
+            assertTrue(rs.next());
+            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
+            assertEquals(TENANT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+            assertEquals(PARENT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
+            assertTrue(rs.next());
+            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
+            assertEquals(TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+            assertEquals(PARENT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
+            assertFalse(rs.next());
+            rs.close();
+            conn.close();
+            
+			// Drop Parent Table 
+			conn.createStatement().executeUpdate("DROP TABLE " + PARENT_TABLE_NAME + " CASCADE");
+		  
+			// Validate Tenant Views are dropped
+			props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+			connTenant1 = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
+	        validateTenantViewIsDropped(connTenant1);
+			connTenant2 = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL2, props);
+	        validateTenantViewIsDropped(connTenant2);
+	        
+	        // Validate Tenant Metadata is gone for the Tenant Table TENANT_TABLE_NAME
+			conn = DriverManager.getConnection(getUrl(), props);
+	        meta = conn.getMetaData();
+            rs = meta.getSuperTables(null, null, StringUtil.escapeLike(TENANT_TABLE_NAME) + "%");
+            assertTrue(rs.next());
+            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
+            assertEquals(TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+            assertEquals(PARENT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
+            assertFalse(rs.next());
+            rs.close();
+	        
+	    } finally {
+	    	if (conn != null) {
+	    		conn.close();
+	    	}
+	    	if (connTenant1 != null) {
+	    		connTenant1.close();
+	    	}
+	    	if (connTenant2 != null) {
+	    		connTenant2.close();
+	    	}
+	    }
+    }
+
+	private void validateTenantViewIsDropped(Connection connTenant)	throws SQLException {
+		// Try and drop tenant view, should throw TableNotFoundException
+		try {
+			String ddl = "DROP VIEW " + TENANT_TABLE_NAME;
+		    connTenant.createStatement().execute(ddl);
+		    fail("Tenant specific view " + TENANT_TABLE_NAME + " should have been dropped when parent was dropped");
+		} catch (TableNotFoundException e) {
+			//Expected
+		}
+	}
     
     @Test
     public void testTableMetadataScan() throws Exception {
