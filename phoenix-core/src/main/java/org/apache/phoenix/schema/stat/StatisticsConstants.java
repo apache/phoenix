@@ -16,30 +16,17 @@
  * limitations under the License.
  */
 package org.apache.phoenix.schema.stat;
- import java.util.List;
-import java.util.TreeMap;
 
-import org.apache.hadoop.hbase.util.Bytes;
- 
- /**
- * Implementation for PTableStats.
- */
-public class PTableStatsImpl implements PTableStats {
+public class StatisticsConstants {
 
-    public static final PTableStats NO_STATS = new PTableStatsImpl();
+    public static final String HISTOGRAM_BYTE_DEPTH_CONF_KEY = "org.apache.phoenix.guidepost.width";
 
-    private TreeMap<byte[], List<byte[]>> guidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
+    // TODO : What should be the configuration here
+    public static final long HISTOGRAM_DEFAULT_BYTE_DEPTH = 512;
 
-    public PTableStatsImpl() {
-        this(new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR));
-    }
+    public static final String MIN_STATS_FREQ_UPDATION = "phoenix.query.minStatsFrequencyUpdation";
 
-    public PTableStatsImpl(TreeMap<byte[], List<byte[]>> guidePosts) {
-        this.guidePosts = guidePosts;
-    }
+    public static final long DEFAULT_STATS_FREQ_UPDATION = 2 * 60000;
 
-    @Override
-    public TreeMap<byte[], List<byte[]>> getGuidePosts() {
-        return guidePosts;
-    }
 }
+    

@@ -339,6 +339,10 @@ public class ParseNodeFactory {
     public DivideParseNode divide(List<ParseNode> children) {
         return new DivideParseNode(children);
     }
+    
+    public UpdateStatisticsStatement updateStatistics(NamedTableNode table) {
+      return new UpdateStatisticsStatement(table);
+    }
 
 
     public FunctionParseNode functionDistinct(String name, List<ParseNode> args) {

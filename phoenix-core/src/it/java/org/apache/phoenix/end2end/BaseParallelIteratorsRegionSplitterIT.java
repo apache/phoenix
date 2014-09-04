@@ -88,7 +88,8 @@ public class BaseParallelIteratorsRegionSplitterIT extends BaseClientManagedTime
 
     protected static TableRef getTableRef(Connection conn, long ts) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        TableRef table = new TableRef(null,pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), STABLE_NAME)),ts, false);
+        TableRef table = new TableRef(null, pconn.getMetaDataCache().getTable(
+                new PTableKey(pconn.getTenantId(), STABLE_NAME)), ts, false);
         return table;
     }
     
