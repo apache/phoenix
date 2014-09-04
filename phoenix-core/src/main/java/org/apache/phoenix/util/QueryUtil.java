@@ -25,6 +25,7 @@ import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
@@ -35,6 +36,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Addressing;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 
@@ -43,6 +45,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import org.apache.phoenix.query.QueryServices;
 
 public final class QueryUtil {
 
@@ -190,26 +193,50 @@ public final class QueryUtil {
     }
 
     public static Connection getConnection(Properties props, Configuration conf)
+            throws ClassNotFoundException,
+            SQLException {
+        String url = getConnectionUrl(props, conf);
+        LOG.info("Creating connection with the jdbc url:" + url);
+        return DriverManager.getConnection(url, props);
+    }
+
+    public static String getConnectionUrl(Properties props, Configuration conf)
             throws ClassNotFoundException, SQLException {
         // make sure we load the phoenix driver
         Class.forName(PhoenixDriver.class.getName());
 
         // read the hbase properties from the configuration
         String server = ZKConfig.getZKQuorumServersString(conf);
-        int port;
-        // if it has a port, don't try to add one
-        try {
-            server = Addressing.parseHostname(server);
-            port = Addressing.parsePort(server);
-        } catch (IllegalArgumentException e) {
-            // port isn't set
-            port =
-                    conf.getInt(HConstants.ZOOKEEPER_CLIENT_PORT,
-                        HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT);
+        // could be a comma-separated list
+        String[] rawServers = server.split(",");
+        List<String> servers = new ArrayList<String>(rawServers.length);
+        boolean first = true;
+        int port = -1;
+        for (String serverPort : rawServers) {
+            try {
+                server = Addressing.parseHostname(serverPort);
+                int specifiedPort = Addressing.parsePort(serverPort);
+                // there was a previously specified port and it doesn't match this server
+                if (port > 0 && specifiedPort != port) {
+                    throw new IllegalStateException("Phoenix/HBase only supports connecting to a " +
+                            "single zookeeper client port. Specify servers only as host names in " +
+                            "HBase configuration");
+                }
+                // set the port to the specified port
+                port = specifiedPort;
+                servers.add(server);
+            } catch (IllegalArgumentException e) {
+            }
         }
+        // port wasn't set, shouldn't ever happen from HBase, but just in case
+        if (port == -1) {
+            port = conf.getInt(QueryServices.ZOOKEEPER_PORT_ATTRIB, -1);
+            if (port == -1) {
+                throw new RuntimeException("Client zk port was not set!");
+            }
+        }
+        server = Joiner.on(',').join(servers);
 
-        String jdbcUrl = getUrl(server, port);
-        LOG.info("Creating connection with the jdbc url:" + jdbcUrl);
-        return DriverManager.getConnection(jdbcUrl, props);
+        return getUrl(server, port);
     }
 }

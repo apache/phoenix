@@ -125,11 +125,7 @@ import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.util.ConfigUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.*;
 import org.junit.Assert;
 
 import com.google.common.collect.ImmutableMap;
@@ -476,8 +472,6 @@ public abstract class BaseTest {
         utility = new HBaseTestingUtility(conf);
         try {
             utility.startMiniCluster();
-            String clientPort = utility.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
-
             // add shutdown hook to kill the mini cluster
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 @Override
@@ -489,11 +483,15 @@ public abstract class BaseTest {
                     }
                 }
             });
-            return JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_SEPARATOR + clientPort
-                    + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+            return getLocalClusterUrl(utility);
         } catch (Throwable t) {
             throw new RuntimeException(t);
         }
+    }
+
+    protected static String getLocalClusterUrl(HBaseTestingUtility util) throws Exception {
+        String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration());
+        return url + PHOENIX_TEST_DRIVER_URL_PARAM;
     }
     
     /**
