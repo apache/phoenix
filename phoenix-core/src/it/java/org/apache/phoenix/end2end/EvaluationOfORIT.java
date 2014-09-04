@@ -1,6 +1,8 @@
 package org.apache.phoenix.end2end;
 
  
+import static org.apache.phoenix.util.TestUtil.ROW5;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
  
@@ -12,11 +14,18 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.TestUtil;
+import org.junit.Before;
 import org.junit.Test;
 
 public class EvaluationOfORIT extends BaseClientManagedTimeIT{
-
+	private static final String tenantId = getOrganizationId();
+	private long ts;
+    
+	@Before
+    public void initTable() throws Exception {
+        ts = nextTimestamp();
+    }
+	
 	@Test
 	public void testPKOrNotPKInOREvaluation() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
@@ -155,5 +164,37 @@ public class EvaluationOfORIT extends BaseClientManagedTimeIT{
         assertEquals(26,rs.getInt(1));		        
         conn2.close();               
 	}
-
+    
+	@Test
+    public void testUnfoundSingleColumnCaseStatement() throws Exception {
+        String query = "SELECT entity_id, b_string FROM ATABLE WHERE organization_id=? and CASE WHEN a_integer = 0 or a_integer != 0 THEN 1 ELSE 0 END = 0";
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        // Set ROW5.A_INTEGER to null so that we have one row
+        // where the else clause of the CASE statement will
+        // fire.
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
+        Connection upsertConn = DriverManager.getConnection(url, props);
+        String upsertStmt =
+            "upsert into " +
+            "ATABLE(" +
+            "    ENTITY_ID, " +
+            "    ORGANIZATION_ID, " +
+            "    A_INTEGER) " +
+            "VALUES ('" + ROW5 + "','" + tenantId + "', null)";
+        upsertConn.setAutoCommit(true); // Test auto commit
+        // Insert all rows at ts
+        PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
+        stmt.execute(); // should commit too
+        upsertConn.close();
+        
+        PreparedStatement statement = conn.prepareStatement(query);
+        statement.setString(1, tenantId);
+        ResultSet rs = statement.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(ROW5, rs.getString(1));
+        assertFalse(rs.next());
+        conn.close();
+    }
 }
