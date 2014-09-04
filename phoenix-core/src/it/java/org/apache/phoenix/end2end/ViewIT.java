@@ -259,15 +259,99 @@ public class ViewIT extends BaseViewIT {
         } catch (TableNotFoundException ignore) {
         }
         ddl = "DROP TABLE s1.t";
-        try {
-            conn.createStatement().execute(ddl);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
-        }
+        validateCannotDropTableWithChildViewsWithoutCascade(conn, "s1.t");
         ddl = "DROP VIEW v2";
         conn.createStatement().execute(ddl);
         ddl = "DROP TABLE s1.t";
         conn.createStatement().execute(ddl);
     }
+
+    
+    @Test
+    public void testDisallowDropOfColumnOnParentTable() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v1(v2 VARCHAR, v3 VARCHAR) AS SELECT * FROM tp WHERE v1 = 1.0";
+        conn.createStatement().execute(ddl);
+        
+        try {
+            conn.createStatement().execute("ALTER TABLE tp DROP COLUMN v1");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+        }
+    }
+   
+    @Test
+    public void testViewAndTableAndDropCascade() throws Exception {
+    	// Setup
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE s2.t (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW s2.v1 (v2 VARCHAR) AS SELECT * FROM s2.t WHERE k > 5";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW s2.v2 (v2 VARCHAR) AS SELECT * FROM s2.t WHERE k > 10";
+        conn.createStatement().execute(ddl);
+
+        validateCannotDropTableWithChildViewsWithoutCascade(conn, "s2.t");
+        
+        // Execute DROP...CASCADE
+        conn.createStatement().execute("DROP TABLE s2.t CASCADE");
+        
+        validateViewDoesNotExist(conn, "s2.v1");
+        validateViewDoesNotExist(conn, "s2.v2");
+    }
+    
+    @Test
+    public void testViewAndTableAndDropCascadeWithIndexes() throws Exception {
+        
+    	// Setup - Tables and Views with Indexes
+    	Connection conn = DriverManager.getConnection(getUrl());
+    	
+        String ddl = "CREATE TABLE s3.t (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) IMMUTABLE_ROWS=true";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE INDEX IDX1 ON s3.t (v1)";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW s3.v1 (v2 VARCHAR) AS SELECT * FROM s3.t WHERE k > 5";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE INDEX IDX2 ON s3.v1 (v2)";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW s3.v2 (v2 VARCHAR) AS SELECT * FROM s3.t WHERE k > 10";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE INDEX IDX3 ON s3.v2 (v2)";
+        conn.createStatement().execute(ddl);
+
+        validateCannotDropTableWithChildViewsWithoutCascade(conn, "s3.t");
+        
+        // Execute DROP...CASCADE
+        conn.createStatement().execute("DROP TABLE s3.t CASCADE");
+        
+        // Validate Views were deleted - Try and delete child views, should throw TableNotFoundException
+        validateViewDoesNotExist(conn, "s3.v1");
+        validateViewDoesNotExist(conn, "s3.v2");
+    }
+
+
+	private void validateCannotDropTableWithChildViewsWithoutCascade(Connection conn, String tableName) throws SQLException {
+		String ddl;
+		try {
+	        ddl = "DROP TABLE " + tableName;
+	        conn.createStatement().execute(ddl);
+	        fail("Should not be able to drop table " + tableName + " with child views without explictly specifying CASCADE");
+        }  catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+        }
+	}
+
+
+	private void validateViewDoesNotExist(Connection conn, String viewName)	throws SQLException {
+		try {
+        	String ddl1 = "DROP VIEW " + viewName;
+            conn.createStatement().execute(ddl1);
+            fail("View s3.v1 should have been deleted when parent was dropped");
+        } catch (TableNotFoundException e) {
+        	//Expected
+        }
+	}
 }

@@ -226,13 +226,22 @@ public interface MetaDataProtocol extends CoprocessorProtocol {
     MetaDataMutationResult createTable(List<Mutation> tableMetadata) throws IOException;
 
     /**
-     * Drop an existing Phoenix table
+     * Drop an existing Phoenix table. This is for backwards compatibility after adding option to CASCADE.
      * @param tableMetadata
      * @param tableType
      * @return MetaDataMutationResult
      * @throws IOException
      */
     MetaDataMutationResult dropTable(List<Mutation> tableMetadata, String tableType) throws IOException;
+    
+    /**
+     * Drop an existing Phoenix table
+     * @param tableMetadata
+     * @param tableType
+     * @return MetaDataMutationResult
+     * @throws IOException
+     */
+    MetaDataMutationResult dropTable(List<Mutation> tableMetadata, String tableType, boolean isCascade) throws IOException;
 
     /**
      * Add a column to an existing Phoenix table

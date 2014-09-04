@@ -299,8 +299,8 @@ public class ParseNodeFactory {
         return new DropColumnStatement(table, tableType, columnNodes, ifExists);
     }
     
-    public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists) {
-        return new DropTableStatement(tableName, tableType, ifExists);
+    public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
+        return new DropTableStatement(tableName, tableType, ifExists, cascade);
     }
     
     public DropIndexStatement dropIndex(NamedNode indexName, TableName tableName, boolean ifExists) {

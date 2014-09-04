@@ -77,10 +77,12 @@ import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -104,6 +106,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -597,10 +600,10 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
     protected static final byte[] PHYSICAL_TABLE_BYTES = new byte[] {PTable.LinkType.PHYSICAL_TABLE.getSerializedValue()};
     /**
      * @param tableName parent table's name
-     * @return true if there exist a table that use this table as their base table.
+     * Looks for whether child views exist for the table specified by table.
      * TODO: should we pass a timestamp here?
      */
-    private boolean hasViews(HRegion region, byte[] tenantId, PTable table) throws IOException {
+    private TableViewFinderResult findChildViews(HRegion region, byte[] tenantId, PTable table) throws IOException {
         byte[] schemaName = table.getSchemaName().getBytes();
         byte[] tableName = table.getTableName().getBytes();
         boolean isMultiTenant = table.isMultiTenant();
@@ -622,22 +625,42 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         scan.setFilter(filter);
         scan.addColumn(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
         HTableInterface hTable = getEnvironment().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+        ResultScanner scanner = hTable.getScanner(scan);
+
+        boolean allViewsInCurrentRegion = true;
+        int numOfChildViews = 0;
+        List<Result> results = Lists.newArrayList();
         try {
-            ResultScanner scanner = hTable.getScanner(scan);
-            try {
-                Result result = scanner.next();
-                return result != null;
-            }
-            finally {
-                scanner.close();
+            for (Result result = scanner.next(); (result != null); result = scanner.next()) {
+                numOfChildViews++;
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                ResultTuple resultTuple = new ResultTuple(result);
+                resultTuple.getKey(ptr);
+                byte[] key = ptr.copyBytes();
+                if (checkTableKeyInRegion(key, region) != null) {
+                    allViewsInCurrentRegion = false;
+                }
+                results.add(result);
             }
         } finally {
+            scanner.close();
             hTable.close();
         }
+        TableViewFinderResult tableViewFinderResult = new TableViewFinderResult(results);
+        if (numOfChildViews > 0 && !allViewsInCurrentRegion) {
+            tableViewFinderResult.setAllViewsNotInSingleRegion();
+        }
+        return tableViewFinderResult;
+
+    }
+
+    @Override
+    public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, String tableType) throws IOException {
+        return dropTable(tableMetadata, tableType, false);
     }
     
     @Override
-    public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, String tableType) throws IOException {
+    public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, String tableType, boolean isCascade) throws IOException {
         byte[][] rowKeyMetaData = new byte[3][];
         MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata,rowKeyMetaData);
         byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
@@ -667,7 +690,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                     acquireLock(region, key, lids);
                 }
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
-                result = doDropTable(key, tenantIdBytes, schemaName, tableName, parentTableName, PTableType.fromSerializedValue(tableType), tableMetadata, invalidateList, lids, tableNamesToDelete);
+                result = doDropTable(key, tenantIdBytes, schemaName, tableName, parentTableName, PTableType.fromSerializedValue(tableType), tableMetadata, invalidateList, lids, tableNamesToDelete, isCascade);
                 if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     return result;
                 }
@@ -693,7 +716,8 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
     }
 
     private MetaDataMutationResult doDropTable(byte[] key, byte[] tenantId, byte[] schemaName, byte[] tableName, byte[] parentTableName, 
-            PTableType tableType, List<Mutation> rowsToDelete, List<ImmutableBytesPtr> invalidateList, List<Integer> lids, List<byte[]> tableNamesToDelete) throws IOException, SQLException {
+            PTableType tableType, List<Mutation> rowsToDelete, List<ImmutableBytesPtr> invalidateList, List<Integer> lids, List<byte[]> tableNamesToDelete,
+            boolean isCascade) throws IOException, SQLException {
         long clientTimeStamp = MetaDataUtil.getClientTimeStamp(rowsToDelete);
 
         RegionCoprocessorEnvironment env = getEnvironment();
@@ -702,7 +726,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         
         Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.getEnvironment()).getMetaDataCache();
         PTable table = metaDataCache.getIfPresent(cacheKey);
-        
+       
         // We always cache the latest version - fault in if not in cache
         if (table != null || (table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP)) != null) {
             if (table.getTimeStamp() < clientTimeStamp) {
@@ -736,9 +760,41 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         if (results.isEmpty()) { // Should not be possible
             return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
         }
-        if (hasViews(region, tenantId, table)) {
-            return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
-        }
+
+        // Handle any child views that exist
+        TableViewFinderResult tableViewFinderResult = findChildViews(region, tenantId, table);
+        if (tableViewFinderResult.hasViews()) {
+        	if (isCascade) {
+		        if (tableViewFinderResult.allViewsInMultipleRegions()) {
+		            // We don't yet support deleting a table with views where SYSTEM.CATALOG has split and the 
+		        	// view metadata spans multiple regions
+		        	return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
+		        } else if (tableViewFinderResult.allViewsInSingleRegion()) {
+		        	// Recursively delete views - safe as all the views as all in the same region
+		        	for (Result viewResult : tableViewFinderResult.getResults()) {
+		                byte[][] rowKeyMetaData = new byte[3][];
+		                getVarChars(viewResult.getRow(), 3, rowKeyMetaData);
+		                byte[] viewTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
+		                byte[] viewSchemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
+		                byte[] viewName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+		            	byte[] viewKey = SchemaUtil.getTableKey(viewTenantId, viewSchemaName, viewName);
+		                Delete delete = new Delete(viewKey, clientTimeStamp);
+		                rowsToDelete.add(delete);
+		                acquireLock(region, viewKey, lids);
+		                MetaDataMutationResult result =
+		                        doDropTable(viewKey, viewTenantId, viewSchemaName, viewName, null, PTableType.VIEW,
+		                            rowsToDelete, invalidateList, lids, tableNamesToDelete, false);
+		                if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+		                    return result;
+		                }
+					}
+		        }	
+        	} else {
+            	// DROP without CASCADE on tables with child views is not permitted
+            	return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
+            }
+        } 
+        
         if (tableType != PTableType.VIEW) { // Add to list of HTables to delete, unless it's a view
             tableNamesToDelete.add(table.getName().getBytes());
         }
@@ -775,7 +831,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             Delete delete = new Delete(indexKey, clientTimeStamp, null);
             rowsToDelete.add(delete);
             acquireLock(region, indexKey, lids);
-            MetaDataMutationResult result = doDropTable(indexKey, tenantId, schemaName, indexName, tableName, PTableType.INDEX, rowsToDelete, invalidateList, lids, tableNamesToDelete);
+            MetaDataMutationResult result = doDropTable(indexKey, tenantId, schemaName, indexName, tableName, PTableType.INDEX, rowsToDelete, invalidateList, lids, tableNamesToDelete, false);
             if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                 return result;
             }
@@ -854,7 +910,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                     if (type != expectedType) {
                         return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
                     }
-                    if (hasViews(region, tenantId, table)) {
+                    if (findChildViews(region, tenantId, table).hasViews()) {
                         // Disallow any column mutations for parents of tenant tables
                         return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
                     }
@@ -977,7 +1033,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                                             byte[] linkKey = MetaDataUtil.getParentLinkKey(tenantId, schemaName, tableName, index.getTableName().getBytes());
                                             // Drop the link between the data table and the index table
                                             additionalTableMetaData.add(new Delete(linkKey, clientTimeStamp, null));
-                                            doDropTable(indexKey, tenantId, index.getSchemaName().getBytes(), index.getTableName().getBytes(), tableName, index.getType(), additionalTableMetaData, invalidateList, lids, tableNamesToDelete);
+                                            doDropTable(indexKey, tenantId, index.getSchemaName().getBytes(), index.getTableName().getBytes(), tableName, index.getType(), additionalTableMetaData, invalidateList, lids, tableNamesToDelete, false);
                                             // TODO: return in result?
                                         } else {
                                             invalidateList.add(new ImmutableBytesPtr(indexKey));
@@ -1246,5 +1302,46 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         }
         return new MetaDataMutationResult(MutationCode.TABLE_NOT_IN_REGION,
                 EnvironmentEdgeManager.currentTimeMillis(), null);
+    }
+    
+    /**
+     * Certain operations, such as DROP TABLE are not allowed if there a table has child views.
+     * This class wraps the Results of a scanning the Phoenix Metadata for child views for a specific table
+     * and stores an additional flag for whether whether SYSTEM.CATALOG has split across multiple regions.
+     */
+    private static class TableViewFinderResult {
+        
+        private List<Result> results = Lists.newArrayList();
+        private boolean allViewsNotInSingleRegion = false;
+        
+        private TableViewFinderResult(List<Result> results) {
+            this.results = results;
+        }
+        
+        public boolean hasViews() {
+            return results.size() > 0;
+        }
+
+        private void setAllViewsNotInSingleRegion() {
+            allViewsNotInSingleRegion = true;
+        }
+        
+        private List<Result> getResults() {
+            return results;
+        }
+        
+        /**
+         * Returns true is the table has views and they are all in the same HBase region.
+         */
+        private boolean allViewsInSingleRegion() {
+            return results.size() > 0 && !allViewsNotInSingleRegion;
+        }
+        
+        /**
+         * Returns true is the table has views and they are all NOT in the same HBase region.
+         */
+        private boolean allViewsInMultipleRegions() {
+            return results.size() > 0 && allViewsNotInSingleRegion;
+        }
     }
 }
