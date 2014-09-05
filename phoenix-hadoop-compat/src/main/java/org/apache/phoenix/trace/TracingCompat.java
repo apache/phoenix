@@ -49,11 +49,11 @@ public class TracingCompat {
     public static final String METRICS_MARKER_CONTEXT = "marker";
 
     public static void addAnnotation(Span span, String message, int value) {
-        span.addKVAnnotation(message.getBytes(), Bytes.toBytes(value));
+        span.addKVAnnotation(message.getBytes(), Bytes.toBytes(Integer.toString(value)));
     }
 
     public static Pair<String, String> readAnnotation(byte[] key, byte[] value) {
-        return new Pair<String, String>(new String(key), Integer.toString(Bytes.toInt(value)));
+        return new Pair<String, String>(new String(key), Bytes.toString(value));
     }
 
     public static MetricsWriter initializeWriter(String clazz) {
