@@ -685,7 +685,7 @@ public class WhereOptimizer {
                     for (KeySlot slot : childSlot) {
                         // We have a nested OR with nothing for this slot, so continue
                         if (slot == null) {
-                            continue; // FIXME: I don't think this is ever necessary
+                            return null; //If one childSlot does not have the PK columns, let Phoenix scan all the key ranges of the table. 
                         }
                         /*
                          * If we see a different PK column than before, we can't
