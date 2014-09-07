@@ -1867,7 +1867,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public long updateStatistics(final byte[] tenantId, final byte[] schemaName, final byte[] tableName)
+    public long updateStatistics(final byte[] tenantId, final byte[] schemaName, final byte[] tableName, final String url)
             throws SQLException {
         HTableInterface ht = null;
         try {
@@ -1882,6 +1882,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     builder.setTableNameBytes(HBaseZeroCopyByteString.wrap(tableName));
                     builder.setTenantIdBytes(HBaseZeroCopyByteString.wrap(tenantId));
                     builder.setSchemaNameBytes(HBaseZeroCopyByteString.wrap(schemaName));
+                    builder.setUrl(url);
                     service.collectStat(controller, builder.build(), rpcCallback);
                     if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
                     return rpcCallback.get();

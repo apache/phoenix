@@ -677,7 +677,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
                 @Override
                 public ExplainPlan getExplainPlan() throws SQLException {
-                    return new ExplainPlan(Collections.singletonList("UPDATE STATISTICS"));
+                    return new ExplainPlan(Collections.singletonList("ANALYZE"));
                 }
 
                 @Override

@@ -228,7 +228,7 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public long updateStatistics(byte[] tenantId, byte[] schemaName, byte[] tableName) throws SQLException {
-        return getDelegate().updateStatistics(tenantId, schemaName, tableName);
+    public long updateStatistics(byte[] tenantId, byte[] schemaName, byte[] tableName, String url) throws SQLException {
+        return getDelegate().updateStatistics(tenantId, schemaName, tableName, url);
     }
 }

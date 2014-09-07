@@ -75,11 +75,11 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         desc.addCoprocessor(StatisticsCollector.class.getName());
     }
 
-    private Map<byte[], byte[]> minMap = new TreeMap<byte[], byte[]>(Bytes.BYTES_COMPARATOR);
-    private Map<byte[], byte[]> maxMap = new TreeMap<byte[], byte[]>(Bytes.BYTES_COMPARATOR);
+    private Map<String, byte[]> minMap = new TreeMap<String, byte[]>();
+    private Map<String, byte[]> maxMap = new TreeMap<String, byte[]>();
     private long guidepostDepth;
     private long byteCount = 0;
-    private TreeMap<byte[], List<byte[]>> guidePostsMap = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
+    private TreeMap<String, List<byte[]>> guidePostsMap = new TreeMap<String, List<byte[]>>();
     private Set<byte[]> familyMap = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
     private RegionCoprocessorEnvironment env;
     protected StatisticsTable stats;
@@ -125,7 +125,6 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     private void writeStatsToStatsTable(final StatCollectRequest request, final HRegion region,
             final RegionScanner scanner, final boolean fullTableUpdate) throws IOException {
         scanner.close();
-        IOException toThrow = null;
         try {
             // update the statistics table
             for (byte[] fam : familyMap) {
@@ -134,11 +133,10 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
                     tableKey = SchemaUtil.getTableKey(request.getTenantIdBytes().toByteArray(), request
                             .getSchemaNameBytes().toByteArray(), request.getTableNameBytes().toByteArray());
                 } else {
-                    // hope thisworks
                     tableKey = SchemaUtil.getTableKeyFromFullName(region.getRegionInfo().getTable().getNameAsString());
                 }
-                stats.updateStats(tableKey, Bytes.toBytes(region.getRegionInfo().getRegionNameAsString()), this, fam,
-                        fullTableUpdate);
+                stats.updateStats(Bytes.toString(tableKey), (region.getRegionInfo().getRegionNameAsString()), this,
+                        Bytes.toString(fam), fullTableUpdate, request.getUrl());
             }
         } catch (IOException e) {
             LOG.error("Failed to update statistics table!", e);
@@ -276,8 +274,9 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
 
     @Override
     public void updateStatistic(KeyValue kv) {
-        byte[] fam = kv.getFamily();
-        familyMap.add(fam);
+        byte[] cf = kv.getFamily();
+        familyMap.add(cf);
+        String fam = Bytes.toString(cf);
         if (!minMap.containsKey(fam) && !maxMap.containsKey(fam)) {
             minMap.put(fam, StatisticsUtils.copyRow(kv));
             // Ideally the max key also should be added in this case
@@ -309,19 +308,19 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     }
 
     @Override
-    public byte[] getMaxKey(byte[] fam) {
+    public byte[] getMaxKey(String fam) {
         if (maxMap.get(fam) != null) { return maxMap.get(fam); }
         return null;
     }
 
     @Override
-    public byte[] getMinKey(byte[] fam) {
+    public byte[] getMinKey(String fam) {
         if (minMap.get(fam) != null) { return minMap.get(fam); }
         return null;
     }
 
     @Override
-    public byte[] getGuidePosts(byte[] fam) {
+    public byte[] getGuidePosts(String fam) {
         if (!guidePostsMap.isEmpty()) {
             List<byte[]> guidePosts = guidePostsMap.get(fam);
             if (guidePosts != null) {

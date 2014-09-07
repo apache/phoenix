@@ -32,4 +32,5 @@ public interface PTableStats {
      */
     TreeMap<byte[], List<byte[]>> getGuidePosts();
 
+    long getEstimatedSize();
 }

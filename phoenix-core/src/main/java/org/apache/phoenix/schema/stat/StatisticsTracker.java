@@ -42,7 +42,7 @@ public interface StatisticsTracker {
      * @param fam
      * @return
      */
-    public byte[] getMaxKey(byte[] fam);
+    public byte[] getMaxKey(String fam);
 
     /**
      * Return the min key of the family
@@ -50,7 +50,7 @@ public interface StatisticsTracker {
      * @param fam
      * @return
      */
-    public byte[] getMinKey(byte[] fam);
+    public byte[] getMinKey(String fam);
 
     /**
      * Return the guide posts of the family
@@ -58,5 +58,5 @@ public interface StatisticsTracker {
      * @param fam
      * @return
      */
-    public byte[] getGuidePosts(byte[] fam);
+    public byte[] getGuidePosts(String fam);
 }

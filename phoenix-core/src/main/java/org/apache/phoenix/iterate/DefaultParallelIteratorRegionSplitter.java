@@ -20,34 +20,27 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.Set;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.stat.PTableStats;
 import org.apache.phoenix.schema.stat.StatisticsConstants;
 import org.apache.phoenix.util.ReadOnlyProps;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
-import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Iterables;
-import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 
 
@@ -127,87 +120,66 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         return Lists.newArrayList(regions);
     }
 
-    protected List<KeyRange> genKeyRanges(List<HRegionLocation> regions, Scan scan) {
+    protected List<KeyRange> genKeyRanges(List<HRegionLocation> regions) {
         if (regions.isEmpty()) {
             return Collections.emptyList();
         }
-        PTableStats tableStats = this.tableRef.getTable().getTableStats();
-        Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
+        List<PColumnFamily> columnFamilies = this.tableRef.getTable().getColumnFamilies();
         // We have the guide posts per column family. We need to return atleast those many keyranges that is 
         // equal to the number of regions. 
         // The guide posts here may be spread across all the regions or the entire data may be spread across few regions
         // After we take the intersection of the available guide posts with the region start and end keys, we have to 
         // add the remaining guide posts with the intersected key ranges
-        List<KeyRange> splits = Lists.newArrayListWithCapacity(regions.size()); 
-        ListMultimap<HRegionLocation,KeyRange> keyRangesPerRegion = ArrayListMultimap.create(regions.size(),regions.size());
-        ListMultimap<byte[],List<KeyRange>> guidePostsPerCf = ArrayListMultimap.create(regions.size(),regions.size());
-        if (regions.size() == 1) {
-            for (HRegionLocation region : regions) {
-                splits.add(ParallelIterators.TO_KEY_RANGE.apply(region));
-            }
-            return splits;
-        } else {
-            List<KeyRange> regionStartEndKey = Lists.newArrayListWithExpectedSize(regions.size());
-            Set<byte[]> keySet = familyMap.keySet();
-            // Map<byte[], List<KeyRange>> guidePostsPerCf = Maps.newHashMapWithExpectedSize(keySet.size());
-            List<KeyRange> guidePosts = Lists.newArrayListWithCapacity(regions.size());
-            for (byte[] fam : keySet) {
-                List<byte[]> gps = null;
-                try {
-                    gps = this.tableRef.getTable().getColumnFamily(fam).getGuidePosts();
-                } catch (ColumnFamilyNotFoundException e) {
-                    new SQLException("Column "+Bytes.toString(fam)+ "  not found", e);
-                }
-                if (gps != null) {
-                    for (byte[] guidePost : gps) {
-                        PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePost);
-                        if (array != null && array.getDimensions() != 0) {
-                            
-                            if (array.getDimensions() > 1) {
-                                // Should we really do like this or as we already have the byte[]
-                                // of guide posts just use them
-                                // per region?
-
-                                // Adding all the collected guideposts to the key ranges
-                                guidePosts.add(KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY, array.toBytes(0)));
-                                for (int i = 1; i < array.getDimensions() - 2; i++) {
-                                    guidePosts.add(KeyRange.getKeyRange(array.toBytes(i), (array.toBytes(i + 1))));
-                                }
-                                guidePosts.add(KeyRange.getKeyRange(array.toBytes(array.getDimensions() - 2),
-                                        (array.toBytes(array.getDimensions() - 1))));
-                                guidePosts.add(KeyRange.getKeyRange(array.toBytes(array.getDimensions() - 1),
-                                        (HConstants.EMPTY_BYTE_ARRAY)));
-                                
-                            } else {
-                                byte[] gp = array.toBytes(0);
-                                // guidePosts.add(KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY, true, ScanUtil.createStopKey(gp),
-                                // true));
-                                guidePosts.add(KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY, gp));
-                                guidePosts.add(KeyRange.getKeyRange(gp, HConstants.EMPTY_BYTE_ARRAY));
+        List<KeyRange> regionStartEndKey = Lists.newArrayListWithExpectedSize(regions.size());
+        // Map<byte[], List<KeyRange>> guidePostsPerCf = Maps.newHashMapWithExpectedSize(keySet.size());
+        List<KeyRange> guidePosts = Lists.newArrayListWithCapacity(regions.size());
+        for (PColumnFamily fam : columnFamilies) {
+            List<byte[]> gps = fam.getGuidePosts();
+            if (gps != null) {
+                for (byte[] guidePost : gps) {
+                    PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePost);
+                    if (array != null && array.getDimensions() != 0) {
+                        if (array.getDimensions() > 1) {
+                            // Should we really do like this or as we already have the byte[]
+                            // of guide posts just use them
+                            // per region?
+                            // Adding all the collected guideposts to the key ranges
+                            guidePosts.add(KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY, array.toBytes(0)));
+                            for (int i = 1; i < array.getDimensions() - 2; i++) {
+                                guidePosts.add(KeyRange.getKeyRange(array.toBytes(i), (array.toBytes(i + 1))));
                             }
+                            guidePosts.add(KeyRange.getKeyRange(array.toBytes(array.getDimensions() - 2),
+                                    (array.toBytes(array.getDimensions() - 1))));
+                            guidePosts.add(KeyRange.getKeyRange(array.toBytes(array.getDimensions() - 1),
+                                    (HConstants.EMPTY_BYTE_ARRAY)));
+
+                        } else {
+                            byte[] gp = array.toBytes(0);
+                            guidePosts.add(KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY, gp));
+                            guidePosts.add(KeyRange.getKeyRange(gp, HConstants.EMPTY_BYTE_ARRAY));
                         }
                     }
                 }
             }
-            for(HRegionLocation region : regions) {
-                regionStartEndKey.add(KeyRange.getKeyRange(region.getRegionInfo().getStartKey(), region.getRegionInfo()
-                        .getEndKey()));
-            }
-            if (guidePosts.size() > 0) {
-                List<KeyRange> intersect = KeyRange.intersect(guidePosts, regionStartEndKey);
-                return intersect;
-            } else {
-                // atleast region based split should happen.
-                // Will it better to have the splits per region concept here? so that
-                // within a region we could still parallelize?
-                return regionStartEndKey;
-            }
+        }
+        for (HRegionLocation region : regions) {
+            regionStartEndKey.add(KeyRange.getKeyRange(region.getRegionInfo().getStartKey(), region.getRegionInfo()
+                    .getEndKey()));
+        }
+        if (guidePosts.size() > 0) {
+            List<KeyRange> intersect = KeyRange.intersect(guidePosts, regionStartEndKey);
+            return intersect;
+        } else {
+            // atleast region based split should happen.
+            // Will it better to have the splits per region concept here? so that
+            // within a region we could still parallelize?
+            return regionStartEndKey;
         }
     }
 
     @Override
     public List<KeyRange> getSplits() throws SQLException {
-        return genKeyRanges(getAllRegions(), context.getScan());
+        return genKeyRanges(getAllRegions());
     }
 
     @Override

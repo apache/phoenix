@@ -60,6 +60,21 @@ public final class StatCollectorProtos {
      * <code>optional bytes stopRow = 5;</code>
      */
     com.google.protobuf.ByteString getStopRow();
+
+    // required string url = 6;
+    /**
+     * <code>required string url = 6;</code>
+     */
+    boolean hasUrl();
+    /**
+     * <code>required string url = 6;</code>
+     */
+    java.lang.String getUrl();
+    /**
+     * <code>required string url = 6;</code>
+     */
+    com.google.protobuf.ByteString
+        getUrlBytes();
   }
   /**
    * Protobuf type {@code StatCollectRequest}
@@ -135,6 +150,11 @@ public final class StatCollectorProtos {
             case 42: {
               bitField0_ |= 0x00000010;
               stopRow_ = input.readBytes();
+              break;
+            }
+            case 50: {
+              bitField0_ |= 0x00000020;
+              url_ = input.readBytes();
               break;
             }
           }
@@ -257,12 +277,56 @@ public final class StatCollectorProtos {
       return stopRow_;
     }
 
+    // required string url = 6;
+    public static final int URL_FIELD_NUMBER = 6;
+    private java.lang.Object url_;
+    /**
+     * <code>required string url = 6;</code>
+     */
+    public boolean hasUrl() {
+      return ((bitField0_ & 0x00000020) == 0x00000020);
+    }
+    /**
+     * <code>required string url = 6;</code>
+     */
+    public java.lang.String getUrl() {
+      java.lang.Object ref = url_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        if (bs.isValidUtf8()) {
+          url_ = s;
+        }
+        return s;
+      }
+    }
+    /**
+     * <code>required string url = 6;</code>
+     */
+    public com.google.protobuf.ByteString
+        getUrlBytes() {
+      java.lang.Object ref = url_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        url_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
     private void initFields() {
       tenantIdBytes_ = com.google.protobuf.ByteString.EMPTY;
       schemaNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       tableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       startRow_ = com.google.protobuf.ByteString.EMPTY;
       stopRow_ = com.google.protobuf.ByteString.EMPTY;
+      url_ = "";
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -278,6 +342,10 @@ public final class StatCollectorProtos {
         return false;
       }
       if (!hasTableNameBytes()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasUrl()) {
         memoizedIsInitialized = 0;
         return false;
       }
@@ -302,6 +370,9 @@ public final class StatCollectorProtos {
       }
       if (((bitField0_ & 0x00000010) == 0x00000010)) {
         output.writeBytes(5, stopRow_);
+      }
+      if (((bitField0_ & 0x00000020) == 0x00000020)) {
+        output.writeBytes(6, getUrlBytes());
       }
       getUnknownFields().writeTo(output);
     }
@@ -331,6 +402,10 @@ public final class StatCollectorProtos {
       if (((bitField0_ & 0x00000010) == 0x00000010)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(5, stopRow_);
+      }
+      if (((bitField0_ & 0x00000020) == 0x00000020)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(6, getUrlBytes());
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -380,6 +455,11 @@ public final class StatCollectorProtos {
         result = result && getStopRow()
             .equals(other.getStopRow());
       }
+      result = result && (hasUrl() == other.hasUrl());
+      if (hasUrl()) {
+        result = result && getUrl()
+            .equals(other.getUrl());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -412,6 +492,10 @@ public final class StatCollectorProtos {
       if (hasStopRow()) {
         hash = (37 * hash) + STOPROW_FIELD_NUMBER;
         hash = (53 * hash) + getStopRow().hashCode();
+      }
+      if (hasUrl()) {
+        hash = (37 * hash) + URL_FIELD_NUMBER;
+        hash = (53 * hash) + getUrl().hashCode();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -532,6 +616,8 @@ public final class StatCollectorProtos {
         bitField0_ = (bitField0_ & ~0x00000008);
         stopRow_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x00000010);
+        url_ = "";
+        bitField0_ = (bitField0_ & ~0x00000020);
         return this;
       }
 
@@ -580,6 +666,10 @@ public final class StatCollectorProtos {
           to_bitField0_ |= 0x00000010;
         }
         result.stopRow_ = stopRow_;
+        if (((from_bitField0_ & 0x00000020) == 0x00000020)) {
+          to_bitField0_ |= 0x00000020;
+        }
+        result.url_ = url_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -611,6 +701,11 @@ public final class StatCollectorProtos {
         if (other.hasStopRow()) {
           setStopRow(other.getStopRow());
         }
+        if (other.hasUrl()) {
+          bitField0_ |= 0x00000020;
+          url_ = other.url_;
+          onChanged();
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
       }
@@ -625,6 +720,10 @@ public final class StatCollectorProtos {
           return false;
         }
         if (!hasTableNameBytes()) {
+          
+          return false;
+        }
+        if (!hasUrl()) {
           
           return false;
         }
@@ -826,6 +925,80 @@ public final class StatCollectorProtos {
       public Builder clearStopRow() {
         bitField0_ = (bitField0_ & ~0x00000010);
         stopRow_ = getDefaultInstance().getStopRow();
+        onChanged();
+        return this;
+      }
+
+      // required string url = 6;
+      private java.lang.Object url_ = "";
+      /**
+       * <code>required string url = 6;</code>
+       */
+      public boolean hasUrl() {
+        return ((bitField0_ & 0x00000020) == 0x00000020);
+      }
+      /**
+       * <code>required string url = 6;</code>
+       */
+      public java.lang.String getUrl() {
+        java.lang.Object ref = url_;
+        if (!(ref instanceof java.lang.String)) {
+          java.lang.String s = ((com.google.protobuf.ByteString) ref)
+              .toStringUtf8();
+          url_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>required string url = 6;</code>
+       */
+      public com.google.protobuf.ByteString
+          getUrlBytes() {
+        java.lang.Object ref = url_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          url_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>required string url = 6;</code>
+       */
+      public Builder setUrl(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000020;
+        url_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required string url = 6;</code>
+       */
+      public Builder clearUrl() {
+        bitField0_ = (bitField0_ & ~0x00000020);
+        url_ = getDefaultInstance().getUrl();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required string url = 6;</code>
+       */
+      public Builder setUrlBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000020;
+        url_ = value;
         onChanged();
         return this;
       }
@@ -1534,15 +1707,16 @@ public final class StatCollectorProtos {
       descriptor;
   static {
     java.lang.String[] descriptorData = {
-      "\n\027StatisticsCollect.proto\"\177\n\022StatCollect" +
-      "Request\022\025\n\rtenantIdBytes\030\001 \002(\014\022\027\n\017schema" +
-      "NameBytes\030\002 \002(\014\022\026\n\016tableNameBytes\030\003 \002(\014\022" +
-      "\020\n\010startRow\030\004 \001(\014\022\017\n\007stopRow\030\005 \001(\014\"*\n\023St" +
-      "atCollectResponse\022\023\n\013rowsScanned\030\001 \002(\0042N" +
-      "\n\022StatCollectService\0228\n\013collectStat\022\023.St" +
-      "atCollectRequest\032\024.StatCollectResponseBG" +
-      "\n(org.apache.phoenix.coprocessor.generat" +
-      "edB\023StatCollectorProtosH\001\210\001\001\240\001\001"
+      "\n\027StatisticsCollect.proto\"\214\001\n\022StatCollec" +
+      "tRequest\022\025\n\rtenantIdBytes\030\001 \002(\014\022\027\n\017schem" +
+      "aNameBytes\030\002 \002(\014\022\026\n\016tableNameBytes\030\003 \002(\014" +
+      "\022\020\n\010startRow\030\004 \001(\014\022\017\n\007stopRow\030\005 \001(\014\022\013\n\003u" +
+      "rl\030\006 \002(\t\"*\n\023StatCollectResponse\022\023\n\013rowsS" +
+      "canned\030\001 \002(\0042N\n\022StatCollectService\0228\n\013co" +
+      "llectStat\022\023.StatCollectRequest\032\024.StatCol" +
+      "lectResponseBG\n(org.apache.phoenix.copro" +
+      "cessor.generatedB\023StatCollectorProtosH\001\210" +
+      "\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -1554,7 +1728,7 @@ public final class StatCollectorProtos {
           internal_static_StatCollectRequest_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_StatCollectRequest_descriptor,
-              new java.lang.String[] { "TenantIdBytes", "SchemaNameBytes", "TableNameBytes", "StartRow", "StopRow", });
+              new java.lang.String[] { "TenantIdBytes", "SchemaNameBytes", "TableNameBytes", "StartRow", "StopRow", "Url", });
           internal_static_StatCollectResponse_descriptor =
             getDescriptor().getMessageTypes().get(1);
           internal_static_StatCollectResponse_fieldAccessorTable = new

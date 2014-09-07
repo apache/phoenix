@@ -16,12 +16,15 @@
  * limitations under the License.
  */
 package org.apache.phoenix.schema.stat;
+import java.io.IOException;
 import java.util.Arrays;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 /**
  * Simple utility class for managing multiple key parts of the statistic
  */
@@ -34,35 +37,17 @@ public class StatisticsUtils {
     /** Number of parts in our complex key */
     protected static final int NUM_KEY_PARTS = 3;
 
-    /**
-     * Get the prefix based on the region, column and name of the statistic
-     * 
-     * @param table
-     *            name of the source table
-     * @param region
-     *            name of the region where the statistic was gathered
-     * @param column
-     *            column for which the statistic was gathered
-     * @return the row key that should be used for this statistic
-     */
-    public static byte[] getRowKey(byte[] table, byte[] region, byte[] column) {
+    public static byte[] getRowKey(byte[] table, byte[] fam, byte[] region) throws IOException {
         // always starts with the source table
-        byte[] prefix = new byte[0];
-        // then append each part of the key and
-        byte[][] parts = new byte[][] { table, region, column };
-        int[] sizes = new int[NUM_KEY_PARTS];
-        for (int i = 0; i < NUM_KEY_PARTS; i++) {
-            prefix = Bytes.add(prefix, parts[i]);
-            sizes[i] = parts[i].length;
-        }
-        // then we add on the sizes to the end of the key
-        // We could use this size to later retrieve the number of bytes used for
-        // each part so that
-        // the stats could be grouped
-        for (int size : sizes) {
-            prefix = Bytes.add(prefix, Bytes.toBytes(size));
-        }
-        return prefix;
+        TrustedByteArrayOutputStream os = new TrustedByteArrayOutputStream(table.length + region.length + fam.length
+                + (NUM_KEY_PARTS - 1));
+        os.write(table);
+        os.write(QueryConstants.SEPARATOR_BYTE_ARRAY);
+        os.write(fam);
+        os.write(QueryConstants.SEPARATOR_BYTE_ARRAY);
+        os.write(region);
+        os.close();
+        return os.getBuffer();
     }
 
     /**
@@ -89,6 +74,25 @@ public class StatisticsUtils {
                 - ((Bytes.SIZEOF_INT * 2)), Bytes.SIZEOF_INT);
         byte[] cf = new byte[cfLength];
         System.arraycopy(cell.getRowArray(), cell.getRowOffset() + tableKeyLength, cf, 0,
+                cfLength);
+        return cf;
+    }
+    
+   public static byte[] getCFFromRowKey(byte[] table, byte[] row, int rowOffset, int rowLength) {
+       // Move over the the sepeartor byte that would be written after the table name
+        int startOff = Bytes.indexOf(row, table) + (table.length);
+        int endOff = startOff;
+        while (endOff < rowLength) {
+            // Check for next seperator byte
+            if (row[endOff] != QueryConstants.SEPARATOR_BYTE) {
+                endOff++;
+            } else {
+                break;
+            }
+        }
+        int cfLength = endOff - startOff;
+        byte[] cf = new byte[cfLength];
+        System.arraycopy(row, startOff, cf, 0,
                 cfLength);
         return cf;
     }

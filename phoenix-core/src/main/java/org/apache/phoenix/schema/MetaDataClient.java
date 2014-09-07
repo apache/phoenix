@@ -478,6 +478,16 @@ public class MetaDataClient {
         // TODO : Check if we need the table key type of table name here. 
         // May be we can avoid multiple calls from the 
         // same connection
+        byte[] tenantIdBytes = QueryConstants.EMPTY_BYTE_ARRAY;
+        // TODO : If tenantId is not null we may have to get the actual table name (PTable.getPhysicalName)
+        if (connection.getTenantId() != null) {
+            tenantIdBytes = connection.getTenantId().getBytes();
+        }
+        byte[] schemaNameBytes = QueryConstants.EMPTY_BYTE_ARRAY;
+        if (connection.getSchema() != null) {
+            schemaNameBytes = Bytes.toBytes(connection.getSchema());
+        }
+        String tableKey = Bytes.toString(SchemaUtil.getTableKey(tenantIdBytes, schemaNameBytes, Bytes.toBytes(tableName)));
         try {
             if (inProgress.get() > 0) {
                 // Already in progress
@@ -487,26 +497,21 @@ public class MetaDataClient {
            // String query = "SELECT " + LAST_STATS_UPDATE_TIME_IN_MS + " FROM " + SYSTEM_CATALOG_SCHEMA + "."
              //       + SYSTEM_STATS_TABLE +" WHERE " + TABLE_NAME + " ='" + tableName + "'";
             // TODO : The below select query does not work due to some reason. Make sure it works.
-            String query = "SELECT " + LAST_STATS_UPDATE_TIME_IN_MS + " FROM " + SYSTEM_CATALOG_SCHEMA + "."
-                          + SYSTEM_STATS_TABLE ;
+            String query = "SELECT " +TABLE_NAME+", " +LAST_STATS_UPDATE_TIME_IN_MS +" FROM " + SYSTEM_CATALOG_SCHEMA + "."
+                          + SYSTEM_STATS_TABLE;
             ResultSet rs = connection.createStatement().executeQuery(query);
             long lastUpdatedTime = 0;
-            if(rs.next()) {
-                lastUpdatedTime = rs.getLong(1);
+            String tableNameFromStats = null;
+            while(rs.next()) {
+                tableNameFromStats = rs.getString(1);
+                if (tableNameFromStats != null && tableNameFromStats.equals(tableKey)) {
+                    lastUpdatedTime = rs.getLong(2);
+                }
             }
-            if (TimeKeeper.SYSTEM.getCurrentTime() + lastUpdatedTime > minTimeForStatsUpdate) {
+            if (TimeKeeper.SYSTEM.getCurrentTime() - lastUpdatedTime > minTimeForStatsUpdate) {
                 // We need to update the stats table
-                byte[] tenantIdBytes = QueryConstants.EMPTY_BYTE_ARRAY;
-                // TODO : If tenantId is not null we may have to get the actual table name (PTable.getPhysicalName)
-                if (connection.getTenantId() != null) {
-                    tenantIdBytes = connection.getTenantId().getBytes();
-                }
-                byte[] schemaNameBytes = QueryConstants.EMPTY_BYTE_ARRAY;
-                if (connection.getSchema() != null) {
-                    schemaNameBytes = Bytes.toBytes(connection.getSchema());
-                }
                 long count = connection.getQueryServices().updateStatistics(tenantIdBytes, schemaNameBytes,
-                        Bytes.toBytes(tableName));
+                        Bytes.toBytes(tableName), connection.getURL());
                 // Remove from the metadata cache also
                 // Ensure getTable is called again
                 updateCache(Bytes.toString(schemaNameBytes), tableName, true);

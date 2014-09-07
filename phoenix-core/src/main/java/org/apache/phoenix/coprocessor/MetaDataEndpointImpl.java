@@ -700,14 +700,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         if (schemaName != null) {
             schNameInBytes = Bytes.toBytes(schemaName.getString());
         }
-        PTableStats stats = updateStatsInternal(SchemaUtil.getTableKey(tenIdBytes, schNameInBytes, tableNameBytes), columns);
+        byte[] tableKey = SchemaUtil.getTableKey(tenIdBytes, schNameInBytes , PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+        ImmutableBytesPtr key = new ImmutableBytesPtr(tableKey);
+        Cache<ImmutableBytesPtr, PTable> metaDataCache =
+                GlobalCache.getInstance(this.env).getMetaDataCache();
+        PTable statsPTable = metaDataCache.getIfPresent(key);
+        PTableStats stats = updateStatsInternal(SchemaUtil.getTableKey(tenIdBytes, schNameInBytes, tableNameBytes), columns, statsPTable);
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, 
             tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? dataTableName : null, 
             indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement, disableWAL, 
             multiTenant, viewType, viewIndexId, indexType, stats);
     }
 
-    private PTableStats updateStatsInternal(byte[] tableNameBytes, List<PColumn> columns)
+    private PTableStats updateStatsInternal(byte[] tableNameBytes, List<PColumn> columns, PTable statsPTable)
             throws IOException {
         List<PName> family = Lists.newArrayListWithExpectedSize(columns.size());
         for (PColumn column : columns) {
@@ -716,17 +721,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 family.add(familyName);
             }
         }
-        HTable statsTable = null;
+        HTable statsHTable = null;
         try {
             // Can we do a new HTable instance here? Or get it from a pool or cache of these instances?
-            statsTable = new HTable(this.env.getConfiguration(),
+            statsHTable = new HTable(this.env.getConfiguration(),
                     PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
             Scan s = new Scan();
             if (tableNameBytes != null) {
                 s.setStartRow(tableNameBytes);
                 s.setStopRow(createStopRow(tableNameBytes));
             }
-            ResultScanner scanner = statsTable.getScanner(s);
+            ResultScanner scanner = statsHTable.getScanner(s);
             Result result = null;
             byte[] fam = null;
             List<byte[]> guidePosts = new ArrayList<byte[]>();
@@ -735,7 +740,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 CellScanner cellScanner = result.cellScanner();
                 while (cellScanner.advance()) {
                     Cell current = cellScanner.current();
-                    byte[] cfInCell = StatisticsUtils.getCFFromRowKey(tableNameBytes, current);
+                    byte[] cfInCell = StatisticsUtils.getCFFromRowKey(tableNameBytes, current.getRowArray(),
+                            current.getRowOffset(), current.getRowLength());
                     if (fam == null) {
                         fam = cfInCell;
                     } else if (!Bytes.equals(fam, cfInCell)) {
@@ -764,8 +770,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 throw new IOException(e);
             }
         } finally {
-            if (statsTable != null) {
-                statsTable.close();
+            if (statsHTable != null) {
+                statsHTable.close();
             }
         }
         return PTableStatsImpl.NO_STATS;
@@ -1003,10 +1009,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         try {
             HTableInterface hTable = pool.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
             try {
-                ResultScanner scanner = hTable.getScanner(scan);
+                RegionScanner scanner = region.getScanner(scan);
                 try {
-                    Result result = scanner.next();
-                    return result != null;
+                    List<Cell> res = new ArrayList<Cell>();
+                    boolean result = scanner.next(res);
+                    return result == true;
                 }
                 finally {
                     scanner.close();

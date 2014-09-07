@@ -11,6 +11,7 @@ message StatCollectRequest {
   required bytes tableNameBytes = 3;
   optional bytes startRow = 4;
   optional bytes stopRow = 5;
+  required string url = 6;
 }
 
 message StatCollectResponse {

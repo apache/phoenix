@@ -906,17 +906,6 @@ public class PTableImpl implements PTable {
                 value[j] = pTableStatsProto.getValues(j).toByteArray();
             }
       }
-/*      Map<String, byte[]> maxKey = new HashMap<String, byte[]>();
-        for (PTableProtos.PTableStats pTableStatsProto : table.getMaxKeyList()) {
-          byte[] value = pTableStatsProto.getValues().toByteArray();
-          maxKey.put(pTableStatsProto.getKey(), value);
-        }
-
-        Map<String, byte[]> minKey = new HashMap<String, byte[]>();
-        for (PTableProtos.PTableStats pTableStatsProto : table.getMinKeyList()) {
-          byte[] value = pTableStatsProto.getValues().toByteArray();
-          minKey.put(pTableStatsProto.getKey(), value);
-      }*/
       PName dataTableName = null;
       if (table.hasDataTableNameBytes()) {
         dataTableName = PNameFactory.newName(table.getDataTableNameBytes().toByteArray());
@@ -1031,25 +1020,6 @@ public class PTableImpl implements PTable {
              }
          }
       }
-            
-/*            Map<String, byte[]> maxKey = table.getTableStats().getMaxKey();
-            if (maxKey != null) {
-                for (Entry<String, byte[]> entry : maxKey.entrySet()) {
-                    PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();
-                    statsBuilder.setKey(entry.getKey());
-                    statsBuilder.setValues(HBaseZeroCopyByteString.wrap(entry.getValue()));
-                    builder.addMaxKey(statsBuilder.build());
-                }
-            }
-            Map<String, byte[]> minKey = table.getTableStats().getMinKey();
-            if (minKey != null) {
-                for (Entry<String, byte[]> entry : maxKey.entrySet()) {
-                    PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();
-                    statsBuilder.setKey(entry.getKey());
-                    statsBuilder.setValues(HBaseZeroCopyByteString.wrap(entry.getValue()));
-                    builder.addMinKey(statsBuilder.build());
-                }
-            }*/
         
       if (table.getParentName() != null) {
         builder.setDataTableNameBytes(HBaseZeroCopyByteString.wrap(table.getParentTableName().getBytes()));

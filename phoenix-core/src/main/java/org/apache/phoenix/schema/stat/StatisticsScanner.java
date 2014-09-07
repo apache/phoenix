@@ -88,8 +88,8 @@ public class StatisticsScanner implements InternalScanner {
       // Just verify if this if fine
       byte[] tableKey = SchemaUtil.getTableKeyFromFullName(region.getTable().getNameAsString());
       stats.updateStats(
-          tableKey, Bytes.toBytes(region
-              .getRegionNameAsString()), this.tracker, family, true);
+          Bytes.toString(tableKey), region
+              .getRegionNameAsString(), this.tracker, Bytes.toString(family), true, null);
     } catch (IOException e) {
       LOG.error("Failed to update statistics table!", e);
       toThrow = e;

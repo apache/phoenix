@@ -190,7 +190,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public long updateStatistics(byte[] tenantId, byte[] schemaName, byte[] tableName) throws SQLException {
+    public long updateStatistics(byte[] tenantId, byte[] schemaName, byte[] tableName, String url) throws SQLException {
         // Noop
         return 0;
     }

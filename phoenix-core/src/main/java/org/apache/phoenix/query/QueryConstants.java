@@ -233,7 +233,7 @@ public interface QueryConstants {
             TABLE_NAME  + " VARCHAR NOT NULL," +
             COLUMN_NAME + " VARCHAR," +
             REGION_NAME + " VARCHAR," +
-            GUIDE_POSTS  + " VARBINARY[]," +
+            GUIDE_POSTS  + " VARBINARY," +
             MIN_KEY + " VARBINARY," + 
             MAX_KEY + " VARBINARY," +
             LAST_STATS_UPDATE_TIME_IN_MS+ " BIGINT, "+
