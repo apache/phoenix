@@ -181,13 +181,4 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
     public List<KeyRange> getSplits() throws SQLException {
         return genKeyRanges(getAllRegions());
     }
-
-    @Override
-    public int getSplitsPerRegion(int numRegions) {
-      int splitsPerRegion =
-          numRegions >= targetConcurrency ? 1
-                  : (numRegions > targetConcurrency / 2 ? maxConcurrency : targetConcurrency)
-                          / numRegions;
-  return Math.min(splitsPerRegion, maxIntraRegionParallelization);
-    }
 }

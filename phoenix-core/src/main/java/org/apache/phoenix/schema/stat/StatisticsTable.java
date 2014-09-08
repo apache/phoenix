@@ -32,7 +32,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.logging.Log;
@@ -70,7 +72,6 @@ public class StatisticsTable implements Closeable {
             MAX_KEY + "," +
             GUIDE_POSTS  +
             ") VALUES (?, ?, ?, ?, ?, ? , ?)";
-
     /**
      * @param env
      *            Environment wherein the coprocessor is attempting to update the stats table.
@@ -114,23 +115,24 @@ public class StatisticsTable implements Closeable {
     }
 
     /**
-     * Update a list of statistics for the given region
-     * 
-     * @param serializer
-     *            to convert the actual statistics to puts in the statistics table
-     * @param tracker
-     * @param fam
-     * @param fullTableUpdate
-     * @param url 
+     * Update a list of statistics for a given region.  If the ANALYZE <tablename> query is issued
+     * then we use Upsert queries to update the table
+     * If the region gets splitted or the major compaction happens we update using HTable.put()
+     * @param tablekey
+     *            The table name formed by combining the tenantid, schemaid and table name
+     * @param region name -  the region of the table for which the stats are collected
+     * @param tracker - the statistics tracker
+     * @param fam -  the family for which the stats is getting collected.
+     * @param url - the connection url - not null if coming from ANALYZE <tablename> query, else null
      * @throws IOException
      *             if we fail to do any of the puts. Any single failure will prevent any future attempts for the remaining list of stats to
      *             update
      */
     public void updateStats(String tableKey, String regionName, StatisticsTracker tracker, String fam,
-            boolean fullTableUpdate, String url) throws IOException {
-        // short circuit if we have nothing to write
+            String url) throws IOException {
         if (tracker == null) { return; }
 
+        long currentTime = timeKeeper.getCurrentTime();
         if (url != null) {
             // If url is not null then the update has come from the ANALYZE query
             try {
@@ -141,11 +143,12 @@ public class StatisticsTable implements Closeable {
                     stmt.setString(1, tableKey);
                     stmt.setString(2, fam);
                     stmt.setString(3, regionName);
-                    stmt.setLong(4, timeKeeper.getCurrentTime());
+                    stmt.setLong(4, currentTime);
                     stmt.setBytes(5, tracker.getMinKey(fam));
                     stmt.setBytes(6, tracker.getMaxKey(fam));
                     stmt.setBytes(7, tracker.getGuidePosts(fam));
                     stmt.execute();
+
                     connection.commit();
                 } finally {
                     connection.close();
@@ -156,15 +159,12 @@ public class StatisticsTable implements Closeable {
             }
         } else {
             // The format we try to write here is the same format as we try to write the statistics using UPSERT stmt
+            // This gets called during major compaction and region split and we don't write any last_update_stats here.
+            // Only when Analyze stats is called we do that.
+            List<Put> puts = new ArrayList<Put>();
             byte[] prefix = StatisticsUtils.getRowKey(PDataType.VARCHAR.toBytes(tableKey),
                     PDataType.VARCHAR.toBytes(fam), PDataType.VARCHAR.toBytes(regionName));
             Put put = new Put(prefix);
-            if (fullTableUpdate) {
-                put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                        PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_IN_MS_BYTES,
-                        PDataType.LONG.toBytes(timeKeeper.getCurrentTime()));
-            }
-            // TODO : Use Phoenix-1101 and use upsert stmt to insert into the SYSTEM.STATS table
             if (tracker.getGuidePosts(fam) != null) {
                 put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES,
                         (tracker.getGuidePosts(fam)));
@@ -173,8 +173,9 @@ public class StatisticsTable implements Closeable {
                     PDataType.VARBINARY.toBytes(tracker.getMinKey(fam)));
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.MAX_KEY_BYTES,
                     PDataType.VARBINARY.toBytes(tracker.getMaxKey(fam)));
+            puts.add(put);
             // serialize each of the metrics with the associated serializer
-            statisticsTable.put(put);
+            statisticsTable.put(puts);
             statisticsTable.flushCommits();
         }
     }

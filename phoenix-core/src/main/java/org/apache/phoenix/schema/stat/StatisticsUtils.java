@@ -19,11 +19,9 @@ package org.apache.phoenix.schema.stat;
 import java.io.IOException;
 import java.util.Arrays;
 
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 /**
  * Simple utility class for managing multiple key parts of the statistic
@@ -50,37 +48,9 @@ public class StatisticsUtils {
         return os.getBuffer();
     }
 
-    /**
-     * Extracts the region name from the cell's row using the table name
-     * 
-     * @param table
-     * @param cell
-     * @return
-     */
-    public static byte[] getRegionFromRowKey(byte[] table, Cell cell) {
-        int lengthOfTableKey = Bytes.toInt(cell.getRowArray(), (cell.getRowOffset() + cell.getRowLength())
-                - ((Bytes.SIZEOF_INT * 3)), Bytes.SIZEOF_INT);
-        int lengthOfRegionKey = Bytes.toInt(cell.getRowArray(), (cell.getRowOffset() + cell.getRowLength())
-                - ((Bytes.SIZEOF_INT * 2)), Bytes.SIZEOF_INT);
-        byte[] region = new byte[lengthOfRegionKey];
-        System.arraycopy(cell.getRowArray(), cell.getRowOffset() + lengthOfTableKey, region, 0, lengthOfRegionKey);
-        return region;
-    }
-
-    public static byte[] getCFFromRowKey(byte[] table, Cell cell) {
-        int tableKeyLength = Bytes.toInt(cell.getRowArray(), (cell.getRowOffset() + cell.getRowLength())
-                - ((Bytes.SIZEOF_INT * 3)), Bytes.SIZEOF_INT);
-        int cfLength = Bytes.toInt(cell.getRowArray(), (cell.getRowOffset() + cell.getRowLength())
-                - ((Bytes.SIZEOF_INT * 2)), Bytes.SIZEOF_INT);
-        byte[] cf = new byte[cfLength];
-        System.arraycopy(cell.getRowArray(), cell.getRowOffset() + tableKeyLength, cf, 0,
-                cfLength);
-        return cf;
-    }
-    
-   public static byte[] getCFFromRowKey(byte[] table, byte[] row, int rowOffset, int rowLength) {
-       // Move over the the sepeartor byte that would be written after the table name
-        int startOff = Bytes.indexOf(row, table) + (table.length);
+    public static byte[] getCFFromRowKey(byte[] table, byte[] row, int rowOffset, int rowLength) {
+        // Move over the the sepeartor byte that would be written after the table name
+        int startOff = Bytes.indexOf(row, table) + (table.length) + 1;
         int endOff = startOff;
         while (endOff < rowLength) {
             // Check for next seperator byte
@@ -92,24 +62,8 @@ public class StatisticsUtils {
         }
         int cfLength = endOff - startOff;
         byte[] cf = new byte[cfLength];
-        System.arraycopy(row, startOff, cf, 0,
-                cfLength);
+        System.arraycopy(row, startOff, cf, 0, cfLength);
         return cf;
-    }
-
-    /**
-     * Extracts the table name from the cell's row.
-     * 
-     * @param cell
-     * @return
-     */
-    public static byte[] getTableNameFromRowKey(Cell cell) {
-        int lengthOfTableKey = Bytes.toInt(cell.getRowArray(), (cell.getRowOffset() + cell.getRowLength())
-                - ((Bytes.SIZEOF_INT * 3)), Bytes.SIZEOF_INT);
-        byte[] table = new byte[lengthOfTableKey];
-        System.arraycopy(cell.getRowArray(), cell.getRowOffset(), table, 0, lengthOfTableKey);
-        String tableNameFromFullName = SchemaUtil.getTableNameFromFullName(table);
-        return Bytes.toBytes(tableNameFromFullName);
     }
 
     public static byte[] copyRow(KeyValue kv) {

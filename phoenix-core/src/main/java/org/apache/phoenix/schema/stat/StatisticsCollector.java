@@ -109,7 +109,7 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         } finally {
             if (scanner != null) {
                 try {
-                    writeStatsToStatsTable(request, region, scanner, true);
+                    writeStatsToStatsTable(request, region, scanner);
                 } catch (IOException e) {
                     LOG.error(e);
                     ResponseConverter.setControllerException(controller, e);
@@ -123,7 +123,7 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     }
 
     private void writeStatsToStatsTable(final StatCollectRequest request, final HRegion region,
-            final RegionScanner scanner, final boolean fullTableUpdate) throws IOException {
+            final RegionScanner scanner) throws IOException {
         scanner.close();
         try {
             // update the statistics table
@@ -136,7 +136,7 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
                     tableKey = SchemaUtil.getTableKeyFromFullName(region.getRegionInfo().getTable().getNameAsString());
                 }
                 stats.updateStats(Bytes.toString(tableKey), (region.getRegionInfo().getRegionNameAsString()), this,
-                        Bytes.toString(fam), fullTableUpdate, request.getUrl());
+                        Bytes.toString(fam), request.getUrl());
             }
         } catch (IOException e) {
             LOG.error("Failed to update statistics table!", e);
@@ -148,7 +148,7 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         List<Cell> results = new ArrayList<Cell>();
         boolean hasMore = true;
         while (hasMore) {
-            // Am getting duplicates here? Need to avoid that
+            // Am getting duplicates here. Need to avoid that
             hasMore = scanner.next(results);
             updateStat(results);
             count += results.size();
@@ -241,7 +241,7 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         } finally {
             if (scanner != null) {
                 try {
-                    writeStatsToStatsTable(null, region, scanner, false);
+                    writeStatsToStatsTable(null, region, scanner);
                 } catch (IOException e) {
                     LOG.error(e);
                     throw e;
@@ -292,6 +292,7 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
             }
         }
         byteCount += kv.getLength();
+        // TODO : This can be moved to an interface so that we could collect guide posts in different ways
         if (byteCount >= guidepostDepth) {
             if (guidePostsMap.get(fam) != null) {
                 guidePostsMap.get(fam).add(

@@ -40,9 +40,4 @@ public class LocalIndexParallelIteratorRegionSplitter extends DefaultParallelIte
         return context.getConnection().getQueryServices().getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
     }
     
-    @Override
-    public int getSplitsPerRegion(int numRegions) {
-        return 1;
-    }
-
 }

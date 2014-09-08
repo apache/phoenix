@@ -43,6 +43,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REGION_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
@@ -264,6 +265,11 @@ public class MetaDataClient {
         COLUMN_FAMILY + "," +
         ORDINAL_POSITION +
         ") VALUES (?, ?, ?, ?, ?, ?)";
+    private static final String UPDATE_STATS_TS =
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_STATS_TABLE + "\"( " + 
+            TABLE_NAME + "," +
+            LAST_STATS_UPDATE_TIME_IN_MS +
+            ") VALUES (?, ?)";
     
     private final PhoenixConnection connection;
     private final AtomicInteger inProgress = new AtomicInteger(0);
@@ -494,21 +500,20 @@ public class MetaDataClient {
                 return 0;
             }
             inProgress.incrementAndGet();
-           // String query = "SELECT " + LAST_STATS_UPDATE_TIME_IN_MS + " FROM " + SYSTEM_CATALOG_SCHEMA + "."
-             //       + SYSTEM_STATS_TABLE +" WHERE " + TABLE_NAME + " ='" + tableName + "'";
-            // TODO : The below select query does not work due to some reason. Make sure it works.
-            String query = "SELECT " +TABLE_NAME+", " +LAST_STATS_UPDATE_TIME_IN_MS +" FROM " + SYSTEM_CATALOG_SCHEMA + "."
-                          + SYSTEM_STATS_TABLE;
+            String query = "SELECT " +"LAST_STATS_UPDATE_TIME_IN_MS "+" FROM " + SYSTEM_CATALOG_SCHEMA + "."
+                          + SYSTEM_STATS_TABLE +" WHERE " + TABLE_NAME + "='" + tableKey + "' AND "+ COLUMN_NAME + " IS NULL AND "+ REGION_NAME + " IS NULL" ;
             ResultSet rs = connection.createStatement().executeQuery(query);
             long lastUpdatedTime = 0;
-            String tableNameFromStats = null;
-            while(rs.next()) {
-                tableNameFromStats = rs.getString(1);
-                if (tableNameFromStats != null && tableNameFromStats.equals(tableKey)) {
-                    lastUpdatedTime = rs.getLong(2);
-                }
+            if (rs.next()) {
+                lastUpdatedTime = rs.getLong(1);
             }
             if (TimeKeeper.SYSTEM.getCurrentTime() - lastUpdatedTime > minTimeForStatsUpdate) {
+                // Before udpating the stats.. Update the ts here. So that per table there is only one header row
+                PreparedStatement stmt = connection.prepareStatement(UPDATE_STATS_TS);
+                stmt.setString(1, tableKey);
+                stmt.setLong(2, TimeKeeper.SYSTEM.getCurrentTime());
+                stmt.execute();
+                
                 // We need to update the stats table
                 long count = connection.getQueryServices().updateStatistics(tenantIdBytes, schemaNameBytes,
                         Bytes.toBytes(tableName), connection.getURL());
