@@ -17,20 +17,16 @@
  */
 package org.apache.phoenix.schema.stat;
 
-import java.util.List;
-import java.util.TreeMap;
+public class StatisticsConstants {
 
+    public static final String HISTOGRAM_BYTE_DEPTH_CONF_KEY = "org.apache.phoenix.guidepost.width";
 
-/*
- * The table is defined on the client side, but it is populated on the server side. The client should not populate any data to the
- * statistics object.
- */
-public interface PTableStats {
-    /**
-     * Returns a tree map of the guide posts collected against a column family
-     * @return
-     */
-    TreeMap<byte[], List<byte[]>> getGuidePosts();
+    // TODO : What should be the configuration here
+    public static final long HISTOGRAM_DEFAULT_BYTE_DEPTH = 1024 * 1024;
 
-    long getEstimatedSize();
+    public static final String MIN_STATS_FREQ_UPDATION = "phoenix.query.minStatsFrequencyUpdation";
+
+    public static final long DEFAULT_STATS_FREQ_UPDATION = 2 * 60000;
+
 }
+    

@@ -15,22 +15,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema.stat;
+package org.apache.phoenix.parse;
 
-import java.util.List;
-import java.util.TreeMap;
+public class UpdateStatisticsStatement extends SingleTableStatement {
 
+    public UpdateStatisticsStatement(NamedTableNode table) {
+        super(table, 0);
+    }
 
-/*
- * The table is defined on the client side, but it is populated on the server side. The client should not populate any data to the
- * statistics object.
- */
-public interface PTableStats {
-    /**
-     * Returns a tree map of the guide posts collected against a column family
-     * @return
-     */
-    TreeMap<byte[], List<byte[]>> getGuidePosts();
-
-    long getEstimatedSize();
 }

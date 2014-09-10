@@ -37,15 +37,18 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_IN_MS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REGION_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
@@ -62,6 +65,7 @@ import static org.apache.phoenix.schema.PDataType.VARCHAR;
 import java.io.IOException;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -76,6 +80,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -123,17 +128,20 @@ import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
+import org.apache.phoenix.schema.stat.StatisticsConstants;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -257,8 +265,15 @@ public class MetaDataClient {
         COLUMN_FAMILY + "," +
         ORDINAL_POSITION +
         ") VALUES (?, ?, ?, ?, ?, ?)";
+    private static final String UPDATE_STATS_TS =
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_STATS_TABLE + "\"( " + 
+            TABLE_SCHEM + ","+
+            TABLE_NAME + "," +
+            LAST_STATS_UPDATE_TIME_IN_MS +
+            ") VALUES (?, ?, ?)";
     
     private final PhoenixConnection connection;
+    private final AtomicInteger inProgress = new AtomicInteger(0);
 
     public MetaDataClient(PhoenixConnection connection) {
         this.connection = connection;
@@ -460,6 +475,71 @@ public class MetaDataClient {
         byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
         MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), emptyCF, null, null, tableRef.getTimeStamp());
         return connection.getQueryServices().updateData(plan);
+    }
+
+    public long updateStatistics(UpdateStatisticsStatement updateStatisticsStmt) throws SQLException {
+        String tableName = updateStatisticsStmt.getTable().getName().getTableName();
+        // Check before updating the stats if we have reached the configured time to reupdate the stats once again
+        long minTimeForStatsUpdate = connection.getQueryServices().getProps()
+                .getLong(StatisticsConstants.MIN_STATS_FREQ_UPDATION, StatisticsConstants.DEFAULT_STATS_FREQ_UPDATION);
+        // TODO : Check if we need the table key type of table name here. 
+        // May be we can avoid multiple calls from the 
+        // same connection
+        byte[] tenantIdBytes = QueryConstants.EMPTY_BYTE_ARRAY;
+        // TODO : If tenantId is not null we may have to get the actual table name (PTable.getPhysicalName)
+        if (connection.getTenantId() != null) {
+            tenantIdBytes = connection.getTenantId().getBytes();
+        }
+        byte[] schemaNameBytes = QueryConstants.EMPTY_BYTE_ARRAY;
+        if (connection.getSchema() != null) {
+            schemaNameBytes = Bytes.toBytes(connection.getSchema());
+        }
+        try {
+            if (inProgress.get() > 0) {
+                // Already in progress
+                return 0;
+            }
+            inProgress.incrementAndGet();
+            // Always invalidate the cache
+            connection.getQueryServices().clearCacheForTable(tenantIdBytes, schemaNameBytes, Bytes.toBytes(tableName));
+            String schema = Bytes.toString(schemaNameBytes);
+            // Clear the cache also. So that for cases like major compaction also we would be able to use the stats
+            updateCache(schema, tableName, true);
+            String query = "SELECT " + "LAST_STATS_UPDATE_TIME_IN_MS " + " FROM " + SYSTEM_CATALOG_SCHEMA + "."
+                    + SYSTEM_STATS_TABLE + " WHERE "
+                    + TABLE_NAME + "='" + tableName + "' AND " + COLUMN_NAME + " IS NULL AND " + REGION_NAME
+                    + " IS NULL";
+            ResultSet rs = connection.createStatement().executeQuery(query);
+            long lastUpdatedTime = 0;
+            if (rs.next()) {
+                lastUpdatedTime = rs.getLong(1);
+            }
+            long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
+            if (currentTime - lastUpdatedTime > minTimeForStatsUpdate) {
+                boolean wasAutoCommit = connection.getAutoCommit();
+                connection.rollback();
+                try {
+                    connection.setAutoCommit(true);
+                    // Before udpating the stats.. Update the ts here. So that per table there is only one header row
+                    PreparedStatement stmt = connection.prepareStatement(UPDATE_STATS_TS);
+                    stmt.setString(1, schema);
+                    stmt.setString(2, tableName);
+                    stmt.setLong(3, currentTime);
+                    stmt.execute();
+
+                    // We need to update the stats table
+                    long count = connection.getQueryServices().updateStatistics(tenantIdBytes, schemaNameBytes,
+                            Bytes.toBytes(tableName), connection.getURL());
+                    updateCache(schema, tableName, true);
+                    return count;
+                } finally {
+                    connection.setAutoCommit(wasAutoCommit);
+                }
+            }
+        } finally {
+            inProgress.decrementAndGet();
+        }
+        return 0;
     }
 
     private MutationState buildIndexAtTimeStamp(PTable index, NamedTableNode dataTableNode) throws SQLException {

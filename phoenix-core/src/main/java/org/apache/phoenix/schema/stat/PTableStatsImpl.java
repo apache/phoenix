@@ -16,40 +16,37 @@
  * limitations under the License.
  */
 package org.apache.phoenix.schema.stat;
+ import java.util.List;
+import java.util.TreeMap;
 
-import java.util.Map;
-
-import org.apache.hadoop.hbase.HRegionInfo;
-
-import com.google.common.collect.ImmutableMap;
-
-
-/**
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.util.SizedUtil;
+ 
+ /**
  * Implementation for PTableStats.
  */
 public class PTableStatsImpl implements PTableStats {
 
-    // The map for guide posts should be immutable. We only take the current snapshot from outside
-    // method call and store it.
-    private Map<String, byte[][]> regionGuidePosts;
+    public static final PTableStats NO_STATS = new PTableStatsImpl();
 
-    public PTableStatsImpl() { }
+    private TreeMap<byte[], List<byte[]>> guidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
 
-    public PTableStatsImpl(Map<String, byte[][]> stats) {
-        regionGuidePosts = ImmutableMap.copyOf(stats);
+    public PTableStatsImpl() {
+        this(new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR));
+    }
+
+    public PTableStatsImpl(TreeMap<byte[], List<byte[]>> guidePosts) {
+        this.guidePosts = guidePosts;
     }
 
     @Override
-    public byte[][] getRegionGuidePosts(HRegionInfo region) {
-        return regionGuidePosts.get(region.getRegionNameAsString());
+    public TreeMap<byte[], List<byte[]>> getGuidePosts() {
+        return guidePosts;
     }
 
     @Override
-    public Map<String, byte[][]> getGuidePosts(){
-      if(regionGuidePosts != null) {
-        return ImmutableMap.copyOf(regionGuidePosts);
-      }
-      
-      return null;
+    public long getEstimatedSize() {
+        return SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE + NO_STATS.getEstimatedSize()
+                + SizedUtil.sizeOfMap(guidePosts.size());
     }
 }

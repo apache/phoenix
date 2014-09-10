@@ -74,7 +74,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 public class QueryServicesOptions {
 	public static final int DEFAULT_KEEP_ALIVE_MS = 60000;
 	public static final int DEFAULT_THREAD_POOL_SIZE = 128;
-	public static final int DEFAULT_QUEUE_SIZE = 500;
+	public static final int DEFAULT_QUEUE_SIZE = 5000;
 	public static final int DEFAULT_THREAD_TIMEOUT_MS = 600000; // 10min
 	public static final int DEFAULT_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
 	public static final int DEFAULT_MAX_MEMORY_PERC = 15; // 15% of heap

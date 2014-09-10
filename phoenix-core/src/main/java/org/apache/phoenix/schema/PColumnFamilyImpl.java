@@ -21,12 +21,16 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.util.SizedUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
+import com.google.common.collect.Lists;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.HBaseZeroCopyByteString;
 
 public class PColumnFamilyImpl implements PColumnFamily {
     private final PName name;
@@ -34,6 +38,7 @@ public class PColumnFamilyImpl implements PColumnFamily {
     private final Map<String, PColumn> columnByString;
     private final Map<byte[], PColumn> columnByBytes;
     private final int estimatedSize;
+    private final List<byte[]> guidePosts;
 
     @Override
     public int getEstimatedSize() {
@@ -41,9 +46,18 @@ public class PColumnFamilyImpl implements PColumnFamily {
     }
     
     public PColumnFamilyImpl(PName name, List<PColumn> columns) {
+       this(name, columns, null);
+    }
+    
+    public PColumnFamilyImpl(PName name, List<PColumn> columns, List<byte[]> guidePosts) {
         Preconditions.checkNotNull(name);
-        long estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 4 + SizedUtil.INT_SIZE + name.getEstimatedSize() +
-                SizedUtil.sizeOfMap(columns.size()) * 2 + SizedUtil.sizeOfArrayList(columns.size());
+        // Include guidePosts also in estimating the size
+        int guidePostsSize = 0;
+        if(guidePosts != null) {
+            guidePostsSize = guidePosts.size();
+        }
+        long estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 5 + SizedUtil.INT_SIZE + name.getEstimatedSize() +
+                SizedUtil.sizeOfMap(columns.size()) * 2 + SizedUtil.sizeOfArrayList(columns.size()) + guidePostsSize;
         this.name = name;
         this.columns = ImmutableList.copyOf(columns);
         ImmutableMap.Builder<String, PColumn> columnByStringBuilder = ImmutableMap.builder();
@@ -56,6 +70,7 @@ public class PColumnFamilyImpl implements PColumnFamily {
         this.columnByBytes = columnByBytesBuilder.build();
         this.columnByString = columnByStringBuilder.build();
         this.estimatedSize = (int)estimatedSize;
+        this.guidePosts = guidePosts;
     }
     
     @Override
@@ -84,5 +99,52 @@ public class PColumnFamilyImpl implements PColumnFamily {
             throw new ColumnNotFoundException(name);
         }
         return column;
+    }
+
+    @Override
+    public List<byte[]> getGuidePosts() {
+        return guidePosts;
+    }
+    
+    public static PTableProtos.PColumnFamily toProto(PColumnFamily columnFamily, List<org.apache.phoenix.coprocessor.generated.PTableProtos.PColumn> cNames) {
+        PTableProtos.PColumnFamily.Builder builder = PTableProtos.PColumnFamily.newBuilder();
+        if (columnFamily != null) {
+            builder.setFamilyNameBytes(HBaseZeroCopyByteString.wrap(columnFamily.getName().getBytes()));
+        }
+        for(int  i = 0 ;i < cNames.size(); i++) {
+            builder.addColumnNameBytes(cNames.get(i));
+        }
+        if (columnFamily.getGuidePosts() != null) {
+            int size = columnFamily.getGuidePosts().size();
+            for (int i = 0; i < size; i++) {
+                builder.addGuidePosts(HBaseZeroCopyByteString.wrap(columnFamily.getGuidePosts().get(i)));
+            }
+        }
+        return builder.build();
+    }
+    
+    /**
+     * Create a PColumnFamily instance from PBed PColumnFamily instance
+     * 
+     * @param columnFamily
+     */
+    public static PColumnFamily createFromProto(PTableProtos.PColumnFamily columnFamily) {
+        byte[] cfNameBytes = columnFamily.getFamilyNameBytes().toByteArray();
+        PName cfName = PNameFactory.newName(cfNameBytes);
+        PName familyName = null;
+        if (columnFamily.hasFamilyNameBytes()) {
+            familyName = PNameFactory.newName(columnFamily.getFamilyNameBytes().toByteArray());
+        }
+        List<ByteString> guidePostsList = columnFamily.getGuidePostsList();
+        List<byte[]> guidePosts = Lists.newArrayListWithCapacity(guidePostsList.size());
+        for(ByteString guidePost : guidePostsList) {
+            guidePosts.add(guidePost.toByteArray());
+        }
+        List<org.apache.phoenix.coprocessor.generated.PTableProtos.PColumn> columnNameBytesList = columnFamily.getColumnNameBytesList();
+        List<PColumn> columnNames = Lists.newArrayListWithCapacity(columnNameBytesList.size());
+        for(org.apache.phoenix.coprocessor.generated.PTableProtos.PColumn colName : columnNameBytesList) {
+            columnNames.add(PColumnImpl.createFromProto(colName));
+        }
+        return new PColumnFamilyImpl(familyName, columnNames, guidePosts);
     }
 }

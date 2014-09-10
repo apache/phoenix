@@ -65,11 +65,6 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public StatsManager getStatsManager() {
-        return getDelegate().getStatsManager();
-    }
-
-    @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
         return getDelegate().getAllTableRegions(tableName);
     }
@@ -230,5 +225,15 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public String getUserName() {
         return getDelegate().getUserName();
+    }
+
+    @Override
+    public long updateStatistics(byte[] tenantId, byte[] schemaName, byte[] tableName, String url) throws SQLException {
+        return getDelegate().updateStatistics(tenantId, schemaName, tableName, url);
+    }
+    
+    @Override
+    public void clearCacheForTable(byte[] tenantId, byte[] schemaName, byte[] tableName) throws SQLException {
+        getDelegate().clearCacheForTable(tenantId, schemaName, tableName);
     }
 }
