@@ -53,7 +53,7 @@ public class TracingCompat {
     }
 
     public static Pair<String, String> readAnnotation(byte[] key, byte[] value) {
-        return new Pair<String, String>(new String(key), Integer.toString(Bytes.toInt(value)));
+        return new Pair<String, String>(new String(key), new String(value));
     }
 
     public static MetricsWriter initializeWriter(String clazz) {

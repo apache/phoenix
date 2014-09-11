@@ -17,7 +17,9 @@
  */
 package org.apache.phoenix.trace;
 
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -48,6 +50,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
+
+import com.google.common.collect.ImmutableMap;
 
 /**
  * Test that the logging sink stores the expected metrics/stats
@@ -257,7 +261,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     @Test
     public void testScanTracing() throws Exception {
         // separate connections to minimize amount of traces that are generated
-        Connection traceable = getTracingConnection();
+        Connection traceable = getTracingConnection(ImmutableMap.of("annot1", "v1"));
         Connection conn = getConnectionWithoutTracing();
 
         // one call for client side, one call for server side
@@ -353,7 +357,67 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         });
         assertTrue("Didn't find the parallel scanner in the tracing", found);
     }
+    
+    @Test
+    public void testCustomAnnotationTracing() throws Exception {
+    	final String customAnnotationKey = "myannot";
+    	final String customAnnotationValue = "a1";
+        // separate connections to minimize amount of traces that are generated
+        Connection traceable = getTracingConnection(ImmutableMap.of(customAnnotationKey, customAnnotationValue));
+        Connection conn = getConnectionWithoutTracing();
 
+        // one call for client side, one call for server side
+        CountDownLatch updated = new CountDownLatch(2);
+        waitForCommit(updated);
+
+        // create a dummy table
+        createTestTable(conn, false);
+
+        // update the table, but don't trace these, to simplify the traces we read
+        LOG.debug("Doing dummy the writes to the tracked table");
+        String insert = "UPSERT INTO " + table + " VALUES (?, ?)";
+        PreparedStatement stmt = conn.prepareStatement(insert);
+        stmt.setString(1, "key1");
+        stmt.setLong(2, 1);
+        stmt.execute();
+        conn.commit();
+        conn.rollback();
+        
+        // setup for next set of updates
+        stmt.setString(1, "key2");
+        stmt.setLong(2, 2);
+        stmt.execute();
+        conn.commit();
+        conn.rollback();
+
+        // do a scan of the table
+        String read = "SELECT * FROM " + table;
+        ResultSet results = traceable.createStatement().executeQuery(read);
+        assertTrue("Didn't get first result", results.next());
+        assertTrue("Didn't get second result", results.next());
+        results.close();
+
+        assertTrue("Get expected updates to trace table", updated.await(200, TimeUnit.SECONDS));
+
+        boolean tracingComplete = checkStoredTraces(conn, new TraceChecker(){
+            @Override
+            public boolean foundTrace(TraceHolder currentTrace) {
+            	return currentTrace.toString().contains(customAnnotationKey);
+            }
+        });
+        
+        assertTrue("Didn't find the custom annotation in the tracing", tracingComplete);
+        
+		ResultSet rs = conn.createStatement().executeQuery(
+				"select annotations.a0, " + PhoenixTableMetricsWriter.ANNOTATION_COUNT 
+					+ " from " + DEFAULT_TRACING_STATS_TABLE_NAME + "(annotations.a0 varchar)"
+					+ " where annotations.a0 like '%" + customAnnotationKey + "%'");
+        
+		assertTrue("Didn't find the custom annotation in the tracing", rs.next());
+		assertTrue(rs.getString(1).contains(customAnnotationValue));
+		assertFalse("Expected only one line with custom annotation but found more", rs.next());
+    }
+    
     private boolean checkStoredTraces(Connection conn, TraceChecker checker) throws Exception {
         TraceReader reader = new TraceReader(conn);
         int retries = 0;

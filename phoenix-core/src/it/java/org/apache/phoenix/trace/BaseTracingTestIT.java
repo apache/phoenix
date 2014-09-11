@@ -22,6 +22,8 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.commons.logging.Log;
@@ -32,6 +34,7 @@ import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.metrics.PhoenixAbstractMetric;
 import org.apache.phoenix.metrics.PhoenixMetricTag;
 import org.apache.phoenix.metrics.PhoenixMetricsRecord;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.trace.util.Tracing;
@@ -86,9 +89,16 @@ public class BaseTracingTestIT extends BaseHBaseManagedTimeIT {
         conn.setAutoCommit(false);
         return conn;
     }
+    
+    public static Connection getTracingConnection() throws Exception { 
+    	return getTracingConnection(new HashMap<String, String>(0));
+    }
 
-    public static Connection getTracingConnection() throws Exception {
+    public static Connection getTracingConnection(Map<String, String> customAnnotations) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        for (Map.Entry<String, String> annot : customAnnotations.entrySet()) {
+        	props.put(QueryServices.TRACING_CUSTOM_ANNOTATION_ATTRIB_PREFIX + annot.getKey(), annot.getValue());
+        }
         return getConnectionWithTracingFrequency(props, Tracing.Frequency.ALWAYS);
     }
 
