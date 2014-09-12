@@ -22,7 +22,7 @@ public class StatisticsConstants {
     public static final String HISTOGRAM_BYTE_DEPTH_CONF_KEY = "org.apache.phoenix.guidepost.width";
 
     // TODO : What should be the configuration here
-    public static final long HISTOGRAM_DEFAULT_BYTE_DEPTH = 1024 * 1024;
+    public static final long HISTOGRAM_DEFAULT_BYTE_DEPTH = 512;
 
     public static final String MIN_STATS_FREQ_UPDATION = "phoenix.query.minStatsFrequencyUpdation";
 

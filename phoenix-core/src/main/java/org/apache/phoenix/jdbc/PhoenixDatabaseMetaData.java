@@ -117,6 +117,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] TABLE_NAME_BYTES = Bytes.toBytes(TABLE_NAME);
     public static final String TABLE_TYPE = "TABLE_TYPE";
     public static final byte[] TABLE_TYPE_BYTES = Bytes.toBytes(TABLE_TYPE);
+    public static final String PHYSICAL_NAME = "PHYSICAL_NAME";
+    public static final String PHYSICAL_NAME_BYTES = "PHYSICAL_NAME_BYTES";
     
     public static final String COLUMN_FAMILY = "COLUMN_FAMILY";
     public static final String TABLE_CAT = "TABLE_CAT";
@@ -236,8 +238,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] MIN_KEY_BYTES = Bytes.toBytes(MIN_KEY);
     public static final String MAX_KEY = "MAX_KEY";
     public static final byte[] MAX_KEY_BYTES = Bytes.toBytes(MAX_KEY);
-    public static final String LAST_STATS_UPDATE_TIME_IN_MS = "LAST_STATS_UPDATE_TIME_IN_MS";
-    public static final byte[] LAST_STATS_UPDATE_TIME_IN_MS_BYTES = Bytes.toBytes(LAST_STATS_UPDATE_TIME_IN_MS);
+    public static final String LAST_STATS_UPDATE_TIME = "LAST_STATS_UPDATE_TIME";
+    public static final byte[] LAST_STATS_UPDATE_TIME_BYTES = Bytes.toBytes(LAST_STATS_UPDATE_TIME);
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;
 

@@ -1868,10 +1868,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public long updateStatistics(final byte[] tenantId, final byte[] schemaName, final byte[] tableName, final String url)
-            throws SQLException {
+    public long updateStatistics(final byte[] schemaName, final byte[] tableName,
+            final String url, final long clientTS) throws SQLException {
         HTableInterface ht = null;
         try {
+            // TODO To set the start/stop range for the analyze call based on tenantId (if not null).
             ht = this.getTable(tableName);
             Batch.Call<StatCollectService, StatCollectResponse> callable = new Batch.Call<StatCollectService, StatCollectResponse>() {
                 ServerRpcController controller = new ServerRpcController();
@@ -1880,9 +1881,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 @Override
                 public StatCollectResponse call(StatCollectService service) throws IOException {
                     StatCollectRequest.Builder builder = StatCollectRequest.newBuilder();
-                    builder.setTableNameBytes(HBaseZeroCopyByteString.wrap(tableName));
-                    builder.setTenantIdBytes(HBaseZeroCopyByteString.wrap(tenantId));
                     builder.setSchemaNameBytes(HBaseZeroCopyByteString.wrap(schemaName));
+                    builder.setTableNameBytes(HBaseZeroCopyByteString.wrap(tableName));
                     builder.setUrl(url);
                     service.collectStat(controller, builder.build(), rpcCallback);
                     if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
@@ -1892,12 +1892,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             Map<byte[], StatCollectResponse> result = ht.coprocessorService(StatCollectService.class,
                     HConstants.EMPTY_BYTE_ARRAY, HConstants.EMPTY_BYTE_ARRAY, callable);
             StatCollectResponse next = result.values().iterator().next();
-            clearCacheForTable(tenantId, schemaName, tableName);
+            clearCacheForTable(schemaName, tableName, clientTS);
             return next.getRowsScanned();
         } catch (ServiceException e) {
             throw new SQLException("Unable to update the statistics for the table " + tableName, e);
         } catch (TableNotFoundException e) {
-            throw e;
+            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
         } catch (Throwable e) {
             throw new SQLException("Unable to update the statistics for the table " + tableName, e);
         } finally {
@@ -1912,8 +1912,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public void clearCacheForTable(final byte[] tenantId, final byte[] schemaName, final byte[] tableName)
-            throws SQLException {
+    public void clearCacheForTable(final byte[] schemaName, final byte[] tableName,
+            final long clientTS) throws SQLException {
         // clear the meta data cache for the table here
         try {
             SQLException sqlE = null;
@@ -1927,8 +1927,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 BlockingRpcCallback<ClearCacheForTableResponse> rpcCallback = new BlockingRpcCallback<ClearCacheForTableResponse>();
                                 ClearCacheForTableRequest.Builder builder = ClearCacheForTableRequest.newBuilder();
                                 builder.setTableName(HBaseZeroCopyByteString.wrap(tableName));
-                                builder.setTenantId(HBaseZeroCopyByteString.wrap(tenantId));
                                 builder.setSchemaName(HBaseZeroCopyByteString.wrap(schemaName));
+                                builder.setClientTimestamp(clientTS);
                                 instance.clearCacheForTable(controller, builder.build(), rpcCallback);
                                 if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
                                 return rpcCallback.get();

@@ -228,12 +228,14 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public long updateStatistics(byte[] tenantId, byte[] schemaName, byte[] tableName, String url) throws SQLException {
-        return getDelegate().updateStatistics(tenantId, schemaName, tableName, url);
+    public long updateStatistics(byte[] schemaName, byte[] tableName, String url, long clientTS)
+            throws SQLException {
+        return getDelegate().updateStatistics(schemaName, tableName, url, clientTS);
     }
     
     @Override
-    public void clearCacheForTable(byte[] tenantId, byte[] schemaName, byte[] tableName) throws SQLException {
-        getDelegate().clearCacheForTable(tenantId, schemaName, tableName);
+    public void clearCacheForTable(byte[] schemaName, byte[] tableName, long clientTS)
+            throws SQLException {
+        getDelegate().clearCacheForTable(schemaName, tableName, clientTS);
     }
 }

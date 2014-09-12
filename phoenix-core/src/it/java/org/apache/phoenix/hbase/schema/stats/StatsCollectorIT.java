@@ -52,14 +52,9 @@ public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
         String clientPort = util.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
         url = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_SEPARATOR + clientPort
                 + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
-        int targetQueryConcurrency = 3;
-        int maxQueryConcurrency = 5;
         int histogramDepth = 60;
         Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
-        props.put(QueryServices.MAX_QUERY_CONCURRENCY_ATTRIB, Integer.toString(maxQueryConcurrency));
-        props.put(QueryServices.TARGET_QUERY_CONCURRENCY_ATTRIB, Integer.toString(targetQueryConcurrency));
         props.put(StatisticsConstants.HISTOGRAM_BYTE_DEPTH_CONF_KEY, Integer.toString(histogramDepth));
-        props.put(QueryServices.MAX_INTRA_REGION_PARALLELIZATION_ATTRIB, Integer.toString(Integer.MAX_VALUE));
         props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Integer.toString(frequency));
         driver = initAndRegisterDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
     }

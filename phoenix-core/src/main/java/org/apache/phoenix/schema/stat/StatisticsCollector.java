@@ -109,7 +109,7 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         } finally {
             if (scanner != null) {
                 try {
-                    writeStatsToStatsTable(request, region, scanner);
+                    writeStatsToStatsTable(request, region, scanner, false);
                 } catch (IOException e) {
                     LOG.error(e);
                     ResponseConverter.setControllerException(controller, e);
@@ -123,22 +123,34 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     }
 
     private void writeStatsToStatsTable(final StatCollectRequest request, final HRegion region,
-            final RegionScanner scanner) throws IOException {
+            final RegionScanner scanner, boolean split) throws IOException {
         scanner.close();
         try {
             // update the statistics table
             for (byte[] fam : familyMap) {
                 String tableName = null;
-                String schemaName = null;
                 if (request != null) {
                     tableName = Bytes.toString(request.getTableNameBytes().toByteArray());
-                    schemaName = Bytes.toString(request.getSchemaNameBytes().toByteArray());
                 } else {
                     tableName = SchemaUtil.getTableNameFromFullName(region.getRegionInfo().getTable().getNameAsString());
-                    schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
                 }
-                stats.updateStats(tableName, schemaName, (region.getRegionInfo().getRegionNameAsString()), this,
-                        Bytes.toString(fam), request.getUrl());
+                stats.updateStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
+                        Bytes.toString(fam), request.getUrl(), split);
+            }
+        } catch (IOException e) {
+            LOG.error("Failed to update statistics table!", e);
+            throw e;
+        }
+    }
+
+    private void deleteStatsFromStatsTable(final HRegion region) throws IOException {
+        try {
+            // update the statistics table
+            for (byte[] fam : familyMap) {
+                String tableName = null;
+                tableName = SchemaUtil.getTableNameFromFullName(region.getRegionInfo().getTable().getNameAsString());
+                stats.deleteStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
+                        Bytes.toString(fam));
             }
         } catch (IOException e) {
             LOG.error("Failed to update statistics table!", e);
@@ -231,11 +243,21 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         if (familyMap != null) {
             familyMap.clear();
         }
+        // Create a delete operation on the parent region
+        // Then write the new guide posts for individual regions
+        // TODO : Try making this automic
+        deleteStatsFromStatsTable(region);
+        collectStatsForSplitRegions(l);
+        clear();
+        collectStatsForSplitRegions(r);
+    }
+
+    private void collectStatsForSplitRegions(HRegion daughter) throws IOException {
         Scan scan = createScan();
         RegionScanner scanner = null;
         int count = 0;
         try {
-            scanner = region.getScanner(scan);
+            scanner = daughter.getScanner(scan);
             count = scanRegion(scanner, count);
         } catch (IOException e) {
             LOG.error(e);
@@ -243,7 +265,7 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         } finally {
             if (scanner != null) {
                 try {
-                    writeStatsToStatsTable(null, region, scanner);
+                    writeStatsToStatsTable(null, daughter, scanner, true);
                 } catch (IOException e) {
                     LOG.error(e);
                     throw e;
@@ -340,5 +362,4 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         }
         return null;
     }
-
 }

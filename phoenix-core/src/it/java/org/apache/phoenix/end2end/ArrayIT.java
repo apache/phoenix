@@ -145,7 +145,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 		        Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
-        analyseTable(conn, TABLE_WITH_ARRAY);
+        analyzeTable(conn, TABLE_WITH_ARRAY);
 		try {
 		    PreparedStatement statement = conn.prepareStatement(query);
 			statement.setString(1, tenantId);
@@ -170,7 +170,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		}
 	}
 
-    private void analyseTable(Connection conn, String tableWithArray) throws SQLException {
+    private void analyzeTable(Connection conn, String tableWithArray) throws SQLException {
         String analyse = "ANALYZE  "+tableWithArray;
 		PreparedStatement statement = conn.prepareStatement(analyse);
         statement.execute();
@@ -188,7 +188,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
-		analyseTable(conn, TABLE_WITH_ARRAY);
+		analyzeTable(conn, TABLE_WITH_ARRAY);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			statement.setString(1, tenantId);

@@ -93,9 +93,9 @@ message GetVersionResponse {
 }
 
 message ClearCacheForTableRequest {
-  required bytes tenantId = 1;
-  required bytes schemaName  = 2;
-  required bytes tableName = 3;
+  required bytes schemaName  = 1;
+  required bytes tableName = 2;
+  required int64 clientTimestamp = 3;
 }
 
 message ClearCacheForTableResponse {

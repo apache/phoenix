@@ -688,14 +688,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 @Override
                 public MutationState execute() throws SQLException {
                     MetaDataClient client = new MetaDataClient(getConnection());
-                    long tempCount = client.updateStatistics(ExecutableUpdateStatisticsStatement.this);
-                    final long rowsScanned = tempCount; 
-                    return new MutationState(1, getConnection()) {
-                        @Override
-                        public long getUpdateCount() {
-                            return rowsScanned;
-                        }
-                    };
+                    return client.updateStatistics(ExecutableUpdateStatisticsStatement.this);
                 }
             };
         }

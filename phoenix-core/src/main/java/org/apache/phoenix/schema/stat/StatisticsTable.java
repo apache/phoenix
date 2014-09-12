@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.schema.stat;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_IN_MS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_KEY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_KEY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REGION_NAME;
@@ -29,6 +29,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 
 import java.io.IOException;
+import java.sql.Date;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -40,9 +41,11 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Closeable;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -63,9 +66,9 @@ public class StatisticsTable implements Closeable {
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_STATS_TABLE + "\"( " + 
             TABLE_SCHEM+ ","+
             TABLE_NAME + "," +
-            COLUMN_NAME + "," +
+            COLUMN_FAMILY + "," +
             REGION_NAME + "," +
-            LAST_STATS_UPDATE_TIME_IN_MS + "," +
+            LAST_STATS_UPDATE_TIME + "," +
             MIN_KEY + "," +
             MAX_KEY + "," +
             GUIDE_POSTS  +
@@ -122,70 +125,66 @@ public class StatisticsTable implements Closeable {
      * @param tracker - the statistics tracker
      * @param fam -  the family for which the stats is getting collected.
      * @param url - the connection url - not null if coming from ANALYZE <tablename> query, else null
+     * @param r 
+     * @param l 
      * @throws IOException
      *             if we fail to do any of the puts. Any single failure will prevent any future attempts for the remaining list of stats to
      *             update
      */
-    public void updateStats(String tableName, String schemaName, String regionName, StatisticsTracker tracker, String fam,
-            String url) throws IOException {
+    public void updateStats(String tableName, String regionName, StatisticsTracker tracker, String fam,
+            String url, boolean split) throws IOException {
         if (tracker == null) { return; }
 
         long currentTime = timeKeeper.getCurrentTime();
-/*        if (url != null) {
-            // If url is not null then the update has come from the ANALYZE query
-            try {
-                // For every update create a new connection and call update stats
-                Connection connection = DriverManager.getConnection(url);
-                try {
-                    PreparedStatement stmt = connection.prepareStatement(UPDATE_STATS);
-                    stmt.setString(1, schemaName);
-                    stmt.setString(2, tableName);
-                    stmt.setString(3, fam);
-                    stmt.setString(4, regionName);
-                    stmt.setLong(5, currentTime);
-                    stmt.setBytes(6, tracker.getMinKey(fam));
-                    stmt.setBytes(7, tracker.getMaxKey(fam));
-                    stmt.setBytes(8, tracker.getGuidePosts(fam));
-                    stmt.execute();
-                    connection.commit();
-                } finally {
-                    connection.close();
-                }
-            } catch (SQLException e) {
-                LOG.error("Failed to update the stats table ", e);
-                throw new IOException(e);
-            }
-        } else {*/
-            // The format we try to write here is the same format as we try to write the statistics using UPSERT stmt
-            // This gets called during major compaction and region split and we don't write any last_update_stats here.
-            // Only when Analyze stats is called we do that.
-            List<Put> puts = new ArrayList<Put>();
-            if(url == null) {
-                // coming from coprocessor hooks
-                byte[] prefix = StatisticsUtils.getRowKeyForTSUpdate(PDataType.VARCHAR.toBytes(schemaName),
-                    PDataType.VARCHAR.toBytes(tableName));
-                Put put = new Put(prefix);
-                put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                    PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_IN_MS_BYTES, PDataType.LONG.toBytes(currentTime));
-                puts.add(put);
-            }
-            byte[] prefix = StatisticsUtils.getRowKey(PDataType.VARCHAR.toBytes(schemaName),
-                    PDataType.VARCHAR.toBytes(tableName), PDataType.VARCHAR.toBytes(fam),
-                    PDataType.VARCHAR.toBytes(regionName));
-            Put put = new Put(prefix);
-            if (tracker.getGuidePosts(fam) != null) {
-                put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES,
-                        (tracker.getGuidePosts(fam)));
-            }
-            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.MIN_KEY_BYTES,
-                    PDataType.VARBINARY.toBytes(tracker.getMinKey(fam)));
-            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.MAX_KEY_BYTES,
-                    PDataType.VARBINARY.toBytes(tracker.getMaxKey(fam)));
-            puts.add(put);
-            // serialize each of the metrics with the associated serializer
-            statisticsTable.put(puts);
-            statisticsTable.flushCommits();
-        //}
+        List<Put> puts = new ArrayList<Put>();
+        // Add the timestamp header
+        byte[] prefix = StatisticsUtils.getRowKeyForTSUpdate(PDataType.VARCHAR.toBytes(tableName));
+        Put put = new Put(prefix);
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES,
+                PDataType.DATE.toBytes(new Date(currentTime)));
+        puts.add(put);
+        statisticsTable.put(puts);
+        statisticsTable.flushCommits();
+
+        prefix = StatisticsUtils.getRowKey(PDataType.VARCHAR.toBytes(tableName), PDataType.VARCHAR.toBytes(fam),
+                PDataType.VARCHAR.toBytes(regionName));
+        RowMutations mutations = new RowMutations(prefix);
+        //All these are very costly operations as we need to give individual deletes to the columns
+        if (!split) {
+            Delete d = new Delete(prefix);
+            d.deleteFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, currentTime - 1);
+            mutations.add(d);
+            statisticsTable.delete(d);
+        }
+        put = new Put(prefix, currentTime);
+        if (tracker.getGuidePosts(fam) != null) {
+            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES,
+                    currentTime, (tracker.getGuidePosts(fam)));
+        }
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.MIN_KEY_BYTES,
+                currentTime, PDataType.VARBINARY.toBytes(tracker.getMinKey(fam)));
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.MAX_KEY_BYTES,
+                currentTime, PDataType.VARBINARY.toBytes(tracker.getMaxKey(fam)));
+        puts.add(put);
+        statisticsTable.put(puts);
+        mutations.add(put);
+        //statisticsTable.mutateRow(mutations);
+        // serialize each of the metrics with the associated serializer
+        //statisticsTable.put(puts);
+        statisticsTable.flushCommits();
+    }
+    
+    public void deleteStats(String tableName, String regionName, StatisticsTracker tracker, String fam)
+            throws IOException {
+        byte[] prefix = StatisticsUtils.getRowKey(PDataType.VARCHAR.toBytes(tableName), PDataType.VARCHAR.toBytes(fam),
+                PDataType.VARCHAR.toBytes(regionName));
+        RowMutations mutations = new RowMutations(prefix);
+        Delete d = new Delete(prefix);
+        d.deleteFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, TimeKeeper.SYSTEM.getCurrentTime() - 1);
+        mutations.add(d);
+        statisticsTable.delete(d);
+        //statisticsTable.mutateRow(mutations);
+        statisticsTable.flushCommits();
     }
 
     /**

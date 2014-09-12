@@ -366,8 +366,6 @@ public class PTableImpl implements PTable {
         PColumnFamily[] families = new PColumnFamily[familyMap.size()];
         if (families.length == 0) {
             this.stats = stats;
-        } else {
-            // associate the stats with the PColumn
         }
         ImmutableMap.Builder<String, PColumnFamily> familyByString = ImmutableMap.builder();
         ImmutableSortedMap.Builder<byte[], PColumnFamily> familyByBytes = ImmutableSortedMap.orderedBy(Bytes.BYTES_COMPARATOR);
@@ -901,10 +899,11 @@ public class PTableImpl implements PTable {
       boolean isImmutableRows = table.getIsImmutableRows();
       TreeMap<byte[], List<byte[]>> tableGuidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
       for (PTableProtos.PTableStats pTableStatsProto : table.getGuidePostsList()) {
-            byte[][] value = new byte[pTableStatsProto.getValuesCount()][];
+            List<byte[]> value = new ArrayList<byte[]>();
             for (int j = 0; j < pTableStatsProto.getValuesCount(); j++) {
-                value[j] = pTableStatsProto.getValues(j).toByteArray();
+                value.add(pTableStatsProto.getValues(j).toByteArray());
             }
+            tableGuidePosts.put(pTableStatsProto.getKeyBytes().toByteArray(), value);
       }
       PName dataTableName = null;
       if (table.hasDataTableNameBytes()) {
@@ -1020,7 +1019,7 @@ public class PTableImpl implements PTable {
              }
          }
       }
-        
+
       if (table.getParentName() != null) {
         builder.setDataTableNameBytes(HBaseZeroCopyByteString.wrap(table.getParentTableName().getBytes()));
       }

@@ -41,8 +41,6 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     private static final int DEFAULT_MAX_TENANT_MEMORY_PERC = 100;
     private static final int DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS = 60000 * 60; // 1HR (to prevent age-out of hash cache during debugging)
     private static final long DEFAULT_MAX_HASH_CACHE_SIZE = 1024*1024*10;  // 10 Mb
-    private static final int DEFAULT_TARGET_QUERY_CONCURRENCY = 4;
-    private static final int DEFAULT_MAX_QUERY_CONCURRENCY = 8;
     private static final boolean DEFAULT_DROP_METADATA = false;
     
     private static final int DEFAULT_MASTER_INFO_PORT = -1;
@@ -67,8 +65,6 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setMaxMemoryWaitMs(DEFAULT_MAX_MEMORY_WAIT_MS)
                 .setMaxTenantMemoryPerc(DEFAULT_MAX_TENANT_MEMORY_PERC)
                 .setMaxServerCacheSize(DEFAULT_MAX_HASH_CACHE_SIZE)
-                .setTargetQueryConcurrency(DEFAULT_TARGET_QUERY_CONCURRENCY)
-                .setMaxQueryConcurrency(DEFAULT_MAX_QUERY_CONCURRENCY)
                 .setRowKeyOrderSaltedTable(true)
                 .setMaxServerCacheTTLMs(DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS)
                 .setMasterInfoPort(DEFAULT_MASTER_INFO_PORT)

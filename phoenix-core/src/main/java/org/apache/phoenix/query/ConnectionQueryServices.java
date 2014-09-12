@@ -93,7 +93,9 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     void addConnection(PhoenixConnection connection) throws SQLException;
     void removeConnection(PhoenixConnection connection) throws SQLException;
-    long updateStatistics(byte[] tenantId, byte[] schemaName, byte[] tableName, String url) throws SQLException;
+
+    long updateStatistics(byte[] schemaName, byte[] tableName, String url, long clientTS)
+            throws SQLException;
 
     /**
      * @return the {@link KeyValueBuilder} that is valid for the locally installed version of HBase.
@@ -104,5 +106,5 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public boolean supportsFeature(Feature feature);
     
     public String getUserName();
-    public void clearCacheForTable(final byte[] tenantId, final byte[] schemaName, final byte[] tableName) throws SQLException;
+    public void clearCacheForTable(final byte[] schemaName, final byte[] tableName, long clientTS) throws SQLException;
 }

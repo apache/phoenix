@@ -87,10 +87,9 @@ public class StatisticsScanner implements InternalScanner {
       // update the statistics table
       // Just verify if this if fine
       String tableName = SchemaUtil.getTableNameFromFullName(region.getTable().getNameAsString());
-      String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
       stats.updateStats(
-          tableName, schemaName, region
-              .getRegionNameAsString(), this.tracker, Bytes.toString(family), null);
+          tableName, region
+              .getRegionNameAsString(), this.tracker, Bytes.toString(family), null, false);
     } catch (IOException e) {
       LOG.error("Failed to update statistics table!", e);
       toThrow = e;

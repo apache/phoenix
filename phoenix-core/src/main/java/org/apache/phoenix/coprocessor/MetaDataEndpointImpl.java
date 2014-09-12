@@ -64,7 +64,6 @@ import java.util.TreeMap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.Coprocessor;
@@ -87,7 +86,6 @@ import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
-import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
@@ -118,7 +116,6 @@ import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.protobuf.ProtobufUtil;
-import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -149,7 +146,6 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
@@ -292,9 +288,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
     private RegionCoprocessorEnvironment env;
          
-    Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
     // TODO : Check if this way is needed
-    private final ReadOnlyProps props = new ReadOnlyProps(this.config.iterator());
     int statsUpdateFrequencyMs;
     int maxStatsAgeMs;
 
@@ -319,10 +313,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
 
         // Can we just get from configuration that is obtained from the env?
-        statsUpdateFrequencyMs = props.getInt(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
-        maxStatsAgeMs = props.getInt(QueryServices.MAX_STATS_AGE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_STATS_AGE_MS);
-        /*statsUpdator = new StatisticsUpdator(this, statsUpdateFrequencyMs, statsCollectorInProgress);
-        Threads.setDaemonThreadRunning(statsUpdator.getThread());*/
+        statsUpdateFrequencyMs = env.getConfiguration().getInt(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
+        maxStatsAgeMs = env.getConfiguration().getInt(QueryServices.MAX_STATS_AGE_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_MAX_STATS_AGE_MS);
         LOG.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
@@ -694,11 +688,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
               addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
           }
         }        
-        byte[] tenIdBytes = QueryConstants.EMPTY_BYTE_ARRAY;
+        byte[] tenIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         if (tenantId != null) {
             tenIdBytes = tenantId.getBytes();
         }
-        byte[] schNameInBytes = QueryConstants.EMPTY_BYTE_ARRAY;
+        byte[] schNameInBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         if (schemaName != null) {
             schNameInBytes = Bytes.toBytes(schemaName.getString());
         }
@@ -707,14 +701,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         Cache<ImmutableBytesPtr, PTable> metaDataCache =
                 GlobalCache.getInstance(this.env).getMetaDataCache();
         PTable statsPTable = metaDataCache.getIfPresent(key);
-        PTableStats stats = updateStatsInternal(schNameInBytes, tableNameBytes, columns, statsPTable);
+        PTableStats stats = updateStatsInternal(tableNameBytes, columns, statsPTable);
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, 
             tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? dataTableName : null, 
             indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement, disableWAL, 
             multiTenant, viewType, viewIndexId, indexType, stats);
     }
 
-    private PTableStats updateStatsInternal(byte[] schemaBytes, byte[] tableNameBytes, List<PColumn> columns, PTable statsPTable)
+    private PTableStats updateStatsInternal(byte[] tableNameBytes, List<PColumn> columns, PTable statsPTable)
             throws IOException {
         List<PName> family = Lists.newArrayListWithExpectedSize(columns.size());
         for (PColumn column : columns) {
@@ -731,10 +725,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             Scan s = new Scan();
             if (tableNameBytes != null) {
                 // Check for an efficient way here
-                byte[] combinedKey = Bytes.add(Bytes.add(schemaBytes, QueryConstants.SEPARATOR_BYTE_ARRAY),
-                        tableNameBytes);
-                s.setStartRow(combinedKey);
-                s.setStopRow(createStopRow(combinedKey));
+                s.setStartRow(tableNameBytes);
+                s.setStopRow(ByteUtil.nextKey(tableNameBytes));
             }
             ResultScanner scanner = statsHTable.getScanner(s);
             Result result = null;
@@ -782,15 +774,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return PTableStatsImpl.NO_STATS;
     }
 
-    private byte[] createStopRow(byte[] tableNameBytes) {
-        byte[] newTableName = new byte[tableNameBytes.length];
-        System.arraycopy(tableNameBytes, 0, newTableName, 0, newTableName.length);
-        byte b = newTableName[tableNameBytes.length-1];
-        b = (byte)(b + 1);
-        newTableName[newTableName.length-1] = b;
-        return newTableName;
-    }
-    
     private PTable buildDeletedTable(byte[] key, ImmutableBytesPtr cacheKey, HRegion region,
         long clientTimeStamp) throws IOException {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
@@ -1787,68 +1770,36 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             return results.size() > 0 && allViewsNotInSingleRegion;
         }
     }
-
-    /**
-     * 
-     * Matches rows that end with a given byte array suffix
-     *
-     * 
-     * @since 3.0
-     */
-    private static class SuffixFilter extends FilterBase {
-        protected byte[] suffix = null;
-
-        public SuffixFilter(final byte[] suffix) {
-            this.suffix = suffix;
-        }
-        
-        @Override
-        public ReturnCode filterKeyValue(Cell ignored) throws IOException {
-          return ReturnCode.INCLUDE;
-        }
-        
-        @Override
-        public boolean filterRowKey(byte[] buffer, int offset, int length) {
-            if (buffer == null || this.suffix == null) return true;
-            if (length < suffix.length) return true;
-            // if they are equal, return false => pass row
-            // else return true, filter row
-            // if we are passed the suffix, set flag
-            int cmp = Bytes.compareTo(buffer, offset + (length - this.suffix.length),
-                    this.suffix.length, this.suffix, 0, this.suffix.length);
-            return cmp != 0;
-        }
-    }
     
     @Override
     public void clearCacheForTable(RpcController controller, ClearCacheForTableRequest request,
             RpcCallback<ClearCacheForTableResponse> done) {
-        ByteString tenantId = request.getTenantId();
         ByteString schemaName = request.getSchemaName();
         ByteString tableName = request.getTableName();
-        byte[] tableKey = SchemaUtil.getTableKey(tenantId.toByteArray(), schemaName.toByteArray() , tableName.toByteArray());
+        byte[] tableKey = SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY, schemaName.toByteArray() , tableName.toByteArray());
         ImmutableBytesPtr key = new ImmutableBytesPtr(tableKey);
-        Cache<ImmutableBytesPtr, PTable> metaDataCache =
-                GlobalCache.getInstance(this.env).getMetaDataCache();
-        PTable table = metaDataCache.getIfPresent(key);
-        // Add +1 to the ts
-        long ts = table.getTimeStamp() + 1;
-        // Here we could add an empty put
-        HRegion region = env.getRegion();
-        List<Mutation> mutations = new ArrayList<Mutation>();
-        Put p = new Put(tableKey);
-        p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, ts, ByteUtil.EMPTY_BYTE_ARRAY);
-        mutations.add(p);
         try {
-            region.mutateRowsWithLocks(mutations, Collections.<byte[]> emptySet());
+            PTable table = doGetTable(tableKey, request.getClientTimestamp());
+            if (table != null) {
+                Cache<ImmutableBytesPtr, PTable> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
+                // Add +1 to the ts
+                // TODO : refactor doGetTable() to do this - optionally increment the timestamp
+                long ts = table.getTimeStamp() + 1;
+                // Here we could add an empty puti
+                HRegion region = env.getRegion();
+                List<Mutation> mutations = new ArrayList<Mutation>();
+                Put p = new Put(tableKey);
+                p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, ts, ByteUtil.EMPTY_BYTE_ARRAY);
+                mutations.add(p);
+                region.mutateRowsWithLocks(mutations, Collections.<byte[]> emptySet());
+                metaDataCache.invalidate(key);
+            }
         } catch (Throwable t) {
-            // I think we could still invalidate it
+            // We could still invalidate it
             logger.error("clearCacheForTable failed to update the latest ts ", t);
             ProtobufUtil.setControllerException(controller, ServerUtil.createIOException(
                     SchemaUtil.getTableName(schemaName.toString(), tableName.toString()), t));
         }
-        // Should this invalidate happen in a lock? Then we need to add this every where in the code
-        metaDataCache.invalidate(key);
     }
     
 }

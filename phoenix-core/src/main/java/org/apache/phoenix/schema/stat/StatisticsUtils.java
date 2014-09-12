@@ -33,14 +33,12 @@ public class StatisticsUtils {
     }
 
     /** Number of parts in our complex key */
-    protected static final int NUM_KEY_PARTS = 4;
+    protected static final int NUM_KEY_PARTS = 3;
 
-    public static byte[] getRowKey(byte[] schema, byte[] table, byte[] fam, byte[] region) throws IOException {
+    public static byte[] getRowKey(byte[] table, byte[] fam, byte[] region) throws IOException {
         // always starts with the source table
-        TrustedByteArrayOutputStream os = new TrustedByteArrayOutputStream(schema.length + table.length + region.length
+        TrustedByteArrayOutputStream os = new TrustedByteArrayOutputStream(table.length + region.length
                 + fam.length + (NUM_KEY_PARTS - 1));
-        os.write(schema);
-        os.write(QueryConstants.SEPARATOR_BYTE_ARRAY);
         os.write(table);
         os.write(QueryConstants.SEPARATOR_BYTE_ARRAY);
         os.write(fam);
@@ -50,11 +48,9 @@ public class StatisticsUtils {
         return os.getBuffer();
     }
     
-    public static byte[] getRowKeyForTSUpdate(byte[] schema, byte[] table) throws IOException {
+    public static byte[] getRowKeyForTSUpdate(byte[] table) throws IOException {
         // always starts with the source table
-        TrustedByteArrayOutputStream os = new TrustedByteArrayOutputStream(schema.length + table.length + 1);
-        os.write(schema);
-        os.write(QueryConstants.SEPARATOR_BYTE_ARRAY);
+        TrustedByteArrayOutputStream os = new TrustedByteArrayOutputStream(table.length);
         os.write(table);
         os.close();
         return os.getBuffer();

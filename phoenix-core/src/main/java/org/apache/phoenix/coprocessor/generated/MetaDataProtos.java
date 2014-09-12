@@ -6319,35 +6319,35 @@ public final class MetaDataProtos {
   public interface ClearCacheForTableRequestOrBuilder
       extends com.google.protobuf.MessageOrBuilder {
 
-    // required bytes tenantId = 1;
+    // required bytes schemaName = 1;
     /**
-     * <code>required bytes tenantId = 1;</code>
-     */
-    boolean hasTenantId();
-    /**
-     * <code>required bytes tenantId = 1;</code>
-     */
-    com.google.protobuf.ByteString getTenantId();
-
-    // required bytes schemaName = 2;
-    /**
-     * <code>required bytes schemaName = 2;</code>
+     * <code>required bytes schemaName = 1;</code>
      */
     boolean hasSchemaName();
     /**
-     * <code>required bytes schemaName = 2;</code>
+     * <code>required bytes schemaName = 1;</code>
      */
     com.google.protobuf.ByteString getSchemaName();
 
-    // required bytes tableName = 3;
+    // required bytes tableName = 2;
     /**
-     * <code>required bytes tableName = 3;</code>
+     * <code>required bytes tableName = 2;</code>
      */
     boolean hasTableName();
     /**
-     * <code>required bytes tableName = 3;</code>
+     * <code>required bytes tableName = 2;</code>
      */
     com.google.protobuf.ByteString getTableName();
+
+    // required int64 clientTimestamp = 3;
+    /**
+     * <code>required int64 clientTimestamp = 3;</code>
+     */
+    boolean hasClientTimestamp();
+    /**
+     * <code>required int64 clientTimestamp = 3;</code>
+     */
+    long getClientTimestamp();
   }
   /**
    * Protobuf type {@code ClearCacheForTableRequest}
@@ -6402,17 +6402,17 @@ public final class MetaDataProtos {
             }
             case 10: {
               bitField0_ |= 0x00000001;
-              tenantId_ = input.readBytes();
+              schemaName_ = input.readBytes();
               break;
             }
             case 18: {
               bitField0_ |= 0x00000002;
-              schemaName_ = input.readBytes();
+              tableName_ = input.readBytes();
               break;
             }
-            case 26: {
+            case 24: {
               bitField0_ |= 0x00000004;
-              tableName_ = input.readBytes();
+              clientTimestamp_ = input.readInt64();
               break;
             }
           }
@@ -6455,73 +6455,73 @@ public final class MetaDataProtos {
     }
 
     private int bitField0_;
-    // required bytes tenantId = 1;
-    public static final int TENANTID_FIELD_NUMBER = 1;
-    private com.google.protobuf.ByteString tenantId_;
+    // required bytes schemaName = 1;
+    public static final int SCHEMANAME_FIELD_NUMBER = 1;
+    private com.google.protobuf.ByteString schemaName_;
     /**
-     * <code>required bytes tenantId = 1;</code>
+     * <code>required bytes schemaName = 1;</code>
      */
-    public boolean hasTenantId() {
+    public boolean hasSchemaName() {
       return ((bitField0_ & 0x00000001) == 0x00000001);
     }
     /**
-     * <code>required bytes tenantId = 1;</code>
-     */
-    public com.google.protobuf.ByteString getTenantId() {
-      return tenantId_;
-    }
-
-    // required bytes schemaName = 2;
-    public static final int SCHEMANAME_FIELD_NUMBER = 2;
-    private com.google.protobuf.ByteString schemaName_;
-    /**
-     * <code>required bytes schemaName = 2;</code>
-     */
-    public boolean hasSchemaName() {
-      return ((bitField0_ & 0x00000002) == 0x00000002);
-    }
-    /**
-     * <code>required bytes schemaName = 2;</code>
+     * <code>required bytes schemaName = 1;</code>
      */
     public com.google.protobuf.ByteString getSchemaName() {
       return schemaName_;
     }
 
-    // required bytes tableName = 3;
-    public static final int TABLENAME_FIELD_NUMBER = 3;
+    // required bytes tableName = 2;
+    public static final int TABLENAME_FIELD_NUMBER = 2;
     private com.google.protobuf.ByteString tableName_;
     /**
-     * <code>required bytes tableName = 3;</code>
+     * <code>required bytes tableName = 2;</code>
      */
     public boolean hasTableName() {
-      return ((bitField0_ & 0x00000004) == 0x00000004);
+      return ((bitField0_ & 0x00000002) == 0x00000002);
     }
     /**
-     * <code>required bytes tableName = 3;</code>
+     * <code>required bytes tableName = 2;</code>
      */
     public com.google.protobuf.ByteString getTableName() {
       return tableName_;
     }
 
+    // required int64 clientTimestamp = 3;
+    public static final int CLIENTTIMESTAMP_FIELD_NUMBER = 3;
+    private long clientTimestamp_;
+    /**
+     * <code>required int64 clientTimestamp = 3;</code>
+     */
+    public boolean hasClientTimestamp() {
+      return ((bitField0_ & 0x00000004) == 0x00000004);
+    }
+    /**
+     * <code>required int64 clientTimestamp = 3;</code>
+     */
+    public long getClientTimestamp() {
+      return clientTimestamp_;
+    }
+
     private void initFields() {
-      tenantId_ = com.google.protobuf.ByteString.EMPTY;
       schemaName_ = com.google.protobuf.ByteString.EMPTY;
       tableName_ = com.google.protobuf.ByteString.EMPTY;
+      clientTimestamp_ = 0L;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
       byte isInitialized = memoizedIsInitialized;
       if (isInitialized != -1) return isInitialized == 1;
 
-      if (!hasTenantId()) {
-        memoizedIsInitialized = 0;
-        return false;
-      }
       if (!hasSchemaName()) {
         memoizedIsInitialized = 0;
         return false;
       }
       if (!hasTableName()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasClientTimestamp()) {
         memoizedIsInitialized = 0;
         return false;
       }
@@ -6533,13 +6533,13 @@ public final class MetaDataProtos {
                         throws java.io.IOException {
       getSerializedSize();
       if (((bitField0_ & 0x00000001) == 0x00000001)) {
-        output.writeBytes(1, tenantId_);
+        output.writeBytes(1, schemaName_);
       }
       if (((bitField0_ & 0x00000002) == 0x00000002)) {
-        output.writeBytes(2, schemaName_);
+        output.writeBytes(2, tableName_);
       }
       if (((bitField0_ & 0x00000004) == 0x00000004)) {
-        output.writeBytes(3, tableName_);
+        output.writeInt64(3, clientTimestamp_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -6552,15 +6552,15 @@ public final class MetaDataProtos {
       size = 0;
       if (((bitField0_ & 0x00000001) == 0x00000001)) {
         size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(1, tenantId_);
+          .computeBytesSize(1, schemaName_);
       }
       if (((bitField0_ & 0x00000002) == 0x00000002)) {
         size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(2, schemaName_);
+          .computeBytesSize(2, tableName_);
       }
       if (((bitField0_ & 0x00000004) == 0x00000004)) {
         size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(3, tableName_);
+          .computeInt64Size(3, clientTimestamp_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -6585,11 +6585,6 @@ public final class MetaDataProtos {
       org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest other = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest) obj;
 
       boolean result = true;
-      result = result && (hasTenantId() == other.hasTenantId());
-      if (hasTenantId()) {
-        result = result && getTenantId()
-            .equals(other.getTenantId());
-      }
       result = result && (hasSchemaName() == other.hasSchemaName());
       if (hasSchemaName()) {
         result = result && getSchemaName()
@@ -6599,6 +6594,11 @@ public final class MetaDataProtos {
       if (hasTableName()) {
         result = result && getTableName()
             .equals(other.getTableName());
+      }
+      result = result && (hasClientTimestamp() == other.hasClientTimestamp());
+      if (hasClientTimestamp()) {
+        result = result && (getClientTimestamp()
+            == other.getClientTimestamp());
       }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
@@ -6613,10 +6613,6 @@ public final class MetaDataProtos {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptorForType().hashCode();
-      if (hasTenantId()) {
-        hash = (37 * hash) + TENANTID_FIELD_NUMBER;
-        hash = (53 * hash) + getTenantId().hashCode();
-      }
       if (hasSchemaName()) {
         hash = (37 * hash) + SCHEMANAME_FIELD_NUMBER;
         hash = (53 * hash) + getSchemaName().hashCode();
@@ -6624,6 +6620,10 @@ public final class MetaDataProtos {
       if (hasTableName()) {
         hash = (37 * hash) + TABLENAME_FIELD_NUMBER;
         hash = (53 * hash) + getTableName().hashCode();
+      }
+      if (hasClientTimestamp()) {
+        hash = (37 * hash) + CLIENTTIMESTAMP_FIELD_NUMBER;
+        hash = (53 * hash) + hashLong(getClientTimestamp());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -6734,11 +6734,11 @@ public final class MetaDataProtos {
 
       public Builder clear() {
         super.clear();
-        tenantId_ = com.google.protobuf.ByteString.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00000001);
         schemaName_ = com.google.protobuf.ByteString.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00000002);
+        bitField0_ = (bitField0_ & ~0x00000001);
         tableName_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00000002);
+        clientTimestamp_ = 0L;
         bitField0_ = (bitField0_ & ~0x00000004);
         return this;
       }
@@ -6771,15 +6771,15 @@ public final class MetaDataProtos {
         if (((from_bitField0_ & 0x00000001) == 0x00000001)) {
           to_bitField0_ |= 0x00000001;
         }
-        result.tenantId_ = tenantId_;
+        result.schemaName_ = schemaName_;
         if (((from_bitField0_ & 0x00000002) == 0x00000002)) {
           to_bitField0_ |= 0x00000002;
         }
-        result.schemaName_ = schemaName_;
+        result.tableName_ = tableName_;
         if (((from_bitField0_ & 0x00000004) == 0x00000004)) {
           to_bitField0_ |= 0x00000004;
         }
-        result.tableName_ = tableName_;
+        result.clientTimestamp_ = clientTimestamp_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -6796,29 +6796,29 @@ public final class MetaDataProtos {
 
       public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest other) {
         if (other == org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.getDefaultInstance()) return this;
-        if (other.hasTenantId()) {
-          setTenantId(other.getTenantId());
-        }
         if (other.hasSchemaName()) {
           setSchemaName(other.getSchemaName());
         }
         if (other.hasTableName()) {
           setTableName(other.getTableName());
         }
+        if (other.hasClientTimestamp()) {
+          setClientTimestamp(other.getClientTimestamp());
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
       }
 
       public final boolean isInitialized() {
-        if (!hasTenantId()) {
-          
-          return false;
-        }
         if (!hasSchemaName()) {
           
           return false;
         }
         if (!hasTableName()) {
+          
+          return false;
+        }
+        if (!hasClientTimestamp()) {
           
           return false;
         }
@@ -6844,110 +6844,107 @@ public final class MetaDataProtos {
       }
       private int bitField0_;
 
-      // required bytes tenantId = 1;
-      private com.google.protobuf.ByteString tenantId_ = com.google.protobuf.ByteString.EMPTY;
+      // required bytes schemaName = 1;
+      private com.google.protobuf.ByteString schemaName_ = com.google.protobuf.ByteString.EMPTY;
       /**
-       * <code>required bytes tenantId = 1;</code>
+       * <code>required bytes schemaName = 1;</code>
        */
-      public boolean hasTenantId() {
+      public boolean hasSchemaName() {
         return ((bitField0_ & 0x00000001) == 0x00000001);
       }
       /**
-       * <code>required bytes tenantId = 1;</code>
-       */
-      public com.google.protobuf.ByteString getTenantId() {
-        return tenantId_;
-      }
-      /**
-       * <code>required bytes tenantId = 1;</code>
-       */
-      public Builder setTenantId(com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  bitField0_ |= 0x00000001;
-        tenantId_ = value;
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>required bytes tenantId = 1;</code>
-       */
-      public Builder clearTenantId() {
-        bitField0_ = (bitField0_ & ~0x00000001);
-        tenantId_ = getDefaultInstance().getTenantId();
-        onChanged();
-        return this;
-      }
-
-      // required bytes schemaName = 2;
-      private com.google.protobuf.ByteString schemaName_ = com.google.protobuf.ByteString.EMPTY;
-      /**
-       * <code>required bytes schemaName = 2;</code>
-       */
-      public boolean hasSchemaName() {
-        return ((bitField0_ & 0x00000002) == 0x00000002);
-      }
-      /**
-       * <code>required bytes schemaName = 2;</code>
+       * <code>required bytes schemaName = 1;</code>
        */
       public com.google.protobuf.ByteString getSchemaName() {
         return schemaName_;
       }
       /**
-       * <code>required bytes schemaName = 2;</code>
+       * <code>required bytes schemaName = 1;</code>
        */
       public Builder setSchemaName(com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
-  bitField0_ |= 0x00000002;
+  bitField0_ |= 0x00000001;
         schemaName_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>required bytes schemaName = 2;</code>
+       * <code>required bytes schemaName = 1;</code>
        */
       public Builder clearSchemaName() {
-        bitField0_ = (bitField0_ & ~0x00000002);
+        bitField0_ = (bitField0_ & ~0x00000001);
         schemaName_ = getDefaultInstance().getSchemaName();
         onChanged();
         return this;
       }
 
-      // required bytes tableName = 3;
+      // required bytes tableName = 2;
       private com.google.protobuf.ByteString tableName_ = com.google.protobuf.ByteString.EMPTY;
       /**
-       * <code>required bytes tableName = 3;</code>
+       * <code>required bytes tableName = 2;</code>
        */
       public boolean hasTableName() {
-        return ((bitField0_ & 0x00000004) == 0x00000004);
+        return ((bitField0_ & 0x00000002) == 0x00000002);
       }
       /**
-       * <code>required bytes tableName = 3;</code>
+       * <code>required bytes tableName = 2;</code>
        */
       public com.google.protobuf.ByteString getTableName() {
         return tableName_;
       }
       /**
-       * <code>required bytes tableName = 3;</code>
+       * <code>required bytes tableName = 2;</code>
        */
       public Builder setTableName(com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
-  bitField0_ |= 0x00000004;
+  bitField0_ |= 0x00000002;
         tableName_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>required bytes tableName = 3;</code>
+       * <code>required bytes tableName = 2;</code>
        */
       public Builder clearTableName() {
-        bitField0_ = (bitField0_ & ~0x00000004);
+        bitField0_ = (bitField0_ & ~0x00000002);
         tableName_ = getDefaultInstance().getTableName();
+        onChanged();
+        return this;
+      }
+
+      // required int64 clientTimestamp = 3;
+      private long clientTimestamp_ ;
+      /**
+       * <code>required int64 clientTimestamp = 3;</code>
+       */
+      public boolean hasClientTimestamp() {
+        return ((bitField0_ & 0x00000004) == 0x00000004);
+      }
+      /**
+       * <code>required int64 clientTimestamp = 3;</code>
+       */
+      public long getClientTimestamp() {
+        return clientTimestamp_;
+      }
+      /**
+       * <code>required int64 clientTimestamp = 3;</code>
+       */
+      public Builder setClientTimestamp(long value) {
+        bitField0_ |= 0x00000004;
+        clientTimestamp_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required int64 clientTimestamp = 3;</code>
+       */
+      public Builder clearClientTimestamp() {
+        bitField0_ = (bitField0_ & ~0x00000004);
+        clientTimestamp_ = 0L;
         onChanged();
         return this;
       }
@@ -8193,32 +8190,32 @@ public final class MetaDataProtos {
       "st\022\036\n\026tableMetadataMutations\030\001 \003(\014\"\023\n\021Cl" +
       "earCacheRequest\"\024\n\022ClearCacheResponse\"\023\n" +
       "\021GetVersionRequest\"%\n\022GetVersionResponse" +
-      "\022\017\n\007version\030\001 \002(\003\"T\n\031ClearCacheForTableR" +
-      "equest\022\020\n\010tenantId\030\001 \002(\014\022\022\n\nschemaName\030\002",
-      " \002(\014\022\021\n\ttableName\030\003 \002(\014\"\034\n\032ClearCacheFor" +
-      "TableResponse*\212\002\n\014MutationCode\022\030\n\024TABLE_" +
-      "ALREADY_EXISTS\020\000\022\023\n\017TABLE_NOT_FOUND\020\001\022\024\n" +
-      "\020COLUMN_NOT_FOUND\020\002\022\031\n\025COLUMN_ALREADY_EX" +
-      "ISTS\020\003\022\035\n\031CONCURRENT_TABLE_MUTATION\020\004\022\027\n" +
-      "\023TABLE_NOT_IN_REGION\020\005\022\025\n\021NEWER_TABLE_FO" +
-      "UND\020\006\022\034\n\030UNALLOWED_TABLE_MUTATION\020\007\022\021\n\rN" +
-      "O_PK_COLUMNS\020\010\022\032\n\026PARENT_TABLE_NOT_FOUND" +
-      "\020\t2\222\004\n\017MetaDataService\022/\n\010getTable\022\020.Get" +
-      "TableRequest\032\021.MetaDataResponse\0225\n\013creat",
-      "eTable\022\023.CreateTableRequest\032\021.MetaDataRe" +
-      "sponse\0221\n\tdropTable\022\021.DropTableRequest\032\021" +
-      ".MetaDataResponse\0221\n\taddColumn\022\021.AddColu" +
-      "mnRequest\032\021.MetaDataResponse\0223\n\ndropColu" +
-      "mn\022\022.DropColumnRequest\032\021.MetaDataRespons" +
-      "e\022?\n\020updateIndexState\022\030.UpdateIndexState" +
-      "Request\032\021.MetaDataResponse\0225\n\nclearCache" +
-      "\022\022.ClearCacheRequest\032\023.ClearCacheRespons" +
-      "e\0225\n\ngetVersion\022\022.GetVersionRequest\032\023.Ge" +
-      "tVersionResponse\022M\n\022clearCacheForTable\022\032",
-      ".ClearCacheForTableRequest\032\033.ClearCacheF" +
-      "orTableResponseBB\n(org.apache.phoenix.co" +
-      "processor.generatedB\016MetaDataProtosH\001\210\001\001" +
-      "\240\001\001"
+      "\022\017\n\007version\030\001 \002(\003\"[\n\031ClearCacheForTableR" +
+      "equest\022\022\n\nschemaName\030\001 \002(\014\022\021\n\ttableName\030",
+      "\002 \002(\014\022\027\n\017clientTimestamp\030\003 \002(\003\"\034\n\032ClearC" +
+      "acheForTableResponse*\212\002\n\014MutationCode\022\030\n" +
+      "\024TABLE_ALREADY_EXISTS\020\000\022\023\n\017TABLE_NOT_FOU" +
+      "ND\020\001\022\024\n\020COLUMN_NOT_FOUND\020\002\022\031\n\025COLUMN_ALR" +
+      "EADY_EXISTS\020\003\022\035\n\031CONCURRENT_TABLE_MUTATI" +
+      "ON\020\004\022\027\n\023TABLE_NOT_IN_REGION\020\005\022\025\n\021NEWER_T" +
+      "ABLE_FOUND\020\006\022\034\n\030UNALLOWED_TABLE_MUTATION" +
+      "\020\007\022\021\n\rNO_PK_COLUMNS\020\010\022\032\n\026PARENT_TABLE_NO" +
+      "T_FOUND\020\t2\222\004\n\017MetaDataService\022/\n\010getTabl" +
+      "e\022\020.GetTableRequest\032\021.MetaDataResponse\0225",
+      "\n\013createTable\022\023.CreateTableRequest\032\021.Met" +
+      "aDataResponse\0221\n\tdropTable\022\021.DropTableRe" +
+      "quest\032\021.MetaDataResponse\0221\n\taddColumn\022\021." +
+      "AddColumnRequest\032\021.MetaDataResponse\0223\n\nd" +
+      "ropColumn\022\022.DropColumnRequest\032\021.MetaData" +
+      "Response\022?\n\020updateIndexState\022\030.UpdateInd" +
+      "exStateRequest\032\021.MetaDataResponse\0225\n\ncle" +
+      "arCache\022\022.ClearCacheRequest\032\023.ClearCache" +
+      "Response\0225\n\ngetVersion\022\022.GetVersionReque" +
+      "st\032\023.GetVersionResponse\022M\n\022clearCacheFor",
+      "Table\022\032.ClearCacheForTableRequest\032\033.Clea" +
+      "rCacheForTableResponseBB\n(org.apache.pho" +
+      "enix.coprocessor.generatedB\016MetaDataProt" +
+      "osH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -8296,7 +8293,7 @@ public final class MetaDataProtos {
           internal_static_ClearCacheForTableRequest_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_ClearCacheForTableRequest_descriptor,
-              new java.lang.String[] { "TenantId", "SchemaName", "TableName", });
+              new java.lang.String[] { "SchemaName", "TableName", "ClientTimestamp", });
           internal_static_ClearCacheForTableResponse_descriptor =
             getDescriptor().getMessageTypes().get(12);
           internal_static_ClearCacheForTableResponse_fieldAccessorTable = new
