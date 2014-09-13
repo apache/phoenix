@@ -304,7 +304,7 @@ public class ScanUtil {
         // but the index for the field it represents in the schema
         // should be incremented by 1 + value in the current slotSpan index
         // slotSpan stores the number of columns beyond one that the range spans
-        int i = slotStartIndex, fieldIndex = slotStartIndex;
+        int i = slotStartIndex, fieldIndex = ScanUtil.getRowKeyPosition(slotSpan, slotStartIndex);
         for (i = slotStartIndex; i < slotEndIndex; i++) {
             // Build up the key by appending the bound of each key range
             // from the current position of each slot. 
@@ -519,12 +519,37 @@ public class ScanUtil {
         return new int[nSlots];
     }
 
-    public static int calculateSlotSpan(List<List<KeyRange>> ranges, int[] slotSpan) {
-        int nSlots = ranges.size();
-        int totalSlotSpan = nSlots;
-        for (int i = 0; i < nSlots; i++) {
-            totalSlotSpan += slotSpan[i];
+    /**
+     * Finds the total number of row keys spanned by this ranges / slotSpan pair.
+     * This accounts for slots in the ranges that may span more than on row key.
+     * @param ranges  the KeyRange slots paired with this slotSpan. corresponds to {@link ScanRanges#ranges}
+     * @param slotSpan  the extra span per skip scan slot. corresponds to {@link ScanRanges#slotSpan}
+     * @return  the total number of row keys spanned yb this ranges / slotSpan pair.
+     * @see #getRowKeyPosition(int[], int)
+     */
+    public static int getTotalSpan(List<List<KeyRange>> ranges, int[] slotSpan) {
+        // finds the position at the "end" of the ranges, which is also the total span
+        return getRowKeyPosition(slotSpan, ranges.size());
+    }
+
+    /**
+     * Finds the position in the row key schema for a given position in the scan slots.
+     * For example, with a slotSpan of {0, 1, 0}, the slot at index 1 spans an extra column in the row key. This means
+     * that the slot at index 2 has a slot index of 2 but a row key index of 3.
+     * To calculate the "adjusted position" index, we simply add up the number of extra slots spanned and offset
+     * the slotPosition by that much.
+     * @param slotSpan  the extra span per skip scan slot. corresponds to {@link ScanRanges#slotSpan}
+     * @param slotPosition  the index of a slot in the SkipScan slots list.
+     * @return  the equivalent row key position in the RowKeySchema
+     * @see #getTotalSpan(java.util.List, int[])
+     */
+    public static int getRowKeyPosition(int[] slotSpan, int slotPosition) {
+        int offset = 0;
+
+        for(int i = 0; i < slotPosition; i++) {
+            offset += slotSpan[i];
         }
-        return totalSlotSpan;
+
+        return offset + slotPosition;
     }
 }
