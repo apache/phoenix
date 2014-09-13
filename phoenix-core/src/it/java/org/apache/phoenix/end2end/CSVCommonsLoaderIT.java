@@ -41,7 +41,6 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(HBaseManagedTimeTest.class)
 public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
 
@@ -50,6 +49,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
             + "KEY1,A,2147483647,1.1,0,TRUE,9223372036854775807,0,1990-12-31 10:59:59,1999-12-31 23:59:59\n"
             + "KEY2,B,-2147483648,-1.1,2147483647,FALSE,-9223372036854775808,9223372036854775807,2000-01-01 00:00:01,2012-02-29 23:59:59\n";
     private static final String STOCK_TABLE = "STOCK_SYMBOL";
+    private static final String STOCK_TABLE_MULTI = "STOCK_SYMBOL_MULTI";
     private static final String STOCK_CSV_VALUES = "AAPL,APPLE Inc.\n"
             + "CRM,SALESFORCE\n" + "GOOG,Google\n"
             + "HOG,Harlet-Davidson Inc.\n" + "HPQ,Hewlett Packard\n"
@@ -136,6 +136,55 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                 parser.close();
             if (conn != null)
                 conn.close();
+        }
+    }
+
+    @Test
+    public void testCSVCommonsUpsert_MultiTenant() throws Exception {
+        CSVParser parser = null;
+        PhoenixConnection globalConn = null;
+        PhoenixConnection tenantConn = null;
+        try {
+
+            // Create table using the global connection
+            String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE_MULTI
+                    + "(TENANT_ID VARCHAR NOT NULL, SYMBOL VARCHAR NOT NULL, COMPANY VARCHAR," +
+                    " CONSTRAINT PK PRIMARY KEY(TENANT_ID,SYMBOL)) MULTI_TENANT = true;";
+            globalConn = DriverManager.getConnection(getUrl()).unwrap(
+                    PhoenixConnection.class);
+            PhoenixRuntime.executeStatements(globalConn,
+                    new StringReader(statements), null);
+            globalConn.close();
+
+            tenantConn = DriverManager.getConnection(getUrl() + ";TenantId=acme").unwrap(
+                    PhoenixConnection.class);
+
+            // Upsert CSV file
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(tenantConn, STOCK_TABLE_MULTI,
+                    Collections.<String> emptyList(), true);
+            csvUtil.upsert(new StringReader(STOCK_CSV_VALUES_WITH_HEADER));
+
+            // Compare Phoenix ResultSet with CSV file content
+            PreparedStatement statement = tenantConn
+                    .prepareStatement("SELECT SYMBOL, COMPANY FROM "
+                            + STOCK_TABLE_MULTI);
+            ResultSet phoenixResultSet = statement.executeQuery();
+            parser = new CSVParser(new StringReader(
+                    STOCK_CSV_VALUES_WITH_HEADER), csvUtil.getFormat());
+            for (CSVRecord record : parser) {
+                assertTrue(phoenixResultSet.next());
+                int i = 0;
+                for (String value : record) {
+                    assertEquals(value, phoenixResultSet.getString(i + 1));
+                    i++;
+                }
+            }
+            assertFalse(phoenixResultSet.next());
+        } finally {
+            if (parser != null)
+                parser.close();
+            if (tenantConn != null)
+                tenantConn.close();
         }
     }
 
