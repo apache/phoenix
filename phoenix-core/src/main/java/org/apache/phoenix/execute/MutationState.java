@@ -46,7 +46,6 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -288,7 +287,7 @@ public class MutationState implements SQLCloseable {
                     serverTimeStamp = timestamp;
                     if (result.wasUpdated()) {
                         // TODO: use bitset?
-                        table = connection.getMetaDataCache().getTable(new PTableKey(tenantId, table.getName().getString()));
+                        table = result.getTable();
                         PColumn[] columns = new PColumn[table.getColumns().size()];
                         for (Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry : entry.getValue().entrySet()) {
                             Map<PColumn,byte[]> valueEntry = rowEntry.getValue();
