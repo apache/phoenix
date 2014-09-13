@@ -53,6 +53,7 @@ import java.util.Properties;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -1228,4 +1229,56 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         assertEquals(4, rs.getInt(2));
         assertFalse(rs.next());
     }
+
+    @Test
+    public void testForceSkipScan() throws Exception {
+        String tempTableWithCompositePK = "TEMP_TABLE_COMPOSITE_PK";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute("CREATE TABLE " + tempTableWithCompositePK
+                    + "   (col0 INTEGER NOT NULL, "
+                    + "    col1 INTEGER NOT NULL, "
+                    + "    col2 INTEGER NOT NULL, "
+                    + "    col3 INTEGER "
+                    + "   CONSTRAINT pk PRIMARY KEY (col0, col1, col2)) "
+                    + "   SALT_BUCKETS=4");
+
+            PreparedStatement upsertStmt = conn.prepareStatement(
+                    "upsert into " + tempTableWithCompositePK + "(col0, col1, col2, col3) " + "values (?, ?, ?, ?)");
+            for (int i = 0; i < 3; i++) {
+                upsertStmt.setInt(1, i + 1);
+                upsertStmt.setInt(2, i + 2);
+                upsertStmt.setInt(3, i + 3);
+                upsertStmt.setInt(4, i + 5);
+                upsertStmt.execute();
+            }
+            conn.commit();
+
+            String query = "SELECT * FROM " + tempTableWithCompositePK + " WHERE (col0, col1) in ((2, 3), (3, 4), (4, 5))";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 2);
+            assertEquals(rs.getInt(2), 3);
+            assertEquals(rs.getInt(3), 4);
+            assertEquals(rs.getInt(4), 6);
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 3);
+            assertEquals(rs.getInt(2), 4);
+            assertEquals(rs.getInt(3), 5);
+            assertEquals(rs.getInt(4), 7);
+
+            assertFalse(rs.next());
+
+            String plan = "CLIENT PARALLEL 4-WAY SKIP SCAN ON 12 KEYS OVER TEMP_TABLE_COMPOSITE_PK [0,2] - [3,4]\n" +
+                          "CLIENT MERGE SORT";
+            String explainQuery = "EXPLAIN " + query;
+            rs = conn.createStatement().executeQuery(explainQuery);
+            assertEquals(query, plan, QueryUtil.getExplainPlan(rs));
+        } finally {
+            conn.close();
+        }
+    }
+
 }

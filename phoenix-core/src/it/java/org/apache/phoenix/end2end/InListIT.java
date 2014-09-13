@@ -164,6 +164,11 @@ public class InListIT extends BaseHBaseManagedTimeIT {
     private static final List<Boolean> TENANCIES = Arrays.asList(false, true);
     private static final List<PDataType> INTEGER_TYPES = Arrays.asList(PDataType.INTEGER, PDataType.LONG);
     private static final List<Integer> SALT_BUCKET_NUMBERS = Arrays.asList(0, 4);
+
+    // we should be including the RANGE_SCAN hint here, but a bug with ParallelIterators causes tests to fail
+    // see the relevant JIRA here: https://issues.apache.org/jira/browse/PHOENIX-1251
+    private static final List<String> HINTS = Arrays.asList("", "/*+ SKIP_SCAN */");
+//    private static final List<String> HINTS = Arrays.asList("", "/*+ SKIP_SCAN */", "/*+ RANGE_SCAN */");
     
     /**
      * Tests the given where clause against the given upserts by comparing against the list of
@@ -193,14 +198,19 @@ public class InListIT extends BaseHBaseManagedTimeIT {
                         }
                         conn.commit();
 
-                        // perform the query
-                        String sql = "SELECT nonPk FROM " + tableName + " " + whereClause;
-                        ResultSet rs = conn.createStatement().executeQuery(sql);
-                        for(String expected : expecteds) {
-                            assertTrue(rs.next());
-                            assertEquals(expected, rs.getString(1));
+                        for(String hint : HINTS) {
+                            String context = "where: " + whereClause + ", type: " + pkType + ", salt buckets: "
+                                    + saltBuckets + ", multitenant: " + isMultiTenant + ", hint: " + hint + "";
+
+                            // perform the query
+                            String sql = "SELECT " + hint + " nonPk FROM " + tableName + " " + whereClause;
+                            ResultSet rs = conn.createStatement().executeQuery(sql);
+                            for (String expected : expecteds) {
+                                assertTrue("did not include result '" + expected + "' (" + context + ")", rs.next());
+                                assertEquals(context, expected, rs.getString(1));
+                            }
+                            assertFalse(context, rs.next());
                         }
-                        assertFalse(rs.next());
                     }
                 }
             }

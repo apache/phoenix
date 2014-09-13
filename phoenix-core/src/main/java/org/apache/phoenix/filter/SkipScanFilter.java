@@ -81,17 +81,21 @@ public class SkipScanFilter extends FilterBase {
     }
 
     public SkipScanFilter(List<List<KeyRange>> slots, RowKeySchema schema) {
-        init(slots, schema);
+        this(slots, ScanUtil.getDefaultSlotSpans(slots.size()), schema);
     }
 
-    private void init(List<List<KeyRange>> slots, RowKeySchema schema) {
+    public SkipScanFilter(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema) {
+        init(slots, slotSpan, schema);
+    }
+
+    private void init(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema) {
         for (List<KeyRange> ranges : slots) {
             if (ranges.isEmpty()) {
                 throw new IllegalStateException();
             }
         }
         this.slots = slots;
-        this.slotSpan = ScanUtil.getDefaultSlotSpans(slots.size());
+        this.slotSpan = slotSpan;
         this.schema = schema;
         this.maxKeyLength = SchemaUtil.getMaxKeyLength(schema, slots);
         this.position = new int[slots.size()];
@@ -133,7 +137,7 @@ public class SkipScanFilter extends FilterBase {
     public SkipScanFilter intersect(byte[] lowerInclusiveKey, byte[] upperExclusiveKey) {
         List<List<KeyRange>> newSlots = Lists.newArrayListWithCapacity(slots.size());
         if (intersect(lowerInclusiveKey, upperExclusiveKey, newSlots)) {
-            return new SkipScanFilter(newSlots, schema);
+            return new SkipScanFilter(newSlots, slotSpan, schema);
         }
         return null;
     }
@@ -160,7 +164,7 @@ public class SkipScanFilter extends FilterBase {
         int lastSlot = slots.size()-1;
         if (!lowerUnbound) {
             // Find the position of the first slot of the lower range
-            schema.next(ptr, 0, schema.iterator(lowerInclusiveKey,ptr));
+            schema.next(ptr, 0, schema.iterator(lowerInclusiveKey,ptr), slotSpan[0]);
             startPos = ScanUtil.searchClosestKeyRangeWithUpperHigherThanPtr(slots.get(0), ptr, 0);
             // Lower range is past last upper range of first slot, so cannot possibly be in range
             if (startPos >= slots.get(0).size()) {
@@ -171,7 +175,7 @@ public class SkipScanFilter extends FilterBase {
         int endPos = slots.get(0).size()-1;
         if (!upperUnbound) {
             // Find the position of the first slot of the upper range
-            schema.next(ptr, 0, schema.iterator(upperExclusiveKey,ptr));
+            schema.next(ptr, 0, schema.iterator(upperExclusiveKey,ptr), slotSpan[0]);
             endPos = ScanUtil.searchClosestKeyRangeWithUpperHigherThanPtr(slots.get(0), ptr, startPos);
             // Upper range lower than first lower range of first slot, so cannot possibly be in range
             if (endPos == 0 && Bytes.compareTo(upperExclusiveKey, slots.get(0).get(0).getLowerRange()) <= 0) {
@@ -296,7 +300,7 @@ public class SkipScanFilter extends FilterBase {
         int earliestRangeIndex = nSlots-1;
         int minOffset = offset;
         int maxOffset = schema.iterator(currentKey, minOffset, length, ptr);
-        schema.next(ptr, i, maxOffset);
+        schema.next(ptr, ScanUtil.getRowKeyPosition(slotSpan, i), maxOffset, slotSpan[i]);
         while (true) {
             // Increment to the next range while the upper bound of our current slot is less than our current key
             while (position[i] < slots.get(i).size() && slots.get(i).get(position[i]).compareUpperToLowerBound(ptr) < 0) {
@@ -335,7 +339,7 @@ public class SkipScanFilter extends FilterBase {
                     // the current key, so we'll end up incrementing the start key until it's bigger than the
                     // current key.
                     setStartKey();
-                    schema.reposition(ptr, i, j, minOffset, maxOffset);
+                    schema.reposition(ptr, ScanUtil.getRowKeyPosition(slotSpan, i), ScanUtil.getRowKeyPosition(slotSpan, j), minOffset, maxOffset, slotSpan[j]);
                 } else {
                     int currentLength = setStartKey(ptr, minOffset, j+1);
                     // From here on, we use startKey as our buffer (resetting minOffset and maxOffset)
@@ -343,7 +347,7 @@ public class SkipScanFilter extends FilterBase {
                     // Reinitialize the iterator to be positioned at previous slot position
                     minOffset = 0;
                     maxOffset = startKeyLength;
-                    schema.iterator(startKey, minOffset, maxOffset, ptr, j+1);
+                    schema.iterator(startKey, minOffset, maxOffset, ptr, ScanUtil.getRowKeyPosition(slotSpan, j)+1);
                     // Do nextKey after setting the accessor b/c otherwise the null byte may have
                     // been incremented causing us not to find it
                     ByteUtil.nextKey(startKey, currentLength);
@@ -368,7 +372,7 @@ public class SkipScanFilter extends FilterBase {
                 }
                 i++;
                 // If we run out of slots in our key, it means we have a partial key.
-                if (schema.next(ptr, i, maxOffset) == null) {
+                if (schema.next(ptr, ScanUtil.getRowKeyPosition(slotSpan, i), maxOffset, slotSpan[i]) == null) {
                     // If the rest of the slots are checking for IS NULL, then break because
                     // that's the case (since we don't store trailing nulls).
                     if (allTrailingNulls(i)) {
@@ -458,27 +462,34 @@ public class SkipScanFilter extends FilterBase {
         int andLen = in.readInt();
         List<List<KeyRange>> slots = Lists.newArrayListWithExpectedSize(andLen);
         for (int i=0; i<andLen; i++) {
-            int orlen = in.readInt();
-            List<KeyRange> orclause = Lists.newArrayListWithExpectedSize(orlen);
-            slots.add(orclause);
-            for (int j=0; j<orlen; j++) {
+            int orLen = in.readInt();
+            List<KeyRange> orClause = Lists.newArrayListWithExpectedSize(orLen);
+            slots.add(orClause);
+            for (int j=0; j<orLen; j++) {
                 KeyRange range = new KeyRange();
                 range.readFields(in);
-                orclause.add(range);
+                orClause.add(range);
             }
         }
-        this.init(slots, schema);
+        int[] slotSpan = new int[andLen];
+        for (int i = 0; i < andLen; i++) {
+            slotSpan[i] = in.readInt();
+        }
+        this.init(slots, slotSpan, schema);
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
         schema.write(out);
         out.writeInt(slots.size());
-        for (List<KeyRange> orclause : slots) {
-            out.writeInt(orclause.size());
-            for (KeyRange range : orclause) {
+        for (List<KeyRange> orClause : slots) {
+            out.writeInt(orClause.size());
+            for (KeyRange range : orClause) {
                 range.write(out);
             }
+        }
+        for (int span : slotSpan) {
+            out.writeInt(span);
         }
     }
 
