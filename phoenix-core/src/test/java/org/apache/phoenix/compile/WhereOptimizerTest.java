@@ -1565,7 +1565,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertArrayEquals(HConstants.EMPTY_START_ROW, scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
-    
+
     @Test
     public void testUsingRVCNonFullyQualifiedInClause() throws Exception {
         String firstOrgId = "000000000000001";
@@ -1577,7 +1577,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         StatementContext context = compileStatement(query, binds);
         Scan scan = context.getScan();
         Filter filter = scan.getFilter();
-        assertTrue(filter instanceof RowKeyComparisonFilter);
+        assertTrue(filter instanceof SkipScanFilter);
         assertArrayEquals(ByteUtil.concat(PDataType.VARCHAR.toBytes(firstOrgId), PDataType.VARCHAR.toBytes(firstParentId)), scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(PDataType.VARCHAR.toBytes(secondOrgId), PDataType.VARCHAR.toBytes(secondParentId))), scan.getStopRow());
     }
