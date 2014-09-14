@@ -23,10 +23,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -45,6 +47,7 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+5));
         Connection conn5 = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn5, KEYONLY_NAME);
         String query = "SELECT i1, i2 FROM KEYONLY";
         PreparedStatement statement = conn5.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
@@ -76,6 +79,7 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+8));
         Connection conn8 = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn8, KEYONLY_NAME);
         query = "SELECT i1 FROM KEYONLY";
         statement = conn8.prepareStatement(query);
         rs = statement.executeQuery();
@@ -113,6 +117,7 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+5));
         Connection conn5 = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn5, KEYONLY_NAME);
         String query = "SELECT i1 FROM KEYONLY WHERE i1 < 2 or i1 = 3";
         PreparedStatement statement = conn5.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
@@ -141,6 +146,11 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         
         conn.commit();
         conn.close();
+    }
+
+    private void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
+        String query = "ANALYZE " + tableName;
+        conn.createStatement().execute(query);
     }
         
 }

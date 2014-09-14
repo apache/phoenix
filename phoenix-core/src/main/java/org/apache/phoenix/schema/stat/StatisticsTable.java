@@ -44,6 +44,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -136,25 +137,23 @@ public class StatisticsTable implements Closeable {
         if (tracker == null) { return; }
 
         long currentTime = timeKeeper.getCurrentTime();
-        List<Put> puts = new ArrayList<Put>();
+        List<Mutation> mutations = new ArrayList<Mutation>();
         // Add the timestamp header
         byte[] prefix = StatisticsUtils.getRowKeyForTSUpdate(PDataType.VARCHAR.toBytes(tableName));
         Put put = new Put(prefix);
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES,
                 PDataType.DATE.toBytes(new Date(currentTime)));
-        puts.add(put);
-        statisticsTable.put(puts);
+        statisticsTable.put(put);
         statisticsTable.flushCommits();
 
         prefix = StatisticsUtils.getRowKey(PDataType.VARCHAR.toBytes(tableName), PDataType.VARCHAR.toBytes(fam),
                 PDataType.VARCHAR.toBytes(regionName));
-        RowMutations mutations = new RowMutations(prefix);
-        //All these are very costly operations as we need to give individual deletes to the columns
+        // Better to add them in in one batch using mutateRow
         if (!split) {
             Delete d = new Delete(prefix);
             d.deleteFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, currentTime - 1);
             mutations.add(d);
-            statisticsTable.delete(d);
+            //statisticsTable.delete(d);
         }
         put = new Put(prefix, currentTime);
         if (tracker.getGuidePosts(fam) != null) {
@@ -165,9 +164,15 @@ public class StatisticsTable implements Closeable {
                 currentTime, PDataType.VARBINARY.toBytes(tracker.getMinKey(fam)));
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.MAX_KEY_BYTES,
                 currentTime, PDataType.VARBINARY.toBytes(tracker.getMaxKey(fam)));
-        puts.add(put);
-        statisticsTable.put(puts);
         mutations.add(put);
+//        statisticsTable.put(puts);
+  //      mutations.add(put);
+        Object[] res = new Object[mutations.size()];
+        try {
+            statisticsTable.batch(mutations, res);
+        } catch (InterruptedException e) {
+            throw new IOException("Exception while adding deletes and puts");
+        }
         //statisticsTable.mutateRow(mutations);
         // serialize each of the metrics with the associated serializer
         //statisticsTable.put(puts);

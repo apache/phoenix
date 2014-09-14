@@ -22,11 +22,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -74,7 +76,12 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         stmt.setLong(7, 22222);
         stmt.execute();
     }
-    
+
+    private void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
+        String query = "ANALYZE " + tableName;
+        conn.createStatement().execute(query);
+    }
+
     @Test
     public void testConstantCount() throws Exception {
         long ts = nextTimestamp();
@@ -84,6 +91,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(ts);
+            analyzeTable(conn, "MULTI_CF");
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -103,6 +111,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(ts);
+            analyzeTable(conn, "MULTI_CF");
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -123,6 +132,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(ts);
+            analyzeTable(conn, "MULTI_CF");
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -143,6 +153,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(ts);
+            analyzeTable(conn, "MULTI_CF");
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -163,6 +174,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(ts);
+            analyzeTable(conn, "MULTI_CF");
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -178,11 +190,11 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
     public void testDefaultCFToDisambiguate() throws Exception {
         long ts = nextTimestamp();
         initTableValues(ts);
-        
         String ddl = "ALTER TABLE multi_cf ADD response_time BIGINT";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3);
         Connection conn = DriverManager.getConnection(url);
         conn.createStatement().execute(ddl);
+        analyzeTable(conn, "MULTI_CF");
         conn.close();
        
         String dml = "upsert into " +
@@ -195,7 +207,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         conn.createStatement().execute(dml);
         conn.commit();
         conn.close();
-
+        analyzeTable(conn, "MULTI_CF");
         String query = "SELECT ID,RESPONSE_TIME from multi_cf where RESPONSE_TIME = 333";
         url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         conn = DriverManager.getConnection(url);
@@ -220,6 +232,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(ts);
+            analyzeTable(conn, "MULTI_CF");
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());

@@ -115,14 +115,37 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
         PTable table = this.tableRef.getTable();
         List<PColumnFamily> columnFamilies = table.getColumnFamilies();
-        if(columnFamilies.isEmpty()) {
+        byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(table);
+        //boolean containsDefaultCF = false;
+        List<byte[]> gps = null;
+/*        if(columnFamilies.isEmpty()) {
             //Cases where column families are empty
-            table.getTableStats().getGuidePosts();
+            TreeMap<byte[], List<byte[]>> tableGps = table.getTableStats().getGuidePosts();
+            // Collect from table here
+            gps = tableGps.get(defaultCF);
+        } else {
+            containsDefaultCF = familyMap.containsKey(defaultCF);
+        }*/
+        
+        try {
+            if (table.getColumnFamilies().isEmpty()) {
+                // For sure we can get the defaultCF from the table
+                gps = table.getTableStats().getGuidePosts().get(defaultCF);
+            } else {
+                if (scan.getFamilyMap().size() > 0) {
+                    if (scan.getFamilyMap().containsKey(defaultCF)) { // Favor using default CF if it's used in scan
+                        gps = table.getColumnFamily(defaultCF).getGuidePosts();
+                    } else { // Otherwise, just use first CF in use by scan
+                        gps = table.getColumnFamily(scan.getFamilyMap().keySet().iterator().next()).getGuidePosts();
+                    }
+                } else {
+                    gps = table.getTableStats().getGuidePosts().get(defaultCF);
+                }
+            }
+        } catch (Exception cfne) {
+            logger.error("Error while getting guideposts for the cf " + Bytes.toString(defaultCF));
         }
-        byte[] emptyColumnFamily = SchemaUtil.getEmptyColumnFamily(table);
-        boolean containsDefaultCF = familyMap.containsKey(emptyColumnFamily);
-        // Collect all the guide posts across families. Sort them and then create a key range that starts 
-        // from [] to [].  Then intersect it with the region boundary
+
         List<KeyRange> regionStartEndKey = Lists.newArrayListWithExpectedSize(regions.size());
         for (HRegionLocation region : regions) {
             regionStartEndKey.add(KeyRange.getKeyRange(region.getRegionInfo().getStartKey(), region.getRegionInfo()
@@ -130,60 +153,61 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         }
         List<KeyRange> guidePosts = Lists.newArrayListWithCapacity(regions.size());
         List<byte[]> guidePostsBytes = Lists.newArrayListWithCapacity(regions.size());
-        PColumnFamily cftoUse = null;
+/*        PColumnFamily cftoUse = null;
         if (containsDefaultCF || familyMap.isEmpty()) {
+            // Check from the cfs associated with the table
             for (PColumnFamily fam : columnFamilies) {
-                if (Bytes.equals(emptyColumnFamily, fam.getName().getBytes())) {
+                if (Bytes.equals(defaultCF, fam.getName().getBytes())) {
                     cftoUse = fam;
+                    gps = cftoUse.getGuidePosts();
                     break;
                 }
             }
         } else {
             if (familyMap.size() > 0) {
+                // 
                 byte[] first = familyMap.values().iterator().next().first();
                 for (PColumnFamily fam : columnFamilies) {
                     if (Bytes.equals(first, fam.getName().getBytes())) {
                         cftoUse = fam;
+                        gps = cftoUse.getGuidePosts();
                         break;
                     }
                 }
             }
-        }
-        if (cftoUse != null) {
-            // Only one cf to be used here
-            List<byte[]> gps = cftoUse.getGuidePosts();
-            if (gps != null) {
-                // the guide posts will arrive in sorted order here as we are focusing on only one cf
-                for (byte[] guidePost : gps) {
-                    PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePost);
-                    if (array != null && array.getDimensions() != 0) {
-                        for (int j = 0; j < array.getDimensions(); j++) {
-                            guidePostsBytes.add(array.toBytes(j));
-                        }
+        }*/
+        // Only one cf to be used here
+        if (gps != null) {
+            // the guide posts will arrive in sorted order here as we are focusing on only one cf
+            for (byte[] guidePost : gps) {
+                PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePost);
+                if (array != null && array.getDimensions() != 0) {
+                    for (int j = 0; j < array.getDimensions(); j++) {
+                        guidePostsBytes.add(array.toBytes(j));
                     }
-           /*             PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePost);
-                        if (array != null && array.getDimensions() != 0) {
-                            if (array.getDimensions() > 1) {
-                                // Should we really do like this or as we already have the byte[]
-                                // of guide posts just use them
-                                // per region?
-                                // Adding all the collected guideposts to the key ranges
-                                guidePosts.add(KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY, array.toBytes(0)));
-                                for (int i = 0; i < array.getDimensions() - 2; i++) {
-                                    guidePosts.add(KeyRange.getKeyRange(array.toBytes(i), (array.toBytes(i + 1))));
-                                }
-                                guidePosts.add(KeyRange.getKeyRange(array.toBytes(array.getDimensions() - 2),
-                                        (array.toBytes(array.getDimensions() - 1))));
-                                guidePosts.add(KeyRange.getKeyRange(array.toBytes(array.getDimensions() - 1),
-                                        (HConstants.EMPTY_BYTE_ARRAY)));
-
-                            } else {
-                                byte[] gp = array.toBytes(0);
-                                guidePosts.add(KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY, gp));
-                                guidePosts.add(KeyRange.getKeyRange(gp, HConstants.EMPTY_BYTE_ARRAY));
-                            }
-                        }*/
                 }
+                /*PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePost);
+                if (array != null && array.getDimensions() != 0) {
+                    if (array.getDimensions() > 1) {
+                        // Should we really do like this or as we already have the byte[]
+                        // of guide posts just use them
+                        // per region?
+                        // Adding all the collected guideposts to the key ranges
+                        guidePosts.add(KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY, array.toBytes(0)));
+                        for (int i = 0; i < array.getDimensions() - 2; i++) {
+                            guidePosts.add(KeyRange.getKeyRange(array.toBytes(i), (array.toBytes(i + 1))));
+                        }
+                        guidePosts.add(KeyRange.getKeyRange(array.toBytes(array.getDimensions() - 2),
+                                (array.toBytes(array.getDimensions() - 1))));
+                        guidePosts.add(KeyRange.getKeyRange(array.toBytes(array.getDimensions() - 1),
+                                (HConstants.EMPTY_BYTE_ARRAY)));
+
+                    } else {
+                        byte[] gp = array.toBytes(0);
+                        guidePosts.add(KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY, gp));
+                        guidePosts.add(KeyRange.getKeyRange(gp, HConstants.EMPTY_BYTE_ARRAY));
+                    }
+                }*/
             }
         }
         int size = guidePostsBytes.size();
