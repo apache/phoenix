@@ -23,12 +23,14 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.MultipleIOException;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
@@ -52,6 +54,7 @@ public class StatisticsScanner implements InternalScanner {
     this.delegate = delegate;
     this.region = region;
     this.family = family;
+    this.tracker.clear();
   }
 
   @Override
@@ -76,10 +79,19 @@ public class StatisticsScanner implements InternalScanner {
    *          next batch of {@link KeyValue}s
    */
   protected void updateStat(final List<Cell> results) {
-    for (Cell c : results) {
-      tracker.updateStatistic(KeyValueUtil.ensureKeyValue(c));
+      byte[] prevRow = null;
+        for (Cell c : results) {
+            KeyValue kv = KeyValueUtil.ensureKeyValue(c);
+            if (!CellUtil.isDelete(kv)) {
+                byte[] row = new ImmutableBytesPtr(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength())
+                        .copyBytesIfNecessary();
+                if (!Bytes.equals(row, prevRow)) {
+                    tracker.updateStatistic(kv);
+                }
+                prevRow = row;
+            }
+        }
     }
-  }
 
   public void close() throws IOException {
     IOException toThrow = null;

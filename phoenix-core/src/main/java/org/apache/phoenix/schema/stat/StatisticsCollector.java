@@ -91,6 +91,9 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         if (familyMap != null) {
             familyMap.clear();
         }
+        maxMap.clear();
+        minMap.clear();
+        guidePostsMap.clear();
         Scan scan = createScan();
         if (request.hasStartRow()) {
             scan.setStartRow(request.getStartRow().toByteArray());
@@ -183,8 +186,14 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
      *            next batch of {@link KeyValue}s
      */
     protected void updateStat(final List<Cell> results) {
+        byte[] prevRow = null;
         for (Cell c : results) {
-            updateStatistic(KeyValueUtil.ensureKeyValue(c));
+            KeyValue kv = KeyValueUtil.ensureKeyValue(c);
+            byte[] row = new ImmutableBytesPtr(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength()).copyBytesIfNecessary();
+            if (!Bytes.equals(row, prevRow)) {
+                updateStatistic(kv);
+            }
+            prevRow = row;
         }
     }
 
@@ -248,9 +257,9 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         // Create a delete operation on the parent region
         // Then write the new guide posts for individual regions
         // TODO : Try making this automic
-        collectStatsForSplitRegions(l, region, true);
+/*        collectStatsForSplitRegions(l, region, true);
         clear();
-        collectStatsForSplitRegions(r, region, false);
+        collectStatsForSplitRegions(r, region, false);*/
     }
 
     private void collectStatsForSplitRegions(HRegion daughter, HRegion region, boolean delete) throws IOException {
@@ -303,8 +312,10 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     @Override
     public void updateStatistic(KeyValue kv) {
         // Should we onlyl check for Puts?
+        System.out.println(kv);
         byte[] cf = kv.getFamily();
         familyMap.add(cf);
+        
         String fam = Bytes.toString(cf);
         if (!minMap.containsKey(fam) && !maxMap.containsKey(fam)) {
             minMap.put(fam, StatisticsUtils.copyRow(kv));
@@ -323,13 +334,13 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         byteCount += kv.getLength();
         // TODO : This can be moved to an interface so that we could collect guide posts in different ways
         if (byteCount >= guidepostDepth) {
+            byte[] row = new ImmutableBytesPtr(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength()).copyBytesIfNecessary();
             if (guidePostsMap.get(fam) != null) {
                 guidePostsMap.get(fam).add(
-                        new ImmutableBytesPtr(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength()).copyBytesIfNecessary());
+                        row);
             } else {
                 List<byte[]> guidePosts = new ArrayList<byte[]>();
-                guidePosts.add(new ImmutableBytesPtr(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength())
-                        .copyBytesIfNecessary());
+                guidePosts.add(row);
                 guidePostsMap.put(fam, guidePosts);
             }
             // reset the count for the next key

@@ -72,7 +72,7 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(100));
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(5000));
         props.put(IndexWriterUtils.HTABLE_THREAD_KEY, Integer.toString(100));
         // Make a small batch size to test multiple calls to reserve sequences
         props.put(QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB, Long.toString(BATCH_SIZE));
