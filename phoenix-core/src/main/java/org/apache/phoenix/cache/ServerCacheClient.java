@@ -18,6 +18,8 @@
 package org.apache.phoenix.cache;
 
 import static com.google.common.io.Closeables.closeQuietly;
+import static java.util.Collections.emptyMap;
+import static org.apache.phoenix.util.LogUtil.addCustomAnnotations;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -166,7 +168,7 @@ public class ServerCacheClient {
                 if ( ! servers.contains(entry) && 
                         keyRanges.intersect(entry.getRegionInfo().getStartKey(), entry.getRegionInfo().getEndKey())) {  // Call RPC once per server
                     servers.add(entry);
-                    if (LOG.isDebugEnabled()) {LOG.debug("Adding cache entry to be sent for " + entry);}
+                    if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Adding cache entry to be sent for " + entry, connection.getCustomTracingAnnotations()));}
                     final byte[] key = entry.getRegionInfo().getStartKey();
                     final HTableInterface htable = services.getTable(cacheUsingTableRef.getTable().getPhysicalName().getBytes());
                     closeables.add(htable);
@@ -219,7 +221,7 @@ public class ServerCacheClient {
                         }
                     }));
                 } else {
-                    if (LOG.isDebugEnabled()) {LOG.debug("NOT adding cache entry to be sent for " + entry + " since one already exists for that entry");}
+                    if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("NOT adding cache entry to be sent for " + entry + " since one already exists for that entry", connection.getCustomTracingAnnotations()));}
                 }
             }
             
@@ -258,7 +260,7 @@ public class ServerCacheClient {
                 }
             }
         }
-        if (LOG.isDebugEnabled()) {LOG.debug("Cache " + cacheId + " successfully added to servers.");}
+        if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Cache " + cacheId + " successfully added to servers.", connection.getCustomTracingAnnotations()));}
         return hashCacheSpec;
     }
     
@@ -284,7 +286,7 @@ public class ServerCacheClient {
     		 * this, we iterate through the current metadata boundaries and remove the cache once for each
     		 * server that we originally sent to.
     		 */
-    		if (LOG.isDebugEnabled()) {LOG.debug("Removing Cache " + cacheId + " from servers.");}
+    		if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Removing Cache " + cacheId + " from servers.", connection.getCustomTracingAnnotations()));}
     		for (HRegionLocation entry : locations) {
     			if (remainingOnServers.contains(entry)) {  // Call once per server
     				try {
@@ -311,12 +313,20 @@ public class ServerCacheClient {
     					remainingOnServers.remove(entry);
     				} catch (Throwable t) {
     					lastThrowable = t;
-    					LOG.error("Error trying to remove hash cache for " + entry, t);
+    					Map<String, String> customAnnotations = emptyMap();
+    					if (connection != null) {
+    						customAnnotations = connection.getCustomTracingAnnotations();
+    					}
+    					LOG.error(addCustomAnnotations("Error trying to remove hash cache for " + entry, customAnnotations), t);
     				}
     			}
     		}
     		if (!remainingOnServers.isEmpty()) {
-    			LOG.warn("Unable to remove hash cache for " + remainingOnServers, lastThrowable);
+				Map<String, String> customAnnotations = emptyMap();
+				if (connection != null) {
+					customAnnotations = connection.getCustomTracingAnnotations();
+				}
+    			LOG.warn(addCustomAnnotations("Unable to remove hash cache for " + remainingOnServers, customAnnotations), lastThrowable);
     		}
     	} finally {
     		closeQuietly(iterateOverTable);
