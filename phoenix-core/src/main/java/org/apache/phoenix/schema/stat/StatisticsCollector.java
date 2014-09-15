@@ -88,12 +88,8 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     @Override
     public void collectStat(RpcController controller, StatCollectRequest request, RpcCallback<StatCollectResponse> done) {
         HRegion region = env.getRegion();
-        if (familyMap != null) {
-            familyMap.clear();
-        }
-        maxMap.clear();
-        minMap.clear();
-        guidePostsMap.clear();
+        // Clear all old stats
+        clear();
         Scan scan = createScan();
         if (request.hasStartRow()) {
             scan.setStartRow(request.getStartRow().toByteArray());
@@ -246,6 +242,7 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         }
         return internalScan;
     }
+    
 
     @Override
     public void postSplit(ObserverContext<RegionCoprocessorEnvironment> ctx, HRegion l, HRegion r) throws IOException {
@@ -257,7 +254,7 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         // Create a delete operation on the parent region
         // Then write the new guide posts for individual regions
         // TODO : Try making this automic
-/*        collectStatsForSplitRegions(l, region, true);
+        /*collectStatsForSplitRegions(l, region, true);
         clear();
         collectStatsForSplitRegions(r, region, false);*/
     }

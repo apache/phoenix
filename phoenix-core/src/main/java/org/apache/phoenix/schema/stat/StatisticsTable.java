@@ -46,7 +46,6 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Closeable;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -150,9 +149,7 @@ public class StatisticsTable implements Closeable {
         // Better to add them in in one batch using mutateRow
         if (!split) {
             Delete d = new Delete(prefix, currentTime - 1);
-            //d.deleteFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, currentTime - 1);
             mutations.add(d);
-            //statisticsTable.delete(d);
         }
         put = new Put(prefix, currentTime);
         if (tracker.getGuidePosts(fam) != null) {
@@ -177,14 +174,8 @@ public class StatisticsTable implements Closeable {
             throws IOException {
         byte[] prefix = StatisticsUtils.getRowKey(PDataType.VARCHAR.toBytes(tableName), PDataType.VARCHAR.toBytes(fam),
                 PDataType.VARCHAR.toBytes(regionName));
-        RowMutations mutations = new RowMutations(prefix);
         Delete d = new Delete(prefix, TimeKeeper.SYSTEM.getCurrentTime() - 1);
-        try {
-            mutations.add(d);
-            statisticsTable.delete(d);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        statisticsTable.delete(d);
         statisticsTable.flushCommits();
     }
 
