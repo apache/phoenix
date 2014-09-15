@@ -482,9 +482,14 @@ public class MetaDataClient {
         // same connection
         byte[] tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         // TODO : If tenantId is not null we may have to get the actual table name (PTable.getPhysicalName)
+/*        KeyRange analyzeRange = KeyRange.EVERYTHING_RANGE;
         if (connection.getTenantId() != null) {
             tenantIdBytes = connection.getTenantId().getBytes();
-        }
+            List<List<KeyRange>> tenantIdKeyRanges = Collections.singletonList(Collections.singletonList(KeyRange.getKeyRange(tenantIdBytes)));
+            byte[] lowerRange = ScanUtil.getMinKey(table.getRowKeySchema(), tenantIdKeyRanges, ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
+            byte[] upperRange = ScanUtil.getMaxKey(table.getRowKeySchema(), tenantIdKeyRanges, ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
+            analyzeRange = KeyRange.getKeyRange(lowerRange, upperRange);
+        }*/
         byte[] schemaNameBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         if (connection.getSchema() != null) {
             schemaNameBytes = Bytes.toBytes(connection.getSchema());

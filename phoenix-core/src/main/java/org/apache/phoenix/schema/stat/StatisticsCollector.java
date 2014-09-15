@@ -125,17 +125,19 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     private void writeStatsToStatsTable(final StatCollectRequest request, final HRegion region,
             final RegionScanner scanner, boolean split) throws IOException {
         scanner.close();
+        String url = null;
         try {
             // update the statistics table
             for (byte[] fam : familyMap) {
                 String tableName = null;
                 if (request != null) {
                     tableName = Bytes.toString(request.getTableNameBytes().toByteArray());
+                    url = request.getUrl();
                 } else {
                     tableName = SchemaUtil.getTableNameFromFullName(region.getRegionInfo().getTable().getNameAsString());
                 }
                 stats.updateStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
-                        Bytes.toString(fam), request.getUrl(), split);
+                        Bytes.toString(fam), url, split);
             }
         } catch (IOException e) {
             LOG.error("Failed to update statistics table!", e);
@@ -246,13 +248,12 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         // Create a delete operation on the parent region
         // Then write the new guide posts for individual regions
         // TODO : Try making this automic
-        deleteStatsFromStatsTable(region);
-        collectStatsForSplitRegions(l);
+        collectStatsForSplitRegions(l, region, true);
         clear();
-        collectStatsForSplitRegions(r);
+        collectStatsForSplitRegions(r, region, false);
     }
 
-    private void collectStatsForSplitRegions(HRegion daughter) throws IOException {
+    private void collectStatsForSplitRegions(HRegion daughter, HRegion region, boolean delete) throws IOException {
         Scan scan = createScan();
         RegionScanner scanner = null;
         int count = 0;
@@ -265,6 +266,9 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         } finally {
             if (scanner != null) {
                 try {
+                    if (delete) {
+                        deleteStatsFromStatsTable(region);
+                    }
                     writeStatsToStatsTable(null, daughter, scanner, true);
                 } catch (IOException e) {
                     LOG.error(e);

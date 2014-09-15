@@ -20,8 +20,6 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -30,7 +28,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PhoenixArray;
@@ -112,21 +109,9 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
     protected List<KeyRange> genKeyRanges(List<HRegionLocation> regions) {
         if (regions.isEmpty()) { return Collections.emptyList(); }
         Scan scan = context.getScan();
-        Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
         PTable table = this.tableRef.getTable();
-        List<PColumnFamily> columnFamilies = table.getColumnFamilies();
         byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(table);
-        //boolean containsDefaultCF = false;
         List<byte[]> gps = null;
-/*        if(columnFamilies.isEmpty()) {
-            //Cases where column families are empty
-            TreeMap<byte[], List<byte[]>> tableGps = table.getTableStats().getGuidePosts();
-            // Collect from table here
-            gps = tableGps.get(defaultCF);
-        } else {
-            containsDefaultCF = familyMap.containsKey(defaultCF);
-        }*/
-        
         try {
             if (table.getColumnFamilies().isEmpty()) {
                 // For sure we can get the defaultCF from the table
@@ -139,7 +124,7 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
                         gps = table.getColumnFamily(scan.getFamilyMap().keySet().iterator().next()).getGuidePosts();
                     }
                 } else {
-                    gps = table.getTableStats().getGuidePosts().get(defaultCF);
+                    gps = table.getColumnFamily(defaultCF).getGuidePosts();
                 }
             }
         } catch (Exception cfne) {
@@ -153,62 +138,19 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         }
         List<KeyRange> guidePosts = Lists.newArrayListWithCapacity(regions.size());
         List<byte[]> guidePostsBytes = Lists.newArrayListWithCapacity(regions.size());
-/*        PColumnFamily cftoUse = null;
-        if (containsDefaultCF || familyMap.isEmpty()) {
-            // Check from the cfs associated with the table
-            for (PColumnFamily fam : columnFamilies) {
-                if (Bytes.equals(defaultCF, fam.getName().getBytes())) {
-                    cftoUse = fam;
-                    gps = cftoUse.getGuidePosts();
-                    break;
-                }
-            }
-        } else {
-            if (familyMap.size() > 0) {
-                // 
-                byte[] first = familyMap.values().iterator().next().first();
-                for (PColumnFamily fam : columnFamilies) {
-                    if (Bytes.equals(first, fam.getName().getBytes())) {
-                        cftoUse = fam;
-                        gps = cftoUse.getGuidePosts();
-                        break;
-                    }
-                }
-            }
-        }*/
         // Only one cf to be used here
         if (gps != null) {
             // the guide posts will arrive in sorted order here as we are focusing on only one cf
-            for (byte[] guidePost : gps) {
-                PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePost);
-                if (array != null && array.getDimensions() != 0) {
-                    for (int j = 0; j < array.getDimensions(); j++) {
-                        guidePostsBytes.add(array.toBytes(j));
+            //for (HRegionLocation region : regions) {
+                for (byte[] guidePost : gps) {
+                    PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePost);
+                    if (array != null && array.getDimensions() != 0) {
+                        for (int j = 0; j < array.getDimensions(); j++) {
+                            guidePostsBytes.add(array.toBytes(j));
+                        }
                     }
                 }
-                /*PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePost);
-                if (array != null && array.getDimensions() != 0) {
-                    if (array.getDimensions() > 1) {
-                        // Should we really do like this or as we already have the byte[]
-                        // of guide posts just use them
-                        // per region?
-                        // Adding all the collected guideposts to the key ranges
-                        guidePosts.add(KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY, array.toBytes(0)));
-                        for (int i = 0; i < array.getDimensions() - 2; i++) {
-                            guidePosts.add(KeyRange.getKeyRange(array.toBytes(i), (array.toBytes(i + 1))));
-                        }
-                        guidePosts.add(KeyRange.getKeyRange(array.toBytes(array.getDimensions() - 2),
-                                (array.toBytes(array.getDimensions() - 1))));
-                        guidePosts.add(KeyRange.getKeyRange(array.toBytes(array.getDimensions() - 1),
-                                (HConstants.EMPTY_BYTE_ARRAY)));
-
-                    } else {
-                        byte[] gp = array.toBytes(0);
-                        guidePosts.add(KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY, gp));
-                        guidePosts.add(KeyRange.getKeyRange(gp, HConstants.EMPTY_BYTE_ARRAY));
-                    }
-                }*/
-            }
+            //}
         }
         int size = guidePostsBytes.size();
         if (size > 0) {

@@ -998,6 +998,7 @@ public class PTableImpl implements PTable {
               }
           }
           builder.addColumnfamilies(PColumnFamilyImpl.toProto(pColumnFamily, cNames));
+          cNames.clear();
       }
       List<PTable> indexes = table.getIndexes();
       for (PTable curIndex : indexes) {

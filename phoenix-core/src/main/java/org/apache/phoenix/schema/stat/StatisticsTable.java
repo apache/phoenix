@@ -126,8 +126,7 @@ public class StatisticsTable implements Closeable {
      * @param tracker - the statistics tracker
      * @param fam -  the family for which the stats is getting collected.
      * @param url - the connection url - not null if coming from ANALYZE <tablename> query, else null
-     * @param r 
-     * @param l 
+     * @param split - if the updation is caused due to a split
      * @throws IOException
      *             if we fail to do any of the puts. Any single failure will prevent any future attempts for the remaining list of stats to
      *             update
