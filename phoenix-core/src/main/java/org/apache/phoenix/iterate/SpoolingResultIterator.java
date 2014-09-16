@@ -47,19 +47,19 @@ import org.apache.phoenix.util.TupleUtil;
 
 
 /**
- * 
+ *
  * Result iterator that spools the results of a scan to disk once an in-memory threshold has been reached.
  * If the in-memory threshold is not reached, the results are held in memory with no disk writing perfomed.
  *
- * 
+ *
  * @since 0.1
  */
 public class SpoolingResultIterator implements PeekingResultIterator {
     private final PeekingResultIterator spoolFrom;
-    
+
     public static class SpoolingResultIteratorFactory implements ParallelIteratorFactory {
         private final QueryServices services;
-        
+
         public SpoolingResultIteratorFactory(QueryServices services) {
             this.services = services;
         }
@@ -67,15 +67,16 @@ public class SpoolingResultIterator implements PeekingResultIterator {
         public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException {
             return new SpoolingResultIterator(scanner, services);
         }
-        
+
     }
 
     public SpoolingResultIterator(ResultIterator scanner, QueryServices services) throws SQLException {
-        this (scanner, services.getMemoryManager(), 
-        		services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES),
-        		services.getProps().getLong(QueryServices.MAX_SPOOL_TO_DISK_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SPOOL_TO_DISK_BYTES));
+        this (scanner, services.getMemoryManager(),
+                services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES),
+                services.getProps().getLong(QueryServices.MAX_SPOOL_TO_DISK_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SPOOL_TO_DISK_BYTES),
+                services.getProps().get(QueryServices.SPOOL_DIRECTORY, QueryServicesOptions.DEFAULT_SPOOL_DIRECTORY));
     }
-    
+
     /**
     * Create a result iterator by iterating through the results of a scan, spooling them to disk once
     * a threshold has been reached. The scanner passed in is closed prior to returning.
@@ -85,7 +86,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
     *  the memory manager) is exceeded.
     * @throws SQLException
     */
-    SpoolingResultIterator(ResultIterator scanner, MemoryManager mm, final int thresholdBytes, final long maxSpoolToDisk) throws SQLException {
+    SpoolingResultIterator(ResultIterator scanner, MemoryManager mm, final int thresholdBytes, final long maxSpoolToDisk, final String spoolDirectory) throws SQLException {
         boolean success = false;
         boolean usedOnDiskIterator = false;
         final MemoryChunk chunk = mm.allocate(0, thresholdBytes);
@@ -93,7 +94,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
         try {
             // Can't be bigger than int, since it's the max of the above allocation
             int size = (int)chunk.getSize();
-            tempFile = File.createTempFile("ResultSpooler",".bin");
+            tempFile = File.createTempFile("ResultSpooler",".bin", new File(spoolDirectory));
             DeferredFileOutputStream spoolTo = new DeferredFileOutputStream(size, tempFile) {
                 @Override
                 protected void thresholdReached() throws IOException {
@@ -102,7 +103,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 }
             };
             DataOutputStream out = new DataOutputStream(spoolTo);
-            final long maxBytesAllowed = maxSpoolToDisk == -1 ? 
+            final long maxBytesAllowed = maxSpoolToDisk == -1 ?
             		Long.MAX_VALUE : thresholdBytes + maxSpoolToDisk;
             long bytesWritten = 0L;
             int maxSize = 0;
@@ -152,17 +153,17 @@ public class SpoolingResultIterator implements PeekingResultIterator {
     public Tuple next() throws SQLException {
         return spoolFrom.next();
     }
-    
+
     @Override
     public void close() throws SQLException {
         spoolFrom.close();
     }
 
     /**
-     * 
+     *
      * Backing result iterator if it was not necessary to spool results to disk.
      *
-     * 
+     *
      * @since 0.1
      */
     private static class InMemoryResultIterator implements PeekingResultIterator {
@@ -170,7 +171,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
         private final byte[] bytes;
         private Tuple next;
         private int offset;
-        
+
         private InMemoryResultIterator(byte[] bytes, MemoryChunk memoryChunk) throws SQLException {
             this.bytes = bytes;
             this.memoryChunk = memoryChunk;
@@ -188,7 +189,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
             Tuple result = new ResultTuple(ResultUtil.toResult(value));
             return next = result;
         }
-        
+
         @Override
         public Tuple peek() throws SQLException {
             return next;
@@ -200,7 +201,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
             advance();
             return current;
         }
-        
+
         @Override
         public void close() {
             memoryChunk.close();
@@ -210,12 +211,12 @@ public class SpoolingResultIterator implements PeekingResultIterator {
         public void explain(List<String> planSteps) {
         }
     }
-    
+
     /**
-     * 
+     *
      * Backing result iterator if results were spooled to disk
      *
-     * 
+     *
      * @since 0.1
      */
     private static class OnDiskResultIterator implements PeekingResultIterator {
@@ -226,12 +227,12 @@ public class SpoolingResultIterator implements PeekingResultIterator {
         private int bufferIndex;
         private byte[][] buffers = new byte[2][];
         private boolean isClosed;
-        
+
         private OnDiskResultIterator (int maxSize, File file) {
             this.file = file;
             this.maxSize = maxSize;
         }
-        
+
         private synchronized void init() throws IOException {
             if (spoolFrom == null) {
                 spoolFrom = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
@@ -241,7 +242,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 advance();
             }
         }
-    
+
         private synchronized void reachedEnd() throws IOException {
             next = null;
             isClosed = true;
@@ -253,7 +254,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 file.delete();
             }
         }
-        
+
         private synchronized Tuple advance() throws IOException {
             if (isClosed) {
                 return next;
@@ -282,7 +283,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
             next = new ResultTuple(ResultUtil.toResult(new ImmutableBytesWritable(buffer,0,length)));
             return next;
         }
-        
+
         @Override
         public synchronized Tuple peek() throws SQLException {
             try {
@@ -292,7 +293,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 throw ServerUtil.parseServerException(e);
             }
         }
-    
+
         @Override
         public synchronized Tuple next() throws SQLException {
             try {
@@ -304,7 +305,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 throw ServerUtil.parseServerException(e);
             }
         }
-        
+
         @Override
         public synchronized void close() throws SQLException {
             try {
