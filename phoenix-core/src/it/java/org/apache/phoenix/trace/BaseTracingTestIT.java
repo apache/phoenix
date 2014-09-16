@@ -39,6 +39,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.trace.util.Tracing.Frequency;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 
@@ -91,13 +92,16 @@ public class BaseTracingTestIT extends BaseHBaseManagedTimeIT {
     }
     
     public static Connection getTracingConnection() throws Exception { 
-    	return getTracingConnection(new HashMap<String, String>(0));
+    	return getTracingConnection(new HashMap<String, String>(0), null);
     }
 
-    public static Connection getTracingConnection(Map<String, String> customAnnotations) throws Exception {
+    public static Connection getTracingConnection(Map<String, String> customAnnotations, String tenantId) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         for (Map.Entry<String, String> annot : customAnnotations.entrySet()) {
         	props.put(QueryServices.TRACING_CUSTOM_ANNOTATION_ATTRIB_PREFIX + annot.getKey(), annot.getValue());
+        }
+        if (tenantId != null) {
+        	props.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
         return getConnectionWithTracingFrequency(props, Tracing.Frequency.ALWAYS);
     }
