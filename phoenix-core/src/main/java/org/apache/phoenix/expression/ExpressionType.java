@@ -55,6 +55,7 @@ import org.apache.phoenix.expression.function.PercentileContAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileDiscAggregateFunction;
 import org.apache.phoenix.expression.function.RTrimFunction;
 import org.apache.phoenix.expression.function.RegexpReplaceFunction;
+import org.apache.phoenix.expression.function.RegexpSplitFunction;
 import org.apache.phoenix.expression.function.RegexpSubstrFunction;
 import org.apache.phoenix.expression.function.ReverseFunction;
 import org.apache.phoenix.expression.function.RoundDateExpression;
@@ -84,7 +85,7 @@ import com.google.common.collect.Maps;
  * Enumeration of all Expression types that may be evaluated on the server-side.
  * Used during serialization and deserialization to pass Expression between client
  * and server.
- *  
+ *
  *
  * @since 0.1
  */
@@ -180,7 +181,8 @@ public enum ExpressionType {
     ArrayAllComparisonExpression(ArrayAllComparisonExpression.class),
     InlineArrayElemRefExpression(InlineArrayElemRefExpression.class),
     SQLIndexTypeFunction(SQLIndexTypeFunction.class),
-    ModulusExpression(ModulusExpression.class);
+    ModulusExpression(ModulusExpression.class),
+    RegexpSplitFunctiond(RegexpSplitFunction.class);
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }
