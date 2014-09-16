@@ -17,11 +17,16 @@
  */
 package org.apache.phoenix.util;
 
+import com.google.common.collect.Iterables;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nullable;
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.*;
-
-import com.google.common.collect.Iterables;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedList;
 
 
 /**
@@ -29,9 +34,37 @@ import com.google.common.collect.Iterables;
  * 
  */
 public class Closeables {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(Closeables.class);
+
     /** Not constructed */
     private Closeables() { }
     
+    /**
+     * Close a {@code Closeable}, returning an {@code IOException} if it occurs while closing
+     * instead of throwing it. This is nearly a clone of the Guava Closeables.closeQuietly method
+     * which has long since been removed from Guava.
+     *
+     * Use of this method should be avoided -- quietly swallowing IOExceptions (particularly on
+     * Closeables that are being written to) is a code smell. Use of the equivalent method in
+     * Guava was done for this reason.
+     *
+     * @param closeable the Closeable to be closed, can be null
+     * @return the IOException if one was thrown, otherwise {@code null}
+     */
+    public static IOException closeQuietly(@Nullable Closeable closeable) {
+        if (closeable == null) {
+            return null;
+        }
+        try {
+            closeable.close();
+            return null;
+        } catch (IOException e) {
+            LOGGER.error("Error closing " + closeable, e);
+            return e;
+        }
+    }
+
     /**
      * Allows you to close as many of the {@link Closeable}s as possible.
      * 
@@ -48,11 +81,10 @@ public class Closeables {
         
         LinkedList<IOException> exceptions = null;
         for (Closeable closeable : iterable) {
-            try {
-                closeable.close();
-            } catch (IOException x) {
+            IOException ioe = closeQuietly(closeable);
+            if (ioe != null) {
                 if (exceptions == null) exceptions = new LinkedList<IOException>();
-                exceptions.add(x);
+                exceptions.add(ioe);
             }
         }
         

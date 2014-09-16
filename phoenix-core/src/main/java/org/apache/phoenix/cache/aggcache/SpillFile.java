@@ -28,11 +28,11 @@ import java.nio.channels.FileChannel.MapMode;
 import java.util.Map;
 import java.util.UUID;
 
+import org.apache.phoenix.util.Closeables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Maps;
-import com.google.common.io.Closeables;
 
 /**
  * This class abstracts a SpillFile It is a accessible on a per page basis

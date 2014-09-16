@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.query;
 
-import static com.google.common.io.Closeables.closeQuietly;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CYCLE_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
@@ -125,6 +124,7 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
@@ -140,7 +140,6 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.common.io.Closeables;
 import com.google.protobuf.HBaseZeroCopyByteString;
 
 
@@ -1716,7 +1715,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (IOException e) {
                 throw ServerUtil.parseServerException(e);
             } finally {
-                closeQuietly(htable);
+                Closeables.closeQuietly(htable);
             }
         } finally {
             sequence.getLock().unlock();
@@ -1742,7 +1741,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (IOException e) {
                 throw ServerUtil.parseServerException(e);
             } finally {
-                closeQuietly(htable);
+                Closeables.closeQuietly(htable);
             }
         } finally {
             sequence.getLock().unlock();
