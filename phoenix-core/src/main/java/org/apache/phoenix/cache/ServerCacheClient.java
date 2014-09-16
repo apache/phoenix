@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.cache;
 
-import static com.google.common.io.Closeables.closeQuietly;
-
 import java.io.Closeable;
 import java.io.IOException;
 import java.sql.SQLException;
@@ -319,7 +317,7 @@ public class ServerCacheClient {
     			LOG.warn("Unable to remove hash cache for " + remainingOnServers, lastThrowable);
     		}
     	} finally {
-    		closeQuietly(iterateOverTable);
+    		Closeables.closeQuietly(iterateOverTable);
     	}
     }
 
