@@ -117,8 +117,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -289,10 +287,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
     private RegionCoprocessorEnvironment env;
          
-    // TODO : Check if this way is needed
-    int statsUpdateFrequencyMs;
-    int maxStatsAgeMs;
-
     private static final Log LOG = LogFactory.getLog(MetaDataEndpointImpl.class);
 
     /**
@@ -312,12 +306,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         } else {
             throw new CoprocessorException("Must be loaded on a table region!");
         }
-
-        // Can we just get from configuration that is obtained from the env?
-        statsUpdateFrequencyMs = env.getConfiguration().getInt(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
-                QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
-        maxStatsAgeMs = env.getConfiguration().getInt(QueryServices.MAX_STATS_AGE_MS_ATTRIB,
-                QueryServicesOptions.DEFAULT_MAX_STATS_AGE_MS);
         LOG.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
