@@ -129,6 +129,7 @@ import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -140,6 +141,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -477,19 +479,18 @@ public class MetaDataClient {
         ColumnResolver resolver = FromCompiler.getResolver(updateStatisticsStmt, connection);
         PTable table = resolver.getTables().get(0).getTable();
         PName physicalName = table.getPhysicalName();
-        // TODO : Check if we need the table key type of table name here. 
-        // May be we can avoid multiple calls from the 
-        // same connection
         byte[] tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
-        // TODO : If tenantId is not null we may have to get the actual table name (PTable.getPhysicalName)
-/*        KeyRange analyzeRange = KeyRange.EVERYTHING_RANGE;
+       KeyRange analyzeRange = KeyRange.EVERYTHING_RANGE;
         if (connection.getTenantId() != null) {
             tenantIdBytes = connection.getTenantId().getBytes();
-            List<List<KeyRange>> tenantIdKeyRanges = Collections.singletonList(Collections.singletonList(KeyRange.getKeyRange(tenantIdBytes)));
-            byte[] lowerRange = ScanUtil.getMinKey(table.getRowKeySchema(), tenantIdKeyRanges, ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
-            byte[] upperRange = ScanUtil.getMaxKey(table.getRowKeySchema(), tenantIdKeyRanges, ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
+            List<List<KeyRange>> tenantIdKeyRanges = Collections.singletonList(Collections.singletonList(KeyRange
+                    .getKeyRange(tenantIdBytes)));
+            byte[] lowerRange = ScanUtil.getMinKey(table.getRowKeySchema(), tenantIdKeyRanges,
+                    ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
+            byte[] upperRange = ScanUtil.getMaxKey(table.getRowKeySchema(), tenantIdKeyRanges,
+                    ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
             analyzeRange = KeyRange.getKeyRange(lowerRange, upperRange);
-        }*/
+        }
         byte[] schemaNameBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         if (connection.getSchema() != null) {
             schemaNameBytes = Bytes.toBytes(connection.getSchema());
@@ -513,8 +514,10 @@ public class MetaDataClient {
         }
         if (minTimeForStatsUpdate  - lastUpdatedTime> 0) {
             // We need to update the stats table
-            connection.getQueryServices().updateStatistics(schemaNameBytes, physicalName.getBytes(),
-                    connection.getURL(), clientTS);
+            connection.getQueryServices().updateStatistics(analyzeRange, physicalName.getBytes(),
+                    connection.getURL());
+            connection.getQueryServices().clearCacheForTable(schemaNameBytes, Bytes.toBytes(tableName),
+                    clientTS);
             updateCache(schema, tableName, true);
             return new MutationState(1, connection);
         } else {

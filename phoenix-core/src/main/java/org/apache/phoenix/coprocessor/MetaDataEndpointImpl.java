@@ -135,6 +135,7 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stat.PTableStats;
@@ -746,17 +747,27 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         if (fam == null) {
                             fam = cfInCell;
                         } else if (!Bytes.equals(fam, cfInCell)) {
+                            // Sort all the guide posts
+                            Collections.sort(guidePosts, Bytes.BYTES_COMPARATOR);
                             guidePostsPerCf.put(cfInCell, guidePosts);
                             // clear - Take a clone?
                             guidePosts = new ArrayList<byte[]>();
                             fam = cfInCell;
                         }
-                        guidePosts.add(new ImmutableBytesPtr(current.getValueArray(), current.getValueOffset(), current
-                                .getValueLength()).copyBytesIfNecessary());
+                        byte[] guidePostVal = new ImmutableBytesPtr(current.getValueArray(), current.getValueOffset(), current
+                                .getValueLength()).copyBytesIfNecessary();
+                        PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePostVal);
+                        if (array != null && array.getDimensions() != 0) {
+                            for (int j = 0; j < array.getDimensions(); j++) {
+                                guidePosts.add(array.toBytes(j));
+                            }
+                        }
                     }
                 }
             }
             if(fam != null) {
+                // Sort all the guideposts
+                Collections.sort(guidePosts, Bytes.BYTES_COMPARATOR);
                 guidePostsPerCf.put(fam, guidePosts);
             }
             return new PTableStatsImpl(guidePostsPerCf);

@@ -17,17 +17,6 @@
  */
 package org.apache.phoenix.schema.stat;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_KEY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_KEY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REGION_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
-
 import java.io.IOException;
 import java.sql.Date;
 import java.util.ArrayList;
@@ -40,10 +29,10 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.HTablePool;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -62,17 +51,6 @@ public class StatisticsTable implements Closeable {
     /** Map of the currently open statistics tables */
     private static final Map<String, StatisticsTable> tableMap = new HashMap<String, StatisticsTable>();
     private TimeKeeper timeKeeper = TimeKeeper.SYSTEM;
-    private static final String UPDATE_STATS =
-            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_STATS_TABLE + "\"( " + 
-            TABLE_SCHEM+ ","+
-            TABLE_NAME + "," +
-            COLUMN_FAMILY + "," +
-            REGION_NAME + "," +
-            LAST_STATS_UPDATE_TIME + "," +
-            MIN_KEY + "," +
-            MAX_KEY + "," +
-            GUIDE_POSTS  +
-            ") VALUES (?, ?, ?, ?, ?, ?, ? , ?)";
     /**
      * @param env
      *            Environment wherein the coprocessor is attempting to update the stats table.
@@ -87,9 +65,10 @@ public class StatisticsTable implements Closeable {
         StatisticsTable table = tableMap.get(primaryTableName);
         if (table == null) {
             // Map the statics table and the table with which the statistics is
-            // associated
-            table = new StatisticsTable(
-                    env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES)), primaryTableName);
+            // associated. This is a workaround
+            HTablePool pool = new HTablePool(env.getConfiguration(), 1);
+            HTableInterface hTable = pool.getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
+            table = new StatisticsTable(hTable, primaryTableName);
             tableMap.put(Bytes.toString(primaryTableName), table);
         }
         return table;

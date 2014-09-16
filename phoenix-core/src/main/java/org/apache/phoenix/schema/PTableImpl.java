@@ -29,7 +29,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.Cell;
@@ -734,8 +733,12 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public PTableStats getTableStats() {
-        return stats;
+    public List<byte[]> getTableStats() {
+        if (stats != null) {
+            return stats.getGuidePosts().get(SchemaUtil.getEmptyColumnFamily(this));
+        } else {
+            return null;
+        }
     }
 
     @Override
@@ -1008,16 +1011,14 @@ public class PTableImpl implements PTable {
 
         // build stats
       if (table.getTableStats() != null) {
-        Map<byte[], List<byte[]>> stats = table.getTableStats().getGuidePosts();
+         List<byte[]> stats = table.getTableStats();
           if (stats != null) {
-             for (Entry<byte[], List<byte[]>> entry : stats.entrySet()) {
-                 PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();
-                 statsBuilder.setKey(Bytes.toString(entry.getKey()));
-                 for (byte[] curVal : entry.getValue()) {
-                     statsBuilder.addValues(HBaseZeroCopyByteString.wrap(curVal));
-                 }
-                 builder.addGuidePosts(statsBuilder.build());
+             PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();
+             statsBuilder.setKey(Bytes.toString(SchemaUtil.getEmptyColumnFamily(table)));
+             for (byte[] stat : stats) {
+                 statsBuilder.addValues(HBaseZeroCopyByteString.wrap(stat));
              }
+             builder.addGuidePosts(statsBuilder.build());
          }
       }
 

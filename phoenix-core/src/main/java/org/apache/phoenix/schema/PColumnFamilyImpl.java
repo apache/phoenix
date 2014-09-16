@@ -56,6 +56,7 @@ public class PColumnFamilyImpl implements PColumnFamily {
         if(guidePosts != null) {
             guidePostsSize = guidePosts.size();
         }
+        this.guidePosts = guidePosts;
         long estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 5 + SizedUtil.INT_SIZE + name.getEstimatedSize() +
                 SizedUtil.sizeOfMap(columns.size()) * 2 + SizedUtil.sizeOfArrayList(columns.size()) + guidePostsSize;
         this.name = name;
@@ -70,7 +71,6 @@ public class PColumnFamilyImpl implements PColumnFamily {
         this.columnByBytes = columnByBytesBuilder.build();
         this.columnByString = columnByStringBuilder.build();
         this.estimatedSize = (int)estimatedSize;
-        this.guidePosts = guidePosts;
     }
     
     @Override

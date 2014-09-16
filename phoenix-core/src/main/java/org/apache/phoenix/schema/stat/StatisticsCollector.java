@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
@@ -54,6 +55,7 @@ import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectR
 import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectResponse.Builder;
 import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectService;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.util.SchemaUtil;
@@ -214,8 +216,14 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     }
 
     @Override
-    public void stop(CoprocessorEnvironment arg0) throws IOException {
-        stats.close();
+    public void stop(CoprocessorEnvironment env) throws IOException {
+        if (env instanceof RegionCoprocessorEnvironment) {
+            TableName table = ((RegionCoprocessorEnvironment)env).getRegion().getRegionInfo().getTable();
+            // Close only if the table is system table
+            if(table.getNameAsString().equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
+                stats.close();
+            }
+        }
     }
 
     @Override
@@ -223,21 +231,24 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
             List<? extends KeyValueScanner> scanners, ScanType scanType, long earliestPutTs, InternalScanner s)
             throws IOException {
         InternalScanner internalScan = s;
-        // See if this is for Major compaction
-        if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
-            // this is the first CP accessed, so we need to just create a major
-            // compaction scanner, just
-            // like in the compactor
-            if (s == null) {
-                Scan scan = new Scan();
-                scan.setMaxVersions(store.getFamily().getMaxVersions());
-                long smallestReadPoint = store.getSmallestReadPoint();
-                internalScan = new StoreScanner(store, store.getScanInfo(), scan, scanners, scanType,
-                        smallestReadPoint, earliestPutTs);
-            }
-            InternalScanner scanner = getInternalScanner(c, store, internalScan, store.getColumnFamilyName());
-            if (scanner != null) {
-                internalScan = scanner;
+        TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
+        if (!table.getNameAsString().equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
+            // See if this is for Major compaction
+            if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
+                // this is the first CP accessed, so we need to just create a major
+                // compaction scanner, just
+                // like in the compactor
+                if (s == null) {
+                    Scan scan = new Scan();
+                    scan.setMaxVersions(store.getFamily().getMaxVersions());
+                    long smallestReadPoint = store.getSmallestReadPoint();
+                    internalScan = new StoreScanner(store, store.getScanInfo(), scan, scanners, scanType,
+                            smallestReadPoint, earliestPutTs);
+                }
+                InternalScanner scanner = getInternalScanner(c, store, internalScan, store.getColumnFamilyName());
+                if (scanner != null) {
+                    internalScan = scanner;
+                }
             }
         }
         return internalScan;
@@ -248,15 +259,18 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     public void postSplit(ObserverContext<RegionCoprocessorEnvironment> ctx, HRegion l, HRegion r) throws IOException {
         // Invoke collectStat here
         HRegion region = ctx.getEnvironment().getRegion();
-        if (familyMap != null) {
-            familyMap.clear();
+        TableName table = region.getRegionInfo().getTable();
+        if (!table.getNameAsString().equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
+            if (familyMap != null) {
+                familyMap.clear();
+            }
+            // Create a delete operation on the parent region
+            // Then write the new guide posts for individual regions
+            // TODO : Try making this automic
+            collectStatsForSplitRegions(l, region, true);
+            clear();
+            collectStatsForSplitRegions(r, region, false);
         }
-        // Create a delete operation on the parent region
-        // Then write the new guide posts for individual regions
-        // TODO : Try making this automic
-        /*collectStatsForSplitRegions(l, region, true);
-        clear();
-        collectStatsForSplitRegions(r, region, false);*/
     }
 
     private void collectStatsForSplitRegions(HRegion daughter, HRegion region, boolean delete) throws IOException {
@@ -309,7 +323,6 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     @Override
     public void updateStatistic(KeyValue kv) {
         // Should we onlyl check for Puts?
-        System.out.println(kv);
         byte[] cf = kv.getFamily();
         familyMap.add(cf);
         

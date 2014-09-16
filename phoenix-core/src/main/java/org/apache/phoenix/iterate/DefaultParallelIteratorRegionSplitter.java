@@ -27,11 +27,11 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stat.StatisticsConstants;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
@@ -111,11 +111,12 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         PTable table = this.tableRef.getTable();
         byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(table);
         List<byte[]> gps = null;
-        try {
-            if (table.getColumnFamilies().isEmpty()) {
-                // For sure we can get the defaultCF from the table
-                gps = table.getTableStats().getGuidePosts().get(defaultCF);
-            } else {
+
+        if (table.getColumnFamilies().isEmpty()) {
+            // For sure we can get the defaultCF from the table
+            gps = table.getTableStats();
+        } else {
+            try {
                 if (scan.getFamilyMap().size() > 0) {
                     if (scan.getFamilyMap().containsKey(defaultCF)) { // Favor using default CF if it's used in scan
                         gps = table.getColumnFamily(defaultCF).getGuidePosts();
@@ -125,10 +126,11 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
                 } else {
                     gps = table.getColumnFamily(defaultCF).getGuidePosts();
                 }
+            } catch (ColumnFamilyNotFoundException cfne) {
+                // Alter table does this
             }
-        } catch (Exception cfne) {
-            logger.error("Error while getting guideposts for the cf " + Bytes.toString(defaultCF));
         }
+        
         List<KeyRange> guidePosts = Lists.newArrayListWithCapacity(regions.size());
         List<KeyRange> regionStartEndKey = Lists.newArrayListWithExpectedSize(regions.size());
         for (HRegionLocation region : regions) {
@@ -142,25 +144,21 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
             int guideIndex = 0;
             int gpsSize = gps.size();
             while ((regionIndex <= regionSize - 1) && (guideIndex <= gpsSize - 1)) {
-                byte[] guidePost = gps.get(guideIndex);
-                PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePost);
+                byte[] currentGuidePost = gps.get(guideIndex);
                 byte[] regionEndKey = regions.get(regionIndex).getRegionInfo().getEndKey();
-                if (array != null && array.getDimensions() != 0) {
-                    boolean intersects = false ;
-                    for (int j = 0; j < array.getDimensions(); j++) {
-                        byte[] currentGuidePost = array.toBytes(j);
-                        if (Bytes.compareTo(currentGuidePost, regionEndKey) <= 0) {
-                            KeyRange keyRange = KeyRange.getKeyRange(startKey, currentGuidePost);
-                            // Contains check may be too coslty
-                            if(keyRange != KeyRange.EMPTY_RANGE) {
-                                guidePosts.add(keyRange);
-                            }
-                            startKey = currentGuidePost;
-                            if (!intersects) {
-                                guideIndex++;
-                                intersects = true;
-                            }
-                        }
+                // Even if last row just form guide posts. Otherwise for the last region we don't get any guide posts
+                while (Bytes.compareTo(currentGuidePost, regionEndKey) <= 0 || Bytes.equals(regionEndKey, ByteUtil.EMPTY_BYTE_ARRAY)) {
+                    KeyRange keyRange = KeyRange.getKeyRange(startKey, currentGuidePost);
+                    if (keyRange != KeyRange.EMPTY_RANGE) {
+                        guidePosts.add(keyRange);
+                    }
+                    startKey = new byte[currentGuidePost.length];
+                    System.arraycopy(currentGuidePost, 0, startKey, 0, startKey.length);
+                    guideIndex++;
+                    if ((guideIndex <= gpsSize - 1)) {
+                        currentGuidePost = gps.get(guideIndex);
+                    } else {
+                        break;
                     }
                 }
                 guidePosts.add(KeyRange.getKeyRange(startKey, regionEndKey));
@@ -169,65 +167,14 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
                     startKey = regions.get(regionIndex).getRegionInfo().getStartKey();
                 }
             }
-            if (guidePosts.size() > 0) {
-                List<KeyRange> intersect = KeyRange.intersect(guidePosts, regionStartEndKey);
-                return intersect;
-            } else {
-                return regionStartEndKey;
-            }
-        } else {
-            return regionStartEndKey;
-        }
-        
-/*        for (HRegionLocation region : regions) {
-            regionStartEndKey.add(KeyRange.getKeyRange(region.getRegionInfo().getStartKey(), region.getRegionInfo()
-                    .getEndKey()));
-        }
-        List<byte[]> guidePostsBytes = Lists.newArrayListWithCapacity(regions.size());
-        // Only one cf to be used here
-        if (gps != null) {
-            // the guide posts will arrive in sorted order here as we are focusing on only one cf
-            //for (HRegionLocation region : regions) {
-                for (byte[] guidePost : gps) {
-                    PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePost);
-                    if (array != null && array.getDimensions() != 0) {
-                        for (int j = 0; j < array.getDimensions(); j++) {
-                            guidePostsBytes.add(array.toBytes(j));
-                        }
-                    }
-                }
-            //}
-        }
-        int size = guidePostsBytes.size();
-        if (size > 0) {
-            if (size > 1) {
-                guidePosts.add(KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY, guidePostsBytes.get(0)));
-                for (int i = 0; i < size - 2; i++) {
-                    KeyRange keyRange = KeyRange.getKeyRange(guidePostsBytes.get(i), (guidePostsBytes.get(i + 1)));
-                    if (keyRange != KeyRange.EMPTY_RANGE) {
-                        guidePosts.add(keyRange);
-                    }
-                }
-                KeyRange keyRange = KeyRange.getKeyRange(guidePostsBytes.get(size - 2), (guidePostsBytes.get(size - 1)));
-                if (keyRange != KeyRange.EMPTY_RANGE) {
-                    guidePosts.add(keyRange);
-                }
-                guidePosts.add(KeyRange.getKeyRange(guidePostsBytes.get(size - 1), (HConstants.EMPTY_BYTE_ARRAY)));
-            } else {
-                byte[] gp = guidePostsBytes.get(0);
-                guidePosts.add(KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY, gp));
-                guidePosts.add(KeyRange.getKeyRange(gp, HConstants.EMPTY_BYTE_ARRAY));
-            }
-
         }
         if (guidePosts.size() > 0) {
-            List<KeyRange> intersect = KeyRange.intersect(guidePosts, regionStartEndKey);
-            return intersect;
+            return guidePosts;
         } else {
             return regionStartEndKey;
-        }*/
+        }
     }
-
+        
     @Override
     public List<KeyRange> getSplits() throws SQLException {
         return genKeyRanges(getAllRegions());

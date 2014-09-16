@@ -94,7 +94,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     void addConnection(PhoenixConnection connection) throws SQLException;
     void removeConnection(PhoenixConnection connection) throws SQLException;
 
-    long updateStatistics(byte[] schemaName, byte[] tableName, String url, long clientTS)
+    long updateStatistics(KeyRange keyRange, byte[] tableName, String url)
             throws SQLException;
 
     /**
