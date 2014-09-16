@@ -48,6 +48,7 @@ import static org.apache.phoenix.query.QueryServices.RPC_TIMEOUT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SPOOL_DIRECTORY;
 import static org.apache.phoenix.query.QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.TARGET_QUERY_CONCURRENCY_ATTRIB;
@@ -76,6 +77,7 @@ public class QueryServicesOptions {
 	public static final int DEFAULT_QUEUE_SIZE = 500;
 	public static final int DEFAULT_THREAD_TIMEOUT_MS = 600000; // 10min
 	public static final int DEFAULT_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
+    public static final String DEFAULT_SPOOL_DIRECTORY = "/tmp";
 	public static final int DEFAULT_MAX_MEMORY_PERC = 15; // 15% of heap
 	public static final int DEFAULT_MAX_MEMORY_WAIT_MS = 10000;
 	public static final int DEFAULT_MAX_TENANT_MEMORY_PERC = 100;
@@ -159,6 +161,7 @@ public class QueryServicesOptions {
             .setIfUnset(QUEUE_SIZE_ATTRIB, DEFAULT_QUEUE_SIZE)
             .setIfUnset(THREAD_TIMEOUT_MS_ATTRIB, DEFAULT_THREAD_TIMEOUT_MS)
             .setIfUnset(SPOOL_THRESHOLD_BYTES_ATTRIB, DEFAULT_SPOOL_THRESHOLD_BYTES)
+            .setIfUnset(SPOOL_DIRECTORY, DEFAULT_SPOOL_DIRECTORY)
             .setIfUnset(MAX_MEMORY_PERC_ATTRIB, DEFAULT_MAX_MEMORY_PERC)
             .setIfUnset(MAX_MEMORY_WAIT_MS_ATTRIB, DEFAULT_MAX_MEMORY_WAIT_MS)
             .setIfUnset(MAX_TENANT_MEMORY_PERC_ATTRIB, DEFAULT_MAX_TENANT_MEMORY_PERC)
@@ -213,7 +216,7 @@ public class QueryServicesOptions {
         config.setIfUnset(name, Long.toString(value));
         return this;
     }
-    
+
     private QueryServicesOptions setIfUnset(String name, String value) {
         config.setIfUnset(name, value);
         return this;
@@ -239,7 +242,11 @@ public class QueryServicesOptions {
     public QueryServicesOptions setSpoolThresholdBytes(int spoolThresholdBytes) {
         return set(SPOOL_THRESHOLD_BYTES_ATTRIB, spoolThresholdBytes);
     }
-    
+
+    public QueryServicesOptions setSpoolDirectory(String spoolDirectory) {
+        return set(SPOOL_DIRECTORY, spoolDirectory);
+    }
+
     public QueryServicesOptions setMaxMemoryPerc(int maxMemoryPerc) {
         return set(MAX_MEMORY_PERC_ATTRIB, maxMemoryPerc);
     }
