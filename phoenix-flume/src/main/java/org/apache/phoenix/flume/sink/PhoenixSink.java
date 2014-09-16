@@ -39,7 +39,6 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 
@@ -140,7 +139,7 @@ public final class PhoenixSink  extends AbstractSink implements Configurable {
         Channel channel = getChannel();
         Transaction transaction = null;
         List<Event>  events = Lists.newArrayListWithExpectedSize(this.batchSize); 
-        Stopwatch watch = new Stopwatch().start();
+        long startTime = System.nanoTime();
         try {
             transaction = channel.getTransaction();
             transaction.begin();
@@ -194,7 +193,9 @@ public final class PhoenixSink  extends AbstractSink implements Configurable {
             throw new EventDeliveryException("Failed to persist message", e);
         }
         finally {
-            logger.error(String.format("Time taken to process [%s] events was [%s] seconds",events.size(),watch.stop().elapsedTime(TimeUnit.SECONDS)));
+            logger.info(String.format("Time taken to process [%s] events was [%s] seconds",
+                    events.size(),
+                    TimeUnit.SECONDS.convert(System.nanoTime() - startTime, TimeUnit.NANOSECONDS)));
             if( transaction != null ) {
                 transaction.close();
             }

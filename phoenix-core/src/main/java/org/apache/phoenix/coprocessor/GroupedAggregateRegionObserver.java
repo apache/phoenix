@@ -64,6 +64,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SizedUtil;
@@ -72,11 +73,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Maps;
-import com.google.common.io.Closeables;
 
 /**
  * Region observer that aggregates grouped rows (i.e. SQL query with GROUP BY clause)
- * 
+ *
  * @since 0.1
  */
 public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
@@ -186,13 +186,13 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
     }
 
     /**
-     * 
+     *
      * Cache for distinct values and their aggregations which is completely
      * in-memory (as opposed to spilling to disk). Used when GROUPBY_SPILLABLE_ATTRIB
      * is set to false. The memory usage is tracked at a coursed grain and will
      * throw and abort if too much is used.
      *
-     * 
+     *
      * @since 3.0.0
      */
     private static final class InMemoryGroupByCache implements GroupByCache {
@@ -200,9 +200,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         private final Map<ImmutableBytesPtr, Aggregator[]> aggregateMap;
         private final ServerAggregators aggregators;
         private final RegionCoprocessorEnvironment env;
-        
+
         private int estDistVals;
-        
+
         InMemoryGroupByCache(RegionCoprocessorEnvironment env, ImmutableBytesWritable tenantId, ServerAggregators aggregators, int estDistVals) {
             int estValueSize = aggregators.getEstimatedByteSize();
             long estSize = sizeOfUnorderedGroupByMap(estDistVals, estValueSize);
@@ -213,7 +213,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             this.aggregateMap = Maps.newHashMapWithExpectedSize(estDistVals);
             this.chunk = tenantCache.getMemoryManager().allocate(estSize);
         }
-        
+
         @Override
         public void close() throws IOException {
             this.chunk.close();
@@ -252,7 +252,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             chunk.resize(estSize);
 
             final List<KeyValue> aggResults = new ArrayList<KeyValue>(aggregateMap.size());
-            
+
             final Iterator<Map.Entry<ImmutableBytesPtr, Aggregator[]>> cacheIter =
                     aggregateMap.entrySet().iterator();
             while (cacheIter.hasNext()) {
@@ -306,22 +306,22 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         public long size() {
             return aggregateMap.size();
         }
-        
+
     }
     private static final class GroupByCacheFactory {
         public static final GroupByCacheFactory INSTANCE = new GroupByCacheFactory();
-        
+
         private GroupByCacheFactory() {
         }
-        
+
         GroupByCache newCache(RegionCoprocessorEnvironment env, ImmutableBytesWritable tenantId, ServerAggregators aggregators, int estDistVals) {
             Configuration conf = env.getConfiguration();
             boolean spillableEnabled =
                     conf.getBoolean(GROUPBY_SPILLABLE_ATTRIB, DEFAULT_GROUPBY_SPILLABLE);
             if (spillableEnabled) {
                 return new SpillableGroupByCache(env, tenantId, aggregators, estDistVals);
-            } 
-            
+            }
+
             return new InMemoryGroupByCache(env, tenantId, aggregators, estDistVals);
         }
     }
@@ -344,16 +344,16 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         byte[] estDistValsBytes = scan.getAttribute(BaseScannerRegionObserver.ESTIMATED_DISTINCT_VALUES);
         if (estDistValsBytes != null) {
             // Allocate 1.5x estimation
-            estDistVals = Math.max(MIN_DISTINCT_VALUES, 
+            estDistVals = Math.max(MIN_DISTINCT_VALUES,
                             (int) (Bytes.toInt(estDistValsBytes) * 1.5f));
         }
 
         final boolean spillableEnabled =
                 conf.getBoolean(GROUPBY_SPILLABLE_ATTRIB, DEFAULT_GROUPBY_SPILLABLE);
 
-        GroupByCache groupByCache = 
+        GroupByCache groupByCache =
                 GroupByCacheFactory.INSTANCE.newCache(
-                        env, ScanUtil.getTenantId(scan), 
+                        env, ScanUtil.getTenantId(scan),
                         aggregators, estDistVals);
 
         boolean success = false;
