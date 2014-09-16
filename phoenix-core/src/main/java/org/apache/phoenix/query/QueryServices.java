@@ -46,7 +46,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String SPOOL_THRESHOLD_BYTES_ATTRIB = "phoenix.query.spoolThresholdBytes";
     public static final String HBASE_CLIENT_KEYTAB = "hbase.myclient.keytab";
     public static final String HBASE_CLIENT_PRINCIPAL = "hbase.myclient.principal";
-
+    public static final String SPOOL_DIRECTORY = "phoenix.spool.directory";
     
     /**
 	 * max size to spool the the result into
