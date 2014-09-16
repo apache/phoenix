@@ -56,7 +56,7 @@ import org.apache.phoenix.util.TupleUtil;
  */
 public class SpoolingResultIterator implements PeekingResultIterator {
     private final PeekingResultIterator spoolFrom;
-    
+
     public static class SpoolingResultIteratorFactory implements ParallelIteratorFactory {
         private final QueryServices services;
         
@@ -73,7 +73,8 @@ public class SpoolingResultIterator implements PeekingResultIterator {
     public SpoolingResultIterator(ResultIterator scanner, QueryServices services) throws SQLException {
         this (scanner, services.getMemoryManager(), 
         		services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES),
-        		services.getProps().getLong(QueryServices.MAX_SPOOL_TO_DISK_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SPOOL_TO_DISK_BYTES));
+        		services.getProps().getLong(QueryServices.MAX_SPOOL_TO_DISK_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SPOOL_TO_DISK_BYTES),
+                services.getProps().get(QueryServices.SPOOL_DIRECTORY, QueryServicesOptions.DEFAULT_SPOOL_DIRECTORY));
     }
     
     /**
@@ -85,7 +86,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
     *  the memory manager) is exceeded.
     * @throws SQLException
     */
-    SpoolingResultIterator(ResultIterator scanner, MemoryManager mm, final int thresholdBytes, final long maxSpoolToDisk) throws SQLException {
+    SpoolingResultIterator(ResultIterator scanner, MemoryManager mm, final int thresholdBytes, final long maxSpoolToDisk, final String spoolDirectory) throws SQLException {
         boolean success = false;
         boolean usedOnDiskIterator = false;
         final MemoryChunk chunk = mm.allocate(0, thresholdBytes);
@@ -93,7 +94,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
         try {
             // Can't be bigger than int, since it's the max of the above allocation
             int size = (int)chunk.getSize();
-            tempFile = File.createTempFile("ResultSpooler",".bin");
+            tempFile = File.createTempFile("ResultSpooler",".bin", new File(spoolDirectory));
             DeferredFileOutputStream spoolTo = new DeferredFileOutputStream(size, tempFile) {
                 @Override
                 protected void thresholdReached() throws IOException {
