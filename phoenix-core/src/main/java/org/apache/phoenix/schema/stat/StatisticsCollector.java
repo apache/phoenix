@@ -181,14 +181,9 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
      *            next batch of {@link KeyValue}s
      */
     protected void updateStat(final List<Cell> results) {
-        byte[] prevRow = null;
         for (Cell c : results) {
             KeyValue kv = KeyValueUtil.ensureKeyValue(c);
-            byte[] row = new ImmutableBytesPtr(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength()).copyBytesIfNecessary();
-            if (!Bytes.equals(row, prevRow)) {
-                updateStatistic(kv);
-            }
-            prevRow = row;
+            updateStatistic(kv);
         }
     }
 
@@ -327,24 +322,25 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         familyMap.add(cf);
         
         String fam = Bytes.toString(cf);
+        byte[] row = new ImmutableBytesPtr(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength())
+                .copyBytesIfNecessary();
         if (!minMap.containsKey(fam) && !maxMap.containsKey(fam)) {
-            minMap.put(fam, StatisticsUtils.copyRow(kv));
+            minMap.put(fam, row);
             // Ideally the max key also should be added in this case
-            maxMap.put(fam, StatisticsUtils.copyRow(kv));
+            maxMap.put(fam, row);
         } else {
             if (Bytes.compareTo(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(), minMap.get(fam), 0,
                     minMap.get(fam).length) < 0) {
-                minMap.put(fam, StatisticsUtils.copyRow(kv));
+                minMap.put(fam, row);
             }
             if (Bytes.compareTo(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(), maxMap.get(fam), 0,
                     maxMap.get(fam).length) > 0) {
-                maxMap.put(fam, StatisticsUtils.copyRow(kv));
+                maxMap.put(fam, row);
             }
         }
         byteCount += kv.getLength();
         // TODO : This can be moved to an interface so that we could collect guide posts in different ways
         if (byteCount >= guidepostDepth) {
-            byte[] row = new ImmutableBytesPtr(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength()).copyBytesIfNecessary();
             if (guidePostsMap.get(fam) != null) {
                 guidePostsMap.get(fam).add(
                         row);

@@ -48,17 +48,30 @@ import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.SequenceManager;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.iterate.DefaultParallelIteratorRegionSplitter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -586,6 +599,9 @@ public class QueryIT extends BaseQueryIT {
             assertTrue (rs.next());
             assertEquals(rs.getString(1), ROW6);
             assertFalse(rs.next());
+            List<KeyRange> splits = getSplits(conn, ts, new Scan());
+            // It is after split
+            assertEquals(14, splits.size());
         } finally {
             conn.close();
         }
@@ -857,5 +873,37 @@ public class QueryIT extends BaseQueryIT {
     private void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
         String query = "ANALYZE " + tableName;
         conn.createStatement().execute(query);
+    }
+    
+    private static TableRef getTableRef(Connection conn, long ts) throws SQLException {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        TableRef table = new TableRef(null, pconn.getMetaDataCache().getTable(
+                new PTableKey(pconn.getTenantId(), "ATABLE")), ts, false);
+        return table;
+    }
+
+    private static List<KeyRange> getSplits(Connection conn, long ts, final Scan scan) throws SQLException {
+        TableRef tableRef = getTableRef(conn, ts);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        final List<HRegionLocation> regions = pconn.getQueryServices().getAllTableRegions(
+                tableRef.getTable().getPhysicalName().getBytes());
+        PhoenixStatement statement = new PhoenixStatement(pconn);
+        StatementContext context = new StatementContext(statement, null, scan, new SequenceManager(statement));
+        DefaultParallelIteratorRegionSplitter splitter = new DefaultParallelIteratorRegionSplitter(context, tableRef,
+                HintNode.EMPTY_HINT_NODE) {
+            @Override
+            protected List<HRegionLocation> getAllRegions() throws SQLException {
+                return DefaultParallelIteratorRegionSplitter.filterRegions(regions, scan.getStartRow(),
+                        scan.getStopRow());
+            }
+        };
+        List<KeyRange> keyRanges = splitter.getSplits();
+        Collections.sort(keyRanges, new Comparator<KeyRange>() {
+            @Override
+            public int compare(KeyRange o1, KeyRange o2) {
+                return Bytes.compareTo(o1.getLowerRange(), o2.getLowerRange());
+            }
+        });
+        return keyRanges;
     }
 }

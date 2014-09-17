@@ -23,7 +23,6 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.MultipleIOException;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TimeKeeper;
 
@@ -72,16 +71,10 @@ public class StatisticsScanner implements InternalScanner {
      *            next batch of {@link KeyValue}s
      */
     protected void updateStat(final List<Cell> results) {
-        byte[] prevRow = null;
         for (Cell c : results) {
             KeyValue kv = KeyValueUtil.ensureKeyValue(c);
             if (!CellUtil.isDelete(kv)) {
-                byte[] row = new ImmutableBytesPtr(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength())
-                        .copyBytesIfNecessary();
-                if (!Bytes.equals(row, prevRow)) {
                     tracker.updateStatistic(kv);
-                }
-                prevRow = row;
             }
         }
     }
