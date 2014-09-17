@@ -676,28 +676,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
           } else {
               addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
           }
-        }        
-        byte[] tenIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
-        if (tenantId != null) {
-            tenIdBytes = tenantId.getBytes();
         }
-        byte[] schNameInBytes = ByteUtil.EMPTY_BYTE_ARRAY;
-        if (schemaName != null) {
-            schNameInBytes = Bytes.toBytes(schemaName.getString());
-        }
-        byte[] tableKey = SchemaUtil.getTableKey(tenIdBytes, schNameInBytes , PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
-        ImmutableBytesPtr key = new ImmutableBytesPtr(tableKey);
-        Cache<ImmutableBytesPtr, PTable> metaDataCache =
-                GlobalCache.getInstance(this.env).getMetaDataCache();
-        PTable statsPTable = metaDataCache.getIfPresent(key);
-        PTableStats stats = updateStatsInternal(tableNameBytes, columns, statsPTable);
+        PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getTableName(
+                schemaName.getString(), tableName.getString())) : physicalTables.get(0);
+        PTableStats stats = updateStatsInternal(physicalTableName.getBytes(), columns);
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, 
             tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? dataTableName : null, 
             indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement, disableWAL, 
             multiTenant, viewType, viewIndexId, indexType, stats);
     }
 
-    private PTableStats updateStatsInternal(byte[] tableNameBytes, List<PColumn> columns, PTable statsPTable)
+    private PTableStats updateStatsInternal(byte[] tableNameBytes, List<PColumn> columns)
             throws IOException {
         List<PName> family = Lists.newArrayListWithExpectedSize(columns.size());
         for (PColumn column : columns) {
@@ -720,7 +709,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             ResultScanner scanner = statsHTable.getScanner(s);
             Result result = null;
             byte[] fam = null;
-            List<byte[]> guidePosts = new ArrayList<byte[]>();
+            List<byte[]> guidePosts = Lists.newArrayListWithExpectedSize(columns.size());
             TreeMap<byte[], List<byte[]>> guidePostsPerCf = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
             while ((result = scanner.next()) != null) {
                 CellScanner cellScanner = result.cellScanner();
@@ -1773,9 +1762,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     @Override
     public void clearCacheForTable(RpcController controller, ClearCacheForTableRequest request,
             RpcCallback<ClearCacheForTableResponse> done) {
+        ByteString tenantId = request.getTenantId();
         ByteString schemaName = request.getSchemaName();
         ByteString tableName = request.getTableName();
-        byte[] tableKey = SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY, schemaName.toByteArray() , tableName.toByteArray());
+        byte[] tableKey = SchemaUtil.getTableKey(tenantId.toByteArray(), schemaName.toByteArray(),
+                tableName.toByteArray());
         ImmutableBytesPtr key = new ImmutableBytesPtr(tableKey);
         try {
             PTable table = doGetTable(tableKey, request.getClientTimestamp());
@@ -1783,6 +1774,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 Cache<ImmutableBytesPtr, PTable> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
                 // Add +1 to the ts
                 // TODO : refactor doGetTable() to do this - optionally increment the timestamp
+                // TODO : clear metadata if it is spread across multiple region servers
                 long ts = table.getTimeStamp() + 1;
                 // Here we could add an empty puti
                 HRegion region = env.getRegion();

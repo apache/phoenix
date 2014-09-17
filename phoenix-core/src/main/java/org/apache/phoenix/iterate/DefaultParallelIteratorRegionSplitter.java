@@ -114,7 +114,7 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
 
         if (table.getColumnFamilies().isEmpty()) {
             // For sure we can get the defaultCF from the table
-            gps = table.getTableStats();
+            gps = table.getGuidePosts();
         } else {
             try {
                 if (scan.getFamilyMap().size() > 0) {
@@ -133,11 +133,16 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         
         List<KeyRange> guidePosts = Lists.newArrayListWithCapacity(regions.size());
         List<KeyRange> regionStartEndKey = Lists.newArrayListWithExpectedSize(regions.size());
-        for (HRegionLocation region : regions) {
-            regionStartEndKey.add(KeyRange.getKeyRange(region.getRegionInfo().getStartKey(), region
-                    .getRegionInfo().getEndKey()));
-        }
-        if (gps != null) {
+        if (gps == null || gps.isEmpty()) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("The splits formed from region start and endkeys are: " + regionStartEndKey);
+            }
+            for (HRegionLocation region : regions) {
+                regionStartEndKey.add(KeyRange.getKeyRange(region.getRegionInfo().getStartKey(), region.getRegionInfo()
+                        .getEndKey()));
+            }
+            return regionStartEndKey;
+        } else {
             byte[] startKey = regions.get(0).getRegionInfo().getStartKey();
             int regionSize = regions.size();
             int regionIndex = 0;
@@ -147,13 +152,19 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
                 byte[] currentGuidePost = gps.get(guideIndex);
                 byte[] regionEndKey = regions.get(regionIndex).getRegionInfo().getEndKey();
                 // Even if last row just form guide posts. Otherwise for the last region we don't get any guide posts
-                while (Bytes.compareTo(currentGuidePost, regionEndKey) <= 0 || Bytes.equals(regionEndKey, ByteUtil.EMPTY_BYTE_ARRAY)) {
+                while (Bytes.compareTo(currentGuidePost, regionEndKey) <= 0
+                        || Bytes.equals(regionEndKey, ByteUtil.EMPTY_BYTE_ARRAY)) {
                     KeyRange keyRange = KeyRange.getKeyRange(startKey, currentGuidePost);
                     if (keyRange != KeyRange.EMPTY_RANGE) {
                         guidePosts.add(keyRange);
                     }
-                    startKey = new byte[currentGuidePost.length];
-                    System.arraycopy(currentGuidePost, 0, startKey, 0, startKey.length);
+                    if (Bytes.compareTo(currentGuidePost, startKey) >= 0) {
+                        // Reset the start key only if the current guide post is greater. Otherwise start key is greater and
+                        // there is no point in using a guide post which is less than the start key.
+                        // This would happen in case if the region start key is 'd' and the guide post is , for eg : 'e'.
+                        // In that case we should not start with 'd' but with 'e'.
+                        startKey = currentGuidePost;
+                    }
                     guideIndex++;
                     if ((guideIndex <= gpsSize - 1)) {
                         currentGuidePost = gps.get(guideIndex);
@@ -167,11 +178,10 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
                     startKey = regions.get(regionIndex).getRegionInfo().getStartKey();
                 }
             }
-        }
-        if (guidePosts.size() > 0) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("The captured guideposts are: " + guidePosts);
+            }
             return guidePosts;
-        } else {
-            return regionStartEndKey;
         }
     }
         

@@ -94,7 +94,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     void addConnection(PhoenixConnection connection) throws SQLException;
     void removeConnection(PhoenixConnection connection) throws SQLException;
 
-    long updateStatistics(KeyRange keyRange, byte[] tableName, String url)
+    long updateStatistics(KeyRange keyRange, byte[] tableName)
             throws SQLException;
 
     /**
@@ -106,5 +106,5 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public boolean supportsFeature(Feature feature);
     
     public String getUserName();
-    public void clearCacheForTable(final byte[] schemaName, final byte[] tableName, long clientTS) throws SQLException;
+    public void clearCacheForTable(final byte[] tenantId, final byte[] schemaName, final byte[] tableName, long clientTS) throws SQLException;
 }

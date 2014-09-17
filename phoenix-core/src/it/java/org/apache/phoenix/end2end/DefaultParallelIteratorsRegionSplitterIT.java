@@ -85,41 +85,39 @@ public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIterat
     public void testGetSplits() throws Exception {
         long ts = nextTimestamp();
         initTableValues(ts);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts + 2;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
-
+        PreparedStatement stmt = conn.prepareStatement("ANALYZE STABLE");
+        stmt.execute();
         Scan scan = new Scan();
         
         // number of regions > target query concurrency
         scan.setStartRow(K1);
         scan.setStopRow(K12);
         List<KeyRange> keyRanges = getSplits(conn, ts, scan);
-        assertEquals("Unexpected number of splits: " + keyRanges, 5, keyRanges.size());
-        assertEquals(newKeyRange(KeyRange.UNBOUND, K3), keyRanges.get(0));
-        assertEquals(newKeyRange(K3, K4), keyRanges.get(1));
-        assertEquals(newKeyRange(K4, K9), keyRanges.get(2));
-        assertEquals(newKeyRange(K9, K11), keyRanges.get(3));
-        assertEquals(newKeyRange(K11, KeyRange.UNBOUND), keyRanges.get(4));
+        assertEquals("Unexpected number of splits: " + keyRanges, 7, keyRanges.size());
+        assertEquals(newKeyRange(KeyRange.UNBOUND, KMIN), keyRanges.get(0));
+        assertEquals(newKeyRange(KMIN, K3), keyRanges.get(1));
+        assertEquals(newKeyRange(K3, K4), keyRanges.get(2));
+        assertEquals(newKeyRange(K4, K9), keyRanges.get(3));
+        assertEquals(newKeyRange(K9, K11), keyRanges.get(4));
+        assertEquals(newKeyRange(K11, KMAX), keyRanges.get(5));
+        assertEquals(newKeyRange(KMAX,  KeyRange.UNBOUND), keyRanges.get(6));
         
-        // (number of regions / 2) > target query concurrency
         scan.setStartRow(K3);
         scan.setStopRow(K6);
         keyRanges = getSplits(conn, ts, scan);
-        assertEquals("Unexpected number of splits: " + keyRanges, 3, keyRanges.size());
+        assertEquals("Unexpected number of splits: " + keyRanges, 2, keyRanges.size());
         // note that we get a single split from R2 due to small key space
         assertEquals(newKeyRange(K3, K4), keyRanges.get(0));
-        assertEquals(newKeyRange(K4, K6), keyRanges.get(1));
-        assertEquals(newKeyRange(K6, K9), keyRanges.get(2));
+        assertEquals(newKeyRange(K4, K9), keyRanges.get(1));
         
-        // (number of regions / 2) <= target query concurrency
         scan.setStartRow(K5);
         scan.setStopRow(K6);
         keyRanges = getSplits(conn, ts, scan);
-        assertEquals("Unexpected number of splits: " + keyRanges, 3, keyRanges.size());
-        assertEquals(newKeyRange(K4, K5), keyRanges.get(0));
-        assertEquals(newKeyRange(K5, K6), keyRanges.get(1));
-        assertEquals(newKeyRange(K6, K9), keyRanges.get(2));
+        assertEquals("Unexpected number of splits: " + keyRanges, 1, keyRanges.size());
+        assertEquals(newKeyRange(K4, K9), keyRanges.get(0));
         conn.close();
     }
 
@@ -127,19 +125,21 @@ public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIterat
     public void testGetLowerUnboundSplits() throws Throwable {
         long ts = nextTimestamp();
         initTableValues(ts);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts + 2;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         PreparedStatement stmt = conn.prepareStatement("ANALYZE STABLE");
         stmt.execute();
-        conn.close();
-        conn = DriverManager.getConnection(url, props);
+        // The query would use all the split points here
         conn.createStatement().executeQuery("SELECT * FROM STABLE");
+        conn.close();
         Scan scan = new Scan();
         scan.setStartRow(HConstants.EMPTY_START_ROW);
         scan.setStopRow(K1);
         List<KeyRange> keyRanges = getSplits(conn, ts, scan);
-        assertEquals("Unexpected number of splits: " + keyRanges, 1, keyRanges.size());
+        assertEquals("Unexpected number of splits: " + keyRanges, 2, keyRanges.size());
+        assertEquals(newKeyRange(KeyRange.UNBOUND, KMIN), keyRanges.get(0));
+        assertEquals(newKeyRange(KMIN, K3), keyRanges.get(1));
     }
 
     private static KeyRange newKeyRange(byte[] lowerRange, byte[] upperRange) {

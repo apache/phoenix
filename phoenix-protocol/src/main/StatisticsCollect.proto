@@ -6,10 +6,8 @@ option optimize_for = SPEED;
 
 
 message StatCollectRequest {
-  required bytes tableNameBytes = 1;
-  optional bytes startRow = 2;
-  optional bytes stopRow = 3;
-  required string url = 4;
+  optional bytes startRow = 1;
+  optional bytes stopRow = 2;
 }
 
 message StatCollectResponse {

@@ -115,6 +115,7 @@ public class PTableImpl implements PTable {
     private Short viewIndexId;
     private int estimatedSize;
     private IndexType indexType;
+    private List<byte[]> guidePosts;
     
     public PTableImpl() {
         this.indexes = Collections.emptyList();
@@ -364,7 +365,15 @@ public class PTableImpl implements PTable {
         Iterator<Map.Entry<PName,List<PColumn>>> iterator = familyMap.entrySet().iterator();
         PColumnFamily[] families = new PColumnFamily[familyMap.size()];
         if (families.length == 0) {
-            this.stats = stats;
+            if(stats != null) {
+                byte[] defaultFamilyNameBytes = null;
+                if(defaultFamilyName == null) {
+                    defaultFamilyNameBytes = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+                } else {
+                    defaultFamilyNameBytes = defaultFamilyName.getBytes();
+                }
+                guidePosts = stats.getGuidePosts().get(defaultFamilyNameBytes);
+            }
         }
         ImmutableMap.Builder<String, PColumnFamily> familyByString = ImmutableMap.builder();
         ImmutableSortedMap.Builder<byte[], PColumnFamily> familyByBytes = ImmutableSortedMap.orderedBy(Bytes.BYTES_COMPARATOR);
@@ -392,6 +401,9 @@ public class PTableImpl implements PTable {
         this.familyByString = familyByString.build();
         estimatedSize += SizedUtil.sizeOfArrayList(families.length);
         estimatedSize += SizedUtil.sizeOfMap(families.length) * 2;
+        if (guidePosts != null) {
+            estimatedSize += SizedUtil.sizeOfArrayList(guidePosts.size());
+        }
         this.indexes = indexes == null ? Collections.<PTable>emptyList() : indexes;
         for (PTable index : this.indexes) {
             estimatedSize += index.getEstimatedSize();
@@ -733,12 +745,8 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public List<byte[]> getTableStats() {
-        if (stats != null) {
-            return stats.getGuidePosts().get(SchemaUtil.getEmptyColumnFamily(this));
-        } else {
-            return null;
-        }
+    public List<byte[]> getGuidePosts() {
+        return guidePosts;
     }
 
     @Override
@@ -1010,8 +1018,8 @@ public class PTableImpl implements PTable {
       builder.setIsImmutableRows(table.isImmutableRows());
 
         // build stats
-      if (table.getTableStats() != null) {
-         List<byte[]> stats = table.getTableStats();
+      if (table.getGuidePosts() != null) {
+         List<byte[]> stats = table.getGuidePosts();
           if (stats != null) {
              PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();
              statsBuilder.setKey(Bytes.toString(SchemaUtil.getEmptyColumnFamily(table)));

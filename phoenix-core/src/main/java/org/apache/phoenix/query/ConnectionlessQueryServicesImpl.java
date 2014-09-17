@@ -190,14 +190,13 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public long updateStatistics(KeyRange keyRange, byte[] tableName, String url)
-            throws SQLException {
+    public long updateStatistics(KeyRange keyRange, byte[] tableName) throws SQLException {
         // Noop
         return 0;
     }
     
     @Override
-    public void clearCacheForTable(byte[] schemaName, byte[] tableName, long clientTS)
+    public void clearCacheForTable(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTS)
             throws SQLException {}
     // TODO: share this with ConnectionQueryServicesImpl
     @Override

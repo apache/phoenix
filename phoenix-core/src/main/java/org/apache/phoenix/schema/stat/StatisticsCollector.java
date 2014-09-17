@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
@@ -59,7 +60,9 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TimeKeeper;
 
+import com.google.common.collect.Lists;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
@@ -110,7 +113,8 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         } finally {
             if (scanner != null) {
                 try {
-                    writeStatsToStatsTable(request, region, scanner, false);
+                    writeStatsToStatsTable(region, scanner, false, new ArrayList<Mutation>(),
+                            TimeKeeper.SYSTEM.getCurrentTime());
                 } catch (IOException e) {
                     LOG.error(e);
                     ResponseConverter.setControllerException(controller, e);
@@ -123,22 +127,15 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         done.run(result);
     }
 
-    private void writeStatsToStatsTable(final StatCollectRequest request, final HRegion region,
-            final RegionScanner scanner, boolean split) throws IOException {
+    private void writeStatsToStatsTable(final HRegion region,
+            final RegionScanner scanner, boolean split, List<Mutation> mutations, long currentTime) throws IOException {
         scanner.close();
-        String url = null;
         try {
             // update the statistics table
             for (byte[] fam : familyMap) {
-                String tableName = null;
-                if (request != null) {
-                    tableName = Bytes.toString(request.getTableNameBytes().toByteArray());
-                    url = request.getUrl();
-                } else {
-                    tableName = SchemaUtil.getTableNameFromFullName(region.getRegionInfo().getTable().getNameAsString());
-                }
+                String tableName = region.getRegionInfo().getTable().getNameAsString();
                 stats.updateStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
-                        Bytes.toString(fam), url, split);
+                        Bytes.toString(fam), split, mutations, currentTime);
             }
         } catch (IOException e) {
             LOG.error("Failed to update statistics table!", e);
@@ -146,14 +143,14 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         }
     }
 
-    private void deleteStatsFromStatsTable(final HRegion region) throws IOException {
+    private void deleteStatsFromStatsTable(final HRegion region, List<Mutation> mutations, long currentTime) throws IOException {
         try {
             // update the statistics table
             for (byte[] fam : familyMap) {
                 String tableName = null;
                 tableName = SchemaUtil.getTableNameFromFullName(region.getRegionInfo().getTable().getNameAsString());
-                stats.deleteStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
-                        Bytes.toString(fam));
+                mutations.add(stats.deleteStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
+                        Bytes.toString(fam), currentTime));
             }
         } catch (IOException e) {
             LOG.error("Failed to update statistics table!", e);
@@ -266,14 +263,17 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
             }
             // Create a delete operation on the parent region
             // Then write the new guide posts for individual regions
-            // TODO : Try making this automic
-            collectStatsForSplitRegions(l, region, true);
+            // TODO : Try making this atomic
+            List<Mutation> mutations = Lists.newArrayListWithExpectedSize(3);
+            long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
+            collectStatsForSplitRegions(l, region, true, mutations, currentTime);
             clear();
-            collectStatsForSplitRegions(r, region, false);
+            collectStatsForSplitRegions(r, region, false, mutations, currentTime);
         }
     }
 
-    private void collectStatsForSplitRegions(HRegion daughter, HRegion region, boolean delete) throws IOException {
+    private void collectStatsForSplitRegions(HRegion daughter, HRegion region, boolean delete,
+            List<Mutation> mutations, long currentTime) throws IOException {
         Scan scan = createScan();
         RegionScanner scanner = null;
         int count = 0;
@@ -287,9 +287,9 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
             if (scanner != null) {
                 try {
                     if (delete) {
-                        deleteStatsFromStatsTable(region);
+                        deleteStatsFromStatsTable(region, mutations, currentTime);
                     }
-                    writeStatsToStatsTable(null, daughter, scanner, true);
+                    writeStatsToStatsTable(daughter, scanner, true, mutations, currentTime);
                 } catch (IOException e) {
                     LOG.error(e);
                     throw e;

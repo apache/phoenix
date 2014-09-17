@@ -256,7 +256,7 @@ public interface PTable {
      * guide posts are return 
      * @return the statistics table.
      */
-    List<byte[]> getTableStats();
+    List<byte[]> getGuidePosts();
 
     RowKeySchema getRowKeySchema();
 

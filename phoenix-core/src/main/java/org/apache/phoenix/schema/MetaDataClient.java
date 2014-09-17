@@ -472,7 +472,8 @@ public class MetaDataClient {
     }
 
     public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt) throws SQLException {
-        String tableName = updateStatisticsStmt.getTable().getName().getTableName();
+        TableName tableNameNode = updateStatisticsStmt.getTable().getName();
+        String tableName = tableNameNode.getTableName();
         // Check before updating the stats if we have reached the configured time to reupdate the stats once again
         long minTimeForStatsUpdate = connection.getQueryServices().getProps()
                 .getLong(StatisticsConstants.MIN_STATS_FREQ_UPDATION, StatisticsConstants.DEFAULT_STATS_FREQ_UPDATION);
@@ -480,8 +481,8 @@ public class MetaDataClient {
         PTable table = resolver.getTables().get(0).getTable();
         PName physicalName = table.getPhysicalName();
         byte[] tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
-       KeyRange analyzeRange = KeyRange.EVERYTHING_RANGE;
-        if (connection.getTenantId() != null) {
+        KeyRange analyzeRange = KeyRange.EVERYTHING_RANGE;
+        if (connection.getTenantId() != null && table.getBucketNum() == null) {
             tenantIdBytes = connection.getTenantId().getBytes();
             List<List<KeyRange>> tenantIdKeyRanges = Collections.singletonList(Collections.singletonList(KeyRange
                     .getKeyRange(tenantIdBytes)));
@@ -491,19 +492,18 @@ public class MetaDataClient {
                     ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
             analyzeRange = KeyRange.getKeyRange(lowerRange, upperRange);
         }
-        byte[] schemaNameBytes = ByteUtil.EMPTY_BYTE_ARRAY;
-        if (connection.getSchema() != null) {
-            schemaNameBytes = Bytes.toBytes(connection.getSchema());
+        String schemaName = tableNameNode.getSchemaName();
+        byte[] schemaBytes = ByteUtil.EMPTY_BYTE_ARRAY;
+        if(schemaName != null) {
+            schemaBytes = tableNameNode.getSchemaName().getBytes();
         }
-
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTS = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
-        connection.getQueryServices().clearCacheForTable(schemaNameBytes, Bytes.toBytes(tableName),
-                clientTS);
-        String schema = Bytes.toString(schemaNameBytes);
+        connection.getQueryServices().clearCacheForTable(tenantIdBytes, schemaBytes,
+                tableNameNode.getTableName().getBytes(), clientTS);
         // Clear the cache also. So that for cases like major compaction also we would be able to use the stats
-        updateCache(schema, tableName, true);
+        updateCache(schemaName, tableName, true);
         String query = "SELECT CURRENT_DATE()-"+ LAST_STATS_UPDATE_TIME + " FROM " + SYSTEM_CATALOG_SCHEMA
                 + "." + SYSTEM_STATS_TABLE + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
                 + " IS NULL AND " + REGION_NAME + " IS NULL";
@@ -514,11 +514,10 @@ public class MetaDataClient {
         }
         if (minTimeForStatsUpdate  - lastUpdatedTime> 0) {
             // We need to update the stats table
-            connection.getQueryServices().updateStatistics(analyzeRange, physicalName.getBytes(),
-                    connection.getURL());
-            connection.getQueryServices().clearCacheForTable(schemaNameBytes, Bytes.toBytes(tableName),
-                    clientTS);
-            updateCache(schema, tableName, true);
+            connection.getQueryServices().updateStatistics(analyzeRange, physicalName.getBytes());
+            connection.getQueryServices().clearCacheForTable(tenantIdBytes, schemaBytes,
+                    tableNameNode.getTableName().getBytes(), clientTS);
+            updateCache(schemaName, tableName, true);
             return new MutationState(1, connection);
         } else {
             return new MutationState(0, connection);

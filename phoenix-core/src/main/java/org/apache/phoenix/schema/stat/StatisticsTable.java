@@ -19,7 +19,6 @@ package org.apache.phoenix.schema.stat;
 
 import java.io.IOException;
 import java.sql.Date;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -103,34 +102,38 @@ public class StatisticsTable implements Closeable {
      * @param region name -  the region of the table for which the stats are collected
      * @param tracker - the statistics tracker
      * @param fam -  the family for which the stats is getting collected.
-     * @param url - the connection url - not null if coming from ANALYZE <tablename> query, else null
      * @param split - if the updation is caused due to a split
+     * @param mutations - list of mutations that collects all the mutations to commit in a batch
+     * @param currentTime -  the current time
      * @throws IOException
      *             if we fail to do any of the puts. Any single failure will prevent any future attempts for the remaining list of stats to
      *             update
      */
-    public void updateStats(String tableName, String regionName, StatisticsTracker tracker, String fam,
-            String url, boolean split) throws IOException {
+    public void updateStats(String tableName, String regionName, StatisticsTracker tracker, String fam, boolean split,
+            List<Mutation> mutations, long currentTime) throws IOException {
         if (tracker == null) { return; }
 
-        long currentTime = timeKeeper.getCurrentTime();
-        List<Mutation> mutations = new ArrayList<Mutation>();
         // Add the timestamp header
-        byte[] prefix = StatisticsUtils.getRowKeyForTSUpdate(PDataType.VARCHAR.toBytes(tableName));
-        Put put = new Put(prefix);
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES,
-                PDataType.DATE.toBytes(new Date(currentTime)));
-        statisticsTable.put(put);
-        statisticsTable.flushCommits();
+        formLastUpdatedStatsMutation(tableName, currentTime, mutations);
 
-        prefix = StatisticsUtils.getRowKey(PDataType.VARCHAR.toBytes(tableName), PDataType.VARCHAR.toBytes(fam),
+        byte[] prefix = StatisticsUtils.getRowKey(PDataType.VARCHAR.toBytes(tableName), PDataType.VARCHAR.toBytes(fam),
                 PDataType.VARCHAR.toBytes(regionName));
-        // Better to add them in in one batch using mutateRow
         if (!split) {
             Delete d = new Delete(prefix, currentTime - 1);
             mutations.add(d);
         }
-        put = new Put(prefix, currentTime);
+        formStatsUpdateMutation(tracker, fam, mutations, currentTime, prefix);
+        Object[] res = new Object[mutations.size()];
+        try {
+            statisticsTable.batch(mutations, res);
+        } catch (InterruptedException e) {
+            throw new IOException("Exception while adding deletes and puts");
+        }
+    }
+
+    private void formStatsUpdateMutation(StatisticsTracker tracker, String fam, List<Mutation> mutations,
+            long currentTime, byte[] prefix) {
+        Put put = new Put(prefix, currentTime);
         if (tracker.getGuidePosts(fam) != null) {
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES,
                     currentTime, (tracker.getGuidePosts(fam)));
@@ -140,22 +143,22 @@ public class StatisticsTable implements Closeable {
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.MAX_KEY_BYTES,
                 currentTime, PDataType.VARBINARY.toBytes(tracker.getMaxKey(fam)));
         mutations.add(put);
-        Object[] res = new Object[mutations.size()];
-        try {
-            statisticsTable.batch(mutations, res);
-        } catch (InterruptedException e) {
-            throw new IOException("Exception while adding deletes and puts");
-        }
-        statisticsTable.flushCommits();
+    }
+
+    private void formLastUpdatedStatsMutation(String tableName, long currentTime, List<Mutation> mutations) throws IOException {
+        byte[] prefix = StatisticsUtils.getRowKeyForTSUpdate(PDataType.VARCHAR.toBytes(tableName));
+        Put put = new Put(prefix);
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES,
+                PDataType.DATE.toBytes(new Date(currentTime)));
+        mutations.add(put);
     }
     
-    public void deleteStats(String tableName, String regionName, StatisticsTracker tracker, String fam)
+    public Mutation deleteStats(String tableName, String regionName, StatisticsTracker tracker, String fam, long currentTime)
             throws IOException {
         byte[] prefix = StatisticsUtils.getRowKey(PDataType.VARCHAR.toBytes(tableName), PDataType.VARCHAR.toBytes(fam),
                 PDataType.VARCHAR.toBytes(regionName));
-        Delete d = new Delete(prefix, TimeKeeper.SYSTEM.getCurrentTime() - 1);
-        statisticsTable.delete(d);
-        statisticsTable.flushCommits();
+        Delete d = new Delete(prefix, currentTime - 1);
+        return d;
     }
 
     /**

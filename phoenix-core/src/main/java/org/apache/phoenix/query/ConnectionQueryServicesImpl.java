@@ -218,8 +218,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // TODO: should we track connection wide memory usage or just org-wide usage?
         // If connection-wide, create a MemoryManager here, otherwise just use the one from the delegate
         this.childServices = new ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices>(INITIAL_CHILD_SERVICES_CAPACITY);
-        int statsUpdateFrequencyMs = this.getProps().getInt(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
-        int maxStatsAgeMs = this.getProps().getInt(QueryServices.MAX_STATS_AGE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_STATS_AGE_MS);
         // find the HBase version and use that to determine the KeyValueBuilder that should be used
         String hbaseVersion = VersionInfo.getVersion();
         this.kvBuilder = KeyValueBuilder.get(hbaseVersion);
@@ -1868,11 +1866,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public long updateStatistics(final KeyRange keyRange, final byte[] tableName,
-            final String url) throws SQLException {
+    public long updateStatistics(final KeyRange keyRange, final byte[] tableName) throws SQLException {
         HTableInterface ht = null;
         try {
-            // TODO To set the start/stop range for the analyze call based on tenantId (if not null).
             ht = this.getTable(tableName);
             Batch.Call<StatCollectService, StatCollectResponse> callable = new Batch.Call<StatCollectService, StatCollectResponse>() {
                 ServerRpcController controller = new ServerRpcController();
@@ -1883,15 +1879,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     StatCollectRequest.Builder builder = StatCollectRequest.newBuilder();
                     builder.setStartRow(HBaseZeroCopyByteString.wrap(keyRange.getLowerRange()));
                     builder.setStopRow(HBaseZeroCopyByteString.wrap(keyRange.getUpperRange()));
-                    builder.setTableNameBytes(HBaseZeroCopyByteString.wrap(tableName));
-                    builder.setUrl(url);
                     service.collectStat(controller, builder.build(), rpcCallback);
                     if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
                     return rpcCallback.get();
                 }
             };
             Map<byte[], StatCollectResponse> result = ht.coprocessorService(StatCollectService.class,
-                    HConstants.EMPTY_BYTE_ARRAY, HConstants.EMPTY_BYTE_ARRAY, callable);
+                    keyRange.getLowerRange(), keyRange.getUpperRange(), callable);
             StatCollectResponse next = result.values().iterator().next();
             return next.getRowsScanned();
         } catch (ServiceException e) {
@@ -1912,7 +1906,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public void clearCacheForTable(final byte[] schemaName, final byte[] tableName,
+    public void clearCacheForTable(final byte[] tenantId, final byte[] schemaName, final byte[] tableName,
             final long clientTS) throws SQLException {
         // clear the meta data cache for the table here
         try {
@@ -1926,6 +1920,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 ServerRpcController controller = new ServerRpcController();
                                 BlockingRpcCallback<ClearCacheForTableResponse> rpcCallback = new BlockingRpcCallback<ClearCacheForTableResponse>();
                                 ClearCacheForTableRequest.Builder builder = ClearCacheForTableRequest.newBuilder();
+                                builder.setTenantId(HBaseZeroCopyByteString.wrap(tenantId));
                                 builder.setTableName(HBaseZeroCopyByteString.wrap(tableName));
                                 builder.setSchemaName(HBaseZeroCopyByteString.wrap(schemaName));
                                 builder.setClientTimestamp(clientTS);

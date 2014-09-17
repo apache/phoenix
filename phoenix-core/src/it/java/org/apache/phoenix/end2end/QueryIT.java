@@ -750,7 +750,7 @@ public class QueryIT extends BaseQueryIT {
             assertTrue(rs.next());
             assertEquals(A_VALUE, rs.getString(1));
             assertEquals(E_VALUE, rs.getString(2));
-           assertEquals(1, rs.getLong(3));
+            assertEquals(1, rs.getLong(3));
             assertFalse(rs.next());
             
             byte[] tableName = Bytes.toBytes(ATABLE_NAME);
