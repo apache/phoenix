@@ -31,7 +31,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
  */
 public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
 
-    private static final int DEFAULT_THREAD_POOL_SIZE = 8;
+    private static final int DEFAULT_THREAD_POOL_SIZE = 20;
     private static final int DEFAULT_QUEUE_SIZE = 0;
     // TODO: setting this down to 5mb causes insufficient memory exceptions. Need to investigate why
     private static final int DEFAULT_MAX_MEMORY_PERC = 30; // 30% of heap

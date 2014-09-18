@@ -479,15 +479,17 @@ public class MetaDataClient {
         PName physicalName = table.getPhysicalName();
         byte[] tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         KeyRange analyzeRange = KeyRange.EVERYTHING_RANGE;
-        if (connection.getTenantId() != null && table.getBucketNum() == null) {
-            tenantIdBytes = connection.getTenantId().getBytes();
-            List<List<KeyRange>> tenantIdKeyRanges = Collections.singletonList(Collections.singletonList(KeyRange
-                    .getKeyRange(tenantIdBytes)));
-            byte[] lowerRange = ScanUtil.getMinKey(table.getRowKeySchema(), tenantIdKeyRanges,
-                    ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
-            byte[] upperRange = ScanUtil.getMaxKey(table.getRowKeySchema(), tenantIdKeyRanges,
-                    ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
-            analyzeRange = KeyRange.getKeyRange(lowerRange, upperRange);
+        if (connection.getTenantId() != null) {
+            if (table.getBucketNum() == null && table.getIndexType() != IndexType.LOCAL) {
+                tenantIdBytes = connection.getTenantId().getBytes();
+                List<List<KeyRange>> tenantIdKeyRanges = Collections.singletonList(Collections.singletonList(KeyRange
+                        .getKeyRange(tenantIdBytes)));
+                byte[] lowerRange = ScanUtil.getMinKey(table.getRowKeySchema(), tenantIdKeyRanges,
+                        ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
+                byte[] upperRange = ScanUtil.getMaxKey(table.getRowKeySchema(), tenantIdKeyRanges,
+                        ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
+                analyzeRange = KeyRange.getKeyRange(lowerRange, upperRange);
+            }
         }
         Long scn = connection.getSCN();
         // Always invalidate the cache

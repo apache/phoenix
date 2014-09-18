@@ -22,8 +22,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -82,56 +83,67 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         desc.addCoprocessor(StatisticsCollector.class.getName());
     }
 
-    private Map<String, byte[]> minMap = new TreeMap<String, byte[]>();
-    private Map<String, byte[]> maxMap = new TreeMap<String, byte[]>();
+    private Map<String, byte[]> minMap = new ConcurrentHashMap<String, byte[]>();
+    private Map<String, byte[]> maxMap = new ConcurrentHashMap<String, byte[]>();
     private long guidepostDepth;
     private long byteCount = 0;
-    private TreeMap<String, List<byte[]>> guidePostsMap = new TreeMap<String, List<byte[]>>();
+    private Map<String, List<byte[]>> guidePostsMap = new ConcurrentHashMap<String, List<byte[]>>();
     private Set<byte[]> familyMap = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
     private RegionCoprocessorEnvironment env;
     protected StatisticsTable stats;
+    // Ensures that either analyze or compaction happens at any point of time.
+    private ReentrantLock lock = new ReentrantLock();
     private static final Log LOG = LogFactory.getLog(StatisticsCollector.class);
 
     @Override
     public void collectStat(RpcController controller, StatCollectRequest request, RpcCallback<StatCollectResponse> done) {
         HRegion region = env.getRegion();
-        // Clear all old stats
-        clear();
-        Scan scan = createScan(env.getConfiguration());
-        if (request.hasStartRow()) {
-            scan.setStartRow(request.getStartRow().toByteArray());
-        }
-        if (request.hasStopRow()) {
-            scan.setStopRow(request.getStopRow().toByteArray());
-        }
-        RegionScanner scanner = null;
+        boolean heldLock = false;
         int count = 0;
+        Builder newBuilder = StatCollectResponse.newBuilder();
         try {
-            scanner = region.getScanner(scan);
-            count = scanRegion(scanner, count);
-        } catch (IOException e) {
-            LOG.error(e);
-            ResponseConverter.setControllerException(controller, e);
-        } finally {
-            if (scanner != null) {
+            if (lock.tryLock()) {
+                heldLock = true;
+                // Clear all old stats
+                clear();
+                Scan scan = createScan(env.getConfiguration());
+                if (request.hasStartRow()) {
+                    scan.setStartRow(request.getStartRow().toByteArray());
+                }
+                if (request.hasStopRow()) {
+                    scan.setStopRow(request.getStopRow().toByteArray());
+                }
+                RegionScanner scanner = null;
                 try {
-                    ArrayList<Mutation> mutations = new ArrayList<Mutation>();
-                    writeStatsToStatsTable(region, scanner, true, mutations,
-                            TimeKeeper.SYSTEM.getCurrentTime());
-                    if(LOG.isDebugEnabled()) {
-                        LOG.debug("Committing new stats for the region "+region.getRegionInfo());
-                    }
-                    commitStats(mutations);
+                    scanner = region.getScanner(scan);
+                    count = scanRegion(scanner, count);
                 } catch (IOException e) {
                     LOG.error(e);
                     ResponseConverter.setControllerException(controller, e);
+                } finally {
+                    if (scanner != null) {
+                        try {
+                            ArrayList<Mutation> mutations = new ArrayList<Mutation>();
+                            writeStatsToStatsTable(region, scanner, true, mutations, TimeKeeper.SYSTEM.getCurrentTime());
+                            if (LOG.isDebugEnabled()) {
+                                LOG.debug("Committing new stats for the region " + region.getRegionInfo());
+                            }
+                            commitStats(mutations);
+                        } catch (IOException e) {
+                            LOG.error(e);
+                            ResponseConverter.setControllerException(controller, e);
+                        }
+                    }
                 }
             }
+        } finally {
+            if (heldLock) {
+                lock.unlock();
+            }
+            newBuilder.setRowsScanned(count);
+            StatCollectResponse result = newBuilder.build();
+            done.run(result);
         }
-        Builder newBuilder = StatCollectResponse.newBuilder();
-        newBuilder.setRowsScanned(count);
-        StatCollectResponse result = newBuilder.build();
-        done.run(result);
     }
 
     private void writeStatsToStatsTable(final HRegion region,
@@ -245,24 +257,35 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         InternalScanner internalScan = s;
         TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
         if (!table.getNameAsString().equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
-            // See if this is for Major compaction
-            if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
-                // this is the first CP accessed, so we need to just create a major
-                // compaction scanner, just
-                // like in the compactor
-                if (s == null) {
-                    Scan scan = new Scan();
-                    scan.setMaxVersions(store.getFamily().getMaxVersions());
-                    long smallestReadPoint = store.getSmallestReadPoint();
-                    internalScan = new StoreScanner(store, store.getScanInfo(), scan, scanners, scanType,
-                            smallestReadPoint, earliestPutTs);
+            boolean heldLock = false;
+            try {
+                if (lock.tryLock()) {
+                    heldLock = true;
+                    // See if this is for Major compaction
+                    if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
+                        // this is the first CP accessed, so we need to just create a major
+                        // compaction scanner, just
+                        // like in the compactor
+                        if (s == null) {
+                            Scan scan = new Scan();
+                            scan.setMaxVersions(store.getFamily().getMaxVersions());
+                            long smallestReadPoint = store.getSmallestReadPoint();
+                            internalScan = new StoreScanner(store, store.getScanInfo(), scan, scanners, scanType,
+                                    smallestReadPoint, earliestPutTs);
+                        }
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("Compaction scanner created for stats");
+                        }
+                        InternalScanner scanner = getInternalScanner(c, store, internalScan,
+                                store.getColumnFamilyName());
+                        if (scanner != null) {
+                            internalScan = scanner;
+                        }
+                    }
                 }
-                if(LOG.isDebugEnabled()) {
-                    LOG.debug("Compaction scanner created for stats");
-                }
-                InternalScanner scanner = getInternalScanner(c, store, internalScan, store.getColumnFamilyName());
-                if (scanner != null) {
-                    internalScan = scanner;
+            } finally {
+                if (heldLock) {
+                    lock.unlock();
                 }
             }
         }
@@ -355,7 +378,6 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
 
     @Override
     public void updateStatistic(KeyValue kv) {
-        // Should we onlyl check for Puts?
         byte[] cf = kv.getFamily();
         familyMap.add(cf);
         

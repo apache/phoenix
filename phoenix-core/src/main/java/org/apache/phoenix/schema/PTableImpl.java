@@ -349,7 +349,6 @@ public class PTableImpl implements PTable {
                 columnsInFamily.add(column);
             }
         }
-        
         this.rowKeySchema = builder.build();
         estimatedSize += rowKeySchema.getEstimatedSize();
         Iterator<Map.Entry<PName,List<PColumn>>> iterator = familyMap.entrySet().iterator();
@@ -366,7 +365,8 @@ public class PTableImpl implements PTable {
             }
         }
         ImmutableMap.Builder<String, PColumnFamily> familyByString = ImmutableMap.builder();
-        ImmutableSortedMap.Builder<byte[], PColumnFamily> familyByBytes = ImmutableSortedMap.orderedBy(Bytes.BYTES_COMPARATOR);
+        ImmutableSortedMap.Builder<byte[], PColumnFamily> familyByBytes = ImmutableSortedMap
+                .orderedBy(Bytes.BYTES_COMPARATOR);
         List<byte[]> guidePosts = null;
         for (int i = 0; i < families.length; i++) {
             Map.Entry<PName,List<PColumn>> entry = iterator.next();

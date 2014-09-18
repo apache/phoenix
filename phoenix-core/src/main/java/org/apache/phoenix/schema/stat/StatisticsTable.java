@@ -145,7 +145,7 @@ public class StatisticsTable implements Closeable {
     private void formLastUpdatedStatsMutation(String tableName, long currentTime, List<Mutation> mutations) throws IOException {
         byte[] prefix = StatisticsUtils.getRowKeyForTSUpdate(PDataType.VARCHAR.toBytes(tableName));
         Put put = new Put(prefix);
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES,
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES, currentTime,
                 PDataType.DATE.toBytes(new Date(currentTime)));
         mutations.add(put);
     }
