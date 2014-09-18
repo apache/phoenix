@@ -15,7 +15,6 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
@@ -73,8 +72,8 @@ public class StatisticsScanner implements InternalScanner {
     protected void updateStat(final List<Cell> results) {
         for (Cell c : results) {
             KeyValue kv = KeyValueUtil.ensureKeyValue(c);
-            if (!CellUtil.isDelete(kv)) {
-                    tracker.updateStatistic(kv);
+            if (c.getTypeByte() == KeyValue.Type.Put.getCode()) {
+                tracker.updateStatistic(kv);
             }
         }
     }

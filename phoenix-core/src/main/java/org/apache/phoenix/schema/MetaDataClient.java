@@ -471,8 +471,6 @@ public class MetaDataClient {
     }
 
     public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt) throws SQLException {
-        TableName tableNameNode = updateStatisticsStmt.getTable().getName();
-        String tableName = tableNameNode.getTableName();
         // Check before updating the stats if we have reached the configured time to reupdate the stats once again
         long minTimeForStatsUpdate = connection.getQueryServices().getProps()
                 .getLong(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
@@ -491,18 +489,13 @@ public class MetaDataClient {
                     ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
             analyzeRange = KeyRange.getKeyRange(lowerRange, upperRange);
         }
-        String schemaName = tableNameNode.getSchemaName();
-        byte[] schemaBytes = ByteUtil.EMPTY_BYTE_ARRAY;
-        if(schemaName != null) {
-            schemaBytes = tableNameNode.getSchemaName().getBytes();
-        }
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTS = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
-        connection.getQueryServices().clearCacheForTable(tenantIdBytes, schemaBytes,
-                tableNameNode.getTableName().getBytes(), clientTS);
+        connection.getQueryServices().clearCacheForTable(tenantIdBytes, table.getSchemaName().getBytes(),
+                table.getTableName().getBytes(), clientTS);
         // Clear the cache also. So that for cases like major compaction also we would be able to use the stats
-        updateCache(schemaName, tableName, true);
+        updateCache(table.getSchemaName().getString(), table.getTableName().getString(), true);
         String query = "SELECT CURRENT_DATE()-"+ LAST_STATS_UPDATE_TIME + " FROM " + SYSTEM_CATALOG_SCHEMA
                 + "." + SYSTEM_STATS_TABLE + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
                 + " IS NULL AND " + REGION_NAME + " IS NULL";
@@ -514,9 +507,9 @@ public class MetaDataClient {
         if (minTimeForStatsUpdate  - lastUpdatedTime> 0) {
             // We need to update the stats table
             connection.getQueryServices().updateStatistics(analyzeRange, physicalName.getBytes());
-            connection.getQueryServices().clearCacheForTable(tenantIdBytes, schemaBytes,
-                    tableNameNode.getTableName().getBytes(), clientTS);
-            updateCache(schemaName, tableName, true);
+            connection.getQueryServices().clearCacheForTable(tenantIdBytes, table.getSchemaName().getBytes(),
+                    table.getTableName().getBytes(), clientTS);
+            updateCache(table.getSchemaName().getString(), table.getTableName().getString(), true);
             return new MutationState(1, connection);
         } else {
             return new MutationState(0, connection);

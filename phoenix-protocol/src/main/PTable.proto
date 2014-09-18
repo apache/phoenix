@@ -51,12 +51,6 @@ message PTableStats {
   repeated bytes values = 2;
 }
 
-message PColumnFamily {
-  required bytes familyNameBytes = 1;
-  repeated bytes guidePosts = 2;
-  repeated PColumn columnNameBytes = 3;
-}
-
 message PTable {
   required bytes schemaNameBytes = 1;
   required bytes tableNameBytes = 2;
@@ -80,6 +74,4 @@ message PTable {
   optional bytes tenantId = 20;
   optional int32 viewIndexId = 21;
   optional bytes indexType = 22;
-  repeated PColumnFamily columnfamilies = 23;
-  // For now not adding min key and max key
 }
