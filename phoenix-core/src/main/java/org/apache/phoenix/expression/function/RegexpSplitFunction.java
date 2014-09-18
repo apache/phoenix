@@ -17,8 +17,10 @@
  */
 package org.apache.phoenix.expression.function;
 
-import com.google.common.base.Splitter;
-import com.google.common.collect.Lists;
+import java.io.DataInput;
+import java.io.IOException;
+import java.util.List;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -28,9 +30,8 @@ import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 
-import java.io.DataInput;
-import java.io.IOException;
-import java.util.List;
+import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
 
 /**
  * Function to split a string value into a {@code VARCHAR_ARRAY}.
@@ -50,7 +51,6 @@ public class RegexpSplitFunction extends ScalarFunction {
 
     public static final String NAME = "REGEXP_SPLIT";
 
-    private ImmutableBytesWritable patternPtr = new ImmutableBytesWritable();
     private Splitter initializedSplitter = null;
 
     public RegexpSplitFunction() {}
