@@ -24,6 +24,7 @@ import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_MAX_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILL_FILES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.HISTOGRAM_BYTE_DEPTH_CONF_KEY;
 import static org.apache.phoenix.query.QueryServices.IMMUTABLE_ROWS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.KEEP_ALIVE_MS_ATTRIB;
@@ -141,6 +142,8 @@ public class QueryServicesOptions {
     public static final String DEFAULT_TRACING_STATS_TABLE_NAME = "SYSTEM.TRACING_STATS";
     public static final String DEFAULT_TRACING_FREQ = Tracing.Frequency.NEVER.getKey();
     public static final double DEFAULT_TRACING_PROBABILITY_THRESHOLD = 0.05;
+    public static final long DEFAULT_HISTOGRAM_BYTE_DEPTH = 1024 * 1024;
+    
     
     public static final boolean DEFAULT_USE_REVERSE_SCAN = true;
 
@@ -195,6 +198,7 @@ public class QueryServicesOptions {
             .setIfUnset(GROUPBY_SPILL_FILES_ATTRIB, DEFAULT_GROUPBY_SPILL_FILES)
             .setIfUnset(SEQUENCE_CACHE_SIZE_ATTRIB, DEFAULT_SEQUENCE_CACHE_SIZE)
             .setIfUnset(SCAN_RESULT_CHUNK_SIZE, DEFAULT_SCAN_RESULT_CHUNK_SIZE)
+            .setIfUnset(HISTOGRAM_BYTE_DEPTH_CONF_KEY, DEFAULT_HISTOGRAM_BYTE_DEPTH);
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
@@ -287,6 +291,10 @@ public class QueryServicesOptions {
     
     public QueryServicesOptions setStatsUpdateFrequencyMs(int frequencyMs) {
         return set(STATS_UPDATE_FREQ_MS_ATTRIB, frequencyMs);
+    }
+    
+    public QueryServicesOptions setHistogramDepthBytes(int depth) {
+        return set(HISTOGRAM_BYTE_DEPTH_CONF_KEY, depth);
     }
     
     public QueryServicesOptions setCallQueueRoundRobin(boolean isRoundRobin) {

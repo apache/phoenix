@@ -136,7 +136,6 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.stat.StatisticsConstants;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -476,7 +475,7 @@ public class MetaDataClient {
         String tableName = tableNameNode.getTableName();
         // Check before updating the stats if we have reached the configured time to reupdate the stats once again
         long minTimeForStatsUpdate = connection.getQueryServices().getProps()
-                .getLong(StatisticsConstants.MIN_STATS_FREQ_UPDATION, StatisticsConstants.DEFAULT_STATS_FREQ_UPDATION);
+                .getLong(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
         ColumnResolver resolver = FromCompiler.getResolver(updateStatisticsStmt, connection);
         PTable table = resolver.getTables().get(0).getTable();
         PName physicalName = table.getPhysicalName();

@@ -85,8 +85,25 @@ public class StatisticsScanner implements InternalScanner {
             // update the statistics table
             // Just verify if this if fine
             String tableName = SchemaUtil.getTableNameFromFullName(region.getTable().getNameAsString());
-            stats.updateStats(tableName, region.getRegionNameAsString(), this.tracker, Bytes.toString(family), false,
-                    new ArrayList<Mutation>(), TimeKeeper.SYSTEM.getCurrentTime());
+            ArrayList<Mutation> mutations = new ArrayList<Mutation>();
+            long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Deleting the stats for the region " + region.getRegionNameAsString()
+                        + " as part of major compaction");
+            }
+            stats.deleteStats(tableName, region.getRegionNameAsString(), this.tracker, Bytes.toString(family),
+                    mutations, currentTime);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Adding new stats for the region " + region.getRegionNameAsString()
+                        + " as part of major compaction");
+            }
+            stats.addStats(tableName, region.getRegionNameAsString(), this.tracker, Bytes.toString(family), mutations,
+                    currentTime);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Committing new stats for the region " + region.getRegionNameAsString()
+                        + " as part of major compaction");
+            }
+            stats.commitStats(mutations);
         } catch (IOException e) {
             LOG.error("Failed to update statistics table!", e);
             toThrow = e;

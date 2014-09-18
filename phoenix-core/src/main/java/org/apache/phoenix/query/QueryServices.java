@@ -130,7 +130,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String TRACING_STATS_TABLE_NAME_ATTRIB = "phoenix.trace.statsTableName";
 
     public static final String USE_REVERSE_SCAN_ATTRIB = "phoenix.query.useReverseScan";
-    
+
+    public static final String HISTOGRAM_BYTE_DEPTH_CONF_KEY = "phoenix.guidepost.width";
+
     /**
      * Get executor service used for parallel scans
      */

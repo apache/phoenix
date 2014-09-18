@@ -39,7 +39,6 @@ import org.apache.hadoop.io.Closeable;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.util.TimeKeeper;
 
 /**
  * Wrapper to access the statistics table SYSTEM.STATS using the HTable.
@@ -49,7 +48,6 @@ public class StatisticsTable implements Closeable {
     private static final Log LOG = LogFactory.getLog(StatisticsTable.class);
     /** Map of the currently open statistics tables */
     private static final Map<String, StatisticsTable> tableMap = new HashMap<String, StatisticsTable>();
-    private TimeKeeper timeKeeper = TimeKeeper.SYSTEM;
     /**
      * @param env
      *            Environment wherein the coprocessor is attempting to update the stats table.
@@ -109,7 +107,7 @@ public class StatisticsTable implements Closeable {
      *             if we fail to do any of the puts. Any single failure will prevent any future attempts for the remaining list of stats to
      *             update
      */
-    public void updateStats(String tableName, String regionName, StatisticsTracker tracker, String fam, boolean split,
+    public void addStats(String tableName, String regionName, StatisticsTracker tracker, String fam,
             List<Mutation> mutations, long currentTime) throws IOException {
         if (tracker == null) { return; }
 
@@ -118,11 +116,10 @@ public class StatisticsTable implements Closeable {
 
         byte[] prefix = StatisticsUtils.getRowKey(PDataType.VARCHAR.toBytes(tableName), PDataType.VARCHAR.toBytes(fam),
                 PDataType.VARCHAR.toBytes(regionName));
-        if (!split) {
-            Delete d = new Delete(prefix, currentTime - 1);
-            mutations.add(d);
-        }
         formStatsUpdateMutation(tracker, fam, mutations, currentTime, prefix);
+    }
+
+    public void commitStats(List<Mutation> mutations) throws IOException {
         Object[] res = new Object[mutations.size()];
         try {
             statisticsTable.batch(mutations, res);
@@ -153,12 +150,12 @@ public class StatisticsTable implements Closeable {
         mutations.add(put);
     }
     
-    public Mutation deleteStats(String tableName, String regionName, StatisticsTracker tracker, String fam, long currentTime)
+    public void deleteStats(String tableName, String regionName, StatisticsTracker tracker, String fam,
+            List<Mutation> mutations, long currentTime)
             throws IOException {
         byte[] prefix = StatisticsUtils.getRowKey(PDataType.VARCHAR.toBytes(tableName), PDataType.VARCHAR.toBytes(fam),
                 PDataType.VARCHAR.toBytes(regionName));
-        Delete d = new Delete(prefix, currentTime - 1);
-        return d;
+        mutations.add(new Delete(prefix, currentTime - 1));
     }
 
     /**

@@ -72,8 +72,10 @@ public class GlobalCache extends TenantCacheImpl {
             synchronized(this) {
                 result = metaDataCache;
                 if(result == null) {
-                    long maxTTL = Math.min(config.getLong(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB,
-                            QueryServicesOptions.DEFAULT_MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS), config.getLong(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
+                    long maxTTL = Math.min(config.getLong(
+                            QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB,
+                            QueryServicesOptions.DEFAULT_MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS), config.getLong(
+                            QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
                             QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS));
                     long maxSize = config.getLong(QueryServices.MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB,
                             QueryServicesOptions.DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE);

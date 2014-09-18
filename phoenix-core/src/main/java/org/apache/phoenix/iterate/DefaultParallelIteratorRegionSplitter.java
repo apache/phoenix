@@ -27,10 +27,11 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.stat.StatisticsConstants;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -64,8 +65,8 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         this.context = context;
         this.tableRef = table;
         ReadOnlyProps props = context.getConnection().getQueryServices().getProps();
-        this.guidePostsDepth = props.getLong(StatisticsConstants.HISTOGRAM_BYTE_DEPTH_CONF_KEY,
-                StatisticsConstants.HISTOGRAM_DEFAULT_BYTE_DEPTH);
+        this.guidePostsDepth = props.getLong(QueryServices.HISTOGRAM_BYTE_DEPTH_CONF_KEY,
+                QueryServicesOptions.DEFAULT_HISTOGRAM_BYTE_DEPTH);
     }
 
     // Get the mapping between key range and the regions that contains them.

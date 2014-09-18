@@ -27,6 +27,7 @@ import java.util.TreeSet;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -57,9 +58,10 @@ import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectR
 import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectService;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PhoenixArray;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TimeKeeper;
 
 import com.google.common.collect.Lists;
@@ -88,14 +90,14 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     private Set<byte[]> familyMap = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
     private RegionCoprocessorEnvironment env;
     protected StatisticsTable stats;
-    private static final Log LOG = LogFactory.getLog(StatCollectService.class);
+    private static final Log LOG = LogFactory.getLog(StatisticsCollector.class);
 
     @Override
     public void collectStat(RpcController controller, StatCollectRequest request, RpcCallback<StatCollectResponse> done) {
         HRegion region = env.getRegion();
         // Clear all old stats
         clear();
-        Scan scan = createScan();
+        Scan scan = createScan(env.getConfiguration());
         if (request.hasStartRow()) {
             scan.setStartRow(request.getStartRow().toByteArray());
         }
@@ -113,8 +115,13 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         } finally {
             if (scanner != null) {
                 try {
-                    writeStatsToStatsTable(region, scanner, false, new ArrayList<Mutation>(),
+                    ArrayList<Mutation> mutations = new ArrayList<Mutation>();
+                    writeStatsToStatsTable(region, scanner, true, mutations,
                             TimeKeeper.SYSTEM.getCurrentTime());
+                    if(LOG.isDebugEnabled()) {
+                        LOG.debug("Committing new stats for the region "+region.getRegionInfo());
+                    }
+                    commitStats(mutations);
                 } catch (IOException e) {
                     LOG.error(e);
                     ResponseConverter.setControllerException(controller, e);
@@ -128,14 +135,24 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     }
 
     private void writeStatsToStatsTable(final HRegion region,
-            final RegionScanner scanner, boolean split, List<Mutation> mutations, long currentTime) throws IOException {
+            final RegionScanner scanner, boolean delete, List<Mutation> mutations, long currentTime) throws IOException {
         scanner.close();
         try {
             // update the statistics table
             for (byte[] fam : familyMap) {
                 String tableName = region.getRegionInfo().getTable().getNameAsString();
-                stats.updateStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
-                        Bytes.toString(fam), split, mutations, currentTime);
+                if (delete) {
+                    if(LOG.isDebugEnabled()) {
+                        LOG.debug("Deleting the stats for the region "+region.getRegionInfo());
+                    }
+                    stats.deleteStats(tableName, region.getRegionInfo().getRegionNameAsString(), this,
+                            Bytes.toString(fam), mutations, currentTime);
+                }
+                if(LOG.isDebugEnabled()) {
+                    LOG.debug("Adding new stats for the region "+region.getRegionInfo());
+                }
+                stats.addStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
+                        Bytes.toString(fam), mutations, currentTime);
             }
         } catch (IOException e) {
             LOG.error("Failed to update statistics table!", e);
@@ -143,17 +160,20 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         }
     }
 
+    private void commitStats(List<Mutation> mutations) throws IOException {
+        stats.commitStats(mutations);
+    }
+
     private void deleteStatsFromStatsTable(final HRegion region, List<Mutation> mutations, long currentTime) throws IOException {
         try {
             // update the statistics table
             for (byte[] fam : familyMap) {
-                String tableName = null;
-                tableName = SchemaUtil.getTableNameFromFullName(region.getRegionInfo().getTable().getNameAsString());
-                mutations.add(stats.deleteStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
-                        Bytes.toString(fam), currentTime));
+                String tableName = region.getRegionInfo().getTable().getNameAsString();
+                stats.deleteStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
+                        Bytes.toString(fam), mutations, currentTime);
             }
         } catch (IOException e) {
-            LOG.error("Failed to update statistics table!", e);
+            LOG.error("Failed to delete from statistics table!", e);
             throw e;
         }
     }
@@ -203,8 +223,8 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         // Get the stats table associated with the current table on which the CP is
         // triggered
         stats = StatisticsTable.getStatisticsTableForCoprocessor(env, desc.getName());
-        guidepostDepth = env.getConfiguration().getLong(StatisticsConstants.HISTOGRAM_BYTE_DEPTH_CONF_KEY,
-                StatisticsConstants.HISTOGRAM_DEFAULT_BYTE_DEPTH);
+        guidepostDepth = env.getConfiguration().getLong(QueryServices.HISTOGRAM_BYTE_DEPTH_CONF_KEY,
+                QueryServicesOptions.DEFAULT_HISTOGRAM_BYTE_DEPTH);
     }
 
     @Override
@@ -237,6 +257,9 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
                     internalScan = new StoreScanner(store, store.getScanInfo(), scan, scanners, scanType,
                             smallestReadPoint, earliestPutTs);
                 }
+                if(LOG.isDebugEnabled()) {
+                    LOG.debug("Compaction scanner created for stats");
+                }
                 InternalScanner scanner = getInternalScanner(c, store, internalScan, store.getColumnFamilyName());
                 if (scanner != null) {
                     internalScan = scanner;
@@ -261,15 +284,26 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
             // TODO : Try making this atomic
             List<Mutation> mutations = Lists.newArrayListWithExpectedSize(3);
             long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
-            collectStatsForSplitRegions(l, region, true, mutations, currentTime);
+            Configuration conf = ctx.getEnvironment().getConfiguration();
+            if(LOG.isDebugEnabled()) {
+                LOG.debug("Collecting stats for the daughter region "+l.getRegionInfo());
+            }
+            collectStatsForSplitRegions(conf, l, region, true, mutations, currentTime);
             clear();
-            collectStatsForSplitRegions(r, region, false, mutations, currentTime);
+            if(LOG.isDebugEnabled()) {
+                LOG.debug("Collecting stats for the daughter region "+r.getRegionInfo());
+            }
+            collectStatsForSplitRegions(conf, r, region, false, mutations, currentTime);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Committing stats for the daughter regions as part of split " + r.getRegionInfo());
+            }
+            commitStats(mutations);
         }
     }
 
-    private void collectStatsForSplitRegions(HRegion daughter, HRegion region, boolean delete,
+    private void collectStatsForSplitRegions(Configuration conf, HRegion daughter, HRegion parent, boolean delete,
             List<Mutation> mutations, long currentTime) throws IOException {
-        Scan scan = createScan();
+        Scan scan = createScan(conf);
         RegionScanner scanner = null;
         int count = 0;
         try {
@@ -282,9 +316,12 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
             if (scanner != null) {
                 try {
                     if (delete) {
-                        deleteStatsFromStatsTable(region, mutations, currentTime);
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("Deleting the stats for the parent region " + parent.getRegionInfo());
+                        }
+                        deleteStatsFromStatsTable(parent, mutations, currentTime);
                     }
-                    writeStatsToStatsTable(daughter, scanner, true, mutations, currentTime);
+                    writeStatsToStatsTable(daughter, scanner, false, mutations, currentTime);
                 } catch (IOException e) {
                     LOG.error(e);
                     throw e;
@@ -293,11 +330,12 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         }
     }
 
-    private Scan createScan() {
+    private Scan createScan(Configuration conf) {
         Scan scan = new Scan();
-        // We should have a mechanism to set the caching here.
-        // TODO : Should the scan object be coming from the endpoint?
-        scan.setCaching(1000);
+        scan.setCaching(
+                conf.getInt(QueryServices.SCAN_CACHE_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE));
+        // do not cache the blocks here
+        scan.setCacheBlocks(false);
         return scan;
     }
 
