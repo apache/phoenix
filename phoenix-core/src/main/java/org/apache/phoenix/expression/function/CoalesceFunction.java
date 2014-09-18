@@ -23,7 +23,9 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.PDataType;
@@ -31,15 +33,15 @@ import org.apache.phoenix.schema.tuple.Tuple;
 
 
 /**
- * 
+ *
  * Function used to provide an alternative value when the first argument is null.
  * Usage:
  * COALESCE(expr1,expr2)
- * If expr1 is not null, then it is returned, otherwise expr2 is returned. 
+ * If expr1 is not null, then it is returned, otherwise expr2 is returned.
  *
  * TODO: better bind parameter type matching, since arg2 must be coercible
  * to arg1. consider allowing a common base type?
- * 
+ *
  * @since 0.1
  */
 @BuiltInFunction(name=CoalesceFunction.NAME, args= {
@@ -53,10 +55,25 @@ public class CoalesceFunction extends ScalarFunction {
 
     public CoalesceFunction(List<Expression> children) throws SQLException {
         super(children);
-        if (!children.get(1).getDataType().isCoercibleTo(children.get(0).getDataType())) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CONVERT_TYPE)
-                .setMessage(getName() + " expected " + children.get(0).getDataType() + ", but got " + children.get(1).getDataType())
-                .build().buildException();
+
+        Expression firstChild = children.get(0);
+        Expression secondChild = children.get(1);
+
+        if (secondChild.isStateless() && secondChild.isDeterministic()) { // is literal
+
+            ImmutableBytesWritable ptr = new ImmutableBytesPtr();
+            secondChild.evaluate(null, ptr);
+
+            if (!secondChild.getDataType().isCoercibleTo(firstChild.getDataType(), secondChild.getDataType().toObject(ptr))) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CONVERT_TYPE)
+                    .setMessage(getName() + " expected " + firstChild.getDataType() + ", but got " + secondChild.getDataType())
+                    .build().buildException();
+            }
+        } else { // second parameter is expression
+            if (!secondChild.getDataType().isCoercibleTo(getDataType())) {
+                // cast explicitly
+                children.add(1, CoerceExpression.create(secondChild, firstChild.getDataType()));
+            }
         }
     }
 
@@ -67,7 +84,12 @@ public class CoalesceFunction extends ScalarFunction {
             return true;
         }
         if (tuple.isImmutable()) {
-            return children.get(1).evaluate(tuple, ptr);
+            Expression secondChild = children.get(1);
+            if (secondChild.evaluate(tuple, ptr)) {
+                // Coerce the type of the second child to the type of the first child
+                getDataType().coerceBytes(ptr, secondChild.getDataType(), secondChild.getSortOrder(), getSortOrder());
+                return true;
+            }
         }
         return false;
     }
@@ -98,7 +120,7 @@ public class CoalesceFunction extends ScalarFunction {
     public String getName() {
         return NAME;
     }
-    
+
     @Override
     public boolean requiresFinalEvaluation() {
         return true;
