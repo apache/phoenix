@@ -479,7 +479,7 @@ public class MetaDataClient {
         PName physicalName = table.getPhysicalName();
         byte[] tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         KeyRange analyzeRange = KeyRange.EVERYTHING_RANGE;
-        if (connection.getTenantId() != null) {
+        if (connection.getTenantId() != null && table.isMultiTenant()) {
             if (table.getBucketNum() == null && table.getIndexType() != IndexType.LOCAL) {
                 tenantIdBytes = connection.getTenantId().getBytes();
                 List<List<KeyRange>> tenantIdKeyRanges = Collections.singletonList(Collections.singletonList(KeyRange
@@ -498,15 +498,15 @@ public class MetaDataClient {
                 table.getTableName().getBytes(), clientTS);
         // Clear the cache also. So that for cases like major compaction also we would be able to use the stats
         updateCache(table.getSchemaName().getString(), table.getTableName().getString(), true);
-        String query = "SELECT CURRENT_DATE()-"+ LAST_STATS_UPDATE_TIME + " FROM " + SYSTEM_CATALOG_SCHEMA
+        String query = "SELECT CURRENT_DATE(),"+ LAST_STATS_UPDATE_TIME + " FROM " + SYSTEM_CATALOG_SCHEMA
                 + "." + SYSTEM_STATS_TABLE + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
                 + " IS NULL AND " + REGION_NAME + " IS NULL";
         ResultSet rs = connection.createStatement().executeQuery(query);
         long lastUpdatedTime = 0;
         if (rs.next()) {
-            lastUpdatedTime = rs.getLong(1);
+            lastUpdatedTime = rs.getDate(1).getTime() - rs.getDate(2).getTime();
         }
-        if (minTimeForStatsUpdate  - lastUpdatedTime> 0) {
+        if (minTimeForStatsUpdate  > lastUpdatedTime) {
             // We need to update the stats table
             connection.getQueryServices().updateStatistics(analyzeRange, physicalName.getBytes());
             connection.getQueryServices().clearCacheForTable(tenantIdBytes, table.getSchemaName().getBytes(),

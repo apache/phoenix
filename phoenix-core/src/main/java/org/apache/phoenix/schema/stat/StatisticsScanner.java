@@ -21,11 +21,8 @@ import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.io.MultipleIOException;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TimeKeeper;
-
-import com.google.common.collect.Lists;
 
 /**
  * The scanner that does the scanning to collect the stats during major compaction.{@link StatisticsCollector}
@@ -111,8 +108,10 @@ public class StatisticsScanner implements InternalScanner {
         try {
             delegate.close();
         } catch (IOException e) {
-            if (toThrow == null) { throw e; }
-            throw MultipleIOException.createIOException(Lists.newArrayList(toThrow, e));
+            LOG.error("Error while closing the scanner");
+            // TODO : We should throw the exception
+            /*if (toThrow == null) { throw e; }
+            throw MultipleIOException.createIOException(Lists.newArrayList(toThrow, e));*/
         }
     }
 }
