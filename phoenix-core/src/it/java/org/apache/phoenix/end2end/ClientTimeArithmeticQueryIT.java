@@ -537,7 +537,7 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
     
     @Test
     public void testCoalesceFunction() throws Exception {
-        String query = "SELECT entity_id FROM aTable WHERE a_integer > 0 and coalesce(X_DECIMAL,0.0) = 0.0";
+        String query = "SELECT entity_id FROM aTable WHERE coalesce(X_DECIMAL,0.0) = 0.0";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
