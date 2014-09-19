@@ -107,6 +107,13 @@ public class PhoenixRuntime {
      * configuration properties
      */
     public static final String TENANT_ID_ATTRIB = "TenantId";
+    
+    /**
+     * Use this connection property prefix for annotations that you want to show up in traces and log lines emitted by Phoenix.
+     * This is useful for annotating connections with information available on the client (e.g. user or session identifier) and
+     * having these annotation automatically passed into log lines and traces by Phoenix.
+     */
+    public static final String ANNOTATION_ATTRIB_PREFIX = "phoenix.annotation.";
 
     /**
      * Use this as the zookeeper quorum name to have a connection-less connection. This enables

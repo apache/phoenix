@@ -17,11 +17,14 @@
  */
 package org.apache.phoenix.trace;
 
+import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.commons.logging.Log;
@@ -36,6 +39,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.trace.util.Tracing.Frequency;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 
@@ -86,9 +90,19 @@ public class BaseTracingTestIT extends BaseHBaseManagedTimeIT {
         conn.setAutoCommit(false);
         return conn;
     }
+    
+    public static Connection getTracingConnection() throws Exception { 
+    	return getTracingConnection(Collections.<String, String>emptyMap(), null);
+    }
 
-    public static Connection getTracingConnection() throws Exception {
+    public static Connection getTracingConnection(Map<String, String> customAnnotations, String tenantId) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        for (Map.Entry<String, String> annot : customAnnotations.entrySet()) {
+        	props.put(ANNOTATION_ATTRIB_PREFIX + annot.getKey(), annot.getValue());
+        }
+        if (tenantId != null) {
+        	props.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        }
         return getConnectionWithTracingFrequency(props, Tracing.Frequency.ALWAYS);
     }
 

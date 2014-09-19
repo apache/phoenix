@@ -17,8 +17,13 @@
  */
 package org.apache.phoenix.trace.util;
 
+import static org.apache.phoenix.util.StringUtil.toBytes;
+
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Callable;
+
+import javax.annotation.Nullable;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -43,6 +48,8 @@ import org.cloudera.htrace.wrappers.TraceCallable;
 import org.cloudera.htrace.wrappers.TraceRunnable;
 
 import com.google.common.base.Function;
+import com.google.common.base.Preconditions;
+import com.sun.istack.NotNull;
 
 /**
  * Helper class to manage using the {@link Tracer} within Phoenix
@@ -153,6 +160,7 @@ public class Tracing {
     public static TraceScope startNewSpan(PhoenixConnection connection, String string) {
         Sampler<?> sampler = connection.getSampler();
         TraceScope scope = Trace.startSpan(string, sampler);
+        addCustomAnnotationsToSpan(scope.getSpan(), connection);
         return scope;
     }
 
@@ -256,6 +264,19 @@ public class Tracing {
      */
     public static CallWrapper withTracing(PhoenixConnection conn, String desc) {
         return new TracingWrapper(conn, desc);
+    }
+    
+    private static void addCustomAnnotationsToSpan(@Nullable Span span, @NotNull PhoenixConnection conn) {
+        Preconditions.checkNotNull(conn);
+        
+        if (span == null) {
+        	return;
+        } 
+		Map<String, String> annotations = conn.getCustomTracingAnnotations();
+		// copy over the annotations as bytes
+		for (Map.Entry<String, String> annotation : annotations.entrySet()) {
+			span.addKVAnnotation(toBytes(annotation.getKey()), toBytes(annotation.getValue()));
+        }
     }
 
     private static class TracingWrapper implements CallWrapper {
