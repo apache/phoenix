@@ -66,11 +66,12 @@ import org.apache.phoenix.util.SQLCloseable;
  * {@link #setTime(int, Time, Calendar)} - {@link #setTimestamp(int, Timestamp)} -
  * {@link #setTimestamp(int, Timestamp, Calendar)} - {@link #setNull(int, int)} - {@link #setNull(int, int, String)} -
  * {@link #setBytes(int, byte[])} - {@link #clearParameters()} - {@link #getMetaData()}
- * 
- * 
+ *
+ *
  * @since 0.1
  */
 public class PhoenixPreparedStatement extends PhoenixStatement implements PreparedStatement, SQLCloseable {
+    private final int parameterCount;
     private final List<Object> parameters;
     private final CompilableStatement statement;
 
@@ -82,6 +83,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         this.statement = parser.nextStatement(new ExecutableNodeFactory());
         if (this.statement == null) { throw new EOFException(); }
         this.query = null; // TODO: add toString on SQLStatement
+        this.parameterCount = statement.getBindCount();
         this.parameters = Arrays.asList(new Object[statement.getBindCount()]);
         Collections.fill(parameters, BindManager.UNBOUND_PARAMETER);
     }
@@ -90,6 +92,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         super(connection);
         this.query = query;
         this.statement = parseStatement(query);
+        this.parameterCount = statement.getBindCount();
         this.parameters = Arrays.asList(new Object[statement.getBindCount()]);
         Collections.fill(parameters, BindManager.UNBOUND_PARAMETER);
     }
@@ -98,6 +101,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         super(statement.connection);
         this.query = statement.query;
         this.statement = statement.statement;
+        this.parameterCount = statement.parameters.size();
         this.parameters = new ArrayList<Object>(statement.parameters);
     }
 
@@ -105,6 +109,27 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     public void addBatch() throws SQLException {
         throwIfUnboundParameters();
         batch.add(new PhoenixPreparedStatement(this));
+    }
+
+    /**
+     * Set a bind parameter's value.
+     * @param parameterIndex 1-based index of the bind parameter to be set
+     * @param value value to be set
+     * @throws SQLException if the bind parameter index is invalid
+     */
+    private void setParameter(int parameterIndex, Object value) throws SQLException {
+        if (parameterIndex < 1 || parameterIndex > parameterCount) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.PARAM_INDEX_OUT_OF_BOUND)
+                    .setMessage("Can't set parameter at index " + parameterIndex + ", " +
+                             parameterCount + " bind parameters are defined")
+                    .build().buildException();
+        }
+        if (parameterIndex < 1) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.PARAM_INDEX_OUT_OF_BOUND)
+                    .setMessage("Invalid bind parameter index " + parameterIndex)
+                    .build().buildException();
+        }
+        this.parameters.set(parameterIndex - 1, value);
     }
 
 
@@ -128,8 +153,8 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
             i++;
         }
     }
-    
-    
+
+
     public QueryPlan compileQuery() throws SQLException {
         return compileQuery(statement, query);
     }
@@ -230,7 +255,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     @Override
     public void setArray(int parameterIndex, Array x) throws SQLException {
-    	parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
@@ -250,12 +275,12 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     @Override
     public void setBigDecimal(int parameterIndex, BigDecimal x) throws SQLException {
-        parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
     public void setBytes(int parameterIndex, byte[] x) throws SQLException {
-        parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
@@ -290,12 +315,12 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     @Override
     public void setBoolean(int parameterIndex, boolean x) throws SQLException {
-        parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
     public void setByte(int parameterIndex, byte x) throws SQLException {
-        parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
@@ -330,35 +355,33 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     @Override
     public void setDate(int parameterIndex, Date x) throws SQLException {
-        parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
     public void setDate(int parameterIndex, Date x, Calendar cal) throws SQLException {
         cal.setTime(x);
-        parameters.set(parameterIndex - 1, new Date(cal.getTimeInMillis()));
+        setParameter(parameterIndex, new Date(cal.getTimeInMillis()));
     }
 
     @Override
     public void setDouble(int parameterIndex, double x) throws SQLException {
-//        parameters.set(parameterIndex - 1, BigDecimal.valueOf(x));
-        parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
     public void setFloat(int parameterIndex, float x) throws SQLException {
-//        parameters.set(parameterIndex - 1, BigDecimal.valueOf(x));
-        parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
     public void setInt(int parameterIndex, int x) throws SQLException {
-        parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
     public void setLong(int parameterIndex, long x) throws SQLException {
-        parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
@@ -393,17 +416,17 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     @Override
     public void setNull(int parameterIndex, int sqlType) throws SQLException {
-        parameters.set(parameterIndex - 1, null);
+        setParameter(parameterIndex, null);
     }
 
     @Override
     public void setNull(int parameterIndex, int sqlType, String typeName) throws SQLException {
-        parameters.set(parameterIndex - 1, null);
+        setParameter(parameterIndex, null);
     }
 
     @Override
     public void setObject(int parameterIndex, Object o) throws SQLException {
-        parameters.set(parameterIndex - 1, o);
+        setParameter(parameterIndex, o);
     }
 
     @Override
@@ -411,7 +434,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         PDataType targetType = PDataType.fromTypeId(targetSqlType);
         PDataType sourceType = PDataType.fromLiteral(o);
         o = targetType.toObject(o, sourceType);
-        parameters.set(parameterIndex - 1, o);
+        setParameter(parameterIndex, o);
     }
 
     @Override
@@ -436,39 +459,39 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     @Override
     public void setShort(int parameterIndex, short x) throws SQLException {
-        parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
     public void setString(int parameterIndex, String x) throws SQLException {
-        parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
     public void setTime(int parameterIndex, Time x) throws SQLException {
-        parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
     public void setTime(int parameterIndex, Time x, Calendar cal) throws SQLException {
         cal.setTime(x);
-        parameters.set(parameterIndex - 1, new Time(cal.getTimeInMillis()));
+        setParameter(parameterIndex, new Time(cal.getTimeInMillis()));
     }
 
     @Override
     public void setTimestamp(int parameterIndex, Timestamp x) throws SQLException {
-        parameters.set(parameterIndex - 1, x);
+        setParameter(parameterIndex, x);
     }
 
     @Override
     public void setTimestamp(int parameterIndex, Timestamp x, Calendar cal) throws SQLException {
         cal.setTime(x);
-        parameters.set(parameterIndex - 1,  DateUtil.getTimestamp(cal.getTimeInMillis(), x.getNanos()));
+        setParameter(parameterIndex,  DateUtil.getTimestamp(cal.getTimeInMillis(), x.getNanos()));
     }
 
     @Override
     public void setURL(int parameterIndex, URL x) throws SQLException {
-        parameters.set(parameterIndex - 1, x.toExternalForm()); // Just treat as String
+        setParameter(parameterIndex, x.toExternalForm()); // Just treat as String
     }
 
     @Override

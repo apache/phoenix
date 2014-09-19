@@ -40,12 +40,12 @@ import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.TupleUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.io.Closeables;
 
 /**
  * Class servers as an adapter between the in-memory LRU cache and the Spill data structures. It
