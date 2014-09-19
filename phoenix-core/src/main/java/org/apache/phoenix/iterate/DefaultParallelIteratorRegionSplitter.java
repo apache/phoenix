@@ -132,51 +132,40 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         }
         
         List<KeyRange> guidePosts = Lists.newArrayListWithCapacity(regions.size());
-        List<KeyRange> regionStartEndKey = Lists.newArrayListWithExpectedSize(regions.size());
-        if (gps.isEmpty()) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("The splits formed from region start and endkeys are: " + regionStartEndKey);
-            }
-            for (HRegionLocation region : regions) {
-                regionStartEndKey.add(KeyRange.getKeyRange(region.getRegionInfo().getStartKey(), region.getRegionInfo()
-                        .getEndKey()));
-            }
-            return regionStartEndKey;
-        } else {
-            byte[] currentKey = regions.get(0).getRegionInfo().getStartKey();
-            byte[] endKey = null;
-            int regionIndex = 0;
-            int guideIndex = 0;
-            int gpsSize = gps.size();
-            int regionSize = regions.size();
-            if (currentKey.length > 0) {
-                guideIndex = Collections.binarySearch(gps, currentKey, Bytes.BYTES_COMPARATOR);
-                guideIndex = (guideIndex < 0 ? -(guideIndex+1) : (guideIndex + 1));
-             }
-            // Merge bisect with guideposts for all but the last region
-            while (regionIndex < regionSize) {
-                byte[] currentGuidePost;
-                endKey = regions.get(regionIndex++).getRegionInfo().getEndKey();
-                while (guideIndex < gpsSize
-                        && (Bytes.compareTo(currentGuidePost = gps.get(guideIndex), endKey) <= 0 || endKey.length == 0)) {
-                    KeyRange keyRange = KeyRange.getKeyRange(currentKey, currentGuidePost);
-                    if (keyRange != KeyRange.EMPTY_RANGE) {
-                        guidePosts.add(keyRange);
-                    }
-                    currentKey = currentGuidePost;
-                    guideIndex++;
-                }
-                KeyRange keyRange = KeyRange.getKeyRange(currentKey, endKey);
+        byte[] currentKey = regions.get(0).getRegionInfo().getStartKey();
+        byte[] endKey = null;
+        int regionIndex = 0;
+        int guideIndex = 0;
+        int gpsSize = gps.size();
+        int regionSize = regions.size();
+        if (currentKey.length > 0) {
+            guideIndex = Collections.binarySearch(gps, currentKey, Bytes.BYTES_COMPARATOR);
+            guideIndex = (guideIndex < 0 ? -(guideIndex + 1) : (guideIndex + 1));
+        }
+        // Merge bisect with guideposts for all but the last region
+        while (regionIndex < regionSize) {
+            byte[] currentGuidePost;
+            endKey = regions.get(regionIndex++).getRegionInfo().getEndKey();
+            while (guideIndex < gpsSize
+                    && (Bytes.compareTo(currentGuidePost = gps.get(guideIndex), endKey) <= 0 || endKey.length == 0)) {
+                KeyRange keyRange = KeyRange.getKeyRange(currentKey, currentGuidePost);
                 if (keyRange != KeyRange.EMPTY_RANGE) {
                     guidePosts.add(keyRange);
                 }
-                currentKey = endKey;
+                currentKey = currentGuidePost;
+                guideIndex++;
             }
-            if (logger.isDebugEnabled()) {
-                logger.debug("The captured guideposts are: " + guidePosts);
+            KeyRange keyRange = KeyRange.getKeyRange(currentKey, endKey);
+            if (keyRange != KeyRange.EMPTY_RANGE) {
+                guidePosts.add(keyRange);
             }
-            return guidePosts;
+            currentKey = endKey;
         }
+        if (logger.isDebugEnabled()) {
+            logger.debug("The captured guideposts are: " + guidePosts);
+        }
+        return guidePosts;
+
     }
         
     @Override

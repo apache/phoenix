@@ -113,7 +113,7 @@ public class PTableImpl implements PTable {
     private Short viewIndexId;
     private int estimatedSize;
     private IndexType indexType;
-    private List<byte[]> guidePosts = Lists.newArrayList();
+    private List<byte[]> guidePosts = Collections.emptyList();
     
     public PTableImpl() {
         this.indexes = Collections.emptyList();
@@ -363,19 +363,26 @@ public class PTableImpl implements PTable {
                 }
                 if (stats.getGuidePosts().get(defaultFamilyNameBytes) != null) {
                     guidePosts = stats.getGuidePosts().get(defaultFamilyNameBytes);
+                    if (guidePosts != null) {
+                        Collections.sort(guidePosts, Bytes.BYTES_COMPARATOR);
+                        estimatedSize += SizedUtil.sizeOfArrayList(guidePosts.size());
+                        for (byte[] gps : guidePosts) {
+                            estimatedSize += gps.length;
+                        }
+                    }
                 }
             }
         }
         ImmutableMap.Builder<String, PColumnFamily> familyByString = ImmutableMap.builder();
         ImmutableSortedMap.Builder<byte[], PColumnFamily> familyByBytes = ImmutableSortedMap
                 .orderedBy(Bytes.BYTES_COMPARATOR);
-        List<byte[]> guidePosts = null;
+        List<byte[]> famGuidePosts = null;
         for (int i = 0; i < families.length; i++) {
             Map.Entry<PName,List<PColumn>> entry = iterator.next();
             if (stats != null) {
-                guidePosts = stats.getGuidePosts().get(entry.getKey().getBytes());
+                famGuidePosts = stats.getGuidePosts().get(entry.getKey().getBytes());
             }
-            PColumnFamily family = new PColumnFamilyImpl(entry.getKey(), entry.getValue(), guidePosts);
+            PColumnFamily family = new PColumnFamilyImpl(entry.getKey(), entry.getValue(), famGuidePosts);
             families[i] = family;
             familyByString.put(family.getName().getString(), family);
             familyByBytes.put(family.getName().getBytes(), family);
@@ -386,12 +393,6 @@ public class PTableImpl implements PTable {
         this.familyByString = familyByString.build();
         estimatedSize += SizedUtil.sizeOfArrayList(families.length);
         estimatedSize += SizedUtil.sizeOfMap(families.length) * 2;
-        if (guidePosts != null) {
-            estimatedSize += SizedUtil.sizeOfArrayList(guidePosts.size());
-            for(byte[] gps : guidePosts) {
-                estimatedSize += gps.length;
-            }
-        }
         this.indexes = indexes == null ? Collections.<PTable>emptyList() : indexes;
         for (PTable index : this.indexes) {
             estimatedSize += index.getEstimatedSize();
@@ -986,7 +987,7 @@ public class PTableImpl implements PTable {
       builder.setIsImmutableRows(table.isImmutableRows());
 
         // build stats for the table
-      if (table.getColumnFamilies().isEmpty() && table.getGuidePosts() != null) {
+      if (table.getColumnFamilies().isEmpty() && !table.getGuidePosts().isEmpty()) {
          List<byte[]> stats = table.getGuidePosts();
           if (stats != null) {
              PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();

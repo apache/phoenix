@@ -725,9 +725,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             fam = cfInCell;
                         } else if (!Bytes.equals(fam, cfInCell)) {
                             // Sort all the guide posts
-                            Collections.sort(guidePosts, Bytes.BYTES_COMPARATOR);
                             guidePostsPerCf.put(cfInCell, guidePosts);
-                            // clear - Take a clone?
                             guidePosts = new ArrayList<byte[]>();
                             fam = cfInCell;
                         }
@@ -744,7 +742,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             if(fam != null) {
                 // Sort all the guideposts
-                Collections.sort(guidePosts, Bytes.BYTES_COMPARATOR);
                 guidePostsPerCf.put(fam, guidePosts);
             }
             return new PTableStatsImpl(guidePostsPerCf);

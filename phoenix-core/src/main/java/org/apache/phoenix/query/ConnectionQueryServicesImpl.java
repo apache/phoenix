@@ -18,10 +18,6 @@
 package org.apache.phoenix.query;
 
 import static com.google.common.io.Closeables.closeQuietly;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CYCLE_FLAG;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 
@@ -1524,18 +1520,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 metaConnection.createStatement().executeUpdate(
                                         QueryConstants.CREATE_STATS_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
-                                // Ignore, as this will happen if the SYSTEM.STATS already exists at this fixed timestamp.
-                                // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                             } catch (TableAlreadyExistsException ignore) {
-                                // This will occur if we have an older SYSTEM.STATS, so we need to update it to include
-                                // any new columns we've added.
-                                String newColumns =
-                                        MIN_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", " 
-                                                + MAX_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", " 
-                                                + CYCLE_FLAG + " " + PDataType.BOOLEAN.getSqlTypeName() + ", " 
-                                                + LIMIT_REACHED_FLAG + " " + PDataType.BOOLEAN.getSqlTypeName();
-                                metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME, 
-                                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, newColumns); 
                             }
                         } catch (Exception e) {
                             if (e instanceof SQLException) {
