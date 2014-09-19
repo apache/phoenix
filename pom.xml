@@ -115,7 +115,7 @@
     
     <!-- Plugin options -->
     <numForkedUT>3</numForkedUT>
-    <numForkedIT>7</numForkedIT>
+    <numForkedIT>5</numForkedIT>
     
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

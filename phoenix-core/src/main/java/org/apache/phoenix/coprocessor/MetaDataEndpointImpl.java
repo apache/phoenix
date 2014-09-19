@@ -60,10 +60,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.TreeMap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
@@ -71,6 +73,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.HTablePool;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -95,6 +98,8 @@ import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.CreateTableRequest;
@@ -128,8 +133,12 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.stat.PTableStats;
+import org.apache.phoenix.schema.stat.PTableStatsImpl;
+import org.apache.phoenix.schema.stat.StatisticsUtils;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
@@ -143,6 +152,7 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.cache.Cache;
 import com.google.common.collect.Lists;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
@@ -162,6 +172,7 @@ import com.google.protobuf.Service;
  * 
  * @since 0.1
  */
+@SuppressWarnings("deprecation")
 public class MetaDataEndpointImpl extends MetaDataProtocol implements CoprocessorService, Coprocessor {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataEndpointImpl.class);
 
@@ -276,7 +287,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     private RegionCoprocessorEnvironment env;
-
+         
     private static final Log LOG = LogFactory.getLog(MetaDataEndpointImpl.class);
 
     /**
@@ -296,7 +307,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         } else {
             throw new CoprocessorException("Must be loaded on a table region!");
         }
-
         LOG.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
@@ -454,7 +464,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         indexes.add(indexTable);
     }
 
-    @SuppressWarnings("deprecation")
     private void addColumnToTable(List<Cell> results, PName colName, PName famName,
         Cell[] colKeyValues, List<PColumn> columns, boolean isSalted) {
         int i = 0;
@@ -668,11 +677,89 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
               addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
           }
         }
-
+        PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getTableName(
+                schemaName.getString(), tableName.getString())) : physicalTables.get(0);
+        PTableStats stats = updateStatsInternal(physicalTableName.getBytes(), columns);
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, 
             tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? dataTableName : null, 
             indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement, disableWAL, 
-            multiTenant, viewType, viewIndexId, indexType);
+            multiTenant, viewType, viewIndexId, indexType, stats);
+    }
+
+    private PTableStats updateStatsInternal(byte[] tableNameBytes, List<PColumn> columns)
+            throws IOException {
+        List<PName> family = Lists.newArrayListWithExpectedSize(columns.size());
+        for (PColumn column : columns) {
+            PName familyName = column.getFamilyName();
+            if (familyName != null) {
+                family.add(familyName);
+            }
+        }
+        HTable statsHTable = null;
+        try {
+            // Can we do a new HTable instance here? Or get it from a pool or cache of these instances?
+            statsHTable = new HTable(this.env.getConfiguration(),
+                    PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+            Scan s = new Scan();
+            if (tableNameBytes != null) {
+                // Check for an efficient way here
+                s.setStartRow(tableNameBytes);
+                s.setStopRow(ByteUtil.nextKey(tableNameBytes));
+            }
+            ResultScanner scanner = statsHTable.getScanner(s);
+            Result result = null;
+            byte[] fam = null;
+            List<byte[]> guidePosts = Lists.newArrayListWithExpectedSize(columns.size());
+            TreeMap<byte[], List<byte[]>> guidePostsPerCf = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
+            while ((result = scanner.next()) != null) {
+                CellScanner cellScanner = result.cellScanner();
+                while (cellScanner.advance()) {
+                    Cell current = cellScanner.current();
+                    // For now collect only guide posts
+                    if (Bytes.equals(current.getQualifierArray(), current.getQualifierOffset(),
+                            current.getQualifierLength(), PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES, 0,
+                            PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES.length)) {
+                        byte[] cfInCell = StatisticsUtils.getCFFromRowKey(tableNameBytes, current.getRowArray(),
+                                current.getRowOffset(), current.getRowLength());
+                        if (fam == null) {
+                            fam = cfInCell;
+                        } else if (!Bytes.equals(fam, cfInCell)) {
+                            // Sort all the guide posts
+                            guidePostsPerCf.put(cfInCell, guidePosts);
+                            guidePosts = new ArrayList<byte[]>();
+                            fam = cfInCell;
+                        }
+                        byte[] guidePostVal = new ImmutableBytesPtr(current.getValueArray(), current.getValueOffset(), current
+                                .getValueLength()).copyBytesIfNecessary();
+                        PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePostVal);
+                        if (array != null && array.getDimensions() != 0) {
+                            for (int j = 0; j < array.getDimensions(); j++) {
+                                byte[] gp = array.toBytes(j);
+                                if (gp.length != 0) {
+                                    guidePosts.add(gp);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if(fam != null) {
+                // Sort all the guideposts
+                guidePostsPerCf.put(fam, guidePosts);
+            }
+            return new PTableStatsImpl(guidePostsPerCf);
+        } catch (Exception e) {
+            if (e instanceof org.apache.hadoop.hbase.TableNotFoundException) {
+                logger.warn("Stats table not yet online", e);
+            } else {
+                throw new IOException(e);
+            }
+        } finally {
+            if (statsHTable != null) {
+                statsHTable.close();
+            }
+        }
+        return PTableStatsImpl.NO_STATS;
     }
 
     private PTable buildDeletedTable(byte[] key, ImmutableBytesPtr cacheKey, HRegion region,
@@ -866,7 +953,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
      * Looks for whether child views exist for the table specified by table.
      * TODO: should we pass a timestamp here?
      */
-    @SuppressWarnings("deprecation")
     private TableViewFinderResult findChildViews(HRegion region, byte[] tenantId, PTable table) throws IOException {
         byte[] schemaName = table.getSchemaName().getBytes();
         byte[] tableName = table.getTableName().getBytes();
@@ -1464,7 +1550,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         done.run(builder.build());
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public void updateIndexState(RpcController controller, UpdateIndexStateRequest request,
             RpcCallback<MetaDataResponse> done) {
@@ -1672,4 +1757,37 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
     }
     
+    @Override
+    public void clearCacheForTable(RpcController controller, ClearCacheForTableRequest request,
+            RpcCallback<ClearCacheForTableResponse> done) {
+        ByteString tenantId = request.getTenantId();
+        ByteString schemaName = request.getSchemaName();
+        ByteString tableName = request.getTableName();
+        byte[] tableKey = SchemaUtil.getTableKey(tenantId.toByteArray(), schemaName.toByteArray(),
+                tableName.toByteArray());
+        ImmutableBytesPtr key = new ImmutableBytesPtr(tableKey);
+        try {
+            PTable table = doGetTable(tableKey, request.getClientTimestamp());
+            if (table != null) {
+                Cache<ImmutableBytesPtr, PTable> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
+                // Add +1 to the ts
+                // TODO : refactor doGetTable() to do this - optionally increment the timestamp
+                // TODO : clear metadata if it is spread across multiple region servers
+                long ts = table.getTimeStamp() + 1;
+                // Here we could add an empty puti
+                HRegion region = env.getRegion();
+                List<Mutation> mutations = new ArrayList<Mutation>();
+                Put p = new Put(tableKey);
+                p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, ts, ByteUtil.EMPTY_BYTE_ARRAY);
+                mutations.add(p);
+                region.mutateRowsWithLocks(mutations, Collections.<byte[]> emptySet());
+                metaDataCache.invalidate(key);
+            }
+        } catch (Throwable t) {
+            // We could still invalidate it
+            logger.error("clearCacheForTable failed to update the latest ts ", t);
+            ProtobufUtil.setControllerException(controller, ServerUtil.createIOException(
+                    SchemaUtil.getTableName(schemaName.toString(), tableName.toString()), t));
+        }
+    }
 }

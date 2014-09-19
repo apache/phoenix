@@ -58,7 +58,6 @@ public class MutableIndexIT extends BaseMutableIndexIT {
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Don't split intra region so we can more easily know that the n-way parallelization is for the explain plan
-        props.put(QueryServices.MAX_INTRA_REGION_PARALLELIZATION_ATTRIB, Integer.toString(1));
         // Forces server cache to be used
         props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
