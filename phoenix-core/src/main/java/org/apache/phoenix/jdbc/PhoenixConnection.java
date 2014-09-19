@@ -224,7 +224,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     
     private ImmutableMap<String, String> getImmutableCustomTracingAnnotations() {
     	Builder<String, String> result = ImmutableMap.builder();
-    	result.putAll(JDBCUtil.getCustomTracingAnnotations(url, info));
+    	result.putAll(JDBCUtil.getAnnotations(url, info));
     	if (getSCN() != null) {
     		result.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, getSCN().toString());
     	}

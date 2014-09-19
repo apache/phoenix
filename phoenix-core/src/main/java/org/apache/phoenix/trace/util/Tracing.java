@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.trace.util;
 
+import static org.apache.phoenix.util.StringUtil.toBytes;
+
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Callable;
@@ -35,7 +37,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TracingCompat;
-import org.apache.phoenix.util.StringUtil;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
@@ -268,12 +269,13 @@ public class Tracing {
     private static void addCustomAnnotationsToSpan(@Nullable Span span, @NotNull PhoenixConnection conn) {
         Preconditions.checkNotNull(conn);
         
-        if (span != null) {
-            Map<String, String> annotations = conn.getCustomTracingAnnotations();
-            // copy over the annotations as bytes
-            for (Map.Entry<String, String> annotation : annotations.entrySet()) {
-                span.addKVAnnotation(StringUtil.toBytes(annotation.getKey()), StringUtil.toBytes(annotation.getValue()));
-            }
+        if (span == null) {
+        	return;
+        } 
+		Map<String, String> annotations = conn.getCustomTracingAnnotations();
+		// copy over the annotations as bytes
+		for (Map.Entry<String, String> annotation : annotations.entrySet()) {
+			span.addKVAnnotation(toBytes(annotation.getKey()), toBytes(annotation.getValue()));
         }
     }
 
