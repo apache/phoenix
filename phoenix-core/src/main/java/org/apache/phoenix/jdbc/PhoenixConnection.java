@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static java.util.Collections.emptyMap;
+
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -86,6 +88,8 @@ import org.cloudera.htrace.Sampler;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
@@ -120,6 +124,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private boolean isClosed = false;
     private Sampler<?> sampler;
     private boolean readOnly = false;
+    private Map<String, String> customTracingAnnotations = emptyMap(); 
  
     static {
         Tracing.addTraceMetricsSource();
@@ -214,10 +219,27 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
         // setup tracing, if its enabled
         this.sampler = Tracing.getConfiguredSampler(this);
+        this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
+    }
+    
+    private ImmutableMap<String, String> getImmutableCustomTracingAnnotations() {
+    	Builder<String, String> result = ImmutableMap.builder();
+    	result.putAll(JDBCUtil.getAnnotations(url, info));
+    	if (getSCN() != null) {
+    		result.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, getSCN().toString());
+    	}
+    	if (getTenantId() != null) {
+    		result.put(PhoenixRuntime.TENANT_ID_ATTRIB, getTenantId().getString());
+    	}
+    	return result.build();
     }
 
     public Sampler<?> getSampler() {
         return this.sampler;
+    }
+    
+    public Map<String, String> getCustomTracingAnnotations() {
+        return customTracingAnnotations;
     }
 
     public int executeStatements(Reader reader, List<Object> binds, PrintStream out) throws IOException, SQLException {
