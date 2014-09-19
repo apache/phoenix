@@ -100,7 +100,7 @@ public class ScanRanges {
         this.slotSpan = slotSpan;
         this.schema = schema;
         if (schema != null && !ranges.isEmpty()) {
-            this.filter = new SkipScanFilter(this.ranges, schema);
+            this.filter = new SkipScanFilter(this.ranges, slotSpan, schema);
         }
         this.forceRangeScan = forceRangeScan;
     }
@@ -152,7 +152,7 @@ public class ScanRanges {
     }
 
     private static boolean isPointLookup(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan) {
-        if (ScanUtil.calculateSlotSpan(ranges, slotSpan) < schema.getMaxFields()) {
+        if (ScanUtil.getTotalSpan(ranges, slotSpan) < schema.getMaxFields()) {
             return false;
         }
         for (List<KeyRange> orRanges : ranges) {
@@ -261,7 +261,7 @@ public class ScanRanges {
     }
     
     public int getPkColumnSpan() {
-        return this == ScanRanges.NOTHING ? 0 : ScanUtil.calculateSlotSpan(ranges, slotSpan);
+        return this == ScanRanges.NOTHING ? 0 : ScanUtil.getTotalSpan(ranges, slotSpan);
     }
 
     @Override

@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.query.QueryServices.TRACING_CUSTOM_ANNOTATION_ATTRIB_PREFIX;
+import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -31,7 +31,7 @@ public class JDBCUtilTest {
     @Test
     public void testGetCustomTracingAnnotationsWithNone() {
         String url = "localhost;TenantId=abc;";
-        Map<String, String> customAnnotations = JDBCUtil.getCustomTracingAnnotations(url, new Properties());
+        Map<String, String> customAnnotations = JDBCUtil.getAnnotations(url, new Properties());
         assertTrue(customAnnotations.isEmpty());
     }
     
@@ -44,13 +44,13 @@ public class JDBCUtilTest {
         String annotKey3 = "key3";
         String annotVal3 = "val3";
         
-        String url= "localhost;" + TRACING_CUSTOM_ANNOTATION_ATTRIB_PREFIX + annotKey1 + '=' + annotVal1;
+        String url= "localhost;" + ANNOTATION_ATTRIB_PREFIX + annotKey1 + '=' + annotVal1;
         
         Properties prop = new Properties();
-        prop.put(TRACING_CUSTOM_ANNOTATION_ATTRIB_PREFIX + annotKey2, annotVal2);
-        prop.put(TRACING_CUSTOM_ANNOTATION_ATTRIB_PREFIX + annotKey3, annotVal3);
+        prop.put(ANNOTATION_ATTRIB_PREFIX + annotKey2, annotVal2);
+        prop.put(ANNOTATION_ATTRIB_PREFIX + annotKey3, annotVal3);
         
-        Map<String, String> customAnnotations = JDBCUtil.getCustomTracingAnnotations(url, prop);
+        Map<String, String> customAnnotations = JDBCUtil.getAnnotations(url, prop);
         assertEquals(3, customAnnotations.size());
         assertEquals(annotVal1, customAnnotations.get(annotKey1));
         assertEquals(annotVal2, customAnnotations.get(annotKey2));

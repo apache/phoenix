@@ -24,10 +24,10 @@ import java.util.List;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
 
-import com.google.common.io.Closeables;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ServerUtil;
 
 

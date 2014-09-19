@@ -284,12 +284,6 @@ public class WhereOptimizer {
         // If we have fully qualified point keys with multi-column spans (i.e. RVC),
         // we can still use our skip scan. The ScanRanges.create() call will explode
         // out the keys.
-        if (hasMultiColumnSpan) {
-            forcedRangeScan |= pkPos < nPKColumns;
-            if (forcedRangeScan && removeFromExtractNodes != null) {
-                extractNodes.removeAll(removeFromExtractNodes);
-            }
-        }
         context.setScanRanges(
                 ScanRanges.create(schema, cnf, Arrays.copyOf(slotSpan, cnf.size()), forcedRangeScan, nBuckets),
                 minMaxRange);

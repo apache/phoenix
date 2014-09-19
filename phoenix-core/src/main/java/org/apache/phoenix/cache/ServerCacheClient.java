@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.cache;
 
-import static com.google.common.io.Closeables.closeQuietly;
 import static java.util.Collections.emptyMap;
 import static org.apache.phoenix.util.LogUtil.addCustomAnnotations;
 
@@ -329,7 +328,7 @@ public class ServerCacheClient {
     			LOG.warn(addCustomAnnotations("Unable to remove hash cache for " + remainingOnServers, customAnnotations), lastThrowable);
     		}
     	} finally {
-    		closeQuietly(iterateOverTable);
+    		Closeables.closeQuietly(iterateOverTable);
     	}
     }
 

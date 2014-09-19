@@ -52,7 +52,7 @@ public class SpoolingResultIteratorTest {
             };
 
         MemoryManager memoryManager = new DelegatingMemoryManager(new GlobalMemoryManager(threshold, 0));
-        ResultIterator scanner = new SpoolingResultIterator(iterator, memoryManager, threshold, maxSizeSpool);
+        ResultIterator scanner = new SpoolingResultIterator(iterator, memoryManager, threshold, maxSizeSpool,"/tmp");
         AssertResults.assertResults(scanner, expectedResults);
     }
 

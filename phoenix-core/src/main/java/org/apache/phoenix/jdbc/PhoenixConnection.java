@@ -89,6 +89,7 @@ import org.cloudera.htrace.Sampler;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
@@ -218,7 +219,19 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
         // setup tracing, if its enabled
         this.sampler = Tracing.getConfiguredSampler(this);
-        this.customTracingAnnotations = ImmutableMap.copyOf(JDBCUtil.getCustomTracingAnnotations(url, info));
+        this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
+    }
+    
+    private ImmutableMap<String, String> getImmutableCustomTracingAnnotations() {
+    	Builder<String, String> result = ImmutableMap.builder();
+    	result.putAll(JDBCUtil.getAnnotations(url, info));
+    	if (getSCN() != null) {
+    		result.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, getSCN().toString());
+    	}
+    	if (getTenantId() != null) {
+    		result.put(PhoenixRuntime.TENANT_ID_ATTRIB, getTenantId().getString());
+    	}
+    	return result.build();
     }
 
     public Sampler<?> getSampler() {

@@ -18,7 +18,7 @@
 package org.apache.phoenix.util;
 
 import static com.google.common.collect.Maps.newHashMapWithExpectedSize;
-import static org.apache.phoenix.query.QueryServices.TRACING_CUSTOM_ANNOTATION_ATTRIB_PREFIX;
+import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
 
 import java.sql.SQLException;
 import java.util.Map;
@@ -69,6 +69,9 @@ public class JDBCUtil {
         return propValue;
     }
     
+    /**
+     * Returns a map that contains connection properties from both <code>info</code> and <code>url</code>.
+     */
     private static Map<String, String> getCombinedConnectionProperties(String url, Properties info) {
 		Map<String, String> result = newHashMapWithExpectedSize(info.size());
 		for (String propName : info.stringPropertyNames()) {
@@ -87,16 +90,16 @@ public class JDBCUtil {
 		return result;
     }
     
-    public static Map<String, String> getCustomTracingAnnotations(@NotNull String url, @NotNull Properties info) {
+    public static Map<String, String> getAnnotations(@NotNull String url, @NotNull Properties info) {
         Preconditions.checkNotNull(url);
         Preconditions.checkNotNull(info);
         
     	Map<String, String> combinedProperties = getCombinedConnectionProperties(url, info);
     	Map<String, String> result = newHashMapWithExpectedSize(combinedProperties.size());
     	for (Map.Entry<String, String> prop : combinedProperties.entrySet()) {
-    		if (prop.getKey().startsWith(TRACING_CUSTOM_ANNOTATION_ATTRIB_PREFIX) &&
-    				prop.getKey().length() > TRACING_CUSTOM_ANNOTATION_ATTRIB_PREFIX.length()) {
-    			result.put(prop.getKey().substring(TRACING_CUSTOM_ANNOTATION_ATTRIB_PREFIX.length()), prop.getValue());
+    		if (prop.getKey().startsWith(ANNOTATION_ATTRIB_PREFIX) &&
+    				prop.getKey().length() > ANNOTATION_ATTRIB_PREFIX.length()) {
+    			result.put(prop.getKey().substring(ANNOTATION_ATTRIB_PREFIX.length()), prop.getValue());
     		}
     	}
     	return result;

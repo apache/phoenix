@@ -17,9 +17,8 @@
  */
 package org.apache.phoenix.trace;
 
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME;
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -261,7 +260,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     @Test
     public void testScanTracing() throws Exception {
         // separate connections to minimize amount of traces that are generated
-        Connection traceable = getTracingConnection(ImmutableMap.of("annot1", "v1"));
+        Connection traceable = getTracingConnection();
         Connection conn = getConnectionWithoutTracing();
 
         // one call for client side, one call for server side
@@ -362,8 +361,9 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     public void testCustomAnnotationTracing() throws Exception {
     	final String customAnnotationKey = "myannot";
     	final String customAnnotationValue = "a1";
+    	final String tenantId = "tenant1";
         // separate connections to minimize amount of traces that are generated
-        Connection traceable = getTracingConnection(ImmutableMap.of(customAnnotationKey, customAnnotationValue));
+        Connection traceable = getTracingConnection(ImmutableMap.of(customAnnotationKey, customAnnotationValue), tenantId);
         Connection conn = getConnectionWithoutTracing();
 
         // one call for client side, one call for server side
@@ -399,23 +399,20 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
         assertTrue("Get expected updates to trace table", updated.await(200, TimeUnit.SECONDS));
 
+        assertAnnotationPresent(customAnnotationKey, customAnnotationValue, conn);
+        assertAnnotationPresent(TENANT_ID_ATTRIB, tenantId, conn);
+        // CurrentSCN is also added as an annotation. Not tested here because it screws up test setup.
+    }
+    
+    private void assertAnnotationPresent(final String annotationKey, final String annotationValue, Connection conn) throws Exception {
         boolean tracingComplete = checkStoredTraces(conn, new TraceChecker(){
             @Override
             public boolean foundTrace(TraceHolder currentTrace) {
-            	return currentTrace.toString().contains(customAnnotationKey);
+            	return currentTrace.toString().contains(annotationKey + " - " + annotationValue);
             }
         });
         
         assertTrue("Didn't find the custom annotation in the tracing", tracingComplete);
-        
-		ResultSet rs = conn.createStatement().executeQuery(
-				"select annotations.a0, " + PhoenixTableMetricsWriter.ANNOTATION_COUNT 
-					+ " from " + DEFAULT_TRACING_STATS_TABLE_NAME + "(annotations.a0 varchar)"
-					+ " where annotations.a0 like '%" + customAnnotationKey + "%'");
-        
-		assertTrue("Didn't find the custom annotation in the tracing", rs.next());
-		assertTrue(rs.getString(1).contains(customAnnotationValue));
-		assertFalse("Expected only one line with custom annotation but found more", rs.next());
     }
     
     private boolean checkStoredTraces(Connection conn, TraceChecker checker) throws Exception {

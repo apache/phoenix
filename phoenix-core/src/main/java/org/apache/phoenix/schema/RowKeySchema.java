@@ -71,6 +71,8 @@ public class RowKeySchema extends ValueSchema {
         return this.getMinNullable();
     }
 
+    // "iterator" initialization methods that initialize a bytes ptr with a row key for further navigation
+
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(
             value="NP_BOOLEAN_RETURN_NULL", 
             justification="Designed to return null.")
@@ -105,11 +107,12 @@ public class RowKeySchema extends ValueSchema {
     public int iterator(ImmutableBytesWritable ptr) {
         return iterator(ptr.get(),ptr.getOffset(),ptr.getLength(), ptr);
     }
-    
+
+    // navigation methods that "select" different chunks of the row key held in a bytes ptr
+
     /**
-     * Move the bytes ptr to the next position relative to the current ptr
-     * @param ptr bytes pointer pointing to the value at the positional index
-     * provided.
+     * Move the bytes ptr to the next position in the row key relative to its current position
+     * @param ptr bytes pointer pointing to the value at the positional index provided.
      * @param position zero-based index of the next field in the value schema
      * @param maxOffset max possible offset value when iterating
      * @return true if a value was found and ptr was set, false if the value is null and ptr was not
@@ -150,6 +153,23 @@ public class RowKeySchema extends ValueSchema {
             }
         }
         return ptr.getLength() > 0;
+    }
+
+    /**
+     * Like {@link #next(org.apache.hadoop.hbase.io.ImmutableBytesWritable, int, int)}, but also
+     * includes the next {@code extraSpan} additional fields in the bytes ptr.
+     * This allows multiple fields to be treated as one concatenated whole.
+     * @param ptr  bytes pointer pointing to the value at the positional index provided.
+     * @param position zero-based index of the next field in the value schema
+     * @param maxOffset max possible offset value when iterating
+     * @param extraSpan the number of extra fields to expand the ptr to contain
+     * @return true if a value was found and ptr was set, false if the value is null and ptr was not
+     * set, and null if the value is null and there are no more values
+     */
+    public Boolean next(ImmutableBytesWritable ptr, int position, int maxOffset, int extraSpan) {
+        Boolean returnValue = next(ptr, position, maxOffset);
+        readExtraFields(ptr, position + 1, maxOffset, extraSpan);
+        return returnValue;
     }
     
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(
@@ -237,5 +257,39 @@ public class RowKeySchema extends ValueSchema {
         }
         
         return hasValue;
+    }
+
+    /**
+     * Like {@link #reposition(org.apache.hadoop.hbase.io.ImmutableBytesWritable, int, int, int, int)},
+     * but also includes the next {@code extraSpan} additional fields in the bytes ptr.
+     * This allows multiple fields to be treated as one concatenated whole.
+     * @param extraSpan  the number of extra fields to expand the ptr to contain.
+     */
+    public Boolean reposition(ImmutableBytesWritable ptr, int oldPosition, int newPosition, int minOffset, int maxOffset, int extraSpan) {
+        Boolean returnValue = reposition(ptr, oldPosition, newPosition, minOffset, maxOffset);
+        readExtraFields(ptr, newPosition + 1, maxOffset, extraSpan);
+        return returnValue;
+    }
+
+    /**
+     * Extends the boundaries of the {@code ptr} to contain the next {@code extraSpan} fields in the row key.
+     * @param ptr  bytes pointer pointing to the value at the positional index provided.
+     * @param position  row key position of the first extra key to read
+     * @param maxOffset  the maximum offset into the bytes pointer to allow
+     * @param extraSpan  the number of extra fields to expand the ptr to contain.
+     */
+    private void readExtraFields(ImmutableBytesWritable ptr, int position, int maxOffset, int extraSpan) {
+        int initialOffset = ptr.getOffset();
+
+        for(int i = 0; i < extraSpan; i++) {
+            Boolean returnValue = next(ptr, position + i, maxOffset);
+
+            if(returnValue == null) {
+                break;
+            }
+        }
+
+        int finalLength = ptr.getOffset() - initialOffset + ptr.getLength();
+        ptr.set(ptr.get(), initialOffset, finalLength);
     }
 }

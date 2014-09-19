@@ -106,14 +106,6 @@ public class Indexer extends BaseRegionObserver {
   private static final String INDEX_RECOVERY_FAILURE_POLICY_KEY = "org.apache.hadoop.hbase.index.recovery.failurepolicy";
 
   /**
-   * Marker {@link KeyValue} to indicate that we are doing a batch operation. Needed because the
-   * coprocessor framework throws away the WALEdit from the prePut/preDelete hooks when checking a
-   * batch if there were no {@link KeyValue}s attached to the {@link WALEdit}. When you get down to
-   * the preBatch hook, there won't be any WALEdits to which to add the index updates.
-   */
-  private static KeyValue BATCH_MARKER = new KeyValue();
-
-  /**
    * cache the failed updates to the various regions. Used for making the WAL recovery mechanisms
    * more robust in the face of recoverying index regions that were on the same server as the
    * primary table region
@@ -201,43 +193,6 @@ public class Indexer extends BaseRegionObserver {
   }
 
   @Override
-  public void prePut(final ObserverContext<RegionCoprocessorEnvironment> c, final Put put,
-      final WALEdit edit, final Durability durability) throws IOException {
-      if (this.disabled) {
-          super.prePut(c, put, edit, durability);
-          return;
-      }
-      preSingleUpdate(c, put, edit, durability);
-  }
-
-  @Override
-  public void preDelete(ObserverContext<RegionCoprocessorEnvironment> e, Delete delete,
-      WALEdit edit, final Durability durability) throws IOException {
-      if (this.disabled) {
-          super.preDelete(e, delete, edit, durability);
-          return;
-      }
-      preSingleUpdate(e, delete, edit, durability);
-  }
-
-  /**
-   * Process the prePut and preDelete methods. These need to be handled so the preBatchMutate method
-   * can function properly.
-   * <p>
-   * As of HBase 0.96, these can all go through the same mechanism as puts and deletes all go
-   * through the batchMutation mechanism in HRegion. Previously, {@link Delete} had a separate path,
-   * which caused some interesting problems for managing WALs, but see older versions of Phoenix for
-   * more information there.
-   */
-  @SuppressWarnings("javadoc")
-  public void preSingleUpdate(final ObserverContext<RegionCoprocessorEnvironment> c, final Mutation put,
-      final WALEdit edit, final Durability durability) throws IOException {
-      // just have to add a batch marker to the WALEdit so we get the edit again in the batch
-      // processing step. We let it throw an exception here because something terrible has happened.
-      edit.add(BATCH_MARKER);
-  }
-
-  @Override
   public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
       MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
       if (this.disabled) {
@@ -269,18 +224,6 @@ public class Indexer extends BaseRegionObserver {
     }
     Durability durability = Durability.SKIP_WAL;
     for (int i = 0; i < miniBatchOp.size(); i++) {
-      // remove the batch keyvalue marker - its added for all puts
-      WALEdit edit = miniBatchOp.getWalEdit(i);
-      // we don't have a WALEdit for immutable index cases, which still see this path
-      // we could check is indexing is enable for the mutation in prePut and then just skip this
-      // after checking here, but this saves us the checking again.
-      if (edit != null) {
-        KeyValue kv = edit.getKeyValues().get(0);
-        if (kv == BATCH_MARKER) {
-          // remove batch marker from the WALEdit
-          edit.getKeyValues().remove(0);
-        }
-      }
       Mutation m = miniBatchOp.getOperation(i);
       // skip this mutation if we aren't enabling indexing
       // unfortunately, we really should ask if the raw mutation (rather than the combined mutation)
@@ -315,6 +258,10 @@ public class Indexer extends BaseRegionObserver {
     // dump all the index updates into a single WAL. They will get combined in the end anyways, so
     // don't worry which one we get
     WALEdit edit = miniBatchOp.getWalEdit(0);
+    if (edit == null) {
+        edit = new WALEdit();
+        miniBatchOp.setWalEdit(0, edit);
+    }
 
         // get the current span, or just use a null-span to avoid a bunch of if statements
         Span current = Trace.startSpan("Starting to build index updates").getSpan();
