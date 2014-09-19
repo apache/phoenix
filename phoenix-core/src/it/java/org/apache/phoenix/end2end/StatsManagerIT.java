@@ -121,7 +121,7 @@ public class StatsManagerIT extends BaseParallelIteratorsRegionSplitterIT {
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
-        TableRef table = getTableRef(conn,ts);
+        TableRef table = getTableRef(conn, ts);
 
         int updateFreq = 5;
         int maxAge = 10;

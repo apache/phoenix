@@ -27,6 +27,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
+import com.google.common.collect.Lists;
 
 public class PColumnFamilyImpl implements PColumnFamily {
     private final PName name;
@@ -34,6 +35,7 @@ public class PColumnFamilyImpl implements PColumnFamily {
     private final Map<String, PColumn> columnByString;
     private final Map<byte[], PColumn> columnByBytes;
     private final int estimatedSize;
+    private List<byte[]> guidePosts = Lists.newArrayList();
 
     @Override
     public int getEstimatedSize() {
@@ -41,9 +43,22 @@ public class PColumnFamilyImpl implements PColumnFamily {
     }
     
     public PColumnFamilyImpl(PName name, List<PColumn> columns) {
+       this(name, columns, null);
+    }
+    
+    public PColumnFamilyImpl(PName name, List<PColumn> columns, List<byte[]> guidePosts) {
         Preconditions.checkNotNull(name);
-        long estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 4 + SizedUtil.INT_SIZE + name.getEstimatedSize() +
-                SizedUtil.sizeOfMap(columns.size()) * 2 + SizedUtil.sizeOfArrayList(columns.size());
+        // Include guidePosts also in estimating the size
+        int guidePostsSize = 0;
+        if(guidePosts != null) {
+            guidePostsSize = guidePosts.size();
+            for(byte[] gps : guidePosts) {
+                guidePostsSize += gps.length;
+            }
+            this.guidePosts = guidePosts;
+        }
+        long estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 5 + SizedUtil.INT_SIZE + name.getEstimatedSize() +
+                SizedUtil.sizeOfMap(columns.size()) * 2 + SizedUtil.sizeOfArrayList(columns.size()) + guidePostsSize;
         this.name = name;
         this.columns = ImmutableList.copyOf(columns);
         ImmutableMap.Builder<String, PColumn> columnByStringBuilder = ImmutableMap.builder();
@@ -84,5 +99,10 @@ public class PColumnFamilyImpl implements PColumnFamily {
             throw new ColumnNotFoundException(name);
         }
         return column;
+    }
+
+    @Override
+    public List<byte[]> getGuidePosts() {
+        return guidePosts;
     }
 }

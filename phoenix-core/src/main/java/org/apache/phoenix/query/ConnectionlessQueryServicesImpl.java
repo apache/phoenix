@@ -68,7 +68,6 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -118,30 +117,6 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public HTableInterface getTable(byte[] tableName) throws SQLException {
         throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public StatsManager getStatsManager() {
-        return new StatsManager() {
-
-            @Override
-            public byte[] getMinKey(TableRef table) {
-                return HConstants.EMPTY_START_ROW;
-            }
-
-            @Override
-            public byte[] getMaxKey(TableRef table) {
-                return HConstants.EMPTY_END_ROW;
-            }
-
-            @Override
-            public void updateStats(TableRef table) throws SQLException {
-            }
-
-            @Override
-            public void clearStats() throws SQLException {
-            }
-        };
     }
 
     @Override
@@ -214,6 +189,15 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, null);
     }
 
+    @Override
+    public long updateStatistics(KeyRange keyRange, byte[] tableName) throws SQLException {
+        // Noop
+        return 0;
+    }
+    
+    @Override
+    public void clearCacheForTable(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTS)
+            throws SQLException {}
     // TODO: share this with ConnectionQueryServicesImpl
     @Override
     public void init(String url, Properties props) throws SQLException {
@@ -248,6 +232,15 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 } catch (NewerTableAlreadyExistsException ignore) {
                     // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
+                }
+                try {
+                    // TODO : Get this from a configuration
+                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_STATS_TABLE_METADATA);
+                } catch (NewerTableAlreadyExistsException ignore) {
+                    // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed
+                    // timestamp.
+                    // A TableAlreadyExistsException is not thrown, since the table only exists *after* this
+                    // fixed timestamp.
                 }
             } catch (SQLException e) {
                 sqlE = e;

@@ -72,6 +72,6 @@ message PTable {
   optional bytes viewStatement = 18;
   repeated bytes physicalNames = 19;
   optional bytes tenantId = 20;
-  optional int32 viewIndexId = 21; 
+  optional int32 viewIndexId = 21;
   optional bytes indexType = 22;
 }

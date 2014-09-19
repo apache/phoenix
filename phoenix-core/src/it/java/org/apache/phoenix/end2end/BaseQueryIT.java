@@ -70,16 +70,13 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     @BeforeClass
     @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
-        int targetQueryConcurrency = 2;
-        int maxQueryConcurrency = 3;
         Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(100));
-        props.put(QueryServices.MAX_QUERY_CONCURRENCY_ATTRIB, Integer.toString(maxQueryConcurrency));
-        props.put(QueryServices.TARGET_QUERY_CONCURRENCY_ATTRIB, Integer.toString(targetQueryConcurrency));
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(5000));
         props.put(IndexWriterUtils.HTABLE_THREAD_KEY, Integer.toString(100));
         // Make a small batch size to test multiple calls to reserve sequences
         props.put(QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB, Long.toString(BATCH_SIZE));
-        
+        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_CONF_KEY, Integer.toString(20));
+        props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Integer.toString(2));
         // Must update config before starting server
         setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }

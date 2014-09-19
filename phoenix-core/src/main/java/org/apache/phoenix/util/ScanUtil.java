@@ -191,7 +191,7 @@ public class ScanUtil {
         }
         return mayHaveRows;
     }
-
+    
     public static void andFilterAtBeginning(Scan scan, Filter andWithFilter) {
         if (andWithFilter == null) {
             return;

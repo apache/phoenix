@@ -58,13 +58,9 @@ public class BaseParallelIteratorsRegionSplitterIT extends BaseClientManagedTime
     @BeforeClass
     @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
-        int targetQueryConcurrency = 3;
-        int maxQueryConcurrency = 5;
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        props.put(QueryServices.MAX_QUERY_CONCURRENCY_ATTRIB, Integer.toString(maxQueryConcurrency));
-        props.put(QueryServices.TARGET_QUERY_CONCURRENCY_ATTRIB, Integer.toString(targetQueryConcurrency));
-        props.put(QueryServices.MAX_INTRA_REGION_PARALLELIZATION_ATTRIB, Integer.toString(Integer.MAX_VALUE));
         // Must update config before starting server
+        props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Integer.toString(2));
         setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
     
@@ -88,7 +84,8 @@ public class BaseParallelIteratorsRegionSplitterIT extends BaseClientManagedTime
 
     protected static TableRef getTableRef(Connection conn, long ts) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        TableRef table = new TableRef(null,pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), STABLE_NAME)),ts, false);
+        TableRef table = new TableRef(null, pconn.getMetaDataCache().getTable(
+                new PTableKey(pconn.getTenantId(), STABLE_NAME)), ts, false);
         return table;
     }
     

@@ -1,0 +1,20 @@
+option java_package = "org.apache.phoenix.coprocessor.generated";
+option java_outer_classname = "StatCollectorProtos";
+option java_generic_services = true;
+option java_generate_equals_and_hash = true;
+option optimize_for = SPEED;
+
+
+message StatCollectRequest {
+  optional bytes startRow = 1;
+  optional bytes stopRow = 2;
+}
+
+message StatCollectResponse {
+  required uint64 rowsScanned = 1;
+}
+
+service StatCollectService {
+  rpc collectStat(StatCollectRequest)
+    returns (StatCollectResponse);
+}

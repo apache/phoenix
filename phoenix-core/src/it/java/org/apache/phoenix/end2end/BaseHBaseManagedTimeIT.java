@@ -96,7 +96,7 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
             disableAndDropNonSystemTables(driver);
         } finally {
             try {
-                assertTrue(destroyDriver(driver));
+              assertTrue(destroyDriver(driver));
             } finally {
                 driver = null;
             }

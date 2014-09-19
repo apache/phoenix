@@ -52,7 +52,7 @@ import org.junit.experimental.categories.Category;
 public abstract class BaseClientManagedTimeIT extends BaseTest {
     private static String url;
     protected static PhoenixTestDriver driver;
-    private static final Configuration config = HBaseConfiguration.create(); 
+    protected static final Configuration config = HBaseConfiguration.create(); 
     private static boolean clusterInitialized = false;
     
     protected final static String getUrl() {

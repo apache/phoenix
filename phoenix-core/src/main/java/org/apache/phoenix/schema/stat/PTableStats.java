@@ -17,28 +17,19 @@
  */
 package org.apache.phoenix.schema.stat;
 
-import java.util.Map;
+import java.util.List;
+import java.util.TreeMap;
 
-import org.apache.hadoop.hbase.HRegionInfo;
 
-
-/**
- * Interface for Phoenix table statistics. Statistics is collected on the server
- * side and can be used for various purpose like splitting region for scanning, etc.
- * 
- * The table is defined on the client side, but it is populated on the server side. The client
- * should not populate any data to the statistics object.
+/*
+ * The table is defined on the client side, but it is populated on the server side. The client should not populate any data to the
+ * statistics object.
  */
 public interface PTableStats {
-
     /**
-     * Given the region info, returns an array of bytes that is the current estimate of key
-     * distribution inside that region. The keys should split that region into equal chunks.
-     * 
-     * @param region
-     * @return array of keys
+     * Returns a tree map of the guide posts collected against a column family
+     * @return
      */
-    byte[][] getRegionGuidePosts(HRegionInfo region);
+    TreeMap<byte[], List<byte[]>> getGuidePosts();
 
-    Map<String, byte[][]> getGuidePosts();
 }

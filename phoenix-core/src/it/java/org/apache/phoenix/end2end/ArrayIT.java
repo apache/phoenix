@@ -143,10 +143,11 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		String query = "SELECT a_double_array, /* comment ok? */ b_string, a_float FROM table_with_array WHERE ?=organization_id and ?=a_float";
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
+		        Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn, TABLE_WITH_ARRAY);
 		try {
-			PreparedStatement statement = conn.prepareStatement(query);
+		    PreparedStatement statement = conn.prepareStatement(query);
 			statement.setString(1, tenantId);
 			statement.setFloat(2, 0.01f);
 			ResultSet rs = statement.executeQuery();
@@ -169,6 +170,12 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		}
 	}
 
+    private void analyzeTable(Connection conn, String tableWithArray) throws SQLException {
+        String analyse = "ANALYZE  "+tableWithArray;
+		PreparedStatement statement = conn.prepareStatement(analyse);
+        statement.execute();
+    }
+
 	@Test
 	public void testScanWithArrayInWhereClause() throws Exception {
 		long ts = nextTimestamp();
@@ -181,6 +188,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
+		analyzeTable(conn, TABLE_WITH_ARRAY);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			statement.setString(1, tenantId);

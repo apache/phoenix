@@ -32,6 +32,4 @@ public interface ParallelIteratorRegionSplitter {
 
     public List<KeyRange> getSplits() throws SQLException;
 
-    public int getSplitsPerRegion(int numRegions);
-
 }

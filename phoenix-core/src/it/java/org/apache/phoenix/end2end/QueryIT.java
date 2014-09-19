@@ -38,17 +38,18 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -59,7 +60,6 @@ import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -101,6 +101,11 @@ public class QueryIT extends BaseQueryIT {
         stmt.setString(2, ROW4);
         stmt.setInt(3, -10);
         stmt.execute();
+        upsertConn.close();
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 6);
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        upsertConn = DriverManager.getConnection(url, props);
+        analyzeTable(upsertConn, "ATABLE");
         upsertConn.close();
 
         String query = "SELECT entity_id FROM aTable WHERE organization_id=? and a_integer >= ?";
@@ -210,6 +215,9 @@ public class QueryIT extends BaseQueryIT {
         stmt.setString(2, ROW5);
         stmt.setString(3, value);
         stmt.execute(); // should commit too
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn1, "ATABLE");
+        conn1.close();
         upsertConn.close();
         
         String query = "SELECT a_string, b_string FROM aTable WHERE organization_id=? and a_integer = 5";
@@ -254,6 +262,9 @@ public class QueryIT extends BaseQueryIT {
         stmt.setString(2, ROW4);
         stmt.setInt(3, 5);
         stmt.execute(); // should commit too
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn1, "ATABLE");
+        conn1.close();
         upsertConn.close();
 
         // Override value again, but should be ignored since it's past the SCN
@@ -389,7 +400,9 @@ public class QueryIT extends BaseQueryIT {
         byte[] ts1 = PDataType.TIMESTAMP.toBytes(tsValue1);
         stmt.setTimestamp(3, tsValue1);
         stmt.execute();
-
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn1, "ATABLE");
+        conn1.close();
         updateStmt = 
             "upsert into " +
             "ATABLE(" +
@@ -408,7 +421,10 @@ public class QueryIT extends BaseQueryIT {
         stmt.setTime(4, new Time(tsValue2.getTime()));
         stmt.execute();
         upsertConn.close();
-        
+        conn1 = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn1, "ATABLE");
+        conn1.close();
+        analyzeTable(upsertConn, "ATABLE");
         assertTrue(compare(CompareOp.GREATER, new ImmutableBytesWritable(ts2), new ImmutableBytesWritable(ts1)));
         assertFalse(compare(CompareOp.GREATER, new ImmutableBytesWritable(ts1), new ImmutableBytesWritable(ts1)));
 
@@ -734,7 +750,7 @@ public class QueryIT extends BaseQueryIT {
             assertTrue(rs.next());
             assertEquals(A_VALUE, rs.getString(1));
             assertEquals(E_VALUE, rs.getString(2));
-           assertEquals(1, rs.getLong(3));
+            assertEquals(1, rs.getLong(3));
             assertFalse(rs.next());
             
             byte[] tableName = Bytes.toBytes(ATABLE_NAME);
@@ -801,6 +817,10 @@ public class QueryIT extends BaseQueryIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         conn.createStatement().execute("UPSERT INTO atable(organization_id,entity_id,a_integer) VALUES('" + getOrganizationId() + "','" + ROW3 + "',NULL)");
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn1, "ATABLE");
+        conn1.close();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -816,6 +836,10 @@ public class QueryIT extends BaseQueryIT {
         conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         conn.createStatement().execute("UPSERT INTO atable(organization_id,entity_id,a_integer) SELECT organization_id, entity_id, null FROM atable");
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
+        conn1 = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn1, "ATABLE");
+        conn1.close();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 9));
         conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -828,5 +852,10 @@ public class QueryIT extends BaseQueryIT {
         } finally {
             conn.close();
         }
+    }
+
+    private void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
+        String query = "ANALYZE " + tableName;
+        conn.createStatement().execute(query);
     }
 }

@@ -15,43 +15,48 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.schema.stat;
 
-import java.util.Collection;
-import java.util.List;
+import org.apache.hadoop.hbase.KeyValue;
 
 /**
- * 
- * Definition of a Phoenix Column Family
- *
- * 
- * @since 0.1
+ * Track a statistic for the column on a given region
  */
-public interface PColumnFamily {
-    
+public interface StatisticsTracker {
+
     /**
-     * @return The column family name.
+     * Reset the statistic after the completion of the compaction
      */
-    PName getName();
-    
+    public void clear();
+
     /**
-     * @return All the PColumns in this column family.
+     * Update the current statistics with the next {@link KeyValue} to be written
+     * 
+     * @param kv
+     *            next {@link KeyValue} to be written.
      */
-    Collection<PColumn> getColumns();
-    
+    public void updateStatistic(KeyValue kv);
+
     /**
-     * @return The PColumn for the specified column qualifier.
-     * @throws ColumnNotFoundException if the column cannot be found
+     * Return the max key of the family
+     * @param fam
+     * @return
      */
-    PColumn getColumn(byte[] qualifier) throws ColumnNotFoundException;
-    
+    public byte[] getMaxKey(String fam);
+
     /**
-     * @return The PColumn for the specified column qualifier.
-     * @throws ColumnNotFoundException if the column cannot be found
+     * Return the min key of the family
+     * 
+     * @param fam
+     * @return
      */
-    PColumn getColumn(String name) throws ColumnNotFoundException;
-    
-    int getEstimatedSize();
-    
-    List<byte[]> getGuidePosts();
+    public byte[] getMinKey(String fam);
+
+    /**
+     * Return the guide posts of the family
+     * 
+     * @param fam
+     * @return
+     */
+    public byte[] getGuidePosts(String fam);
 }

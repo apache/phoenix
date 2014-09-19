@@ -22,13 +22,30 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.SequenceManager;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.iterate.DefaultParallelIteratorRegionSplitter;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -74,7 +91,12 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         stmt.setLong(7, 22222);
         stmt.execute();
     }
-    
+
+    private void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
+        String query = "ANALYZE " + tableName;
+        conn.createStatement().execute(query);
+    }
+
     @Test
     public void testConstantCount() throws Exception {
         long ts = nextTimestamp();
@@ -84,6 +106,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(ts);
+            analyzeTable(conn, "MULTI_CF");
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -103,6 +126,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(ts);
+            analyzeTable(conn, "MULTI_CF");
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -123,6 +147,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(ts);
+            analyzeTable(conn, "MULTI_CF");
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -143,12 +168,24 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(ts);
+            analyzeTable(conn, "MULTI_CF");
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
             assertEquals(2222, rs.getLong(1));
             assertEquals(22222, rs.getLong(2));
             assertFalse(rs.next());
+            Scan scan = new Scan();
+            // See if F has splits in it
+            scan.addFamily(Bytes.toBytes("E"));
+            List<KeyRange> splits = getSplits(conn, ts, scan);
+            assertEquals(3, splits.size());
+            scan = new Scan();
+            // See if G has splits in it
+            scan.addFamily(Bytes.toBytes("G"));
+            splits = getSplits(conn, ts, scan);
+            // We get splits from different CF
+            assertEquals(3, splits.size());
         } finally {
             conn.close();
         }
@@ -163,6 +200,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(ts);
+            analyzeTable(conn, "MULTI_CF");
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -178,11 +216,11 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
     public void testDefaultCFToDisambiguate() throws Exception {
         long ts = nextTimestamp();
         initTableValues(ts);
-        
         String ddl = "ALTER TABLE multi_cf ADD response_time BIGINT";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3);
         Connection conn = DriverManager.getConnection(url);
         conn.createStatement().execute(ddl);
+        analyzeTable(conn, "MULTI_CF");
         conn.close();
        
         String dml = "upsert into " +
@@ -195,7 +233,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         conn.createStatement().execute(dml);
         conn.commit();
         conn.close();
-
+        analyzeTable(conn, "MULTI_CF");
         String query = "SELECT ID,RESPONSE_TIME from multi_cf where RESPONSE_TIME = 333";
         url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         conn = DriverManager.getConnection(url);
@@ -220,6 +258,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(url, props);
         try {
             initTableValues(ts);
+            analyzeTable(conn, "MULTI_CF");
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -230,5 +269,36 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
             conn.close();
         }
     }
-    
+
+    private static TableRef getTableRef(Connection conn, long ts) throws SQLException {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        TableRef table = new TableRef(null, pconn.getMetaDataCache().getTable(
+                new PTableKey(pconn.getTenantId(), "MULTI_CF")), ts, false);
+        return table;
+    }
+
+    private static List<KeyRange> getSplits(Connection conn, long ts, final Scan scan) throws SQLException {
+        TableRef tableRef = getTableRef(conn, ts);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        final List<HRegionLocation> regions = pconn.getQueryServices().getAllTableRegions(
+                tableRef.getTable().getPhysicalName().getBytes());
+        PhoenixStatement statement = new PhoenixStatement(pconn);
+        StatementContext context = new StatementContext(statement, null, scan, new SequenceManager(statement));
+        DefaultParallelIteratorRegionSplitter splitter = new DefaultParallelIteratorRegionSplitter(context, tableRef,
+                HintNode.EMPTY_HINT_NODE) {
+            @Override
+            protected List<HRegionLocation> getAllRegions() throws SQLException {
+                return DefaultParallelIteratorRegionSplitter.filterRegions(regions, scan.getStartRow(),
+                        scan.getStopRow());
+            }
+        };
+        List<KeyRange> keyRanges = splitter.getSplits();
+        Collections.sort(keyRanges, new Comparator<KeyRange>() {
+            @Override
+            public int compare(KeyRange o1, KeyRange o2) {
+                return Bytes.compareTo(o1.getLowerRange(), o2.getLowerRange());
+            }
+        });
+        return keyRanges;
+    }
 }

@@ -15,32 +15,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema.stat;
- import java.util.List;
-import java.util.TreeMap;
+package org.apache.phoenix.parse;
 
-import org.apache.hadoop.hbase.util.Bytes;
- 
- /**
- * Implementation for PTableStats.
- */
-public class PTableStatsImpl implements PTableStats {
+public class UpdateStatisticsStatement extends SingleTableStatement {
 
-    public static final PTableStats NO_STATS = new PTableStatsImpl();
-
-    private TreeMap<byte[], List<byte[]>> guidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
-
-    public PTableStatsImpl() {
-        this(new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR));
-    }
-
-    public PTableStatsImpl(TreeMap<byte[], List<byte[]>> guidePosts) {
-        this.guidePosts = guidePosts;
-    }
-
-    @Override
-    public TreeMap<byte[], List<byte[]>> getGuidePosts() {
-        return guidePosts;
+    public UpdateStatisticsStatement(NamedTableNode table) {
+        super(table, 0);
     }
 
 }
