@@ -17,10 +17,14 @@
  */
 package org.apache.phoenix.execute;
 
+import static java.util.Collections.emptyMap;
+import static org.apache.phoenix.util.LogUtil.addCustomAnnotations;
+
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -33,9 +37,9 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
@@ -48,15 +52,16 @@ import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
-import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
@@ -127,6 +132,7 @@ public class HashJoinPlan implements QueryPlan {
         final ScanRanges ranges = plan.getContext().getScanRanges();
 
         int count = joinIds.length;
+        final PhoenixConnection connection = getContext().getConnection();
         ConnectionQueryServices services = getContext().getConnection().getQueryServices();
         ExecutorService executor = services.getExecutor();
         List<Future<ServerCache>> futures = new ArrayList<Future<ServerCache>>(count);
@@ -152,7 +158,11 @@ public class HashJoinPlan implements QueryPlan {
                     long endTime = System.currentTimeMillis();
                     boolean isSet = firstJobEndTime.compareAndSet(0, endTime);
                     if (!isSet && (endTime - firstJobEndTime.get()) > maxServerCacheTimeToLive) {
-                        LOG.warn("Hash plan [" + index + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.");
+                    	Map<String, String> customAnnotations = emptyMap();
+                    	if (connection != null) {
+                    		customAnnotations = connection.getCustomTracingAnnotations();
+                    	}
+                        LOG.warn(addCustomAnnotations("Hash plan [" + index + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.", customAnnotations));
                     }
                     return cache;
                 }

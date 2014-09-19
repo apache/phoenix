@@ -29,9 +29,11 @@ import java.util.TreeSet;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.LogUtil;
 import org.cloudera.htrace.Span;
 
 import com.google.common.base.Joiner;
@@ -146,7 +148,7 @@ public class TraceReader {
                     orphan.parent = spanInfo;
                     spanInfo.children.add(orphan);
                     // / its no longer an orphan
-                    LOG.trace("Found parent for span: " + span);
+                    LOG.trace(addCustomAnnotations("Found parent for span: " + span));
                     orphans.remove(i--);
                 }
             }
@@ -156,8 +158,8 @@ public class TraceReader {
                 parentSpan.children.add(spanInfo);
             } else if (parent != Span.ROOT_SPAN_ID) {
                 // add the span to the orphan pile to check for the remaining spans we see
-                LOG.info("No parent span found for span: " + span + " (root span id: "
-                        + Span.ROOT_SPAN_ID + ")");
+                LOG.info(addCustomAnnotations("No parent span found for span: " + span + " (root span id: "
+                        + Span.ROOT_SPAN_ID + ")"));
                 orphans.add(spanInfo);
             }
 
@@ -213,7 +215,7 @@ public class TraceReader {
                         + MetricInfo.TRACE.columnName + "=" + traceid + " AND "
                         + MetricInfo.PARENT.columnName + "=" + parent + " AND "
                         + MetricInfo.SPAN.columnName + "=" + span;
-        LOG.trace("Requesting columns with: " + request);
+        LOG.trace(addCustomAnnotations("Requesting columns with: " + request));
         ResultSet results = conn.createStatement().executeQuery(request);
         List<String> cols = new ArrayList<String>();
         while (results.next()) {
@@ -222,12 +224,20 @@ public class TraceReader {
             }
         }
         if (cols.size() < count) {
-            LOG.error("Missing tags! Expected " + count + ", but only got " + cols.size()
-                    + " tags from rquest " + request);
+            LOG.error(addCustomAnnotations("Missing tags! Expected " + count + ", but only got " + cols.size()
+                    + " tags from rquest " + request));
         }
         return cols;
     }
-
+    
+    private String addCustomAnnotations(String logLine) throws SQLException {
+    	if (conn.isWrapperFor(PhoenixConnection.class)) {
+    		PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+    		logLine = LogUtil.addCustomAnnotations(logLine, phxConn.getCustomTracingAnnotations());
+    	}
+    	return logLine;
+    }
+    
     /**
      * Holds information about a trace
      */
