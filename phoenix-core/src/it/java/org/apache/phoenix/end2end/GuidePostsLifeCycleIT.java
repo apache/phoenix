@@ -40,20 +40,33 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(ClientManagedTimeTest.class)
-public class GuidePostsLifeCycleIT extends BaseParallelIteratorsRegionSplitterIT {
+@Category(HBaseManagedTimeTest.class)
+public class GuidePostsLifeCycleIT extends BaseHBaseManagedTimeIT {
 
+    protected static final byte[] KMIN  = new byte[] {'!'};
+    protected static final byte[] KMIN2  = new byte[] {'.'};
+    protected static final byte[] K1  = new byte[] {'a'};
+    protected static final byte[] K3  = new byte[] {'c'};
+    protected static final byte[] K4  = new byte[] {'d'};
+    protected static final byte[] K5  = new byte[] {'e'};
+    protected static final byte[] K6  = new byte[] {'f'};
+    protected static final byte[] K9  = new byte[] {'i'};
+    protected static final byte[] K11 = new byte[] {'k'};
+    protected static final byte[] K12 = new byte[] {'l'};
+    protected static final byte[] KMAX  = new byte[] {'~'};
+    protected static final byte[] KMAX2  = new byte[] {'z'};
     protected static final byte[] KR = new byte[] { 'r' };
     protected static final byte[] KP = new byte[] { 'p' };
 
-    private static List<KeyRange> getSplits(Connection conn, long ts, final Scan scan) throws SQLException {
-        TableRef tableRef = getTableRef(conn, ts);
+    private static List<KeyRange> getSplits(Connection conn, final Scan scan) throws SQLException {
+        TableRef tableRef = getTableRef(conn);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         final List<HRegionLocation> regions = pconn.getQueryServices().getAllTableRegions(
                 tableRef.getTable().getPhysicalName().getBytes());
@@ -80,37 +93,36 @@ public class GuidePostsLifeCycleIT extends BaseParallelIteratorsRegionSplitterIT
     // This test ensures that as we keep adding new records the splits gets updated
     @Test
     public void testGuidePostsLifeCycle() throws Exception {
-        long ts = nextTimestamp();
         byte[][] splits = new byte[][] { K3, K9, KR };
-        ensureTableCreated(getUrl(), STABLE_NAME, splits, ts - 2);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts + 2;
+        ensureTableCreated(getUrl(), STABLE_NAME, splits);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         PreparedStatement stmt = conn.prepareStatement("ANALYZE STABLE");
         stmt.execute();
         Scan scan = new Scan();
-        List<KeyRange> keyRanges = getSplits(conn, ts, scan);
+        List<KeyRange> keyRanges = getSplits(conn, scan);
         assertEquals(4, keyRanges.size());
-        upsert(ts, new byte[][] { KMIN, K4, K11 });
+        upsert(new byte[][] { KMIN, K4, K11 });
         stmt = conn.prepareStatement("ANALYZE STABLE");
         stmt.execute();
-        keyRanges = getSplits(conn, ts, scan);
-        assertEquals(6, keyRanges.size());
-        upsert(ts, new byte[][] { KMIN2, K5, K12 });
+        keyRanges = getSplits(conn, scan);
+        assertEquals(7, keyRanges.size());
+        upsert(new byte[][] { KMIN2, K5, K12 });
         stmt = conn.prepareStatement("ANALYZE STABLE");
         stmt.execute();
-        keyRanges = getSplits(conn, ts, scan);
-        assertEquals(9, keyRanges.size());
-        upsert(ts, new byte[][] { K1, K6, KP });
+        keyRanges = getSplits(conn, scan);
+        assertEquals(10, keyRanges.size());
+        upsert(new byte[][] { K1, K6, KP });
         stmt = conn.prepareStatement("ANALYZE STABLE");
         stmt.execute();
-        keyRanges = getSplits(conn, ts, scan);
-        assertEquals(12, keyRanges.size());
+        keyRanges = getSplits(conn, scan);
+        assertEquals(13, keyRanges.size());
         conn.close();
     }
 
-    protected void upsert(long ts, byte[][] val) throws Exception {
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+    protected void upsert( byte[][] val) throws Exception {
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         PreparedStatement stmt = conn.prepareStatement("upsert into " + STABLE_NAME + " VALUES (?, ?)");
@@ -125,5 +137,12 @@ public class GuidePostsLifeCycleIT extends BaseParallelIteratorsRegionSplitterIT
         stmt.execute();
         conn.commit();
         conn.close();
+    }
+    
+    protected static TableRef getTableRef(Connection conn) throws SQLException {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        TableRef table = new TableRef(null, pconn.getMetaDataCache().getTable(
+                new PTableKey(pconn.getTenantId(), STABLE_NAME)), System.currentTimeMillis(), false);
+        return table;
     }
 }

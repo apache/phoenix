@@ -113,7 +113,7 @@ public class PTableImpl implements PTable {
     private Short viewIndexId;
     private int estimatedSize;
     private IndexType indexType;
-    private List<byte[]> guidePosts;
+    private List<byte[]> guidePosts = Lists.newArrayList();
     
     public PTableImpl() {
         this.indexes = Collections.emptyList();
@@ -361,7 +361,9 @@ public class PTableImpl implements PTable {
                 } else {
                     defaultFamilyNameBytes = defaultFamilyName.getBytes();
                 }
-                guidePosts = stats.getGuidePosts().get(defaultFamilyNameBytes);
+                if (stats.getGuidePosts().get(defaultFamilyNameBytes) != null) {
+                    guidePosts = stats.getGuidePosts().get(defaultFamilyNameBytes);
+                }
             }
         }
         ImmutableMap.Builder<String, PColumnFamily> familyByString = ImmutableMap.builder();
@@ -893,7 +895,7 @@ public class PTableImpl implements PTable {
       boolean isImmutableRows = table.getIsImmutableRows();
       TreeMap<byte[], List<byte[]>> tableGuidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
       for (PTableProtos.PTableStats pTableStatsProto : table.getGuidePostsList()) {
-            List<byte[]> value = new ArrayList<byte[]>();
+          List<byte[]> value = Lists.newArrayListWithExpectedSize(pTableStatsProto.getValuesCount());
             for (int j = 0; j < pTableStatsProto.getValuesCount(); j++) {
                 value.add(pTableStatsProto.getValues(j).toByteArray());
             }
@@ -971,11 +973,9 @@ public class PTableImpl implements PTable {
         builder.setBucketNum(bucketNum);
       }
       List<PColumn> columns = table.getColumns();
-      List<PName> families = Lists.newArrayListWithCapacity(columns.size()); 
       int columnSize = columns.size();
       for (int i = offset; i < columnSize; i++) {
         PColumn column = columns.get(i);
-        families.add(column.getFamilyName());
         builder.addColumns(PColumnImpl.toProto(column));
       }
 

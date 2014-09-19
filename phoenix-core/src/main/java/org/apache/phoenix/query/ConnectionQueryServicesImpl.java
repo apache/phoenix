@@ -1524,10 +1524,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 metaConnection.createStatement().executeUpdate(
                                         QueryConstants.CREATE_STATS_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
-                                // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
+                                // Ignore, as this will happen if the SYSTEM.STATS already exists at this fixed timestamp.
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                             } catch (TableAlreadyExistsException ignore) {
-                                // This will occur if we have an older SYSTEM.SEQUENCE, so we need to update it to include
+                                // This will occur if we have an older SYSTEM.STATS, so we need to update it to include
                                 // any new columns we've added.
                                 String newColumns =
                                         MIN_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", " 

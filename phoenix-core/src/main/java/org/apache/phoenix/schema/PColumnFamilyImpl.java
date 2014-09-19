@@ -27,6 +27,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
+import com.google.common.collect.Lists;
 
 public class PColumnFamilyImpl implements PColumnFamily {
     private final PName name;
@@ -34,7 +35,7 @@ public class PColumnFamilyImpl implements PColumnFamily {
     private final Map<String, PColumn> columnByString;
     private final Map<byte[], PColumn> columnByBytes;
     private final int estimatedSize;
-    private final List<byte[]> guidePosts;
+    private List<byte[]> guidePosts = Lists.newArrayList();
 
     @Override
     public int getEstimatedSize() {
@@ -54,8 +55,8 @@ public class PColumnFamilyImpl implements PColumnFamily {
             for(byte[] gps : guidePosts) {
                 guidePostsSize += gps.length;
             }
+            this.guidePosts = guidePosts;
         }
-        this.guidePosts = guidePosts;
         long estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 5 + SizedUtil.INT_SIZE + name.getEstimatedSize() +
                 SizedUtil.sizeOfMap(columns.size()) * 2 + SizedUtil.sizeOfArrayList(columns.size()) + guidePostsSize;
         this.name = name;

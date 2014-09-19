@@ -32,7 +32,6 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
@@ -111,7 +110,7 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         Scan scan = context.getScan();
         PTable table = this.tableRef.getTable();
         byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(table);
-        List<byte[]> gps = null;
+        List<byte[]> gps = Lists.newArrayList();
 
         if (table.getColumnFamilies().isEmpty()) {
             // For sure we can get the defaultCF from the table
@@ -134,7 +133,7 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         
         List<KeyRange> guidePosts = Lists.newArrayListWithCapacity(regions.size());
         List<KeyRange> regionStartEndKey = Lists.newArrayListWithExpectedSize(regions.size());
-        if (gps == null || gps.isEmpty()) {
+        if (gps.isEmpty()) {
             if (logger.isDebugEnabled()) {
                 logger.debug("The splits formed from region start and endkeys are: " + regionStartEndKey);
             }
@@ -144,40 +143,34 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
             }
             return regionStartEndKey;
         } else {
-            byte[] startKey = regions.get(0).getRegionInfo().getStartKey();
-            int regionSize = regions.size();
+            byte[] currentKey = regions.get(0).getRegionInfo().getStartKey();
+            byte[] endKey = null;
             int regionIndex = 0;
             int guideIndex = 0;
             int gpsSize = gps.size();
-            while ((regionIndex <= regionSize - 1) && (guideIndex <= gpsSize - 1)) {
-                byte[] currentGuidePost = gps.get(guideIndex);
-                byte[] regionEndKey = regions.get(regionIndex).getRegionInfo().getEndKey();
-                // Even if last row just form guide posts. Otherwise for the last region we don't get any guide posts
-                while (Bytes.compareTo(currentGuidePost, regionEndKey) <= 0
-                        || Bytes.equals(regionEndKey, ByteUtil.EMPTY_BYTE_ARRAY)) {
-                    KeyRange keyRange = KeyRange.getKeyRange(startKey, currentGuidePost);
+            int regionSize = regions.size();
+            if (currentKey.length > 0) {
+                guideIndex = Collections.binarySearch(gps, currentKey, Bytes.BYTES_COMPARATOR);
+                guideIndex = (guideIndex < 0 ? -(guideIndex+1) : (guideIndex + 1));
+             }
+            // Merge bisect with guideposts for all but the last region
+            while (regionIndex < regionSize) {
+                byte[] currentGuidePost;
+                endKey = regions.get(regionIndex++).getRegionInfo().getEndKey();
+                while (guideIndex < gpsSize
+                        && (Bytes.compareTo(currentGuidePost = gps.get(guideIndex), endKey) <= 0 || endKey.length == 0)) {
+                    KeyRange keyRange = KeyRange.getKeyRange(currentKey, currentGuidePost);
                     if (keyRange != KeyRange.EMPTY_RANGE) {
                         guidePosts.add(keyRange);
                     }
-                    if (Bytes.compareTo(currentGuidePost, startKey) >= 0) {
-                        // Reset the start key only if the current guide post is greater. Otherwise start key is greater and
-                        // there is no point in using a guide post which is less than the start key.
-                        // This would happen in case if the region start key is 'd' and the guide post is , for eg : 'e'.
-                        // In that case we should not start with 'd' but with 'e'.
-                        startKey = currentGuidePost;
-                    }
+                    currentKey = currentGuidePost;
                     guideIndex++;
-                    if ((guideIndex <= gpsSize - 1)) {
-                        currentGuidePost = gps.get(guideIndex);
-                    } else {
-                        break;
-                    }
                 }
-                guidePosts.add(KeyRange.getKeyRange(startKey, regionEndKey));
-                regionIndex++;
-                if (regionIndex <= regionSize - 1) {
-                    startKey = regions.get(regionIndex).getRegionInfo().getStartKey();
+                KeyRange keyRange = KeyRange.getKeyRange(currentKey, endKey);
+                if (keyRange != KeyRange.EMPTY_RANGE) {
+                    guidePosts.add(keyRange);
                 }
+                currentKey = endKey;
             }
             if (logger.isDebugEnabled()) {
                 logger.debug("The captured guideposts are: " + guidePosts);

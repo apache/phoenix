@@ -480,8 +480,9 @@ public class MetaDataClient {
         byte[] tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         KeyRange analyzeRange = KeyRange.EVERYTHING_RANGE;
         if (connection.getTenantId() != null && table.isMultiTenant()) {
+            tenantIdBytes = connection.getTenantId().getBytes();
+            //  TODO remove this inner if once PHOENIX-1259 is fixed.
             if (table.getBucketNum() == null && table.getIndexType() != IndexType.LOCAL) {
-                tenantIdBytes = connection.getTenantId().getBytes();
                 List<List<KeyRange>> tenantIdKeyRanges = Collections.singletonList(Collections.singletonList(KeyRange
                         .getKeyRange(tenantIdBytes)));
                 byte[] lowerRange = ScanUtil.getMinKey(table.getRowKeySchema(), tenantIdKeyRanges,
@@ -503,7 +504,7 @@ public class MetaDataClient {
                 + " IS NULL AND " + REGION_NAME + " IS NULL";
         ResultSet rs = connection.createStatement().executeQuery(query);
         long lastUpdatedTime = 0;
-        if (rs.next()) {
+        if (rs.next() && rs.getDate(2) != null) {
             lastUpdatedTime = rs.getDate(1).getTime() - rs.getDate(2).getTime();
         }
         if (minTimeForStatsUpdate  > lastUpdatedTime) {

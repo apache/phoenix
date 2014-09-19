@@ -21,8 +21,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -88,7 +86,7 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     private long guidepostDepth;
     private long byteCount = 0;
     private Map<String, List<byte[]>> guidePostsMap = new ConcurrentHashMap<String, List<byte[]>>();
-    private Set<byte[]> familyMap = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
+    private Map<ImmutableBytesPtr, Boolean> familyMap = new ConcurrentHashMap<ImmutableBytesPtr, Boolean>();
     private RegionCoprocessorEnvironment env;
     protected StatisticsTable stats;
     // Ensures that either analyze or compaction happens at any point of time.
@@ -151,20 +149,20 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         scanner.close();
         try {
             // update the statistics table
-            for (byte[] fam : familyMap) {
+            for (ImmutableBytesPtr fam : familyMap.keySet()) {
                 String tableName = region.getRegionInfo().getTable().getNameAsString();
                 if (delete) {
                     if(LOG.isDebugEnabled()) {
                         LOG.debug("Deleting the stats for the region "+region.getRegionInfo());
                     }
                     stats.deleteStats(tableName, region.getRegionInfo().getRegionNameAsString(), this,
-                            Bytes.toString(fam), mutations, currentTime);
+                            Bytes.toString(fam.copyBytesIfNecessary()), mutations, currentTime);
                 }
                 if(LOG.isDebugEnabled()) {
                     LOG.debug("Adding new stats for the region "+region.getRegionInfo());
                 }
                 stats.addStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
-                        Bytes.toString(fam), mutations, currentTime);
+                        Bytes.toString(fam.copyBytesIfNecessary()), mutations, currentTime);
             }
         } catch (IOException e) {
             LOG.error("Failed to update statistics table!", e);
@@ -179,10 +177,10 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     private void deleteStatsFromStatsTable(final HRegion region, List<Mutation> mutations, long currentTime) throws IOException {
         try {
             // update the statistics table
-            for (byte[] fam : familyMap) {
+            for (ImmutableBytesPtr fam : familyMap.keySet()) {
                 String tableName = region.getRegionInfo().getTable().getNameAsString();
                 stats.deleteStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
-                        Bytes.toString(fam), mutations, currentTime);
+                        Bytes.toString(fam.copyBytesIfNecessary()), mutations, currentTime);
             }
         } catch (IOException e) {
             LOG.error("Failed to delete from statistics table!", e);
@@ -379,7 +377,7 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
     @Override
     public void updateStatistic(KeyValue kv) {
         byte[] cf = kv.getFamily();
-        familyMap.add(cf);
+        familyMap.put(new ImmutableBytesPtr(cf), true);
         
         String fam = Bytes.toString(cf);
         byte[] row = new ImmutableBytesPtr(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength())

@@ -118,7 +118,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String TABLE_TYPE = "TABLE_TYPE";
     public static final byte[] TABLE_TYPE_BYTES = Bytes.toBytes(TABLE_TYPE);
     public static final String PHYSICAL_NAME = "PHYSICAL_NAME";
-    public static final String PHYSICAL_NAME_BYTES = "PHYSICAL_NAME_BYTES";
+    public static final byte[] PHYSICAL_NAME_BYTES = Bytes.toBytes(PHYSICAL_NAME);
     
     public static final String COLUMN_FAMILY = "COLUMN_FAMILY";
     public static final String TABLE_CAT = "TABLE_CAT";

@@ -125,7 +125,7 @@ public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIterat
     public void testGetLowerUnboundSplits() throws Throwable {
         long ts = nextTimestamp();
         initTableValues(ts);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts + 2;
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         PreparedStatement stmt = conn.prepareStatement("ANALYZE STABLE");
