@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.io.DataInput;
+import java.io.IOException;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -144,6 +146,12 @@ public class RegexpSubstrFunction extends PrefixFunction {
             }
         }
         return OrderPreserving.NO;
+    }
+
+    @Override
+    public void readFields(DataInput input) throws IOException {
+        super.readFields(input);
+        init();
     }
 
     @Override
