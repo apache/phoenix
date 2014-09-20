@@ -122,7 +122,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         if(localIndex){
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_MT_BASE ['a',-32768,'f']\nCLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
         } else {
-            assertEquals("CLIENT PARALLEL 4-WAY RANGE SCAN OVER _IDX_MT_BASE ['a',-32768,'f']",QueryUtil.getExplainPlan(rs));
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_MT_BASE ['a',-32768,'f']",QueryUtil.getExplainPlan(rs));
         }
         
         try {
