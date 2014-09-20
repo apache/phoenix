@@ -23,10 +23,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
@@ -94,12 +96,12 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
             stmt.setInt(2, 1);
             stmt.execute();
             conn.commit();
-            
             query = "UPSERT INTO target(pk, col) SELECT pk, col from source";
             stmt = conn.prepareStatement(query);
             stmt.execute();
             conn.commit();
-            
+            analyzeTable(conn, "source");
+            analyzeTable(conn, "target");
             query = "SELECT * FROM target";
             stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
@@ -110,6 +112,11 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
         } finally {
             conn.close();
         }
+    }
+    
+    private void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
+        String query = "ANALYZE " + tableName;
+        conn.createStatement().execute(query);
     }
 
     @Test
@@ -188,12 +195,12 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "CREATE TABLE IF NOT EXISTS source" + 
+            String ddl = "CREATE TABLE IF NOT EXISTS source1" + 
                     " (pk1 varchar NULL, pk2 varchar NULL, pk3 integer NOT NULL, col1 INTEGER" + 
                     " CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl);
             
-            String query = "UPSERT INTO source(pk1, pk2, pk3, col1) VALUES(?,?,?,?)";
+            String query = "UPSERT INTO source1(pk1, pk2, pk3, col1) VALUES(?,?,?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, "1");
             stmt.setString(2, "2");
@@ -203,12 +210,12 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
             conn.commit();
             
             conn.setAutoCommit(true);
-            query = "UPSERT INTO source(pk3, col1, pk1) SELECT pk3+1, col1+1, pk2 from source";
+            query = "UPSERT INTO source1(pk3, col1, pk1) SELECT pk3+1, col1+1, pk2 from source1";
             stmt = conn.prepareStatement(query);
             stmt.execute();
             conn.commit();
-            
-            query = "SELECT col1 FROM source";
+            analyzeTable(conn, "source1");
+            query = "SELECT col1 FROM source1";
             stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());

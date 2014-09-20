@@ -92,6 +92,16 @@ message GetVersionResponse {
   required int64 version = 1;
 }
 
+message ClearCacheForTableRequest {
+  required bytes tenantId = 1;
+  required bytes schemaName  = 2;
+  required bytes tableName = 3;
+  required int64 clientTimestamp = 4;
+}
+
+message ClearCacheForTableResponse {
+}
+
 service MetaDataService {
   rpc getTable(GetTableRequest)
     returns (MetaDataResponse);
@@ -115,5 +125,8 @@ service MetaDataService {
     returns (ClearCacheResponse);
     
    rpc getVersion(GetVersionRequest)
-    returns (GetVersionResponse);           
+    returns (GetVersionResponse);
+   
+   rpc clearCacheForTable(ClearCacheForTableRequest)
+    returns (ClearCacheForTableResponse);
 }

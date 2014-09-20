@@ -1,6 +1,4 @@
 /**
- * Copyright 2010 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -105,12 +103,12 @@ tokens
     MAXVALUE='maxvalue';
     CYCLE='cycle';
     CASCADE='cascade';
+    ANALYZE='analyze';
 }
 
 
 @parser::header {
 /**
- * Copyright 2010 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -358,6 +356,7 @@ non_select_node returns [BindableStatement ret]
     |   s=alter_table_node
     |	s=create_sequence_node
     |	s=drop_sequence_node
+    |   s=update_statistics_node
     |   s=explain_node) { contextStack.pop();  $ret = s; }
     ;
     
@@ -493,6 +492,11 @@ alter_table_node returns [AlterTableStatement ret]
         ( (DROP COLUMN (IF ex=EXISTS)? c=column_names) | (ADD (IF NOT ex=EXISTS)? (d=column_defs) (p=properties)?) | (SET (p=properties)) )
         { PTableType tt = v==null ? (QueryConstants.SYSTEM_SCHEMA_NAME.equals(t.getSchemaName()) ? PTableType.SYSTEM : PTableType.TABLE) : PTableType.VIEW; ret = ( c == null ? factory.addColumn(factory.namedTable(null,t), tt, d, ex!=null, p) : factory.dropColumn(factory.namedTable(null,t), tt, c, ex!=null) ); }
     ;
+
+update_statistics_node returns [UpdateStatisticsStatement ret]
+	:   ANALYZE t=from_table_name
+		{ret = factory.updateStatistics(factory.namedTable(null, t));}
+	;
 
 prop_name returns [String ret]
     :   p=identifier {$ret = SchemaUtil.normalizeIdentifier(p); }
