@@ -179,7 +179,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     public void testBaseTableWrongFormatWithTenantTypeId() throws Exception {
         // only two PK columns for multi_tenant, multi_type
         try {
-            createTestTable(getUrl(), "CREATE TABLE BASE_TABLE2 (TENANT_ID VARCHAR NOT NULL PRIMARY KEY, ID VARCHAR NOT NULL, A INTEGER) MULTI_TENANT=true", null, nextTimestamp());
+            createTestTable(getUrl(), "CREATE TABLE BASE_TABLE2 (TENANT_ID VARCHAR NOT NULL PRIMARY KEY, ID VARCHAR, A INTEGER) MULTI_TENANT=true", null, nextTimestamp());
             fail();
         }
         catch (SQLException expected) {

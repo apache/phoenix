@@ -350,4 +350,18 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         }
    }
 
+    @Test
+    public void testNotNullConstraintForWithSinglePKCol() throws Exception {
+        
+        String ddl = "create table test.testing(k integer primary key, v bigint not null)";
+                    
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute(ddl);    
+            fail(" Non pk column V has a NOT NULL constraint");
+        } catch( SQLException sqle) {
+            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),sqle.getErrorCode());
+        }
+   }
 }
