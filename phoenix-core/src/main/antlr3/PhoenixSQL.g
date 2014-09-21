@@ -471,7 +471,7 @@ column_names returns [List<ColumnName> ret]
 // Parse a drop table statement.
 drop_table_node returns [DropTableStatement ret]
     :   DROP (v=VIEW | TABLE) (IF ex=EXISTS)? t=from_table_name (c=CASCADE)?
-        {ret = factory.dropTable(t, v==null ? PTableType.TABLE : PTableType.VIEW, ex!=null, c!=null); }
+        {ret = factory.dropTable(t, v==null ? (QueryConstants.SYSTEM_SCHEMA_NAME.equals(t.getSchemaName()) ? PTableType.SYSTEM : PTableType.TABLE) : PTableType.VIEW, ex!=null, c!=null); }
     ;
 
 // Parse a drop index statement

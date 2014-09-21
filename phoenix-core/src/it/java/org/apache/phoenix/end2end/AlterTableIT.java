@@ -108,6 +108,24 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
+    public void testDropSystemTable() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        try {
+            try {
+                conn.createStatement().executeUpdate(
+                        "DROP TABLE " + PhoenixDatabaseMetaData.SYSTEM_CATALOG);
+                fail("Should not be allowed to drop a system table");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
     public void testAddVarCharColToPK() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
