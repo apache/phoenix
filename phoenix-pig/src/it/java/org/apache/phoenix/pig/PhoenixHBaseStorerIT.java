@@ -195,7 +195,7 @@ public class PhoenixHBaseStorerIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testStoreWithBinaryDataTypes() throws Exception {
      
-        final String tableName = "TABLE2";
+        final String tableName = "TABLE3";
         final Statement stmt = conn.createStatement();
 
         stmt.execute("CREATE TABLE " + tableName +
@@ -252,7 +252,7 @@ public class PhoenixHBaseStorerIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testStoreWithDateTime() throws Exception {
      
-        final String tableName = "TABLE3";
+        final String tableName = "TABLE4";
         final Statement stmt = conn.createStatement();
 
         stmt.execute("CREATE TABLE " + tableName +
