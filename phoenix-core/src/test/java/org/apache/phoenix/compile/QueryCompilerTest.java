@@ -208,7 +208,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.execute();
             fail();
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 517 (42895): Invalid not null constraint on non primary key column columnName=PK"));
+            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 517 (42895): Invalid not null constraint on non primary key column columnName=FOO.PK"));
         } finally {
             conn.close();
         }
