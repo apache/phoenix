@@ -406,21 +406,21 @@ public abstract class BaseTest {
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
         builder.put(JOIN_ORDER_TABLE_FULL_NAME, "create table " + JOIN_ORDER_TABLE_FULL_NAME +
                 "   (\"order_id\" char(15) not null primary key, " +
-                "    \"customer_id\" char(10) not null, " +
-                "    \"item_id\" char(10) not null, " +
-                "    price integer not null, " +
-                "    quantity integer not null, " +
-                "    date timestamp not null)");
+                "    \"customer_id\" char(10), " +
+                "    \"item_id\" char(10), " +
+                "    price integer, " +
+                "    quantity integer, " +
+                "    date timestamp)");
         builder.put(JOIN_CUSTOMER_TABLE_FULL_NAME, "create table " + JOIN_CUSTOMER_TABLE_FULL_NAME +
                 "   (\"customer_id\" char(10) not null primary key, " +
-                "    name varchar not null, " +
+                "    name varchar, " +
                 "    phone char(12), " +
                 "    address varchar, " +
                 "    loc_id char(5), " +
                 "    date date)");
         builder.put(JOIN_ITEM_TABLE_FULL_NAME, "create table " + JOIN_ITEM_TABLE_FULL_NAME +
                 "   (\"item_id\" char(10) not null primary key, " +
-                "    name varchar not null, " +
+                "    name varchar, " +
                 "    price integer, " +
                 "    discount1 integer, " +
                 "    discount2 integer, " +
@@ -428,7 +428,7 @@ public abstract class BaseTest {
                 "    description varchar)");
         builder.put(JOIN_SUPPLIER_TABLE_FULL_NAME, "create table " + JOIN_SUPPLIER_TABLE_FULL_NAME +
                 "   (\"supplier_id\" char(10) not null primary key, " +
-                "    name varchar not null, " +
+                "    name varchar, " +
                 "    phone char(12), " +
                 "    address varchar, " +
                 "    loc_id char(5))");
