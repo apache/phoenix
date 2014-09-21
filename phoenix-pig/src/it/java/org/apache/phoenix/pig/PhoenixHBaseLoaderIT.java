@@ -307,6 +307,63 @@ public class PhoenixHBaseLoaderIT {
     }
     
     /**
+     * 
+     * @throws Exception
+     */
+    @Test
+    public void testForNonPKSQLQuery() throws Exception {
+        
+         //create the table
+         String ddl = "CREATE TABLE  " + TABLE_FULL_NAME 
+                + " ( ID VARCHAR PRIMARY KEY, FOO VARCHAR, BAR INTEGER, BAZ UNSIGNED_INT)";
+                
+        conn.createStatement().execute(ddl);
+        
+        //upsert data.
+        final String dml = "UPSERT INTO " + TABLE_FULL_NAME + " VALUES(?,?,?,?) ";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        stmt.setString(1, "a");
+        stmt.setString(2, "a");
+        stmt.setInt(3,-1);
+        stmt.setInt(4,1);
+        stmt.execute();
+       
+        stmt.setString(1, "b");
+        stmt.setString(2, "b");
+        stmt.setInt(3,-2);
+        stmt.setInt(4,2);
+        stmt.execute();
+        
+        conn.commit();
+        
+        //sql query
+        final String sqlQuery = String.format(" SELECT FOO, BAZ FROM %s WHERE BAR = -1 " , TABLE_FULL_NAME);
+      
+        pigServer.registerQuery(String.format(
+                "A = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", sqlQuery,
+                zkQuorum));
+        
+        final Iterator<Tuple> iterator = pigServer.openIterator("A");
+        int recordsRead = 0;
+        while (iterator.hasNext()) {
+            final Tuple tuple = iterator.next();
+            assertEquals("a", tuple.get(0));
+            assertEquals(1, tuple.get(1));
+            recordsRead++;
+        }
+        assertEquals(1, recordsRead);
+        
+        //test the schema. Test for PHOENIX-1123
+        Schema schema = pigServer.dumpSchema("A");
+        List<FieldSchema> fields = schema.getFields();
+        assertEquals(2, fields.size());
+        assertTrue(fields.get(0).alias.equalsIgnoreCase("FOO"));
+        assertTrue(fields.get(0).type == DataType.CHARARRAY);
+        assertTrue(fields.get(1).alias.equalsIgnoreCase("BAZ"));
+        assertTrue(fields.get(1).type == DataType.INTEGER);
+    }
+    
+    /**
      * @throws Exception
      */
     @Test

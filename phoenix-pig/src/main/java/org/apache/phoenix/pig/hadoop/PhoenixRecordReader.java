@@ -36,6 +36,7 @@ import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.pig.PhoenixPigConfiguration;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
@@ -96,10 +97,8 @@ public final class PhoenixRecordReader extends RecordReader<NullWritable,Phoenix
         final KeyRange keyRange = pSplit.getKeyRange();
         final Scan splitScan = queryPlan.getContext().getScan();
         final Scan scan = new Scan(splitScan);
-        scan.setStartRow(keyRange.getLowerRange());
-        scan.setStopRow(keyRange.getUpperRange());
-         try {
-            //this.resultIterator = queryPlan.iterator();
+        ScanUtil.intersectScanRange(scan, keyRange.getLowerRange(), keyRange.getUpperRange(), queryPlan.getContext().getScanRanges().useSkipScanFilter());
+        try {
              TableResultIterator tableResultIterator = new TableResultIterator(queryPlan.getContext(), queryPlan.getTableRef(),scan);
             if(queryPlan.getContext().getSequenceManager().getSequenceCount() > 0) {
                     this.resultIterator = new SequenceResultIterator(tableResultIterator, queryPlan.getContext().getSequenceManager());
