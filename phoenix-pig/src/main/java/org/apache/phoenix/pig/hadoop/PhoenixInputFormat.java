@@ -37,7 +37,6 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.pig.PhoenixPigConfiguration;
 import org.apache.phoenix.query.KeyRange;
@@ -46,7 +45,6 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 
 /**
@@ -82,18 +80,10 @@ public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixR
 
     @Override
     public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {        
-        List<InputSplit> splits = null;
-        try{
-            setConf(context.getConfiguration());
-            final QueryPlan queryPlan = getQueryPlan(context);
-            @SuppressWarnings("unused")
-            final ResultIterator iterator = queryPlan.iterator();
-            final List<KeyRange> allSplits = queryPlan.getSplits();
-            splits = generateSplits(queryPlan,allSplits);
-        } catch(SQLException sqlE) {
-            LOG.error(String.format(" Error [%s] in getSplits of PhoenixInputFormat ", sqlE.getMessage()));
-            Throwables.propagate(sqlE);
-        }
+        setConf(context.getConfiguration());
+        final QueryPlan queryPlan = getQueryPlan(context);
+        final List<KeyRange> allSplits = queryPlan.getSplits();
+        final List<InputSplit> splits = generateSplits(queryPlan,allSplits);
         return splits;
     }
 
@@ -157,6 +147,7 @@ public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixR
                 final Statement statement = connection.createStatement();
                 final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
                 this.queryPlan = pstmt.compileQuery(selectStatement);
+                this.queryPlan.iterator();
             } catch(Exception exception) {
                 LOG.error(String.format("Failed to get the query plan with error [%s]",exception.getMessage()));
                 throw new RuntimeException(exception);
