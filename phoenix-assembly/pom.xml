@@ -72,7 +72,7 @@
               <tarLongFileMode>gnu</tarLongFileMode>
               <appendAssemblyId>false</appendAssemblyId>
               <descriptors>
-                <descriptor>src/build/${assembly.descriptor}</descriptor>
+                <descriptor>src/build/package-to-tar-all.xml</descriptor>
               </descriptors>
             </configuration>
           </execution>
@@ -142,7 +142,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>${compat.module}</artifactId>
+      <artifactId>phoenix-hadoop2-compat</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
