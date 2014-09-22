@@ -17,25 +17,21 @@
  */
 package org.apache.phoenix.trace;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import org.apache.hadoop.metrics2.MetricsRecord;
+import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.trace.TraceReader.SpanInfo;
+import org.apache.phoenix.trace.TraceReader.TraceHolder;
+import org.junit.Test;
 
 import java.sql.Connection;
 import java.util.Collection;
 
-import org.apache.phoenix.metrics.PhoenixMetricsRecord;
-import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.trace.Hadoop1TracingTestEnabler.Hadoop1Disabled;
-import org.apache.phoenix.trace.TraceReader.SpanInfo;
-import org.apache.phoenix.trace.TraceReader.TraceHolder;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 /**
  * Test that the logging sink stores the expected metrics/stats
  */
-@RunWith(Hadoop1TracingTestEnabler.class)
-@Hadoop1Disabled("tracing")
 public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
 
     /**
@@ -45,7 +41,7 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
      */
     @Test
     public void testCreatesTable() throws Exception {
-        PhoenixTableMetricsWriter sink = new PhoenixTableMetricsWriter();
+        PhoenixMetricsSink sink = new PhoenixMetricsSink();
         Connection conn = getConnectionWithoutTracing();
         sink.initForTesting(conn);
 
@@ -69,13 +65,13 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
 
     /**
      * Simple metrics writing and reading check, that uses the standard wrapping in the
-     * {@link PhoenixMetricsWriter}
+     * {@link PhoenixMetricsSink}
      * @throws Exception on failure
      */
     @Test
     public void writeMetrics() throws Exception {
         // hook up a phoenix sink
-        PhoenixTableMetricsWriter sink = new PhoenixTableMetricsWriter();
+        PhoenixMetricsSink sink = new PhoenixMetricsSink();
         Connection conn = getConnectionWithoutTracing();
         sink.initForTesting(conn);
 
@@ -88,12 +84,12 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         long endTime = 13;
         String annotation = "test annotation for a span";
         String hostnameValue = "host-name.value";
-        PhoenixMetricsRecord record =
+       MetricsRecord record =
                 createRecord(traceid, parentid, spanid, description, startTime, endTime,
                     hostnameValue, annotation);
 
         // actually write the record to the table
-        sink.addMetrics(record);
+        sink.putMetrics(record);
         sink.flush();
 
         // make sure we only get expected stat entry (matcing the trace id), otherwise we could the
