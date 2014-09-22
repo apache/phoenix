@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,24 +15,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.trace;
+package org.apache.hadoop.metrics2.impl;
 
 import org.apache.hadoop.metrics2.MetricsInfo;
-import org.apache.hadoop.metrics2.MetricsTag;
 
 /**
- * Simple Tag implementation for testing
+ *
  */
-public class PhoenixTagImpl extends MetricsTag {
+public class ExposedMetricCounterLong extends MetricCounterLong {
 
-    private final String name;
-    private final String description;
-    private final String value;
 
-    public PhoenixTagImpl(String name, String description, String value) {
-        super(new MetricsInfoImpl(name, description), value);
-        this.name = name;
-        this.description = description;
-        this.value = value;
-    }
+
+  /**
+   * @param info
+   * @param value
+   */
+  public ExposedMetricCounterLong(MetricsInfo info, long value) {
+    super(info, value);
+  }
 }
