@@ -104,7 +104,7 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT k1, k2, v2 FROM v WHERE v2='" + valuePrefix + "v2-1'");
         assertEquals(saltBuckets == null ? 
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T ['" + tenantId + "',-32768,'" + valuePrefix + "v2-1']" :
-                "CLIENT PARALLEL 4-WAY SKIP SCAN ON 3 KEYS OVER _IDX_T [0,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1'] - [2,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1']\n" + 
+                "CLIENT PARALLEL 3-WAY SKIP SCAN ON 3 KEYS OVER _IDX_T [0,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1'] - [2,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1']\n" + 
                 "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
     }
     

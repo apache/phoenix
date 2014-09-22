@@ -59,11 +59,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -82,7 +84,6 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
-import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -104,8 +105,12 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.stat.PTableStats;
+import org.apache.phoenix.schema.stat.PTableStatsImpl;
+import org.apache.phoenix.schema.stat.StatisticsUtils;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -445,11 +450,85 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                 addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
             }
         }
-        
-        return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, tableSeqNum, pkName, saltBucketNum, columns, 
-                tableType == INDEX ? dataTableName : null, indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement, disableWAL, multiTenant, viewType, viewIndexId);
+        PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getTableName(
+                schemaName.getString(), tableName.getString())) : physicalTables.get(0);
+        PTableStats stats = updateStatsInternal(physicalTableName.getBytes(), columns);
+        return PTableImpl
+                .makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, tableSeqNum, pkName,
+                        saltBucketNum, columns, tableType == INDEX ? dataTableName : null, indexes, isImmutableRows,
+                        physicalTables, defaultFamilyName, viewStatement, disableWAL, multiTenant, viewType,
+                        viewIndexId, stats);
     }
-
+    
+    private PTableStats updateStatsInternal(byte[] tableNameBytes, List<PColumn> columns) throws IOException {
+        List<PName> family = Lists.newArrayListWithExpectedSize(columns.size());
+        for (PColumn column : columns) {
+            PName familyName = column.getFamilyName();
+            if (familyName != null) {
+                family.add(familyName);
+            }
+        }
+        HTable statsHTable = null;
+        try {
+            // Can we do a new HTable instance here? Or get it from a pool or cache of these instances?
+            statsHTable = new HTable(getEnvironment().getConfiguration(), PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+            Scan s = new Scan();
+            if (tableNameBytes != null) {
+                // Check for an efficient way here
+                s.setStartRow(tableNameBytes);
+                s.setStopRow(ByteUtil.nextKey(tableNameBytes));
+            }
+            ResultScanner scanner = statsHTable.getScanner(s);
+            Result result = null;
+            byte[] fam = null;
+            List<byte[]> guidePosts = Lists.newArrayListWithExpectedSize(columns.size());
+            TreeMap<byte[], List<byte[]>> guidePostsPerCf = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
+            while ((result = scanner.next()) != null) {
+                KeyValue[] kvs = result.raw();
+                for(KeyValue kv : kvs) {
+                    // For now collect only guide posts
+                    if (Bytes.equals(kv.getQualifier(), PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES)) {
+                        byte[] cfInCell = StatisticsUtils.getCFFromRowKey(tableNameBytes, kv.getRow());
+                        if (fam == null) {
+                            fam = cfInCell;
+                        } else if (!Bytes.equals(fam, cfInCell)) {
+                            // Sort all the guide posts
+                            guidePostsPerCf.put(cfInCell, guidePosts);
+                            guidePosts = new ArrayList<byte[]>();
+                            fam = cfInCell;
+                        }
+                        byte[] guidePostVal = new ImmutableBytesPtr(kv.getBuffer(), kv.getValueOffset(),
+                                kv.getValueLength()).copyBytesIfNecessary();
+                        PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePostVal);
+                        if (array != null && array.getDimensions() != 0) {
+                            for (int j = 0; j < array.getDimensions(); j++) {
+                                byte[] gp = array.toBytes(j);
+                                if (gp.length != 0) {
+                                    guidePosts.add(gp);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (fam != null) {
+                // Sort all the guideposts
+                guidePostsPerCf.put(fam, guidePosts);
+            }
+            return new PTableStatsImpl(guidePostsPerCf);
+        } catch (Exception e) {
+            if (e instanceof org.apache.hadoop.hbase.TableNotFoundException) {
+                logger.warn("Stats table not yet online", e);
+            } else {
+                throw new IOException(e);
+            }
+        } finally {
+            if (statsHTable != null) {
+                statsHTable.close();
+            }
+        }
+        return PTableStatsImpl.NO_STATS;
+    }
     private PTable buildDeletedTable(byte[] key, ImmutableBytesPtr cacheKey, HRegion region, long clientTimeStamp) throws IOException {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
             return null;
@@ -1337,11 +1416,41 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             return results.size() > 0 && !allViewsNotInSingleRegion;
         }
         
-        /**
+        /**o
          * Returns true is the table has views and they are all NOT in the same HBase region.
          */
         private boolean allViewsInMultipleRegions() {
             return results.size() > 0 && allViewsNotInSingleRegion;
         }
     }
+    
+    @Override
+    public void clearCacheForTable(byte[] tenantId, byte[] schema, byte[] tableName, final long clientTS)
+            throws IOException {
+        byte[] tableKey = SchemaUtil.getTableKey(tenantId, schema, tableName);
+        ImmutableBytesPtr key = new ImmutableBytesPtr(tableKey);
+        try {
+            PTable table = doGetTable(tableKey, clientTS);
+            if (table != null) {
+                Cache<ImmutableBytesPtr, PTable> metaDataCache = GlobalCache.getInstance(getEnvironment()).getMetaDataCache();
+                // Add +1 to the ts
+                // TODO : refactor doGetTable() to do this - optionally increment the timestamp
+                // TODO : clear metadata if it is spread across multiple region servers
+                long ts = table.getTimeStamp() + 1;
+                // Here we could add an empty puti
+                HRegion region = getEnvironment().getRegion();
+                List<Mutation> mutations = new ArrayList<Mutation>();
+                Put p = new Put(tableKey);
+                p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, ts, ByteUtil.EMPTY_BYTE_ARRAY);
+                mutations.add(p);
+                region.mutateRowsWithLocks(mutations, Collections.<byte[]> emptySet());
+                metaDataCache.invalidate(key);
+            }
+        } catch (Throwable t) {
+            // We could still invalidate it
+            logger.error("clearCacheForTable failed to update the latest ts ", t);
+            throw new IOException(t);
+        }
+    }
+    
 }

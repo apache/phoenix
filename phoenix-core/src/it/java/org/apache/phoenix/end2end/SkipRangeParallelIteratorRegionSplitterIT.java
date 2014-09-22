@@ -45,7 +45,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
@@ -81,12 +80,8 @@ public class SkipRangeParallelIteratorRegionSplitterIT extends BaseClientManaged
     private static final String DDL = "CREATE TABLE " + TABLE_NAME + " (id char(3) NOT NULL PRIMARY KEY, \"value\" integer)";
     private static final byte[] Ka1A = Bytes.toBytes("a1A");
     private static final byte[] Ka1B = Bytes.toBytes("a1B");
-    private static final byte[] Ka1C = Bytes.toBytes("a1C");
-    private static final byte[] Ka1D = Bytes.toBytes("a1D");
     private static final byte[] Ka1E = Bytes.toBytes("a1E");
-    private static final byte[] Ka1F = Bytes.toBytes("a1F");
     private static final byte[] Ka1G = Bytes.toBytes("a1G");
-    private static final byte[] Ka1H = Bytes.toBytes("a1H");
     private static final byte[] Ka1I = Bytes.toBytes("a1I");
     private static final byte[] Ka2A = Bytes.toBytes("a2A");
 
@@ -109,11 +104,13 @@ public class SkipRangeParallelIteratorRegionSplitterIT extends BaseClientManaged
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        
+        initTableValues();
+        PreparedStatement stmt = conn.prepareStatement("ANALYZE "+TABLE_NAME);
+        stmt.execute();
+        conn.close();
         TableRef tableRef = new TableRef(null,pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), TABLE_NAME)),ts, false);
         List<HRegionLocation> regions = pconn.getQueryServices().getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
-        
-        conn.close();
-        initTableValues();
         List<KeyRange> ranges = getSplits(tableRef, scan, regions, scanRanges);
         assertEquals("Unexpected number of splits: " + ranges.size(), expectedSplits.size(), ranges.size());
         for (int i=0; i<expectedSplits.size(); i++) {
@@ -188,9 +185,7 @@ public class SkipRangeParallelIteratorRegionSplitterIT extends BaseClientManaged
                         }},
                     new int[] {1,1,1},
                     new KeyRange[] {
-                        getKeyRange(Ka1B, true, Ka1C, false),
-                        getKeyRange(Ka1C, true, Ka1D, false),
-                        getKeyRange(Ka1D, true, Ka1E, false),
+                        getKeyRange(Ka1B, true, Ka1E, false)
                 }));
         // Scan range spans third, split into 3 due to concurrency config.
         testCases.addAll(
@@ -204,9 +199,7 @@ public class SkipRangeParallelIteratorRegionSplitterIT extends BaseClientManaged
                         }},
                     new int[] {1,1,1},
                     new KeyRange[] {
-                        getKeyRange(Ka1B, true, Ka1C, false),
-                        getKeyRange(Ka1C, true, Ka1D, false),
-                        getKeyRange(Ka1D, true, Ka1E, false),
+                        getKeyRange(Ka1B, true, Ka1E, false),
                 }));
         // Scan range spans 2 ranges, split into 4 due to concurrency config.
         testCases.addAll(
@@ -220,10 +213,8 @@ public class SkipRangeParallelIteratorRegionSplitterIT extends BaseClientManaged
                         }},
                     new int[] {1,1,1},
                     new KeyRange[] {
-                        getKeyRange(Ka1E, true, Ka1F, false),
-                        getKeyRange(Ka1F, true, Ka1G, false),
-                        getKeyRange(Ka1G, true, Ka1H, false),
-                        getKeyRange(Ka1H, true, Ka1I, false),
+                        getKeyRange(Ka1E, true, Ka1G, false),
+                        getKeyRange(Ka1G, true, Ka1I, false),
                 }));
         // Scan range spans more than 3 range, no split.
         testCases.addAll(
@@ -326,12 +317,7 @@ public class SkipRangeParallelIteratorRegionSplitterIT extends BaseClientManaged
     @BeforeClass
     @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
-        int targetQueryConcurrency = 3;
-        int maxQueryConcurrency = 5;
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        props.put(QueryServices.MAX_QUERY_CONCURRENCY_ATTRIB, Integer.toString(maxQueryConcurrency));
-        props.put(QueryServices.TARGET_QUERY_CONCURRENCY_ATTRIB, Integer.toString(targetQueryConcurrency));
-        props.put(QueryServices.MAX_INTRA_REGION_PARALLELIZATION_ATTRIB, Integer.toString(Integer.MAX_VALUE));
         // Must update config before starting server
         setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }

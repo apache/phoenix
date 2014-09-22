@@ -28,10 +28,10 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
@@ -95,8 +95,6 @@ public class PTableImpl implements PTable {
     private ListMultimap<String,PColumn> columnsByName;
     private PName pkName;
     private Integer bucketNum;
-    // Statistics associated with this table.
-    private PTableStats stats;
     private RowKeySchema rowKeySchema;
     // Indexes associated with this table.
     private List<PTable> indexes;
@@ -114,6 +112,7 @@ public class PTableImpl implements PTable {
     private ViewType viewType;
     private Short viewIndexId;
     private int estimatedSize;
+    private List<byte[]> guidePosts = Collections.emptyList();
     
     public PTableImpl() {
         this.indexes = Collections.emptyList();
@@ -211,12 +210,33 @@ public class PTableImpl implements PTable {
         return new PTableImpl(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, pkName, bucketNum, columns, dataTableName,
                 indexes, isImmutableRows, physicalNames, defaultFamilyName, viewExpression, disableWAL, multiTenant, viewType, viewIndexId);
     }
+    
+    public static PTableImpl makePTable(PName tenantId, PName schemaName, PName tableName, PTableType type,
+            PIndexState state, long timeStamp, long sequenceNumber, PName pkName, Integer bucketNum,
+            List<PColumn> columns, PName dataTableName, List<PTable> indexes, boolean isImmutableRows,
+            List<PName> physicalNames, PName defaultFamilyName, String viewExpression, boolean disableWAL,
+            boolean multiTenant, ViewType viewType, Short viewIndexId, PTableStats stats)
+            throws SQLException {
+        return new PTableImpl(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, pkName,
+                bucketNum, columns, dataTableName, indexes, isImmutableRows, physicalNames, defaultFamilyName,
+                viewExpression, disableWAL, multiTenant, viewType, viewIndexId, stats);
+    }
 
     private PTableImpl(PName tenantId, PName schemaName, PName tableName, PTableType type, PIndexState state, long timeStamp, long sequenceNumber,
             PName pkName, Integer bucketNum, List<PColumn> columns, PName dataTableName, List<PTable> indexes, boolean isImmutableRows,
             List<PName> physicalNames, PName defaultFamilyName, String viewExpression, boolean disableWAL, boolean multiTenant, ViewType viewType, Short viewIndexId) throws SQLException {
         init(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, pkName, bucketNum, columns,
                 new PTableStatsImpl(), dataTableName, indexes, isImmutableRows, physicalNames, defaultFamilyName, viewExpression, disableWAL, multiTenant, viewType, viewIndexId);
+    }
+    
+    private PTableImpl(PName tenantId, PName schemaName, PName tableName, PTableType type, PIndexState state,
+            long timeStamp, long sequenceNumber, PName pkName, Integer bucketNum, List<PColumn> columns,
+            PName dataTableName, List<PTable> indexes, boolean isImmutableRows, List<PName> physicalNames,
+            PName defaultFamilyName, String viewExpression, boolean disableWAL, boolean multiTenant, ViewType viewType,
+            Short viewIndexId, PTableStats stats) throws SQLException {
+        init(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, pkName, bucketNum, columns,
+                stats, dataTableName, indexes, isImmutableRows, physicalNames, defaultFamilyName, viewExpression,
+                disableWAL, multiTenant, viewType, viewIndexId);
     }
 
     @Override
@@ -327,16 +347,40 @@ public class PTableImpl implements PTable {
                 columnsInFamily.add(column);
             }
         }
-        
         this.rowKeySchema = builder.build();
         estimatedSize += rowKeySchema.getEstimatedSize();
         Iterator<Map.Entry<PName,List<PColumn>>> iterator = familyMap.entrySet().iterator();
         PColumnFamily[] families = new PColumnFamily[familyMap.size()];
+        if (families.length == 0) {
+            if(stats != null) {
+                byte[] defaultFamilyNameBytes = null;
+                if(defaultFamilyName == null) {
+                    defaultFamilyNameBytes = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+                } else {
+                    defaultFamilyNameBytes = defaultFamilyName.getBytes();
+                }
+                if (stats.getGuidePosts().get(defaultFamilyNameBytes) != null) {
+                    guidePosts = stats.getGuidePosts().get(defaultFamilyNameBytes);
+                    if (guidePosts != null) {
+                        Collections.sort(guidePosts, Bytes.BYTES_COMPARATOR);
+                        estimatedSize += SizedUtil.sizeOfArrayList(guidePosts.size());
+                        for (byte[] gps : guidePosts) {
+                            estimatedSize += gps.length;
+                        }
+                    }
+                }
+            }
+        }
         ImmutableMap.Builder<String, PColumnFamily> familyByString = ImmutableMap.builder();
-        ImmutableSortedMap.Builder<byte[], PColumnFamily> familyByBytes = ImmutableSortedMap.orderedBy(Bytes.BYTES_COMPARATOR);
+        ImmutableSortedMap.Builder<byte[], PColumnFamily> familyByBytes = ImmutableSortedMap
+                .orderedBy(Bytes.BYTES_COMPARATOR);
+        List<byte[]> famGuidePosts = null;
         for (int i = 0; i < families.length; i++) {
             Map.Entry<PName,List<PColumn>> entry = iterator.next();
-            PColumnFamily family = new PColumnFamilyImpl(entry.getKey(), entry.getValue());
+            if (stats != null) {
+                famGuidePosts = stats.getGuidePosts().get(entry.getKey().getBytes());
+            }
+            PColumnFamily family = new PColumnFamilyImpl(entry.getKey(), entry.getValue(), famGuidePosts);
             families[i] = family;
             familyByString.put(family.getName().getString(), family);
             familyByBytes.put(family.getName().getBytes(), family);
@@ -347,8 +391,6 @@ public class PTableImpl implements PTable {
         this.familyByString = familyByString.build();
         estimatedSize += SizedUtil.sizeOfArrayList(families.length);
         estimatedSize += SizedUtil.sizeOfMap(families.length) * 2;
-        
-        this.stats = stats;
         this.indexes = indexes == null ? Collections.<PTable>emptyList() : indexes;
         for (PTable index : this.indexes) {
             estimatedSize += index.getEstimatedSize();
@@ -687,8 +729,8 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public PTableStats getTableStats() {
-        return stats;
+    public List<byte[]> getGuidePosts() {
+        return guidePosts;
     }
 
     @Override
@@ -732,14 +774,14 @@ public class PTableImpl implements PTable {
             indexes.add(index);
         }
         boolean isImmutableRows = input.readBoolean();
-        Map<String, byte[][]> guidePosts = new HashMap<String, byte[][]>();
+        TreeMap<byte[], List<byte[]>> guidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
         int size = WritableUtils.readVInt(input);
-        for (int i=0; i<size; i++) {
-            String key = WritableUtils.readString(input);
+        for (int i = 0; i < size; i++) {
+            byte[] key = Bytes.readByteArray(input);
             int valueSize = WritableUtils.readVInt(input);
-            byte[][] value = new byte[valueSize][];
-            for (int j=0; j<valueSize; j++) {
-                value[j] = Bytes.readByteArray(input);
+            List<byte[]> value = Lists.newArrayListWithExpectedSize(valueSize);
+            for (int j = 0; j < valueSize; j++) {
+                value.add(j, Bytes.readByteArray(input));
             }
             guidePosts.put(key, value);
         }
@@ -809,6 +851,17 @@ public class PTableImpl implements PTable {
             index.write(output);
         }
         output.writeBoolean(isImmutableRows);
+        TreeMap<byte[], List<byte[]>> guidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
+        if(this.families.size() == 0) {
+            byte[] fam = (defaultFamilyName == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : defaultFamilyName.getBytes());
+            guidePosts.put(fam, this.guidePosts);
+        } else {
+            // Get the stats from the PColumnFamily
+            for(PColumnFamily fam : families) {
+                guidePosts.put(fam.getName().getBytes(), fam.getGuidePosts());
+            }
+        }
+        PTableStats stats = new PTableStatsImpl(guidePosts);
         stats.write(output);
         Bytes.writeByteArray(output, parentTableName == null ? ByteUtil.EMPTY_BYTE_ARRAY : parentTableName.getBytes());
         Bytes.writeByteArray(output, defaultFamilyName == null ? ByteUtil.EMPTY_BYTE_ARRAY : defaultFamilyName.getBytes());
@@ -940,4 +993,5 @@ public class PTableImpl implements PTable {
     public PTableKey getKey() {
         return key;
     }
+    
 }

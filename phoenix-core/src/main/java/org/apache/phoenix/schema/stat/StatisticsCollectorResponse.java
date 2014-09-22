@@ -17,29 +17,31 @@
  */
 package org.apache.phoenix.schema.stat;
 
-import java.io.DataOutput;
 import java.io.IOException;
-import java.util.List;
-import java.util.TreeMap;
+import java.io.Serializable;
 
+public class StatisticsCollectorResponse implements Serializable {
+    private static final long serialVersionUID = -8192337710525997237L;
+    private long rowsScanned;
+    private IOException ioException;
 
-/**
- * Interface for Phoenix table statistics. Statistics is collected on the server
- * side and can be used for various purpose like splitting region for scanning, etc.
- * 
- * The table is defined on the client side, but it is populated on the server side. The client
- * should not populate any data to the statistics object.
- */
-public interface PTableStats {
+    public StatisticsCollectorResponse() {
 
-    /**
-     * Given the region info, returns an array of bytes that is the current estimate of key
-     * distribution inside that region. The keys should split that region into equal chunks.
-     * 
-     * @param region
-     * @return array of keys
-     */
-    TreeMap<byte[], List<byte[]>> getGuidePosts();
+    }
 
-    void write(DataOutput output) throws IOException;
+    public void setRowsScanned(long rowScanned) {
+        this.rowsScanned = rowScanned;
+    }
+
+    public long getRowsScanned() {
+        return rowsScanned;
+    }
+
+    public void setIoException(IOException ioException) {
+        this.ioException = ioException;
+    }
+
+    public IOException getIoException() {
+        return ioException;
+    }
 }

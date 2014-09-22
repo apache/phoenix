@@ -24,7 +24,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Writable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.schema.stat.PTableStats;
 
 
 /**
@@ -218,10 +217,11 @@ public interface PTable extends Writable {
     int newKey(ImmutableBytesWritable key, byte[][] values);
 
     /**
-     * Return the statistics table associated with this PTable.
+     * Return the statistics table associated with this PTable. A list of 
+     * guide posts are return 
      * @return the statistics table.
      */
-    PTableStats getTableStats();
+    List<byte[]> getGuidePosts();
 
     RowKeySchema getRowKeySchema();
 

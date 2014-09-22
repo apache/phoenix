@@ -19,12 +19,14 @@ package org.apache.phoenix.schema.stat;
 
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
-import java.util.TreeMap;
 
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
+
+import com.google.common.collect.ImmutableMap;
 
 
 /**
@@ -34,36 +36,32 @@ public class PTableStatsImpl implements PTableStats {
 
     // The map for guide posts should be immutable. We only take the current snapshot from outside
     // method call and store it.
-    
-    public static final PTableStats NO_STATS = new PTableStatsImpl();
-    private TreeMap<byte[], List<byte[]>> guidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
+    private Map<String, byte[][]> regionGuidePosts;
 
-    public PTableStatsImpl() {
-        this(new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR));
+    public PTableStatsImpl() { }
+
+    public PTableStatsImpl(Map<String, byte[][]> stats) {
+        regionGuidePosts = ImmutableMap.copyOf(stats);
     }
 
-    public PTableStatsImpl(TreeMap<byte[], List<byte[]>> guidePosts) {
-        this.guidePosts = guidePosts;
-    }
-    
     @Override
-    public TreeMap<byte[], List<byte[]>> getGuidePosts() {
-        return guidePosts;
+    public byte[][] getRegionGuidePosts(HRegionInfo region) {
+        return regionGuidePosts.get(region.getRegionNameAsString());
     }
 
     @Override
     public void write(DataOutput output) throws IOException {
-        if (guidePosts == null) {
+        if (regionGuidePosts == null) {
             WritableUtils.writeVInt(output, 0);
             return;
         }
-        WritableUtils.writeVInt(output, guidePosts.size());
-        for (Entry<byte[], List<byte[]>> entry : guidePosts.entrySet()) {
-            Bytes.writeByteArray(output, entry.getKey());
-            List<byte[]> value = entry.getValue();
-            WritableUtils.writeVInt(output, value.size());
-            for (int i = 0; i < value.size(); i++) {
-                Bytes.writeByteArray(output, value.get(i));
+        WritableUtils.writeVInt(output, regionGuidePosts.size());
+        for (Entry<String, byte[][]> entry : regionGuidePosts.entrySet()) {
+            WritableUtils.writeString(output, entry.getKey());
+            byte[][] value = entry.getValue();
+            WritableUtils.writeVInt(output, value.length);
+            for (int i=0; i<value.length; i++) {
+                Bytes.writeByteArray(output, value[i]);
             }
         }
     }

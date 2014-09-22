@@ -267,6 +267,9 @@ public interface MetaDataProtocol extends CoprocessorProtocol {
      */
     void clearCache();
     
+    void clearCacheForTable(final byte[] tenantID, final byte[] schema, final byte[] tableName, final long clientTS)
+            throws IOException;
+    
     /**
      * Get the version of the server-side HBase and phoenix.jar. Used when initially connecting
      * to a cluster to ensure that the client and server jars are compatible.

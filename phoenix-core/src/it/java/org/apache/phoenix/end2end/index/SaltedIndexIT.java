@@ -53,12 +53,13 @@ public class SaltedIndexIT extends BaseIndexIT {
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        // Don't split intra region so we can more easily know that the n-way parallelization is for the explain plan
-        props.put(QueryServices.MAX_INTRA_REGION_PARALLELIZATION_ATTRIB, Integer.toString(1));
         // Forces server cache to be used
         props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
         // Drop the HBase table metadata for this test
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
+        // Don't put guideposts in
+        // TODO: ovrides are not being correctly propagated into configs, but when
+        // they are we can add this: props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Long.toString(10000000));
         // Must update config before starting server
         setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
     }
@@ -98,6 +99,12 @@ public class SaltedIndexIT extends BaseIndexIT {
         testMutableTableIndexMaintanence(null, null);
     }
 
+    private void assertQueryPlan(String expectedPrefix, String expectedPostfix, String actual) {
+        assertTrue("Expected query plan to start with [" + expectedPrefix + "], but got [" + actual + "]",
+                actual.startsWith(expectedPrefix));
+        assertTrue("Expected query plan to end with [" + expectedPostfix + "], but got [" + actual + "]", actual.endsWith(expectedPostfix));;
+    }
+    
     private void testMutableTableIndexMaintanence(Integer tableSaltBuckets, Integer indexSaltBuckets) throws Exception {
         String query;
         ResultSet rs;
@@ -123,7 +130,9 @@ public class SaltedIndexIT extends BaseIndexIT {
         stmt.setString(2, "y");
         stmt.execute();
         conn.commit();
-        
+        stmt = conn.prepareStatement("ANALYZE "+DATA_TABLE_FULL_NAME);
+        stmt.execute();
+
         query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -177,13 +186,15 @@ public class SaltedIndexIT extends BaseIndexIT {
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         expectedPlan = tableSaltBuckets == null ? 
-                "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER " + DATA_TABLE_FULL_NAME + "\n" +
+                "CLIENT PARALLEL 3-WAY POINT LOOKUP ON 1 KEY OVER " + DATA_TABLE_FULL_NAME + "\n" +
                 "    SERVER SORTED BY [V]\n" + 
                 "CLIENT MERGE SORT" :
-                    "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER " + DATA_TABLE_FULL_NAME + "\n" + 
+                    "CLIENT PARALLEL 4-WAY POINT LOOKUP ON 1 KEY OVER " + DATA_TABLE_FULL_NAME + "\n" + 
                     "    SERVER SORTED BY [V]\n" + 
                     "CLIENT MERGE SORT";
-        assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
+        String explainPlan2 = QueryUtil.getExplainPlan(rs);
+        String prefix = "CLIENT PARALLEL ";
+        assertQueryPlan(prefix, expectedPlan.substring(prefix.length()+1),explainPlan2);
         
         // Will use data table now, since there's a LIMIT clause and
         // we're able to optimize out the ORDER BY, unless the data
@@ -199,15 +210,16 @@ public class SaltedIndexIT extends BaseIndexIT {
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         expectedPlan = tableSaltBuckets == null ? 
-             "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + DATA_TABLE_FULL_NAME + "\n" +
+             "CLIENT PARALLEL 3-WAY FULL SCAN OVER " + DATA_TABLE_FULL_NAME + "\n" +
              "    SERVER FILTER BY V >= 'x'\n" + 
              "    SERVER 2 ROW LIMIT\n" + 
              "CLIENT 2 ROW LIMIT" :
-                 "CLIENT PARALLEL 3-WAY FULL SCAN OVER " + DATA_TABLE_FULL_NAME + "\n" +
+                 "CLIENT PARALLEL 6-WAY FULL SCAN OVER " + DATA_TABLE_FULL_NAME + "\n" +
                  "    SERVER FILTER BY V >= 'x'\n" + 
                  "    SERVER 2 ROW LIMIT\n" + 
                  "CLIENT MERGE SORT\n" + 
                  "CLIENT 2 ROW LIMIT";
-        assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
+        String explainPlan = QueryUtil.getExplainPlan(rs);
+        assertQueryPlan(prefix, expectedPlan.substring(prefix.length()+1),explainPlan);
     }
 }

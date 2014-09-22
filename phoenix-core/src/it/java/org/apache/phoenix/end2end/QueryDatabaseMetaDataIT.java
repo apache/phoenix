@@ -113,6 +113,10 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(rs.getString("TABLE_NAME"),TYPE_SEQUENCE);
         assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
         assertTrue(rs.next());
+        assertEquals(rs.getString("TABLE_SCHEM"),SYSTEM_CATALOG_SCHEMA);
+        assertEquals(rs.getString("TABLE_NAME"),PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE);
+        assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+        assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),null);
         assertEquals(rs.getString("TABLE_NAME"),ATABLE_NAME);
         assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));

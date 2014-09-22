@@ -1286,13 +1286,12 @@ public abstract class BaseTest {
         try {
             HTableDescriptor[] tables = admin.listTables();
             for (HTableDescriptor table : tables) {
-                boolean isCatalogTable = (Bytes.compareTo(table.getName(), PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES) == 0);
-                boolean isSequenceTable = (Bytes.compareTo(table.getName(), PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES) == 0);
-                if (!isCatalogTable && !isSequenceTable) {
+                String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getName());
+                if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
                     admin.disableTable(table.getName());
                     admin.deleteTable(table.getName());
                 }
-            }    
+            }
         } finally {
             admin.close();
         }
