@@ -132,7 +132,7 @@ public interface QueryServices extends SQLCloseable {
 
     public static final String USE_REVERSE_SCAN_ATTRIB = "phoenix.query.useReverseScan";
 
-    public static final String HISTOGRAM_BYTE_DEPTH_CONF_KEY = "phoenix.guidepost.width";
+    public static final String HISTOGRAM_BYTE_DEPTH_ATTRIB = "phoenix.guidepost.width";
 
     /**
      * Get executor service used for parallel scans
