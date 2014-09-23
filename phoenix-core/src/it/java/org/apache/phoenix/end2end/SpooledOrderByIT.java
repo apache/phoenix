@@ -35,7 +35,7 @@ public class SpooledOrderByIT extends OrderByIT {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         props.put(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(100));
         // Must update config before starting server
-        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
 }

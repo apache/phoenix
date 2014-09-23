@@ -105,6 +105,7 @@ import java.util.logging.Logger;
 import javax.annotation.Nonnull;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -437,19 +438,47 @@ public abstract class BaseTest {
         return conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
     }
     
+    private static String url;
+    protected static PhoenixTestDriver driver;
+    private static boolean clusterInitialized = false;
+    protected static final Configuration config = HBaseConfiguration.create(); 
+    
+    protected static String getUrl() {
+        if (!clusterInitialized) {
+            throw new IllegalStateException("Cluster must be initialized before attempting to get the URL");
+        }
+        return url;
+    }
+    
+    protected static String checkClusterInitialized(ReadOnlyProps overrideProps) {
+        if (!clusterInitialized) {
+            url = setUpTestCluster(config, overrideProps);
+            clusterInitialized = true;
+        }
+        return url;
+    }
+    
     /**
      * Set up the test hbase cluster. 
+     * @param props TODO
      * @return url to be used by clients to connect to the cluster.
      */
-    protected static String setUpTestCluster(@Nonnull Configuration conf) {
+    protected static String setUpTestCluster(@Nonnull Configuration conf, ReadOnlyProps overrideProps) {
         boolean isDistributedCluster = isDistributedClusterModeEnabled(conf);
         if (!isDistributedCluster) {
-            return initMiniCluster(conf);
+            return initMiniCluster(conf, overrideProps);
        } else {
-            return initClusterDistributedMode(conf);
+            return initClusterDistributedMode(conf, overrideProps);
         }
     }
     
+    protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
+        String url = checkClusterInitialized(props);
+        if (driver == null) {
+            driver = initAndRegisterDriver(url, props);
+        }
+    }
+
     private static boolean isDistributedClusterModeEnabled(Configuration conf) {
         boolean isDistributedCluster = false;
         //check if the distributed mode was specified as a system property.
@@ -463,10 +492,11 @@ public abstract class BaseTest {
     
     /**
      * Initialize the mini cluster using phoenix-test specific configuration.
+     * @param overrideProps TODO
      * @return url to be used by clients to connect to the mini cluster.
      */
-    private static String initMiniCluster(Configuration conf) {
-        setUpConfigForMiniCluster(conf);
+    private static String initMiniCluster(Configuration conf, ReadOnlyProps overrideProps) {
+        setUpConfigForMiniCluster(conf, overrideProps);
         final HBaseTestingUtility utility = new HBaseTestingUtility(conf);
         try {
             utility.startMiniCluster();
@@ -492,10 +522,11 @@ public abstract class BaseTest {
     
     /**
      * Initialize the cluster in distributed mode
+     * @param overrideProps TODO
      * @return url to be used by clients to connect to the mini cluster.
      */
-    private static String initClusterDistributedMode(Configuration conf) {
-        setTestConfigForDistribuedCluster(conf);
+    private static String initClusterDistributedMode(Configuration conf, ReadOnlyProps overrideProps) {
+        setTestConfigForDistribuedCluster(conf, overrideProps);
         try {
             IntegrationTestingUtility util =  new IntegrationTestingUtility(conf);
             util.initializeCluster(NUM_SLAVES_BASE);
@@ -505,11 +536,11 @@ public abstract class BaseTest {
         return JDBC_PROTOCOL + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
     }
 
-    private static void setTestConfigForDistribuedCluster(Configuration conf) {
-        setDefaultTestConfig(conf);
+    private static void setTestConfigForDistribuedCluster(Configuration conf, ReadOnlyProps overrideProps) {
+        setDefaultTestConfig(conf, overrideProps);
     }
     
-    private static void setDefaultTestConfig(Configuration conf) {
+    private static void setDefaultTestConfig(Configuration conf, ReadOnlyProps overrideProps) {
         ConfigUtil.setReplicationConfigIfAbsent(conf);
         QueryServices services = new PhoenixTestDriver().getQueryServices();
         for (Entry<String,String> entry : services.getProps()) {
@@ -517,11 +548,20 @@ public abstract class BaseTest {
         }
         //no point doing sanity checks when running tests.
         conf.setBoolean("hbase.table.sanity.checks", false);
+        
+        // override any defaults based on overrideProps
+        for (Entry<String,String> entry : overrideProps) {
+            conf.set(entry.getKey(), entry.getValue());
+        }
     }
     
     public static Configuration setUpConfigForMiniCluster(Configuration conf) {
+        return setUpConfigForMiniCluster(conf, ReadOnlyProps.EMPTY_PROPS);
+    }
+    
+    public static Configuration setUpConfigForMiniCluster(Configuration conf, ReadOnlyProps overrideProps) {
         assertNotNull(conf);
-        setDefaultTestConfig(conf);
+        setDefaultTestConfig(conf, overrideProps);
         /*
          * The default configuration of mini cluster ends up spawning a lot of threads
          * that are not really needed by phoenix for test purposes. Limiting these threads
