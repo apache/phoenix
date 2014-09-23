@@ -76,7 +76,7 @@ public class ContextClassloaderIT  extends BaseTest {
                 File.createTempFile("invalid", ".jar").toURI().toURL() }, null);
     }
 
-    private static String getUrl() {
+    protected static String getUrl() {
         return "jdbc:phoenix:localhost:" + hbaseTestUtil.getZkCluster().getClientPort() + ";test=true";
     }
 

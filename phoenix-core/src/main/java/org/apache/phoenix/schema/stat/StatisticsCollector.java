@@ -235,7 +235,7 @@ public class StatisticsCollector extends BaseRegionObserver implements Coprocess
         // Get the stats table associated with the current table on which the CP is
         // triggered
         stats = StatisticsTable.getStatisticsTableForCoprocessor(env, desc.getName());
-        guidepostDepth = env.getConfiguration().getLong(QueryServices.HISTOGRAM_BYTE_DEPTH_CONF_KEY,
+        guidepostDepth = env.getConfiguration().getLong(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB,
                 QueryServicesOptions.DEFAULT_HISTOGRAM_BYTE_DEPTH);
     }
 

@@ -31,6 +31,7 @@ import org.apache.phoenix.pig.hadoop.PhoenixRecord;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.pig.PigException;
 import org.apache.pig.ResourceSchema.ResourceFieldSchema;
+import org.apache.pig.backend.hadoop.hbase.HBaseBinaryConverter;
 import org.apache.pig.builtin.Utf8StorageConverter;
 import org.apache.pig.data.DataByteArray;
 import org.apache.pig.data.DataType;
@@ -45,7 +46,7 @@ import com.google.common.collect.ImmutableMap.Builder;
 public final class TypeUtil {
 	
     private static final Log LOG = LogFactory.getLog(TypeUtil.class);
-	private static final Utf8StorageConverter utf8Converter = new Utf8StorageConverter();
+    private static final HBaseBinaryConverter binaryConverter = new HBaseBinaryConverter ();
 	private static final ImmutableMap<PDataType,Byte> phoenixTypeToPigDataType = init();	
 	
 	private TypeUtil(){
@@ -97,7 +98,6 @@ public final class TypeUtil {
 		if (obj == null) {
 			return null;
 		}
-	
 		PDataType sqlType;
 
 		switch (type) {
@@ -108,6 +108,7 @@ public final class TypeUtil {
 			sqlType = PDataType.VARCHAR;
 			break;
 		case DataType.DOUBLE:
+		case DataType.BIGDECIMAL:
 			sqlType = PDataType.DOUBLE;
 			break;
 		case DataType.FLOAT:
@@ -117,6 +118,7 @@ public final class TypeUtil {
 			sqlType = PDataType.INTEGER;
 			break;
 		case DataType.LONG:
+		case DataType.BIGINTEGER:
 			sqlType = PDataType.LONG;
 			break;
 		case DataType.BOOLEAN:
@@ -124,6 +126,9 @@ public final class TypeUtil {
 			break;
 		case DataType.DATETIME:
 			sqlType = PDataType.DATE;
+			break;
+		case DataType.BYTE:
+			sqlType = PDataType.TINYINT;
 			break;
 		default:
 			throw new RuntimeException("Unknown type " + obj.getClass().getName()
@@ -150,16 +155,17 @@ public final class TypeUtil {
 		if(inferredPType == null) {
 			return null;
 		}
-		
-		if(inferredPType == PDataType.VARBINARY && targetPhoenixType != PDataType.VARBINARY) {
+
+		if(inferredPType == PDataType.VARBINARY) {
 			try {
 				o = castBytes(o, targetPhoenixType);
-				inferredPType = getType(o, DataType.findType(o));
+				if(targetPhoenixType != PDataType.VARBINARY && targetPhoenixType != PDataType.BINARY) {
+					inferredPType = getType(o, DataType.findType(o));	
+				}
 			} catch (IOException e) {
 				throw new RuntimeException("Error while casting bytes for object " +o);
 			}
 		}
-
 		if(inferredPType == PDataType.DATE) {
 			int inferredSqlType = targetPhoenixType.getSqlType();
 
@@ -192,42 +198,36 @@ public final class TypeUtil {
 	 * @return Object
 	 * @throws IOException
 	 */
-    public static Object castBytes(Object o, PDataType targetPhoenixType) throws IOException {
+	private static Object castBytes(Object o, PDataType targetPhoenixType) throws IOException {
         byte[] bytes = ((DataByteArray)o).get();
         
         switch(targetPhoenixType) {
         case CHAR:
         case VARCHAR:
-            return utf8Converter.bytesToCharArray(bytes);
+            return binaryConverter.bytesToCharArray(bytes);
         case UNSIGNED_SMALLINT:
         case SMALLINT:
-            return utf8Converter.bytesToInteger(bytes).shortValue();
+            return binaryConverter.bytesToInteger(bytes).shortValue();
         case UNSIGNED_TINYINT:
         case TINYINT:
-            return utf8Converter.bytesToInteger(bytes).byteValue();
+            return binaryConverter.bytesToInteger(bytes).byteValue();
         case UNSIGNED_INT:
         case INTEGER:
-            return utf8Converter.bytesToInteger(bytes);
+        	return binaryConverter.bytesToInteger(bytes);
         case BOOLEAN:
-            return utf8Converter.bytesToBoolean(bytes);
-        case DECIMAL:
-            return utf8Converter.bytesToBigDecimal(bytes);
+            return binaryConverter.bytesToBoolean(bytes);
         case FLOAT:
         case UNSIGNED_FLOAT:
-            return utf8Converter.bytesToFloat(bytes);
+            return binaryConverter.bytesToFloat(bytes);
         case DOUBLE:
         case UNSIGNED_DOUBLE:
-            return utf8Converter.bytesToDouble(bytes);
+            return binaryConverter.bytesToDouble(bytes);
         case UNSIGNED_LONG:
         case LONG:
-            return utf8Converter.bytesToLong(bytes);
-        case TIME:
-        case TIMESTAMP:
-        case DATE:
-        case UNSIGNED_TIME:
-        case UNSIGNED_TIMESTAMP:
-        case UNSIGNED_DATE:
-        	return utf8Converter.bytesToDateTime(bytes);
+            return binaryConverter.bytesToLong(bytes);
+        case VARBINARY : 
+        case BINARY:
+        	 return bytes;
         default:
         	return o;
         }        

@@ -319,7 +319,7 @@ public class SkipRangeParallelIteratorRegionSplitterIT extends BaseClientManaged
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
-        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     private static List<KeyRange> getSplits(TableRef tableRef, final Scan scan, final List<HRegionLocation> regions,

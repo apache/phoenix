@@ -69,7 +69,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
       props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(64));
 
       // Must update config before starting server
-      setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+      setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
     
     @Test

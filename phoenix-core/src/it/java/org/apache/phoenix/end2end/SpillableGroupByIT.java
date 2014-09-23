@@ -66,7 +66,7 @@ public class SpillableGroupByIT extends BaseHBaseManagedTimeIT {
                 Integer.toString(1));
         // Large enough to not run out of memory, but small enough to spill
         props.put(QueryServices.MAX_MEMORY_SIZE_ATTRIB, Integer.toString(40000));
-        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     private long createTable() throws Exception {

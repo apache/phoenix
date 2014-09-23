@@ -43,7 +43,7 @@ public class BaseViewIT extends BaseHBaseManagedTimeIT {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         // Don't split intra region so we can more easily know that the n-way parallelization is for the explain plan
         // Must update config before starting server
-        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     protected void testUpdatableViewWithIndex(Integer saltBuckets, boolean localIndex) throws Exception {
