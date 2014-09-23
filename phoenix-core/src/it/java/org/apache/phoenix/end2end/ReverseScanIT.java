@@ -50,10 +50,10 @@ import com.google.common.collect.Maps;
 @Category(HBaseManagedTimeTest.class)
 public class ReverseScanIT extends BaseClientManagedTimeIT {
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         // Ensures our split points will be used
         // TODO: do deletePriorTables before test?
         Connection conn = DriverManager.getConnection(getUrl());
