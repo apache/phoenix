@@ -48,7 +48,7 @@ public class QueryPlanIT extends BaseHBaseManagedTimeIT {
         // Override date format so we don't have a bunch of zeros
         props.put(QueryServices.DATE_FORMAT_ATTRIB, "yyyy-MM-dd");
         // Must update config before starting server
-        setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
     @Test
