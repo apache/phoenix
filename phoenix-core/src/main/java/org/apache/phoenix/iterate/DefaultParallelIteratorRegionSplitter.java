@@ -64,7 +64,7 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         this.context = context;
         this.tableRef = table;
         ReadOnlyProps props = context.getConnection().getQueryServices().getProps();
-        this.guidePostsDepth = props.getLong(QueryServices.HISTOGRAM_BYTE_DEPTH_CONF_KEY,
+        this.guidePostsDepth = props.getLong(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB,
                 QueryServicesOptions.DEFAULT_HISTOGRAM_BYTE_DEPTH);
     }
 

@@ -50,7 +50,7 @@ public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
                 + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
         int histogramDepth = 60;
         Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
-        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_CONF_KEY, Integer.toString(histogramDepth));
+        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Integer.toString(histogramDepth));
         props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Integer.toString(frequency));
         driver = initAndRegisterDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
     }
