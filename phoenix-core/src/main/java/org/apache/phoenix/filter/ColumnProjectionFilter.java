@@ -103,6 +103,8 @@ public class ColumnProjectionFilter extends FilterBase {
         }
     }
 
+    // "ptr" to be used for one time comparisons in filterRowCells
+    private ImmutableBytesPtr ptr = new ImmutableBytesPtr();
     @Override
     public void filterRow(List<KeyValue> kvs) {
         if (kvs.isEmpty()) return;
@@ -110,18 +112,19 @@ public class ColumnProjectionFilter extends FilterBase {
         Iterator<KeyValue> itr = kvs.iterator();
         while (itr.hasNext()) {
             KeyValue kv = itr.next();
-            ImmutableBytesPtr f = new ImmutableBytesPtr(kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength());
-            if (this.columnsTracker.containsKey(f)) {
-                Set<ImmutableBytesPtr> cols = this.columnsTracker.get(f);
-                ImmutableBytesPtr q = new ImmutableBytesPtr(kv.getBuffer(), kv.getQualifierOffset(),
-                        kv.getQualifierLength());
-                if (cols != null && !(cols.contains(q))) {
+            ptr.set(kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength());
+            if (this.columnsTracker.containsKey(ptr)) {
+                Set<ImmutableBytesPtr> cols = this.columnsTracker.get(ptr);
+                ptr.set(kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength());
+                if (cols != null && !(cols.contains(ptr))) {
                     itr.remove();
                 }
             } else {
                 itr.remove();
             }
         }
+        // make sure we're not holding to any of the byte[]'s
+        ptr.set(HConstants.EMPTY_BYTE_ARRAY);
         if (kvs.isEmpty()) {
             kvs.add(new KeyValue(firstKV.getBuffer(), firstKV.getRowOffset(), firstKV.getRowLength(), this.emptyCFName,
                     0, this.emptyCFName.length, QueryConstants.EMPTY_COLUMN_BYTES, 0,
