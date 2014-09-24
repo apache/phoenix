@@ -292,7 +292,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             conn.close();
         }
     }
-    
+
     @Test
     public void testUpsertValuesWithArray() throws Exception {
         long ts = nextTimestamp();
@@ -373,7 +373,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             }
         }
     }
-    
+
     @Test
     public void testArraySelectWithORCondition() throws Exception {
         long ts = nextTimestamp();
@@ -552,7 +552,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             }
         }
     }
-   
+
     @Test
     public void testSelectWithArrayWithColumnRef() throws Exception {
         long ts = nextTimestamp();
@@ -583,7 +583,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             conn.close();
         }
     }
-    
+
     @Test
     public void testSelectWithArrayWithColumnRefWithVarLengthArray() throws Exception {
         long ts = nextTimestamp();
@@ -648,7 +648,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             conn.close();
         }
     }
-    
+
     @Test
     public void testUpsertSelectWithColumnRef() throws Exception {
         long ts = nextTimestamp();
@@ -790,7 +790,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE TABLE t ( k VARCHAR PRIMARY KEY, a bigint ARRAY[])");
         conn.close();
-        
+
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?)");
@@ -883,21 +883,21 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         Connection conn;
         PreparedStatement stmt;
         ResultSet rs;
-        
+
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE TABLE t ( k VARCHAR PRIMARY KEY, a CHAR(5) ARRAY)");
         conn.close();
-        
+
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.getMetaData().getColumns(null, null, "T", "A");
         assertTrue(rs.next());
         assertEquals(5, rs.getInt("COLUMN_SIZE"));
         conn.close();
-        
+
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?)");
@@ -908,7 +908,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         stmt.execute();
         conn.commit();
         conn.close();
-        
+
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT k, a[2] FROM t");
@@ -917,7 +917,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         assertEquals("2",rs.getString(2));
         conn.close();
     }
- 
+
 	@Test
 	public void testSelectArrayUsingUpsertLikeSyntax() throws Exception {
 		long ts = nextTimestamp();
@@ -947,7 +947,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			conn.close();
 		}
 	}
-	
+
 	@Test
 	public void testArrayIndexUsedInWhereClause() throws Exception {
 		long ts = nextTimestamp();
@@ -1008,7 +1008,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			conn.close();
 		}
 	}
-	
+
 	@Test
 	public void testVariableLengthArrayWithNullValue() throws Exception {
 		long ts = nextTimestamp();
@@ -1033,7 +1033,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			conn.close();
 		}
 	}
-	
+
 	@Test
 	public void testSelectSpecificIndexOfAVariableArrayAlongWithAnotherColumn1() throws Exception {
 	    long ts = nextTimestamp();
@@ -1061,7 +1061,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             conn.close();
         }
 	}
-	   
+
     @Test
     public void testSelectSpecificIndexOfAVariableArrayAlongWithAnotherColumn2() throws Exception {
         long ts = nextTimestamp();
@@ -1089,7 +1089,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             conn.close();
         }
     }
-    
+
     @Test
     public void testSelectMultipleArrayColumns() throws Exception {
         long ts = nextTimestamp();
@@ -1117,9 +1117,9 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
         } finally {
             conn.close();
-        } 
+        }
     }
-    
+
     @Test
     public void testSelectSameArrayColumnMultipleTimesWithDifferentIndices() throws Exception {
         long ts = nextTimestamp();
@@ -1127,7 +1127,9 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         createTableWithArray(getUrl(),
                 getDefaultSplits(tenantId), null, ts - 2);
         initTablesWithArrays(tenantId, null, ts, false, getUrl());
-        String query = "SELECT a_string_array[1], a_string_array[3] FROM table_with_array";
+        String query = "SELECT a_string_array[1], a_string_array[2], " +
+                "a_string_array[3], a_double_array[1], a_double_array[2], a_double_array[3] " +
+                "FROM table_with_array";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
@@ -1136,19 +1138,18 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
-            String[] strArr = new String[2];
-            strArr[0] = "ABC";
-            strArr[1] = "XYZWER";
-            String result = rs.getString(1);
-            assertEquals(strArr[0], result);
-            result = rs.getString(2);
-            assertEquals(strArr[1], result);
+            assertEquals("ABC", rs.getString(1));
+            assertEquals("CEDF", rs.getString(2));
+            assertEquals("XYZWER", rs.getString(3));
+            assertEquals(25.343, rs.getDouble(4), 0.0);
+            assertEquals(36.763, rs.getDouble(5), 0.0);
+            assertEquals(37.56, rs.getDouble(6), 0.0);
             assertFalse(rs.next());
         } finally {
             conn.close();
-        } 
+        }
     }
-    
+
     @Test
     public void testSelectSameArrayColumnMultipleTimesWithSameIndices() throws Exception {
         long ts = nextTimestamp();
@@ -1174,7 +1175,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
         } finally {
             conn.close();
-        } 
+        }
     }
 
 	@Test
@@ -1246,7 +1247,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
-			assertTrue(rs.next());			
+			assertTrue(rs.next());
 			int result = rs.getInt(1);
 			assertEquals(result, 4);
 			assertFalse(rs.next());
@@ -1254,7 +1255,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			conn.close();
 		}
 	}
-	
+
 
 	@Test
 	public void testArrayLengthFunctionForFixedLength() throws Exception {
@@ -1271,7 +1272,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
-			assertTrue(rs.next());			
+			assertTrue(rs.next());
 			int result = rs.getInt(1);
 			assertEquals(result, 4);
 			assertFalse(rs.next());
@@ -1279,7 +1280,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			conn.close();
 		}
 	}
-	
+
     @Test
     public void testArraySizeRoundtrip() throws Exception {
         long ts = nextTimestamp();
@@ -1292,17 +1293,17 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             ResultSet rs = conn.getMetaData().getColumns(null, null, StringUtil.escapeLike(TABLE_WITH_ARRAY), StringUtil.escapeLike(SchemaUtil.normalizeIdentifier("x_long_array")));
-            assertTrue(rs.next());          
+            assertTrue(rs.next());
             assertEquals(5, rs.getInt("ARRAY_SIZE"));
             assertFalse(rs.next());
 
             rs = conn.getMetaData().getColumns(null, null, StringUtil.escapeLike(TABLE_WITH_ARRAY), StringUtil.escapeLike(SchemaUtil.normalizeIdentifier("a_string_array")));
-            assertTrue(rs.next());          
+            assertTrue(rs.next());
             assertEquals(3, rs.getInt("ARRAY_SIZE"));
             assertFalse(rs.next());
 
             rs = conn.getMetaData().getColumns(null, null, StringUtil.escapeLike(TABLE_WITH_ARRAY), StringUtil.escapeLike(SchemaUtil.normalizeIdentifier("a_double_array")));
-            assertTrue(rs.next());          
+            assertTrue(rs.next());
             assertEquals(0, rs.getInt("ARRAY_SIZE"));
             assertTrue(rs.wasNull());
             assertFalse(rs.next());
@@ -1310,13 +1311,13 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             conn.close();
         }
     }
-    
+
     @Test
     public void testVarLengthArrComparisonInWhereClauseWithSameArrays() throws Exception {
         Connection conn;
         PreparedStatement stmt;
         ResultSet rs;
-        
+
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
@@ -1325,7 +1326,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
                 .execute(
                         "CREATE TABLE t_same_size ( k VARCHAR PRIMARY KEY, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4])");
         conn.close();
-        
+
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO t_same_size VALUES(?,?,?)");
@@ -1339,7 +1340,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         stmt.execute();
         conn.commit();
         conn.close();
-        
+
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT k, a_string_array[2] FROM t_same_size where a_string_array=b_string_array");
@@ -1348,7 +1349,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         assertEquals("def",rs.getString(2));
         conn.close();
     }
-    
+
     @Test
     public void testVarLengthArrComparisonInWhereClauseWithDiffSizeArrays() throws Exception {
         Connection conn;
@@ -1386,7 +1387,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         assertEquals("def", rs.getString(2));
         conn.close();
     }
-    
+
     @Test
     public void testVarLengthArrComparisonWithNulls() throws Exception {
         Connection conn;
@@ -1462,7 +1463,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             conn.close();
         }
     }
-    
+
     @Test
     public void testUpsertValuesWithNullUsingPreparedStmt() throws Exception {
         long ts = nextTimestamp();
@@ -1561,7 +1562,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         }
 
     }
-    
+
     @Test
     public void testArrayRefToLiteral() throws Exception {
         Connection conn;
@@ -1585,7 +1586,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         }
 
     }
-    
+
     static void createTableWithArray(String url, byte[][] bs, Object object,
 			long ts) throws SQLException {
 		String ddlStmt = "create table "
@@ -1611,7 +1612,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				+ ")";
 		BaseTest.createTestTable(url, ddlStmt, bs, ts);
 	}
-	
+
 	static void createSimpleTableWithArray(String url, byte[][] bs, Object object,
 			long ts) throws SQLException {
 		String ddlStmt = "create table "
@@ -1625,7 +1626,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				+ ")";
 		BaseTest.createTestTable(url, ddlStmt, bs, ts);
 	}
-	
+
 	protected static void initSimpleArrayTable(String tenantId, Date date, Long ts, boolean useNull) throws Exception {
    	 Properties props = new Properties();
         if (ts != null) {
@@ -1652,7 +1653,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             //doubleArr[2] = 9.9;
             Array array = conn.createArrayOf("DOUBLE", doubleArr);
             stmt.setArray(4, array);
-            
+
             // create character array
             String[] charArr =  new String[2];
             charArr[0] = "a";
@@ -1660,7 +1661,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             array = conn.createArrayOf("CHAR", charArr);
             stmt.setArray(5, array);
             stmt.execute();
-                
+
             conn.commit();
         } finally {
             conn.close();

@@ -22,9 +22,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
+import com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
@@ -62,13 +63,13 @@ import com.google.common.collect.Lists;
 
 
 /**
- * 
+ *
  * Wraps the scan performing a non aggregate query to prevent needless retries
  * if a Phoenix bug is encountered from our custom filter expression evaluation.
  * Unfortunately, until HBASE-7481 gets fixed, there's no way to do this from our
  * custom filters.
  *
- * 
+ *
  * @since 0.1
  */
 public class ScanRegionObserver extends BaseScannerRegionObserver {
@@ -97,7 +98,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             }
         }
     }
-    
+
     public static OrderedResultIterator deserializeFromScan(Scan scan, RegionScanner s) {
         byte[] topN = scan.getAttribute(BaseScannerRegionObserver.TOPN);
         if (topN == null) {
@@ -110,7 +111,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             int limit = WritableUtils.readVInt(input);
             int estimatedRowSize = WritableUtils.readVInt(input);
             int size = WritableUtils.readVInt(input);
-            List<OrderByExpression> orderByExpressions = Lists.newArrayListWithExpectedSize(size);           
+            List<OrderByExpression> orderByExpressions = Lists.newArrayListWithExpectedSize(size);
             for (int i = 0; i < size; i++) {
                 OrderByExpression orderByExpression = new OrderByExpression();
                 orderByExpression.readFields(input);
@@ -128,9 +129,9 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             }
         }
     }
-    
+
     private Expression[] deserializeArrayPostionalExpressionInfoFromScan(Scan scan, RegionScanner s,
-            List<KeyValueColumnExpression> arrayKVRefs) {
+            Set<KeyValueColumnExpression> arrayKVRefs) {
         byte[] specificArrayIdx = scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX);
         if (specificArrayIdx == null) {
             return null;
@@ -172,14 +173,14 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         final ImmutableBytesWritable tenantId = ScanUtil.getTenantId(scan);
-        
+
         RegionScanner innerScanner = s;
         if (p != null || j != null) {
             innerScanner = new HashJoinRegionScanner(s, p, j, tenantId, c.getEnvironment());
         }
-        
+
         final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner);
-        List<KeyValueColumnExpression> arrayKVRefs = new ArrayList<KeyValueColumnExpression>();
+        Set<KeyValueColumnExpression> arrayKVRefs = Sets.newHashSet();
         Expression[] arrayFuncRefs = deserializeArrayPostionalExpressionInfoFromScan(
                 scan, innerScanner, arrayKVRefs);
         innerScanner = getWrappedScanner(c, innerScanner, arrayKVRefs, arrayFuncRefs);
@@ -189,7 +190,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         // TODO:the above wrapped scanner should be used here also
         return getTopNScanner(c, innerScanner, iterator, tenantId);
     }
-    
+
     /**
      *  Return region scanner that does TopN.
      *  We only need to call startRegionOperation and closeRegionOperation when
@@ -218,10 +219,10 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         }
         return new BaseRegionScanner() {
             private Tuple tuple = firstTuple;
-            
+
             @Override
             public boolean isFilterDone() {
-                return tuple == null; 
+                return tuple == null;
             }
 
             @Override
@@ -235,11 +236,11 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                     if (isFilterDone()) {
                         return false;
                     }
-                    
+
                     for (int i = 0; i < tuple.size(); i++) {
                         results.add(tuple.getValue(i));
                     }
-                    
+
                     tuple = iterator.next();
                     return !isFilterDone();
                 } catch (Throwable t) {
@@ -257,17 +258,17 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             }
         };
     }
-        
+
     /**
      * Return wrapped scanner that catches unexpected exceptions (i.e. Phoenix bugs) and
      * re-throws as DoNotRetryIOException to prevent needless retrying hanging the query
      * for 30 seconds. Unfortunately, until HBASE-7481 gets fixed, there's no way to do
      * the same from a custom filter.
-     * @param arrayFuncRefs 
-     * @param arrayKVRefs 
+     * @param arrayFuncRefs
+     * @param arrayKVRefs
      */
-    private RegionScanner getWrappedScanner(final ObserverContext<RegionCoprocessorEnvironment> c, final RegionScanner s, 
-           final List<KeyValueColumnExpression> arrayKVRefs, final Expression[] arrayFuncRefs) {
+    private RegionScanner getWrappedScanner(final ObserverContext<RegionCoprocessorEnvironment> c, final RegionScanner s,
+           final Set<KeyValueColumnExpression> arrayKVRefs, final Expression[] arrayFuncRefs) {
         return new RegionScanner() {
 
             @Override
@@ -329,7 +330,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             public boolean reseek(byte[] row) throws IOException {
                 return s.reseek(row);
             }
-            
+
             @Override
             public long getMvccReadPoint() {
                 return s.getMvccReadPoint();
@@ -352,7 +353,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                 }
             }
 
-            
+
 
             @Override
             public boolean nextRaw(List<KeyValue> result, int limit, String metric) throws IOException {
@@ -360,8 +361,8 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                     boolean next = s.nextRaw(result, limit, metric);
                     if (result.size() == 0) {
                         return next;
-                    } else if ((arrayFuncRefs != null && arrayFuncRefs.length == 0) || arrayKVRefs.size() == 0) { 
-                        return next; 
+                    } else if ((arrayFuncRefs != null && arrayFuncRefs.length == 0) || arrayKVRefs.size() == 0) {
+                        return next;
                     }
                     // There is a scanattribute set to retrieve the specific array element
                     replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
@@ -372,15 +373,14 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                 }
             }
 
-            private void replaceArrayIndexElement(final List<KeyValueColumnExpression> arrayKVRefs,
+            private void replaceArrayIndexElement(final Set<KeyValueColumnExpression> arrayKVRefs,
                     final Expression[] arrayFuncRefs, List<KeyValue> result) {
                 MultiKeyValueTuple tuple = new MultiKeyValueTuple(result);
                 // The size of both the arrays would be same?
                 // Using KeyValueSchema to set and retrieve the value
                 // collect the first kv to get the row
                 KeyValue rowKv = result.get(0);
-                for (int i = 0; i < arrayKVRefs.size(); i++) {
-                    KeyValueColumnExpression kvExp = arrayKVRefs.get(i);
+                for (KeyValueColumnExpression kvExp : arrayKVRefs) {
                     if (kvExp.evaluate(tuple, ptr)) {
                         for (int idx = tuple.size() - 1; idx >= 0; idx--) {
                             KeyValue kv = tuple.getValue(idx);
@@ -409,6 +409,6 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
     protected boolean isRegionObserverFor(Scan scan) {
         return scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY) != null;
     }
-    
-    
+
+
 }
