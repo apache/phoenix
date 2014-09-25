@@ -80,6 +80,7 @@ import org.apache.phoenix.parse.ComparisonParseNode;
 import org.apache.phoenix.parse.DivideParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
+import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.InListParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
 import org.apache.phoenix.parse.LikeParseNode;
@@ -119,7 +120,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     protected final GroupBy groupBy;
     private int nodeCount;
     private final boolean resolveViewConstants;
-    
+
     ExpressionCompiler(StatementContext context) {
         this(context,GroupBy.EMPTY_GROUP_BY, false);
     }
@@ -145,7 +146,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     public boolean isTopLevel() {
         return nodeCount == 0;
     }
-    
+
     public void reset() {
         this.isAggregate = false;
         this.nodeCount = 0;
@@ -155,7 +156,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     public boolean visitEnter(ComparisonParseNode node) {
         return true;
     }
-    
+
     private void addBindParamMetaData(ParseNode lhsNode, ParseNode rhsNode, Expression lhsExpr, Expression rhsExpr) throws SQLException {
         if (lhsNode instanceof BindParseNode) {
             context.getBindManager().addParamMetaData((BindParseNode)lhsNode, rhsExpr);
@@ -164,7 +165,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             context.getBindManager().addParamMetaData((BindParseNode)rhsNode, lhsExpr);
         }
     }
-    
+
     @Override
     public Expression visitLeave(ComparisonParseNode node, List<Expression> children) throws SQLException {
         ParseNode lhsNode = node.getChildren().get(0);
@@ -172,7 +173,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         Expression lhsExpr = children.get(0);
         Expression rhsExpr = children.get(1);
         CompareOp op = node.getFilterOp();
-        
+
         if (lhsNode instanceof RowValueConstructorParseNode && rhsNode instanceof RowValueConstructorParseNode) {
             int i = 0;
             for (; i < Math.min(lhsExpr.getChildren().size(),rhsExpr.getChildren().size()); i++) {
@@ -281,7 +282,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     protected Expression addExpression(Expression expression) {
         return context.getExpressionManager().addIfAbsent(expression);
     }
-   
+
     @Override
     /**
      * @param node a function expression node
@@ -403,7 +404,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         }
         return true;
     }
-    
+
     @Override
     public Expression visitLeave(CaseParseNode node, List<Expression> l) throws SQLException {
         final CaseExpression caseExpression = new CaseExpression(l);
@@ -465,16 +466,18 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 if (lhsMaxLength != null && lhsMaxLength != rhsLiteral.length()) {
                     return LiteralExpression.newConstant(false, rhs.isDeterministic());
                 }
-                CompareOp op = node.isNegate() ? CompareOp.NOT_EQUAL : CompareOp.EQUAL;
-                if (pattern.equals(rhsLiteral)) {
-                    return new ComparisonExpression(op, children);
-                } else {
-                    rhs = LiteralExpression.newConstant(rhsLiteral, PDataType.CHAR, rhs.isDeterministic());
-                    return new ComparisonExpression(op, Arrays.asList(lhs,rhs));
+                if (node.getLikeType() == LikeType.CASE_SENSITIVE) {
+                  CompareOp op = node.isNegate() ? CompareOp.NOT_EQUAL : CompareOp.EQUAL;
+                  if (pattern.equals(rhsLiteral)) {
+                      return new ComparisonExpression(op, children);
+                  } else {
+                      rhs = LiteralExpression.newConstant(rhsLiteral, PDataType.CHAR, rhs.isDeterministic());
+                      return new ComparisonExpression(op, Arrays.asList(lhs,rhs));
+                  }
                 }
             }
         }
-        Expression expression = new LikeExpression(children);
+        Expression expression = new LikeExpression(children, node.getLikeType());
         if (ExpressionUtil.isConstant(expression)) {
             ImmutableBytesWritable ptr = context.getTempPtr();
             if (!expression.evaluate(null, ptr)) {

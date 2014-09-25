@@ -50,6 +50,7 @@ import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.visitor.TraverseNoExpressionVisitor;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
@@ -877,7 +878,8 @@ public class WhereOptimizer {
         @Override
         public Iterator<Expression> visitEnter(LikeExpression node) {
             // TODO: can we optimize something that starts with '_' like this: foo LIKE '_a%' ?
-            if (! (node.getChildren().get(1) instanceof LiteralExpression) || node.startsWithWildcard()) {
+            if (node.getLikeType() == LikeType.CASE_INSENSITIVE || // TODO: remove this when we optimize ILIKE
+                ! (node.getChildren().get(1) instanceof LiteralExpression) || node.startsWithWildcard()) {
                 return Iterators.emptyIterator();
             }
 
@@ -886,6 +888,7 @@ public class WhereOptimizer {
 
         @Override
         public KeySlots visitLeave(LikeExpression node, List<KeySlots> childParts) {
+            // TODO: optimize ILIKE by creating two ranges for the literal prefix: one with lower case, one with upper case
             if (childParts.isEmpty()) {
                 return null;
             }

@@ -29,6 +29,7 @@ tokens
     TRUE='true';
     FALSE='false';
     LIKE='like';
+    ILIKE='ilike';
     AS='as';
     OUTER='outer';
     ON='on';
@@ -148,6 +149,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.parse.LikeParseNode.LikeType;
 }
 
 @lexer::header {
@@ -712,7 +714,8 @@ comparison_op returns [CompareOp ret]
 boolean_expression returns [ParseNode ret]
     :   l=value_expression ((op=comparison_op (r=value_expression | ((all=ALL | any=ANY) LPAREN r=value_expression RPAREN)) {$ret = all != null ? factory.wrapInAll(op, l, r) : any != null ? factory.wrapInAny(op, l, r) : factory.comparison(op,l,r); } )
                   |  (IS n=NOT? NULL {$ret = factory.isNull(l,n!=null); } )
-                  |  ( n=NOT? ((LIKE r=value_expression {$ret = factory.like(l,r,n!=null); } )
+                  |  ( n=NOT? ((LIKE r=value_expression {$ret = factory.like(l,r,n!=null,LikeType.CASE_SENSITIVE); } )
+                      |        (ILIKE r=value_expression {$ret = factory.like(l,r,n!=null,LikeType.CASE_INSENSITIVE); } )
                       |        (EXISTS LPAREN r=subquery_expression RPAREN {$ret = factory.exists(l,r,n!=null);} )
                       |        (BETWEEN r1=value_expression AND r2=value_expression {$ret = factory.between(l,r1,r2,n!=null); } )
                       |        ((IN ((r=bind_expression {$ret = factory.inList(Arrays.asList(l,r),n!=null);} )
