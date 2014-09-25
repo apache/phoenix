@@ -1592,6 +1592,143 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             rs = statement.executeQuery();
             assertFalse(rs.next());
 
+            // Test 5
+            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE 'abcdef' LIKE '%bCd%'");
+            rs = statement.executeQuery();
+            assertFalse(rs.next());
+
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testILikeOnColumn() throws Exception {
+        long ts = nextTimestamp();
+        ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
+
+        // Insert all rows at ts
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        PreparedStatement stmt = conn.prepareStatement("upsert into PTSDB(INST, HOST, DATE, VAL, PATTERN VARCHAR) VALUES (?, ?, ?, 0.5, 'x_Z%')");
+        stmt.setDate(3, D1);
+
+        stmt.setString(1, "a");
+        stmt.setString(2, "a");
+        stmt.execute();
+
+        stmt.setString(1, "x");
+        stmt.setString(2, "a");
+        stmt.execute();
+
+        stmt.setString(1, "xy");
+        stmt.setString(2, "b");
+        stmt.execute();
+
+        stmt.setString(1, "xyz");
+        stmt.setString(2, "c");
+        stmt.execute();
+
+        stmt.setString(1, "xyza");
+        stmt.setString(2, "d");
+        stmt.execute();
+
+        stmt.setString(1, "xyzab");
+        stmt.setString(2, "e");
+        stmt.execute();
+
+        stmt.setString(1, "z");
+        stmt.setString(2, "e");
+        stmt.execute();
+
+        conn.commit();
+        conn.close();
+
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        conn = DriverManager.getConnection(url, props);
+        PreparedStatement statement;
+        ResultSet rs;
+        try {
+            // Test 1
+            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE INST ILIKE 'x%'");
+            rs = statement.executeQuery();
+
+            assertTrue(rs.next());
+            assertEquals("x", rs.getString(1));
+
+            assertTrue(rs.next());
+            assertEquals("xy", rs.getString(1));
+
+            assertTrue(rs.next());
+            assertEquals("xyz", rs.getString(1));
+
+            assertTrue(rs.next());
+            assertEquals("xyza", rs.getString(1));
+
+            assertTrue(rs.next());
+            assertEquals("xyzab", rs.getString(1));
+
+            assertFalse(rs.next());
+
+            // Test 2
+            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE INST ILIKE 'xy_a%'");
+            rs = statement.executeQuery();
+
+            assertTrue(rs.next());
+            assertEquals("xyza", rs.getString(1));
+
+            assertTrue(rs.next());
+            assertEquals("xyzab", rs.getString(1));
+
+            assertFalse(rs.next());
+
+            // Test 3
+            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE INST NOT ILIKE 'xy_a%'");
+            rs = statement.executeQuery();
+
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+
+            assertTrue(rs.next());
+            assertEquals("x", rs.getString(1));
+
+            assertTrue(rs.next());
+            assertEquals("xy", rs.getString(1));
+
+            assertTrue(rs.next());
+            assertEquals("xyz", rs.getString(1));
+
+            assertTrue(rs.next());
+            assertEquals("z", rs.getString(1));
+
+            assertFalse(rs.next());
+
+            // Test 4
+            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE 'xzabc' ILIKE 'xy_a%'");
+            rs = statement.executeQuery();
+            assertFalse(rs.next());
+
+            // Test 5
+            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE 'abcdef' ILIKE '%bCd%'");
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+
+            // Test 5
+            statement = conn.prepareStatement("SELECT INST FROM PTSDB(PATTERN VARCHAR) WHERE INST ILIKE PATTERN");
+            rs = statement.executeQuery();
+
+            assertTrue(rs.next());
+            assertEquals("xyz", rs.getString(1));
+
+            assertTrue(rs.next());
+            assertEquals("xyza", rs.getString(1));
+
+            assertTrue(rs.next());
+            assertEquals("xyzab", rs.getString(1));
+
+            assertFalse(rs.next());
+
         } finally {
             conn.close();
         }

@@ -75,6 +75,11 @@ public abstract class TraverseAllParseNodeVisitor<T> extends BaseParseNodeVisito
     }
     
     @Override
+    public boolean visitEnter(InParseNode node) throws SQLException {
+        return true;
+    }
+    
+    @Override
     public boolean visitEnter(IsNullParseNode node) throws SQLException {
         return true;
     }
@@ -141,6 +146,11 @@ public abstract class TraverseAllParseNodeVisitor<T> extends BaseParseNodeVisito
 
     @Override
     public T visit(FamilyWildcardParseNode node) throws SQLException {
+        return null;
+    }
+
+    @Override
+    public T visit(SubqueryParseNode node) throws SQLException {
         return null;
     }
     

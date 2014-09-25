@@ -59,10 +59,10 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
         assertEquals(
         		"CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
         		"    SERVER FILTER BY FIRST KEY ONLY\n" +
-        		"    PARALLEL EQUI-JOIN 1 HASH TABLES:\n" +
+        		"    PARALLEL EQUI/SEMI/ANTI-JOIN 1 TABLES:\n" +
         		"    BUILD HASH TABLE 0\n" +
         		"        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-        		"            PARALLEL EQUI-JOIN 2 HASH TABLES:\n" +
+        		"            PARALLEL EQUI/SEMI/ANTI-JOIN 2 TABLES:\n" +
         		"            BUILD HASH TABLE 0\n" +
         		"                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + "\n" +
         		"                    SERVER FILTER BY NAME LIKE 'C%'\n" +

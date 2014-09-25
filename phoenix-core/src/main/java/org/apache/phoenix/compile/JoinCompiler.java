@@ -56,6 +56,7 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.InListParseNode;
+import org.apache.phoenix.parse.InParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
 import org.apache.phoenix.parse.JoinTableNode;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
@@ -830,6 +831,12 @@ public class JoinCompiler {
 
         @Override
         public Void visitLeave(InListParseNode node,
+                List<Void> l) throws SQLException {
+            return leaveBooleanNode(node, l);
+        }
+
+        @Override
+        public Void visitLeave(InParseNode node,
                 List<Void> l) throws SQLException {
             return leaveBooleanNode(node, l);
         }

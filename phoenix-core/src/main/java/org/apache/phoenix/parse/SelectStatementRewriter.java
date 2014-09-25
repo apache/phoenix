@@ -183,4 +183,17 @@ public class SelectStatementRewriter extends ParseNodeRewriter {
     public ParseNode visitLeave(InListParseNode node, List<ParseNode> c) throws SQLException {
         return c.isEmpty() ? null : node;
     }
+    
+    @Override
+    public boolean visitEnter(InParseNode node) throws SQLException {
+        if (removeNodes.contains(node)) {
+            return false;
+        }
+        return true;
+    }
+    
+    @Override
+    public ParseNode visitLeave(InParseNode node, List<ParseNode> c) throws SQLException {
+        return c.isEmpty() ? null : node;
+    }
 }

@@ -17,10 +17,6 @@
  */
 package org.apache.phoenix.query;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CYCLE_FLAG;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 
@@ -1518,12 +1514,28 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             }
                             try {
                                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
-                                
-                                // TODO : Get this from a configuration
+                            } catch (NewerTableAlreadyExistsException ignore) {
+                                // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
+                                // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
+
+                            } catch (TableAlreadyExistsException ignore) {
+                                // This will occur if we have an older SYSTEM.SEQUENCE, so we need to update it to include
+                                // any new columns we've added.
+                                String newColumns = PhoenixDatabaseMetaData.MIN_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", "
+                                        + PhoenixDatabaseMetaData.MAX_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", " + PhoenixDatabaseMetaData.CYCLE_FLAG + " "
+                                        + PDataType.BOOLEAN.getSqlTypeName() + ", " + PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG + " "
+                                        + PDataType.BOOLEAN.getSqlTypeName();
+                                metaConnection = addColumnsIfNotExists(metaConnection,
+                                        PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME,
+                                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, newColumns);
+                            }
+                            try {
                                 metaConnection.createStatement().executeUpdate(
                                         QueryConstants.CREATE_STATS_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
-                            } catch (TableAlreadyExistsException ignore) {
+
+                            } catch(TableAlreadyExistsException ignore) {
+                                
                             }
                         } catch (Exception e) {
                             if (e instanceof SQLException) {

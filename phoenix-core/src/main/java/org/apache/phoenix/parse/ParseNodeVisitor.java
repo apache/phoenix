@@ -18,7 +18,6 @@
 package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.util.List;
 
 
@@ -82,6 +81,9 @@ public interface ParseNodeVisitor<E> {
     public boolean visitEnter(InListParseNode node) throws SQLException;
     public E visitLeave(InListParseNode node, List<E> l) throws SQLException;
     
+    public boolean visitEnter(InParseNode node) throws SQLException;
+    public E visitLeave(InParseNode node, List<E> l) throws SQLException;
+    
     public boolean visitEnter(IsNullParseNode node) throws SQLException;
     public E visitLeave(IsNullParseNode node, List<E> l) throws SQLException;
     
@@ -90,7 +92,8 @@ public interface ParseNodeVisitor<E> {
     public E visit(BindParseNode node) throws SQLException;
     public E visit(WildcardParseNode node) throws SQLException;
     public E visit(TableWildcardParseNode node) throws SQLException;
-    public E visit(FamilyWildcardParseNode node) throws SQLException;  
+    public E visit(FamilyWildcardParseNode node) throws SQLException;
+    public E visit(SubqueryParseNode node) throws SQLException;
     public E visit(ParseNode node) throws SQLException;  
     
     public boolean visitEnter(StringConcatParseNode node) throws SQLException;
