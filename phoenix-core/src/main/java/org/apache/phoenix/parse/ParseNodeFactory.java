@@ -39,6 +39,7 @@ import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
+import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -86,12 +87,12 @@ public class ParseNodeFactory {
             this.upperName = lowerName;
             this.argCount = argCount;
         }
-        
+
         @Override
         public String toString() {
             return upperName;
         }
-        
+
         @Override
         public int hashCode() {
             final int prime = 31;
@@ -187,7 +188,7 @@ public class ParseNodeFactory {
     public AliasedNode aliasedNode(String alias, ParseNode expression) {
     	return new AliasedNode(alias, expression);
     }
-    
+
     public AddParseNode add(List<ParseNode> children) {
         return new AddParseNode(children);
     }
@@ -199,7 +200,7 @@ public class ParseNodeFactory {
     public MultiplyParseNode multiply(List<ParseNode> children) {
         return new MultiplyParseNode(children);
     }
-    
+
     public ModulusParseNode modulus(List<ParseNode> children) {
         return new ModulusParseNode(children);
     }
@@ -207,11 +208,11 @@ public class ParseNodeFactory {
     public AndParseNode and(List<ParseNode> children) {
         return new AndParseNode(children);
     }
-    
+
     public FamilyWildcardParseNode family(String familyName){
     	    return new FamilyWildcardParseNode(familyName, false);
     }
-    
+
     public TableWildcardParseNode tableWildcard(TableName tableName) {
         return new TableWildcardParseNode(tableName, false);
     }
@@ -235,7 +236,7 @@ public class ParseNodeFactory {
     public ColumnParseNode column(TableName tableName, String name, String alias) {
         return new ColumnParseNode(tableName,name,alias);
     }
-    
+
     public ColumnName columnName(String columnName) {
         return new ColumnName(columnName);
     }
@@ -255,7 +256,7 @@ public class ParseNodeFactory {
     public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isNull, Integer maxLength, Integer scale, boolean isPK, SortOrder sortOrder) {
         return new ColumnDef(columnDefName, sqlTypeName, isNull, maxLength, scale, isPK, sortOrder);
     }
-    
+
     public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength, Integer scale, boolean isPK, 
         	SortOrder sortOrder) {
         return new ColumnDef(columnDefName, sqlTypeName, isArray, arrSize, isNull, maxLength, scale, isPK, sortOrder);
@@ -264,54 +265,54 @@ public class ParseNodeFactory {
     public PrimaryKeyConstraint primaryKey(String name, List<Pair<ColumnName, SortOrder>> columnNameAndSortOrder) {
         return new PrimaryKeyConstraint(name, columnNameAndSortOrder);
     }
-    
+
     public CreateTableStatement createTable(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType, boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount) {
         return new CreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount);
     }
-    
+
     public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable, PrimaryKeyConstraint pkConstraint, List<ColumnName> includeColumns, List<ParseNode> splits, ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, int bindCount) {
         return new CreateIndexStatement(indexName, dataTable, pkConstraint, includeColumns, splits, props, ifNotExists, indexType, bindCount);
     }
-    
+
     public CreateSequenceStatement createSequence(TableName tableName, ParseNode startsWith,
             ParseNode incrementBy, ParseNode cacheSize, ParseNode minValue, ParseNode maxValue,
             boolean cycle, boolean ifNotExits, int bindCount) {
         return new CreateSequenceStatement(tableName, startsWith, incrementBy, cacheSize, minValue,
                 maxValue, cycle, ifNotExits, bindCount);
     }
-    
+
     public DropSequenceStatement dropSequence(TableName tableName, boolean ifExits, int bindCount){
         return new DropSequenceStatement(tableName, ifExits, bindCount);
     }
-    
-	public SequenceValueParseNode currentValueFor(TableName tableName) {
-		return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.CURRENT_VALUE);
-	}
-    
+
+    public SequenceValueParseNode currentValueFor(TableName tableName) {
+        return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.CURRENT_VALUE);
+    }
+
     public SequenceValueParseNode nextValueFor(TableName tableName) {
         return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.NEXT_VALUE);
     }
-    
+
     public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, Map<String,Object> props) {
         return new AddColumnStatement(table, tableType, columnDefs, ifNotExists, props);
     }
-    
+
     public DropColumnStatement dropColumn(NamedTableNode table,  PTableType tableType, List<ColumnName> columnNodes, boolean ifExists) {
         return new DropColumnStatement(table, tableType, columnNodes, ifExists);
     }
-    
+
     public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
         return new DropTableStatement(tableName, tableType, ifExists, cascade);
     }
-    
+
     public DropIndexStatement dropIndex(NamedNode indexName, TableName tableName, boolean ifExists) {
         return new DropIndexStatement(indexName, tableName, ifExists);
     }
-    
+
     public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state) {
         return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state);
     }
-    
+
     public TableName table(String schemaName, String tableName) {
         return TableName.createNormalized(schemaName,tableName);
     }
@@ -339,7 +340,7 @@ public class ParseNodeFactory {
     public DivideParseNode divide(List<ParseNode> children) {
         return new DivideParseNode(children);
     }
-    
+
     public UpdateStatisticsStatement updateStatistics(NamedTableNode table) {
       return new UpdateStatisticsStatement(table);
     }
@@ -354,7 +355,7 @@ public class ParseNodeFactory {
             throw new UnsupportedOperationException("DISTINCT not supported with " + name);
         }
     }
-    
+
     public FunctionParseNode arrayElemRef(List<ParseNode> args) {
     	return function(ARRAY_ELEM, args);
     }
@@ -410,10 +411,9 @@ public class ParseNodeFactory {
         for (JoinPartNode part : parts) {
             table = new JoinTableNode(part.getType(), table, part.getTable(), part.getOnNode());
         }
-        
         return table;
     }
-    
+
     JoinPartNode joinPart(JoinType type, ParseNode onNode, TableNode table) {
         return new JoinPartNode(type, onNode, table);
     }
@@ -426,10 +426,9 @@ public class ParseNodeFactory {
         return new DerivedTableNode(alias, select);
     }
 
-    public LikeParseNode like(ParseNode lhs, ParseNode rhs, boolean negate) {
-        return new LikeParseNode(lhs, rhs, negate);
+    public LikeParseNode like(ParseNode lhs, ParseNode rhs, boolean negate, LikeType likeType) {
+        return new LikeParseNode(lhs, rhs, negate, likeType);
     }
-
 
     public LiteralParseNode literal(Object value) {
         return new LiteralParseNode(value);
@@ -450,11 +449,11 @@ public class ParseNodeFactory {
     public CastParseNode cast(ParseNode expression, String dataType, Integer maxLength, Integer scale, boolean arr) {
         return new CastParseNode(expression, dataType, maxLength, scale, arr);
     }
-    
+
     public ParseNode rowValueConstructor(List<ParseNode> l) {
         return new RowValueConstructorParseNode(l);
     }
-    
+
     private void checkTypeMatch (PDataType expectedType, PDataType actualType) throws SQLException {
         if (!expectedType.isCoercibleTo(actualType)) {
             throw TypeMismatchException.newException(expectedType, actualType);
@@ -509,7 +508,7 @@ public class ParseNodeFactory {
     public ArrayAllComparisonNode wrapInAll(CompareOp op, ParseNode lhs, ParseNode rhs) {
         return new ArrayAllComparisonNode(rhs, comparison(op, lhs, elementRef(Arrays.<ParseNode>asList(rhs, literal(1)))));
     }
-    
+
     public ArrayElemRefNode elementRef(List<ParseNode> parseNode) {
         return new ArrayElemRefNode(parseNode);
     }
@@ -566,18 +565,18 @@ public class ParseNodeFactory {
     public OuterJoinParseNode outer(ParseNode node) {
         return new OuterJoinParseNode(node);
     }
-    
+
     public SelectStatement select(List<? extends TableNode> from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
             List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
 
         return new SelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy, having,
                 orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate, hasSequence);
     }
-    
+
     public UpsertStatement upsert(NamedTableNode table, HintNode hint, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount) {
         return new UpsertStatement(table, hint, columns, values, select, bindCount);
     }
-    
+
     public DeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode node, List<OrderByNode> orderBy, LimitNode limit, int bindCount) {
         return new DeleteStatement(table, hint, node, orderBy, limit, bindCount);
     }

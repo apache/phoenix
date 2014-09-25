@@ -31,15 +31,24 @@ import java.util.List;
  * @since 0.1
  */
 public class LikeParseNode extends BinaryParseNode {
-    private final boolean negate;
 
-    LikeParseNode(ParseNode lhs, ParseNode rhs, boolean negate) {
+    public enum LikeType {CASE_SENSITIVE, CASE_INSENSITIVE}
+
+    private final boolean negate;
+    private final LikeType likeType;
+
+    LikeParseNode(ParseNode lhs, ParseNode rhs, boolean negate, LikeType likeType) {
         super(lhs, rhs);
         this.negate = negate;
+        this.likeType = likeType;
     }
-    
+
     public boolean isNegate() {
         return negate;
+    }
+
+    public LikeType getLikeType() {
+      return likeType;
     }
 
     @Override

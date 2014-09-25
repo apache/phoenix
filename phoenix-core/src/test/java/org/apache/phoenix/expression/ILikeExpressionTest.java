@@ -27,18 +27,19 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.junit.Test;
 
-public class LikeExpressionTest {
+public class ILikeExpressionTest {
     public boolean testExpression (String value, String expression) {
       LiteralExpression v = LiteralExpression.newConstant(value);
       LiteralExpression p = LiteralExpression.newConstant(expression);
       List<Expression> children = Arrays.<Expression>asList(v,p);
-      LikeExpression e = new LikeExpression(children, LikeType.CASE_SENSITIVE);
+      LikeExpression e = new LikeExpression(children, LikeType.CASE_INSENSITIVE);
       ImmutableBytesWritable ptr = new ImmutableBytesWritable();
       boolean evaluated = e.evaluate(null, ptr);
       Boolean result = (Boolean)e.getDataType().toObject(ptr);
       assertTrue(evaluated);
       return result;
     }
+
     @Test
     public void testStartWildcard() throws Exception {
         assertEquals(Boolean.FALSE, testExpression ("149na7-app1-2-", "%-w"));
@@ -50,12 +51,12 @@ public class LikeExpressionTest {
     @Test
     public void testCaseSensitive() throws Exception {
         assertEquals(Boolean.TRUE, testExpression ("test", "test"));
-        assertEquals(Boolean.FALSE, testExpression ("test", "teSt"));
+        assertEquals(Boolean.TRUE, testExpression ("test", "teSt"));
     }
 
     @Test
     public void testStartWildcardAndCaseInsensitive() throws Exception {
         assertEquals(Boolean.TRUE, testExpression ("test", "%s%"));
-        assertEquals(Boolean.FALSE, testExpression ("test", "%S%"));
+        assertEquals(Boolean.TRUE, testExpression ("test", "%S%"));
     }
- }
+}
