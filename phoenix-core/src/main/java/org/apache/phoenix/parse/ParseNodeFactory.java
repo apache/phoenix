@@ -500,6 +500,14 @@ public class ParseNodeFactory {
             throw new IllegalArgumentException("Unexpcted CompareOp of " + op);
         }
     }
+    
+    public ArrayAnyComparisonNode arrayAny(ParseNode rhs, ComparisonParseNode compareNode) {
+        return new ArrayAnyComparisonNode(rhs, compareNode);
+    }
+    
+    public ArrayAllComparisonNode arrayAll(ParseNode rhs, ComparisonParseNode compareNode) {
+        return new ArrayAllComparisonNode(rhs, compareNode);
+    }
 
     public ArrayAnyComparisonNode wrapInAny(CompareOp op, ParseNode lhs, ParseNode rhs) {
         return new ArrayAnyComparisonNode(rhs, comparison(op, lhs, elementRef(Arrays.<ParseNode>asList(rhs, literal(1)))));
@@ -598,8 +606,14 @@ public class ParseNodeFactory {
                 statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
     }
 
-    public SubqueryParseNode subquery(SelectStatement select) {
-        return new SubqueryParseNode(select);
+    public SelectStatement select(SelectStatement statement, LimitNode limit) {
+        return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(),
+                statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), limit,
+                statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
+    }
+
+    public SubqueryParseNode subquery(SelectStatement select, boolean expectSingleRow) {
+        return new SubqueryParseNode(select, expectSingleRow);
     }
 
     public LimitNode limit(BindParseNode b) {

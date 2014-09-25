@@ -78,6 +78,7 @@ public enum SQLExceptionCode {
     SERVER_ARITHMETIC_ERROR(212, "22012", "Arithmetic error on server."),
     VALUE_OUTSIDE_RANGE(213,"22003","Value outside range."),
     VALUE_IN_LIST_NOT_CONSTANT(214, "22008", "Values in IN must evaluate to a constant."),
+    SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS(215, "22015", "Single-row subquery returns more than one row."),
     
     /**
      * Constraint Violation (errorcode 03, sqlstate 23)
