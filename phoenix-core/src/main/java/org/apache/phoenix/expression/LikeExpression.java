@@ -18,15 +18,18 @@
 package org.apache.phoenix.expression;
 
 import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.List;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.io.WritableUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.StringUtil;
@@ -46,10 +49,15 @@ import org.apache.phoenix.util.StringUtil;
  */
 public class LikeExpression extends BaseCompoundExpression {
     private static final Logger logger = LoggerFactory.getLogger(LikeExpression.class);
-    
+
     private static final String ZERO_OR_MORE = "\\E.*\\Q";
     private static final String ANY_ONE = "\\E.\\Q";
-    
+
+    /**
+     * Store whether this like expression has to be case sensitive or not.
+     */
+    private LikeType likeType;
+
     public static String unescapeLike(String s) {
         return StringUtil.replace(s, StringUtil.LIKE_ESCAPE_SEQS, StringUtil.LIKE_UNESCAPED_SEQS);
     }
@@ -67,7 +75,7 @@ public class LikeExpression extends BaseCompoundExpression {
     public static boolean hasWildcards(String s) {
         return indexOfWildcard(s) != -1;
     }
-    
+
     /**
      * Replace unescaped '*' and '?' in s with '%' and '_' respectively
      * such that the returned string may be used in a LIKE expression.
@@ -95,7 +103,7 @@ public class LikeExpression extends BaseCompoundExpression {
             if (underPos != -1 && (i == -1 || underPos < i)) {
                 i = underPos;
             }
-            
+
             if (i > 0 && s.charAt(i - 1) == '\\') {
                 // If we found protection then keep looking
                 buf.append(s.substring(j,i-1));
@@ -108,7 +116,7 @@ public class LikeExpression extends BaseCompoundExpression {
             j = ++i;
         }
     }
-    
+
     public static int indexOfWildcard(String s) {
         // Look for another unprotected % or _ in the middle
         if (s == null) {
@@ -125,7 +133,7 @@ public class LikeExpression extends BaseCompoundExpression {
             if (underPos != -1 && (i == -1 || underPos < i)) {
                 i = underPos;
             }
-            
+
             if (i > 0 && s.charAt(i - 1) == '\\') {
                 // If we found protection then keep looking
                 i++;
@@ -186,26 +194,38 @@ public class LikeExpression extends BaseCompoundExpression {
 //    }
 
     private Pattern pattern;
-    
+
     public LikeExpression() {
     }
 
-    public LikeExpression(List<Expression> children) {
+    public LikeExpression(List<Expression> children, LikeType likeType) {
         super(children);
+        this.likeType = likeType;
         init();
     }
-    
+
+    public LikeType getLikeType () {
+      return likeType;
+    }
+
     public boolean startsWithWildcard() {
         return pattern != null && pattern.pattern().startsWith("\\Q\\E");
     }
-    
+
     private void init() {
         Expression e = getPatternExpression();
         if (e instanceof LiteralExpression) {
             LiteralExpression patternExpression = (LiteralExpression)e;
             String value = (String)patternExpression.getValue();
-            pattern = Pattern.compile(toPattern(value));
+            pattern = compilePattern(value);
         }
+    }
+
+    protected Pattern compilePattern (String value) {
+        if (likeType == LikeType.CASE_SENSITIVE)
+            return Pattern.compile(toPattern(value));
+        else
+            return Pattern.compile("(?i)" + toPattern(value));
     }
 
     private Expression getStrExpression() {
@@ -227,12 +247,12 @@ public class LikeExpression extends BaseCompoundExpression {
                 return false;
             }
             String value = (String)PDataType.VARCHAR.toObject(ptr, getPatternExpression().getSortOrder());
-            pattern = Pattern.compile(toPattern(value));
+            pattern = compilePattern(value);
             if (logger.isDebugEnabled()) {
                 logger.debug("LIKE pattern is expression: " + pattern.pattern());
             }
         }
-        
+
         if (!getStrExpression().evaluate(tuple, ptr)) {
             if (logger.isDebugEnabled()) {
                 logger.debug("LIKE is FALSE: child expression is null");
@@ -242,7 +262,7 @@ public class LikeExpression extends BaseCompoundExpression {
         if (ptr.getLength() == 0) {
             return true;
         }
-        
+
         String value = (String)PDataType.VARCHAR.toObject(ptr, getStrExpression().getSortOrder());
         boolean matched = pattern.matcher(value).matches();
         ptr.set(matched ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
@@ -256,13 +276,24 @@ public class LikeExpression extends BaseCompoundExpression {
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
         init();
+        try {
+            likeType = LikeType.values()[WritableUtils.readVInt(input)];
+        } catch (EOFException e) {
+            likeType = LikeType.CASE_SENSITIVE;
+        }
+    }
+
+    @Override
+    public void write(DataOutput output) throws IOException {
+        super.write(output);
+        WritableUtils.writeVInt(output, likeType.ordinal());
     }
 
     @Override
     public PDataType getDataType() {
         return PDataType.BOOLEAN;
     }
-    
+
     @Override
     public final <T> T accept(ExpressionVisitor<T> visitor) {
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
@@ -292,7 +323,7 @@ public class LikeExpression extends BaseCompoundExpression {
         pattern.lastIndexOf(ANY_ONE, pattern.length() - endsWith.length() - 1) == -1 &&
         pattern.lastIndexOf(ZERO_OR_MORE, pattern.length() - endsWith.length() - 1) == -1;
     }
-    
+
     @Override
     public String toString() {
         return (children.get(0) + " LIKE " + children.get(1));
