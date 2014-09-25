@@ -82,6 +82,7 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.InListParseNode;
+import org.apache.phoenix.parse.InParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
 import org.apache.phoenix.parse.LikeParseNode;
 import org.apache.phoenix.parse.LiteralParseNode;
@@ -93,6 +94,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.RowValueConstructorParseNode;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.StringConcatParseNode;
+import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.parse.UnsupportedAllParseNodeVisitor;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -104,6 +106,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
@@ -111,6 +114,8 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.collect.Lists;
 
 
 public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expression> {
@@ -1219,5 +1224,37 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     @Override
     public boolean visitEnter(ArrayConstructorNode node) throws SQLException {
         return true;
+    }
+
+    @Override
+    public boolean visitEnter(InParseNode node) throws SQLException {
+        return true;
+    }
+
+    @Override
+    public Expression visitLeave(InParseNode node, List<Expression> l)
+            throws SQLException {
+        Expression firstChild = l.get(0);
+        LiteralExpression secondChild = (LiteralExpression) l.get(1);
+        ImmutableBytesWritable ptr = context.getTempPtr();
+        ParseNode firstChildNode = node.getChildren().get(0);
+        
+        if (firstChildNode instanceof BindParseNode) {
+            context.getBindManager().addParamMetaData((BindParseNode)firstChildNode, firstChild);
+        }
+        
+        List<Expression> children = Lists.<Expression> newArrayList(firstChild);
+        PhoenixArray array = (PhoenixArray) secondChild.getValue();
+        PDataType type = PDataType.fromTypeId(array.getBaseType());
+        for (Object obj : (Object[]) array.getArray()) {
+            children.add(LiteralExpression.newConstant(obj, type));
+        }
+        return wrapGroupByExpression(InListExpression.create(children, node.isNegate(), ptr));
+    }
+
+    @Override
+    public Expression visit(SubqueryParseNode node) throws SQLException {
+        Object result = context.getSubqueryResult(node.getSelectNode());
+        return LiteralExpression.newConstant(result);
     }
 }

@@ -348,6 +348,17 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitLeave(final InParseNode node, List<ParseNode> nodes) throws SQLException {
+        ParseNode normNode = leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+            @Override
+            public ParseNode createNode(List<ParseNode> children) {
+                return NODE_FACTORY.in(children.get(0), children.get(1), node.isNegate());
+            }
+        });
+        return normNode;
+    }
+    
+    @Override
     public ParseNode visitLeave(final IsNullParseNode node, List<ParseNode> nodes) throws SQLException {
         return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
             @Override
@@ -428,6 +439,11 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         return node;
     }
 
+    @Override
+    public ParseNode visit(SubqueryParseNode node) throws SQLException {
+        return node;
+    }
+    
     @Override
     public List<ParseNode> newElementList(int size) {
         nodeCount += size;
@@ -541,13 +557,25 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
 	}
 
 	@Override
-    public ParseNode visitLeave(ArrayAnyComparisonNode node, List<ParseNode> l) throws SQLException {
-        return node;
+    public ParseNode visitLeave(ArrayAnyComparisonNode node, final List<ParseNode> nodes) throws SQLException {
+        ParseNode normNode = leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+            @Override
+            public ParseNode createNode(List<ParseNode> children) {
+                return NODE_FACTORY.arrayAny(nodes.get(0), (ComparisonParseNode) nodes.get(1));
+            }
+        });
+        return normNode;
     }
 
     @Override
-    public ParseNode visitLeave(ArrayAllComparisonNode node, List<ParseNode> l) throws SQLException {
-        return node;
+    public ParseNode visitLeave(ArrayAllComparisonNode node, final List<ParseNode> nodes) throws SQLException {
+        ParseNode normNode = leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+            @Override
+            public ParseNode createNode(List<ParseNode> children) {
+                return NODE_FACTORY.arrayAll(nodes.get(0), (ComparisonParseNode) nodes.get(1));
+            }
+        });
+        return normNode;
     }
  
     @Override

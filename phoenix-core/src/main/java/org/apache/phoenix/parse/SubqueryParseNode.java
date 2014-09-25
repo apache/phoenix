@@ -30,13 +30,19 @@ import java.sql.SQLException;
  */
 public class SubqueryParseNode extends TerminalParseNode {
     private final SelectStatement select;
+    private final boolean expectSingleRow;
 
-    SubqueryParseNode(SelectStatement select) {
+    SubqueryParseNode(SelectStatement select, boolean expectSingleRow) {
         this.select = select;
+        this.expectSingleRow = expectSingleRow;
     }
     
     public SelectStatement getSelectNode() {
         return select;
+    }
+    
+    public boolean expectSingleRow() {
+        return expectSingleRow;
     }
 
     @Override

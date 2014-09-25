@@ -42,6 +42,9 @@ import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
+import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
+import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
@@ -72,7 +75,7 @@ public class WhereCompiler {
     private WhereCompiler() {
     }
 
-    public static Expression compile(StatementContext context, FilterableStatement statement) throws SQLException {
+    public static Set<SubqueryParseNode> compile(StatementContext context, FilterableStatement statement) throws SQLException {
         return compile(context, statement, null);
     }
     
@@ -86,7 +89,7 @@ public class WhereCompiler {
      * @throws ColumnNotFoundException if column name could not be resolved
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */
-    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere) throws SQLException {
+    public static Set<SubqueryParseNode> compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere) throws SQLException {
         return compile(context, statement, viewWhere, Collections.<Expression>emptyList(), false);
     }
     
@@ -100,10 +103,21 @@ public class WhereCompiler {
      * @throws ColumnNotFoundException if column name could not be resolved
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */    
-    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, List<Expression> dynamicFilters, boolean hashJoinOptimization) throws SQLException {
+    public static Set<SubqueryParseNode> compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, List<Expression> dynamicFilters, boolean hashJoinOptimization) throws SQLException {
+        ParseNode where = statement.getWhere();
+        Set<SubqueryParseNode> subqueryNodes = Sets.<SubqueryParseNode> newHashSet();
+        SubqueryParseNodeVisitor subqueryVisitor = new SubqueryParseNodeVisitor(context, subqueryNodes);
+        if (where != null) {
+            where.accept(subqueryVisitor);
+        }
+        if (viewWhere != null) {
+            viewWhere.accept(subqueryVisitor);
+        }
+        if (!subqueryNodes.isEmpty())
+            return subqueryNodes;
+        
         Set<Expression> extractedNodes = Sets.<Expression>newHashSet();
         WhereExpressionCompiler whereCompiler = new WhereExpressionCompiler(context);
-        ParseNode where = statement.getWhere();
         Expression expression = where == null ? LiteralExpression.newConstant(true,PDataType.BOOLEAN,true) : where.accept(whereCompiler);
         if (whereCompiler.isAggregate()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_IN_WHERE).build().buildException();
@@ -125,7 +139,7 @@ public class WhereCompiler {
         expression = WhereOptimizer.pushKeyExpressionsToScan(context, statement, expression, extractedNodes);
         setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily, hashJoinOptimization);
 
-        return expression;
+        return subqueryNodes;
     }
     
     private static class WhereExpressionCompiler extends ExpressionCompiler {
@@ -200,7 +214,6 @@ public class WhereCompiler {
      */
     private static void setScanFilter(StatementContext context, FilterableStatement statement, Expression whereClause, boolean disambiguateWithFamily, boolean hashJoinOptimization) {
         Scan scan = context.getScan();
-        assert scan.getFilter() == null;
 
         if (LiteralExpression.isFalse(whereClause)) {
             context.setScanRanges(ScanRanges.NOTHING);
@@ -246,5 +259,25 @@ public class WhereCompiler {
         if (scanRanges.useSkipScanFilter()) {
             ScanUtil.andFilterAtBeginning(scan, scanRanges.getSkipScanFilter());
         }
+    }
+    
+    private static class SubqueryParseNodeVisitor extends StatelessTraverseAllParseNodeVisitor {
+        private final StatementContext context;
+        private final Set<SubqueryParseNode> subqueryNodes;
+        
+        SubqueryParseNodeVisitor(StatementContext context, Set<SubqueryParseNode> subqueryNodes) {
+            this.context = context;
+            this.subqueryNodes = subqueryNodes;
+        }
+        
+        @Override
+        public Void visit(SubqueryParseNode node) throws SQLException {
+            SelectStatement select = node.getSelectNode();
+            if (!context.isSubqueryResultAvailable(select)) {
+                this.subqueryNodes.add(node);
+            }
+            return null;                
+        }
+        
     }
 }

@@ -401,33 +401,33 @@ public abstract class BaseTest {
         builder.put("SumDoubleTest","create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
         builder.put(JOIN_ORDER_TABLE_FULL_NAME, "create table " + JOIN_ORDER_TABLE_FULL_NAME +
-                "   (\"order_id\" char(15) not null primary key, " +
-                "    \"customer_id\" char(10), " +
-                "    \"item_id\" char(10), " +
+                "   (\"order_id\" varchar(15) not null primary key, " +
+                "    \"customer_id\" varchar(10), " +
+                "    \"item_id\" varchar(10), " +
                 "    price integer, " +
                 "    quantity integer, " +
                 "    date timestamp)");
         builder.put(JOIN_CUSTOMER_TABLE_FULL_NAME, "create table " + JOIN_CUSTOMER_TABLE_FULL_NAME +
-                "   (\"customer_id\" char(10) not null primary key, " +
+                "   (\"customer_id\" varchar(10) not null primary key, " +
                 "    name varchar, " +
-                "    phone char(12), " +
+                "    phone varchar(12), " +
                 "    address varchar, " +
-                "    loc_id char(5), " +
+                "    loc_id varchar(5), " +
                 "    date date)");
         builder.put(JOIN_ITEM_TABLE_FULL_NAME, "create table " + JOIN_ITEM_TABLE_FULL_NAME +
-                "   (\"item_id\" char(10) not null primary key, " +
+                "   (\"item_id\" varchar(10) not null primary key, " +
                 "    name varchar, " +
                 "    price integer, " +
                 "    discount1 integer, " +
                 "    discount2 integer, " +
-                "    \"supplier_id\" char(10), " +
+                "    \"supplier_id\" varchar(10), " +
                 "    description varchar)");
         builder.put(JOIN_SUPPLIER_TABLE_FULL_NAME, "create table " + JOIN_SUPPLIER_TABLE_FULL_NAME +
-                "   (\"supplier_id\" char(10) not null primary key, " +
+                "   (\"supplier_id\" varchar(10) not null primary key, " +
                 "    name varchar, " +
-                "    phone char(12), " +
+                "    phone varchar(12), " +
                 "    address varchar, " +
-                "    loc_id char(5))");
+                "    loc_id varchar(5))");
         tableDDLMap = builder.build();
     }
     

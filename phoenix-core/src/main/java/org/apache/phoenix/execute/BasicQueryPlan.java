@@ -127,7 +127,7 @@ public abstract class BasicQueryPlan implements QueryPlan {
         return iterator(Collections.<SQLCloseable>emptyList());
     }
 
-    public final ResultIterator iterator(final List<SQLCloseable> dependencies) throws SQLException {
+    public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies) throws SQLException {
         if (context.getScanRanges() == ScanRanges.NOTHING) {
             return ResultIterator.EMPTY_ITERATOR;
         }
