@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.phoenix.parse.AliasedNode;
+import org.apache.phoenix.parse.ArrayElemRefNode;
 import org.apache.phoenix.parse.BetweenParseNode;
 import org.apache.phoenix.parse.BindTableNode;
 import org.apache.phoenix.parse.ColumnParseNode;
@@ -144,7 +145,8 @@ public class StatementNormalizer extends ParseNodeRewriter {
     
     @Override
     public ParseNode visitLeave(ComparisonParseNode node, List<ParseNode> nodes) throws SQLException {
-         if (nodes.get(0).isStateless() && !nodes.get(1).isStateless()) {
+         if (nodes.get(0).isStateless() && !nodes.get(1).isStateless()
+                 && !(nodes.get(1) instanceof ArrayElemRefNode)) {
              List<ParseNode> normNodes = Lists.newArrayListWithExpectedSize(2);
              normNodes.add(nodes.get(1));
              normNodes.add(nodes.get(0));
