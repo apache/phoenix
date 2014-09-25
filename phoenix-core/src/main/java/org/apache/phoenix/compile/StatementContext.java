@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.join.TupleProjector;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -78,6 +79,8 @@ public class StatementContext {
     private TupleProjector clientTupleProjector;
     private TimeRange scanTimeRange = null;
     
+    private Map<SelectStatement, Object> subqueryResults;
+    
     public StatementContext(PhoenixStatement statement) {
         this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan(), new SequenceManager(statement));
     }
@@ -99,6 +102,7 @@ public class StatementContext {
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;
         this.whereConditionColumns = new ArrayList<Pair<byte[],byte[]>>();
         this.dataColumns = this.currentTable == null ? Collections.<PColumn, Integer>emptyMap() : Maps.<PColumn, Integer>newLinkedHashMap();
+        this.subqueryResults = Maps.<SelectStatement, Object>newHashMap();
     }
 
     /**
@@ -289,5 +293,16 @@ public class StatementContext {
     public TimeRange getScanTimeRange() {
     	return this.scanTimeRange;
     }
+    
+    public boolean isSubqueryResultAvailable(SelectStatement select) {
+        return subqueryResults.containsKey(select);
+    }
 
+    public Object getSubqueryResult(SelectStatement select) {
+        return subqueryResults.get(select);
+    }
+    
+    public void setSubqueryResult(SelectStatement select, Object result) {
+        subqueryResults.put(select, result);
+    }
 }

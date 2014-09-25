@@ -29,6 +29,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.expression.function.InlineArrayElemRefExpression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
@@ -112,7 +113,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         PDataType lhsExprDataType = lhsExpr.getDataType();
         PDataType rhsExprDataType = rhsExpr.getDataType();
         
-        if (lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) {
+        if ((lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) && !(lhsExpr instanceof InlineArrayElemRefExpression) && !(rhsExpr instanceof InlineArrayElemRefExpression)) {
             if (op == CompareOp.EQUAL || op == CompareOp.NOT_EQUAL) {
                 List<Expression> andNodes = Lists.<Expression>newArrayListWithExpectedSize(Math.max(lhsExpr.getChildren().size(), rhsExpr.getChildren().size()));
                 rewriteRVCAsEqualityExpression(lhsExpr, rhsExpr, andNodes, ptr);

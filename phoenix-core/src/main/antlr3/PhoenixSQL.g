@@ -551,7 +551,7 @@ select_expression returns [SelectStatement ret]
     ;
     
 subquery_expression returns [ParseNode ret]
-    :  s=select_expression {$ret = factory.subquery(s);}
+    :  s=select_expression {$ret = factory.subquery(s, false);}
     ;
     
 // Parse a full select expression structure.
@@ -713,7 +713,7 @@ comparison_op returns [CompareOp ret]
 	;
 	
 boolean_expression returns [ParseNode ret]
-    :   l=value_expression ((op=comparison_op (r=value_expression | ((all=ALL | any=ANY) LPAREN r=value_expression RPAREN)) {$ret = all != null ? factory.wrapInAll(op, l, r) : any != null ? factory.wrapInAny(op, l, r) : factory.comparison(op,l,r); } )
+    :   l=value_expression ((op=comparison_op (r=value_expression | (LPAREN r=subquery_expression RPAREN) | ((all=ALL | any=ANY) LPAREN r=value_expression RPAREN)  | ((all=ALL | any=ANY) LPAREN r=subquery_expression RPAREN)) {$ret = all != null ? factory.wrapInAll(op, l, r) : any != null ? factory.wrapInAny(op, l, r) : factory.comparison(op,l,r); } )
                   |  (IS n=NOT? NULL {$ret = factory.isNull(l,n!=null); } )
                   |  ( n=NOT? ((LIKE r=value_expression {$ret = factory.like(l,r,n!=null,LikeType.CASE_SENSITIVE); } )
                       |        (ILIKE r=value_expression {$ret = factory.like(l,r,n!=null,LikeType.CASE_INSENSITIVE); } )
