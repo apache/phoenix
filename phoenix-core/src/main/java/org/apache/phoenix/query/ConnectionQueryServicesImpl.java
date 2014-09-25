@@ -1295,9 +1295,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     ConnectionQueryServicesImpl.this, url, scnProps, newEmptyMetaData());
                             try {
                                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
-                                // TODO : Get this from a configuration
-                                metaConnection.createStatement().executeUpdate(
-                                        QueryConstants.CREATE_STATS_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
                                 // Ignore, as this will happen if the SYSTEM.CATALOG already exists at this fixed timestamp.
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
@@ -1325,6 +1322,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                                 + LIMIT_REACHED_FLAG + " " + PDataType.BOOLEAN.getSqlTypeName();
                                 metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME,
                                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, newColumns);
+                            }
+                            try {
+                                metaConnection.createStatement().executeUpdate(
+                                        QueryConstants.CREATE_STATS_TABLE_METADATA);
+                            } catch (NewerTableAlreadyExistsException ignore) {
+
+                            } catch (TableAlreadyExistsException ignore) {
+
                             }
                         } catch (Exception e) {
                             if (e instanceof SQLException) {
