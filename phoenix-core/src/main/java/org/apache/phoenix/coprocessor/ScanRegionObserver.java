@@ -25,7 +25,9 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
+
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
@@ -375,7 +377,8 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
 
             private void replaceArrayIndexElement(final Set<KeyValueColumnExpression> arrayKVRefs,
                     final Expression[] arrayFuncRefs, List<KeyValue> result) {
-                MultiKeyValueTuple tuple = new MultiKeyValueTuple(result);
+                // make a copy of the results array here, as we're modifying it below
+                MultiKeyValueTuple tuple = new MultiKeyValueTuple(ImmutableList.copyOf(result));
                 // The size of both the arrays would be same?
                 // Using KeyValueSchema to set and retrieve the value
                 // collect the first kv to get the row
