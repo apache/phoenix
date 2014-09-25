@@ -24,8 +24,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.util.KeyValueUtil;
 
-import com.google.common.collect.ImmutableList;
-
 
 public class MultiKeyValueTuple extends BaseTuple {
     private List<Cell> values;
@@ -37,8 +35,9 @@ public class MultiKeyValueTuple extends BaseTuple {
     public MultiKeyValueTuple() {
     }
 
+    /** Caller must not modify the list that is passed here */
     public void setKeyValues(List<Cell> values) {
-        this.values = ImmutableList.copyOf(values);
+        this.values = values;
     }
     
     @Override
