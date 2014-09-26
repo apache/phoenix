@@ -233,7 +233,7 @@ public class TraceReader {
     private String addCustomAnnotations(String logLine) throws SQLException {
     	if (conn.isWrapperFor(PhoenixConnection.class)) {
     		PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
-    		logLine = LogUtil.addCustomAnnotations(logLine, phxConn.getCustomTracingAnnotations());
+    		logLine = LogUtil.addCustomAnnotations(logLine, phxConn);
     	}
     	return logLine;
     }

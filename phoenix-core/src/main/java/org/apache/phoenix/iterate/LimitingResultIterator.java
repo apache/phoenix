@@ -52,4 +52,9 @@ public class LimitingResultIterator extends DelegateResultIterator {
         planSteps.add("CLIENT " + limit + " ROW LIMIT");
     }
 
+	@Override
+	public String toString() {
+		return "LimitingResultIterator [rowCount=" + rowCount + ", limit="
+				+ limit + "]";
+	}
 }

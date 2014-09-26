@@ -75,4 +75,10 @@ public class FilterAggregatingResultIterator  implements AggregatingResultIterat
         delegate.explain(planSteps);
         planSteps.add("CLIENT FILTER BY " + expression.toString());
     }
+
+	@Override
+	public String toString() {
+		return "FilterAggregatingResultIterator [delegate=" + delegate
+				+ ", expression=" + expression + ", ptr=" + ptr + "]";
+	}
 }

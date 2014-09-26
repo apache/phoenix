@@ -87,6 +87,7 @@ import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -233,7 +234,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         boolean hasAny = false;
         MultiKeyValueTuple result = new MultiKeyValueTuple();
         if (logger.isInfoEnabled()) {
-        	logger.info("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo());
+        	logger.info(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
         }
         long rowCount = 0;
         region.startRegionOperation();
@@ -359,7 +360,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
 
                     } catch (ConstraintViolationException e) {
                         // Log and ignore in count
-                        logger.error("Failed to create row in " + region.getRegionNameAsString() + " with values " + SchemaUtil.toString(values), e);
+                        logger.error(LogUtil.addCustomAnnotations("Failed to create row in " + region.getRegionNameAsString() + " with values " + SchemaUtil.toString(values), ScanUtil.getCustomAnnotations(scan)), e);
                         continue;
                     }
                     aggregators.aggregate(rowAggregators, result);
@@ -379,7 +380,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         }
         
         if (logger.isInfoEnabled()) {
-        	logger.info("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan);
+        	logger.info(LogUtil.addCustomAnnotations("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan, ScanUtil.getCustomAnnotations(scan)));
         }
 
         if (!mutations.isEmpty()) {

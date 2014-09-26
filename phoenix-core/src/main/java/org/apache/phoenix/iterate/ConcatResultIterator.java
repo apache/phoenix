@@ -86,4 +86,9 @@ public class ConcatResultIterator implements PeekingResultIterator {
         return currentIterator().next();
     }
 
+	@Override
+	public String toString() {
+		return "ConcatResultIterator [resultIterators=" + resultIterators
+				+ ", iterators=" + iterators + ", index=" + index + "]";
+	}
 }

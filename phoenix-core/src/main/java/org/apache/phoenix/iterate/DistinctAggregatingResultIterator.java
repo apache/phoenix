@@ -158,4 +158,11 @@ public class DistinctAggregatingResultIterator implements AggregatingResultItera
     public void aggregate(Tuple result) {
         delegate.aggregate(result);
     }
+
+	@Override
+	public String toString() {
+		return "DistinctAggregatingResultIterator [delegate=" + delegate
+				+ ", rowProjector=" + rowProjector + ", resultIterator="
+				+ resultIterator + ", ptr1=" + ptr1 + ", ptr2=" + ptr2 + "]";
+	}
 }

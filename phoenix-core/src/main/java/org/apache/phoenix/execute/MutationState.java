@@ -51,6 +51,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.ServerUtil;
@@ -275,7 +276,6 @@ public class MutationState implements SQLCloseable {
     private long[] validate() throws SQLException {
         int i = 0;
         Long scn = connection.getSCN();
-        PName tenantId = connection.getTenantId();
         MetaDataClient client = new MetaDataClient(connection);
         long[] timeStamps = new long[this.mutations.size()];
         for (Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> entry : mutations.entrySet()) {
@@ -315,7 +315,7 @@ public class MutationState implements SQLCloseable {
         return timeStamps;
     }
     
-    private static void logMutationSize(HTableInterface htable, List<Mutation> mutations) {
+    private static void logMutationSize(HTableInterface htable, List<Mutation> mutations, PhoenixConnection connection) {
         long byteSize = 0;
         int keyValueCount = 0;
         for (Mutation mutation : mutations) {
@@ -330,7 +330,7 @@ public class MutationState implements SQLCloseable {
                 }
             }
         }
-        logger.debug("Sending " + mutations.size() + " mutations for " + Bytes.toString(htable.getTableName()) + " with " + keyValueCount + " key values of total size " + byteSize + " bytes");
+        logger.debug(LogUtil.addCustomAnnotations("Sending " + mutations.size() + " mutations for " + Bytes.toString(htable.getTableName()) + " with " + keyValueCount + " key values of total size " + byteSize + " bytes", connection));
     }
     
     @SuppressWarnings("deprecation")
@@ -399,13 +399,13 @@ public class MutationState implements SQLCloseable {
                     SQLException sqlE = null;
                     HTableInterface hTable = connection.getQueryServices().getTable(htableName);
                     try {
-                        if (logger.isDebugEnabled()) logMutationSize(hTable, mutations);
+                        if (logger.isDebugEnabled()) logMutationSize(hTable, mutations, connection);
                         long startTime = System.currentTimeMillis();
                         child.addTimelineAnnotation("Attempt " + retryCount);
                         hTable.batch(mutations);
                         child.stop();
                         shouldRetry = false;
-                        if (logger.isDebugEnabled()) logger.debug("Total time for batch call of  " + mutations.size() + " mutations into " + table.getName().getString() + ": " + (System.currentTimeMillis() - startTime) + " ms");
+                        if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Total time for batch call of  " + mutations.size() + " mutations into " + table.getName().getString() + ": " + (System.currentTimeMillis() - startTime) + " ms", connection));
                         committedList.add(entry);
                     } catch (Exception e) {
                         SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);
@@ -415,7 +415,7 @@ public class MutationState implements SQLCloseable {
                                 // and one of the region servers doesn't have it. This will cause it to have it the next go around.
                                 // If it fails again, we don't retry.
                                 String msg = "Swallowing exception and retrying after clearing meta cache on connection. " + inferredE;
-                                logger.warn(msg);
+                                logger.warn(LogUtil.addCustomAnnotations(msg, connection));
                                 connection.getQueryServices().clearTableRegionCache(htableName);
 
                                 // add a new child span as this one failed
