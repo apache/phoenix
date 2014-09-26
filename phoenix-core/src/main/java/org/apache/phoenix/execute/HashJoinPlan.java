@@ -23,7 +23,6 @@ import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -93,7 +92,6 @@ public class HashJoinPlan implements QueryPlan {
     private HashCacheClient hashClient;
     private int maxServerCacheTimeToLive;
     private AtomicLong firstJobEndTime;
-    private Map<String, String> customAnnotations;
     private List<Expression> keyRangeExpressions;
     
     public static HashJoinPlan create(FilterableStatement statement, 
@@ -153,7 +151,6 @@ public class HashJoinPlan implements QueryPlan {
             hashClient = new HashCacheClient(plan.getContext().getConnection());
             maxServerCacheTimeToLive = services.getProps().getInt(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
             firstJobEndTime = new AtomicLong(0);
-            customAnnotations = connection.getCustomTracingAnnotations();
             keyRangeExpressions = new CopyOnWriteArrayList<Expression>();
         }
         
@@ -429,7 +426,7 @@ public class HashJoinPlan implements QueryPlan {
             long endTime = System.currentTimeMillis();
             boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);
             if (!isSet && (endTime - parent.firstJobEndTime.get()) > parent.maxServerCacheTimeToLive) {
-                LOG.warn(addCustomAnnotations("Hash plan [" + index + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.", parent.customAnnotations));
+                LOG.warn(addCustomAnnotations("Hash plan [" + index + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.", parent.plan.context.getConnection()));
             }
             if (keyRangeRhsValues != null) {
                 parent.keyRangeExpressions.add(parent.createKeyRangeExpression(keyRangeLhsExpression, keyRangeRhsExpression, keyRangeRhsValues, plan.getContext().getTempPtr(), hasFilters));

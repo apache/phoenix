@@ -17,18 +17,37 @@
  */
 package org.apache.phoenix.util;
 
-import java.util.Map;
+import javax.annotation.Nullable;
+
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 
 public class LogUtil {
 
 	private LogUtil() {
     }
 
-    public static String addCustomAnnotations(String logLine, Map<String, String> annotations) {
-        if (annotations == null || annotations.isEmpty()) {
+    public static String addCustomAnnotations(@Nullable String logLine, @Nullable PhoenixConnection con) {
+    	if (con == null || con.getCustomTracingAnnotations() == null || con.getCustomTracingAnnotations().isEmpty()) {
             return logLine;
+    	} else {
+    		return customAnnotationsToString(con) + ' ' + logLine;
+    	}
+    }
+    
+    public static String addCustomAnnotations(@Nullable String logLine, @Nullable byte[] annotations) {
+    	if (annotations == null) {
+            return logLine;
+    	} else {
+    		return Bytes.toString(annotations) + ' ' + logLine;
+    	}
+    }
+    
+    public static String customAnnotationsToString(@Nullable PhoenixConnection con) {
+    	if (con == null || con.getCustomTracingAnnotations() == null || con.getCustomTracingAnnotations().isEmpty()) {
+            return null;
         } else {
-            return annotations.toString() + ' ' + logLine;
+        	return con.getCustomTracingAnnotations().toString();
         }
     }
 }

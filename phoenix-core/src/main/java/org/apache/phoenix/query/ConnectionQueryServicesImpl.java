@@ -410,7 +410,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     /**
      * Ensures that metaData mutations are handled in the correct order
-     * @param tenantId TODO
      */
     private PMetaData metaDataMutated(PName tenantId, String tableName, long tableSeqNum, Mutator mutator) throws SQLException {
         synchronized (latestMetaDataLock) {

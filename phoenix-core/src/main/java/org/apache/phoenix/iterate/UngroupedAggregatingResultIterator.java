@@ -51,4 +51,10 @@ public class UngroupedAggregatingResultIterator extends GroupedAggregatingResult
         hasRows = true;
         return result;
     }
+
+	@Override
+	public String toString() {
+		return "UngroupedAggregatingResultIterator [hasRows=" + hasRows
+				+ ", aggregators=" + aggregators + "]";
+	}
 }

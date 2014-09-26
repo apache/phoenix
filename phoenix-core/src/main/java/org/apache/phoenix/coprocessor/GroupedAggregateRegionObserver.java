@@ -69,6 +69,7 @@ import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TupleUtil;
@@ -235,10 +236,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         private final Map<ImmutableBytesPtr, Aggregator[]> aggregateMap;
         private final ServerAggregators aggregators;
         private final RegionCoprocessorEnvironment env;
+        private final byte[] customAnnotations;
         
         private int estDistVals;
         
-        InMemoryGroupByCache(RegionCoprocessorEnvironment env, ImmutableBytesWritable tenantId, ServerAggregators aggregators, int estDistVals) {
+        InMemoryGroupByCache(RegionCoprocessorEnvironment env, ImmutableBytesWritable tenantId, byte[] customAnnotations, ServerAggregators aggregators, int estDistVals) {
             int estValueSize = aggregators.getEstimatedByteSize();
             long estSize = sizeOfUnorderedGroupByMap(estDistVals, estValueSize);
             TenantCache tenantCache = GlobalCache.getTenantCache(env, tenantId);
@@ -247,6 +249,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             this.aggregators = aggregators;
             this.aggregateMap = Maps.newHashMapWithExpectedSize(estDistVals);
             this.chunk = tenantCache.getMemoryManager().allocate(estSize);
+            this.customAnnotations = customAnnotations;
         }
         
         @Override
@@ -263,9 +266,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 // value, clone our original one (we need one
                 // per distinct value)
                 if (logger.isDebugEnabled()) {
-                    logger.debug("Adding new aggregate bucket for row key "
+                    logger.debug(LogUtil.addCustomAnnotations("Adding new aggregate bucket for row key "
                             + Bytes.toStringBinary(key.get(), key.getOffset(),
-                                key.getLength()));
+                                key.getLength()), customAnnotations));
                 }
                 rowAggregators =
                         aggregators.newAggregators(env.getConfiguration());
@@ -298,10 +301,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 byte[] value = aggregators.toBytes(rowAggregators);
 
                 if (logger.isDebugEnabled()) {
-                    logger.debug("Adding new distinct group: "
+                    logger.debug(LogUtil.addCustomAnnotations("Adding new distinct group: "
                             + Bytes.toStringBinary(key.get(), key.getOffset(), key.getLength())
                             + " with aggregators " + Arrays.asList(rowAggregators).toString()
-                            + " value = " + Bytes.toStringBinary(value));
+                            + " value = " + Bytes.toStringBinary(value), customAnnotations));
                 }
                 KeyValue keyValue =
                         KeyValueUtil.newKeyValue(key.get(), key.getOffset(), key.getLength(),
@@ -354,7 +357,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         private GroupByCacheFactory() {
         }
         
-        GroupByCache newCache(RegionCoprocessorEnvironment env, ImmutableBytesWritable tenantId, ServerAggregators aggregators, int estDistVals) {
+        GroupByCache newCache(RegionCoprocessorEnvironment env, ImmutableBytesWritable tenantId, byte[] customAnnotations, ServerAggregators aggregators, int estDistVals) {
             Configuration conf = env.getConfiguration();
             boolean spillableEnabled =
                     conf.getBoolean(GROUPBY_SPILLABLE_ATTRIB, DEFAULT_GROUPBY_SPILLABLE);
@@ -362,7 +365,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 return new SpillableGroupByCache(env, tenantId, aggregators, estDistVals);
             } 
             
-            return new InMemoryGroupByCache(env, tenantId, aggregators, estDistVals);
+            return new InMemoryGroupByCache(env, tenantId, customAnnotations, aggregators, estDistVals);
         }
     }
     /**
@@ -378,8 +381,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             List<IndexMaintainer> indexMaintainers, HRegion dataRegion, byte[][] viewConstants)
             throws IOException {
         if (logger.isDebugEnabled()) {
-            logger.debug("Grouped aggregation over unordered rows with scan " + scan
-                    + ", group by " + expressions + ", aggregators " + aggregators);
+            logger.debug(LogUtil.addCustomAnnotations("Grouped aggregation over unordered rows with scan " + scan
+                    + ", group by " + expressions + ", aggregators " + aggregators, ScanUtil.getCustomAnnotations(scan)));
         }
         RegionCoprocessorEnvironment env = c.getEnvironment();
         Configuration conf = env.getConfiguration();
@@ -396,7 +399,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
 
         GroupByCache groupByCache = 
                 GroupByCacheFactory.INSTANCE.newCache(
-                        env, ScanUtil.getTenantId(scan), 
+                        env, ScanUtil.getTenantId(scan), ScanUtil.getCustomAnnotations(scan),
                         aggregators, estDistVals);
         ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
         boolean success = false;
@@ -405,7 +408,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
 
             MultiKeyValueTuple result = new MultiKeyValueTuple();
             if (logger.isDebugEnabled()) {
-                logger.debug("Spillable groupby enabled: " + spillableEnabled);
+                logger.debug(LogUtil.addCustomAnnotations("Spillable groupby enabled: " + spillableEnabled, ScanUtil.getCustomAnnotations(scan)));
             }
 
             HRegion region = c.getEnvironment().getRegion();
@@ -459,15 +462,15 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
      * @throws IOException 
      */
     private RegionScanner scanOrdered(final ObserverContext<RegionCoprocessorEnvironment> c,
-            Scan scan, final RegionScanner s, final List<Expression> expressions,
+            final Scan scan, final RegionScanner s, final List<Expression> expressions,
             final ServerAggregators aggregators, final long limit, final int offset,
             final boolean localIndexScan, final ColumnReference[] dataColumns,
             final TupleProjector tupleProjector, final List<IndexMaintainer> indexMaintainers,
             final HRegion dataRegion, final byte[][] viewConstants) throws IOException {
 
         if (logger.isDebugEnabled()) {
-            logger.debug("Grouped aggregation over ordered rows with scan " + scan + ", group by "
-                    + expressions + ", aggregators " + aggregators);
+            logger.debug(LogUtil.addCustomAnnotations("Grouped aggregation over ordered rows with scan " + scan + ", group by "
+                    + expressions + ", aggregators " + aggregators, ScanUtil.getCustomAnnotations(scan)));
         }
         final ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
         return new BaseRegionScanner() {
@@ -518,9 +521,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                             if (!aggBoundary) {
                                 aggregators.aggregate(rowAggregators, result);
                                 if (logger.isDebugEnabled()) {
-                                    logger.debug("Row passed filters: " + kvs
+                                    logger.debug(LogUtil.addCustomAnnotations("Row passed filters: " + kvs
                                             + ", aggregated values: "
-                                            + Arrays.asList(rowAggregators));
+                                            + Arrays.asList(rowAggregators), ScanUtil.getCustomAnnotations(scan)));
                                 }
                                 currentKey = key;
                             }
@@ -541,12 +544,12 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                                 AGG_TIMESTAMP, value, 0, value.length);
                     results.add(keyValue);
                     if (logger.isDebugEnabled()) {
-                        logger.debug("Adding new aggregate row: "
+                        logger.debug(LogUtil.addCustomAnnotations("Adding new aggregate row: "
                                 + keyValue
                                 + ",for current key "
                                 + Bytes.toStringBinary(currentKey.get(), currentKey.getOffset(),
                                     currentKey.getLength()) + ", aggregated values: "
-                                + Arrays.asList(rowAggregators));
+                                + Arrays.asList(rowAggregators), ScanUtil.getCustomAnnotations(scan)));
                     }
                     // If we're at an aggregation boundary, reset the
                     // aggregators and
