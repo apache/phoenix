@@ -51,7 +51,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     private static final String DEFAULT_WAL_EDIT_CODEC = IndexedWALEditCodec.class.getName();
     public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE =  1024L*1024L*4L; // 4 Mb
     public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE =  1024L*1024L*2L; // 2 Mb
-    public static final long DEFAULT_HISTOGRAM_BYTE_DEPTH = 20;
+    public static final long DEFAULT_HISTOGRAM_BYTE_DEPTH = 2000;
 
     
     public QueryServicesTestImpl(ReadOnlyProps defaultProps) {

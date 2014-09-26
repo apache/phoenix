@@ -130,7 +130,6 @@ import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
-import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -141,7 +140,6 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -479,20 +477,6 @@ public class MetaDataClient {
         PTable table = resolver.getTables().get(0).getTable();
         PName physicalName = table.getPhysicalName();
         byte[] tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
-        KeyRange analyzeRange = KeyRange.EVERYTHING_RANGE;
-        if (connection.getTenantId() != null && table.isMultiTenant()) {
-            tenantIdBytes = connection.getTenantId().getBytes();
-            //  TODO remove this inner if once PHOENIX-1259 is fixed.
-            if (table.getBucketNum() == null && table.getIndexType() != IndexType.LOCAL) {
-                List<List<KeyRange>> tenantIdKeyRanges = Collections.singletonList(Collections.singletonList(KeyRange
-                        .getKeyRange(tenantIdBytes)));
-                byte[] lowerRange = ScanUtil.getMinKey(table.getRowKeySchema(), tenantIdKeyRanges,
-                        ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
-                byte[] upperRange = ScanUtil.getMaxKey(table.getRowKeySchema(), tenantIdKeyRanges,
-                        ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
-                analyzeRange = KeyRange.getKeyRange(lowerRange, upperRange);
-            }
-        }
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTS = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
@@ -509,12 +493,26 @@ public class MetaDataClient {
             lastUpdatedTime = rs.getDate(1).getTime() - rs.getDate(2).getTime();
         }
         if (minTimeForStatsUpdate  > lastUpdatedTime) {
+            // Here create the select query.
+            String countQuery = "SELECT /*+ NO_CACHE */ count(*) FROM " + table.getName().getString();
+            PhoenixStatement statement = (PhoenixStatement) connection.createStatement();
+            QueryPlan plan = statement.compileQuery(countQuery);
+            Scan scan = plan.getContext().getScan();
+            // Add all CF in the table
+            scan.getFamilyMap().clear();
+            for (PColumnFamily family : table.getColumnFamilies()) {
+                scan.addFamily(family.getName().getBytes());
+            }
+            scan.setAttribute(BaseScannerRegionObserver.ANALYZE_TABLE, PDataType.TRUE_BYTES);
+            Cell kv = plan.iterator().next().getValue(0);
+            ImmutableBytesWritable tempPtr = plan.getContext().getTempPtr();
+            tempPtr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
+            // A single Cell will be returned with the count(*) - we decode that here
+            long rowCount = PDataType.LONG.getCodec().decodeLong(tempPtr, SortOrder.getDefault());
             // We need to update the stats table
-            connection.getQueryServices().updateStatistics(analyzeRange, physicalName.getBytes());
             connection.getQueryServices().clearCacheForTable(tenantIdBytes, table.getSchemaName().getBytes(),
                     table.getTableName().getBytes(), clientTS);
-            updateCache(table.getSchemaName().getString(), table.getTableName().getString(), true);
-            return new MutationState(1, connection);
+            return new  MutationState(0, connection, rowCount);
         } else {
             return new MutationState(0, connection);
         }

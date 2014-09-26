@@ -32,10 +32,10 @@ public class StatisticsScanner implements InternalScanner {
     private InternalScanner delegate;
     private StatisticsTable stats;
     private HRegionInfo region;
-    private StatisticsTracker tracker;
+    private StatisticsCollector tracker;
     private byte[] family;
 
-    public StatisticsScanner(StatisticsTracker tracker, StatisticsTable stats, HRegionInfo region,
+    public StatisticsScanner(StatisticsCollector tracker, StatisticsTable stats, HRegionInfo region,
             InternalScanner delegate, byte[] family) {
         // should there be only one tracker?
         this.tracker = tracker;
@@ -109,9 +109,6 @@ public class StatisticsScanner implements InternalScanner {
             delegate.close();
         } catch (IOException e) {
             LOG.error("Error while closing the scanner");
-            // TODO : We should throw the exception
-            /*if (toThrow == null) { throw e; }
-            throw MultipleIOException.createIOException(Lists.newArrayList(toThrow, e));*/
         }
     }
 }

@@ -94,9 +94,6 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     void addConnection(PhoenixConnection connection) throws SQLException;
     void removeConnection(PhoenixConnection connection) throws SQLException;
 
-    long updateStatistics(KeyRange keyRange, byte[] tableName)
-            throws SQLException;
-
     /**
      * @return the {@link KeyValueBuilder} that is valid for the locally installed version of HBase.
      */

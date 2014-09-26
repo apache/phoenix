@@ -226,11 +226,6 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public String getUserName() {
         return getDelegate().getUserName();
     }
-
-    @Override
-    public long updateStatistics(KeyRange keyRange, byte[] tableName) throws SQLException {
-        return getDelegate().updateStatistics(keyRange, tableName);
-    }
     
     @Override
     public void clearCacheForTable(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTS)
