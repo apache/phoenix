@@ -60,6 +60,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String VIEW_CONSTANTS = "_ViewConstants";
     public static final String EXPECTED_UPPER_REGION_KEY = "_ExpectedUpperRegionKey";
     public static final String REVERSE_SCAN = "_ReverseScan";
+    public static final String ANALYZE_TABLE = "_ANALYZETABLE";
 
     /** Exposed for testing */
     public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";

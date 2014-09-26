@@ -33,6 +33,7 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -111,23 +112,24 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
         PTable table = this.tableRef.getTable();
         byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(table);
         List<byte[]> gps = Lists.newArrayList();
-
-        if (table.getColumnFamilies().isEmpty()) {
-            // For sure we can get the defaultCF from the table
-            gps = table.getGuidePosts();
-        } else {
-            try {
-                if (scan.getFamilyMap().size() > 0) {
-                    if (scan.getFamilyMap().containsKey(defaultCF)) { // Favor using default CF if it's used in scan
+        if (!ScanUtil.isAnalyzeTable(scan)) {
+            if (table.getColumnFamilies().isEmpty()) {
+                // For sure we can get the defaultCF from the table
+                gps = table.getGuidePosts();
+            } else {
+                try {
+                    if (scan.getFamilyMap().size() > 0) {
+                        if (scan.getFamilyMap().containsKey(defaultCF)) { // Favor using default CF if it's used in scan
+                            gps = table.getColumnFamily(defaultCF).getGuidePosts();
+                        } else { // Otherwise, just use first CF in use by scan
+                            gps = table.getColumnFamily(scan.getFamilyMap().keySet().iterator().next()).getGuidePosts();
+                        }
+                    } else {
                         gps = table.getColumnFamily(defaultCF).getGuidePosts();
-                    } else { // Otherwise, just use first CF in use by scan
-                        gps = table.getColumnFamily(scan.getFamilyMap().keySet().iterator().next()).getGuidePosts();
                     }
-                } else {
-                    gps = table.getColumnFamily(defaultCF).getGuidePosts();
+                } catch (ColumnFamilyNotFoundException cfne) {
+                    // Alter table does this
                 }
-            } catch (ColumnFamilyNotFoundException cfne) {
-                // Alter table does this
             }
         }
         List<KeyRange> guidePosts = Lists.newArrayListWithCapacity(regions.size());

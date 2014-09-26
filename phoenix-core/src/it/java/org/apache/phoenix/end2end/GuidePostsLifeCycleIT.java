@@ -28,6 +28,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -40,16 +41,32 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import com.google.common.collect.Maps;
+
 @Category(HBaseManagedTimeTest.class)
 public class GuidePostsLifeCycleIT extends BaseHBaseManagedTimeIT {
-
+    
+    @BeforeClass
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    public static void doSetup() throws Exception {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        // Must update config before starting server
+        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Long.toString(20l));
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(20));
+        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(20));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+    
     protected static final byte[] KMIN  = new byte[] {'!'};
     protected static final byte[] KMIN2  = new byte[] {'.'};
     protected static final byte[] K1  = new byte[] {'a'};
@@ -106,16 +123,19 @@ public class GuidePostsLifeCycleIT extends BaseHBaseManagedTimeIT {
         upsert(new byte[][] { KMIN, K4, K11 });
         stmt = conn.prepareStatement("ANALYZE STABLE");
         stmt.execute();
+        conn.prepareStatement("SELECT COUNT(*) FROM STABLE").executeQuery(); 
         keyRanges = getSplits(conn, scan);
         assertEquals(7, keyRanges.size());
         upsert(new byte[][] { KMIN2, K5, K12 });
         stmt = conn.prepareStatement("ANALYZE STABLE");
         stmt.execute();
+        conn.prepareStatement("SELECT COUNT(*) FROM STABLE").executeQuery();
         keyRanges = getSplits(conn, scan);
         assertEquals(10, keyRanges.size());
         upsert(new byte[][] { K1, K6, KP });
         stmt = conn.prepareStatement("ANALYZE STABLE");
         stmt.execute();
+        conn.prepareStatement("SELECT COUNT(*) FROM STABLE").executeQuery();
         keyRanges = getSplits(conn, scan);
         assertEquals(13, keyRanges.size());
         conn.close();

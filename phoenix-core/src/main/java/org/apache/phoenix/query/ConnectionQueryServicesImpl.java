@@ -88,9 +88,6 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRespons
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
-import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectRequest;
-import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectResponse;
-import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectService;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -124,7 +121,6 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.stat.StatisticsCollector;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
@@ -143,7 +139,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.protobuf.HBaseZeroCopyByteString;
-import com.google.protobuf.ServiceException;
 
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
@@ -594,10 +589,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, 1, null);
-            }
-
-            if (!descriptor.hasCoprocessor(StatisticsCollector.class.getName())) {
-                descriptor.addCoprocessor(StatisticsCollector.class.getName(), null, 1, null);
             }
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes. Also,
@@ -1864,47 +1855,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
     }
-
-    @Override
-    public long updateStatistics(final KeyRange keyRange, final byte[] tableName) throws SQLException {
-        HTableInterface ht = null;
-        try {
-            ht = this.getTable(tableName);
-            Batch.Call<StatCollectService, StatCollectResponse> callable = new Batch.Call<StatCollectService, StatCollectResponse>() {
-                ServerRpcController controller = new ServerRpcController();
-                BlockingRpcCallback<StatCollectResponse> rpcCallback = new BlockingRpcCallback<StatCollectResponse>();
-
-                @Override
-                public StatCollectResponse call(StatCollectService service) throws IOException {
-                    StatCollectRequest.Builder builder = StatCollectRequest.newBuilder();
-                    builder.setStartRow(HBaseZeroCopyByteString.wrap(keyRange.getLowerRange()));
-                    builder.setStopRow(HBaseZeroCopyByteString.wrap(keyRange.getUpperRange()));
-                    service.collectStat(controller, builder.build(), rpcCallback);
-                    if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
-                    return rpcCallback.get();
-                }
-            };
-            Map<byte[], StatCollectResponse> result = ht.coprocessorService(StatCollectService.class,
-                    keyRange.getLowerRange(), keyRange.getUpperRange(), callable);
-            StatCollectResponse next = result.values().iterator().next();
-            return next.getRowsScanned();
-        } catch (ServiceException e) {
-            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
-        } catch (TableNotFoundException e) {
-            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
-        } catch (Throwable e) {
-            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
-        } finally {
-            if (ht != null) {
-                try {
-                    ht.close();
-                } catch (IOException e) {
-                    throw new SQLException("Unable to close the table " + tableName + " after collecting stats", e);
-                }
-            }
-        }
-    }
-
+    
     @Override
     public void clearCacheForTable(final byte[] tenantId, final byte[] schemaName, final byte[] tableName,
             final long clientTS) throws SQLException {

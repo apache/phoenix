@@ -552,4 +552,8 @@ public class ScanUtil {
 
         return offset + slotPosition;
     }
+
+    public static boolean isAnalyzeTable(Scan scan) {
+        return scan.getAttribute((BaseScannerRegionObserver.ANALYZE_TABLE)) != null;
+    }
 }

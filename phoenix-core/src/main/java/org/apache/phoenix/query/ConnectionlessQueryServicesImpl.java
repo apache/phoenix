@@ -188,12 +188,6 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public MetaDataMutationResult dropColumn(List<Mutation> tableMetadata, PTableType tableType) throws SQLException {
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, null);
     }
-
-    @Override
-    public long updateStatistics(KeyRange keyRange, byte[] tableName) throws SQLException {
-        // Noop
-        return 0;
-    }
     
     @Override
     public void clearCacheForTable(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTS)
