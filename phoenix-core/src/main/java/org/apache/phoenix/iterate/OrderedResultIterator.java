@@ -249,4 +249,14 @@ public class OrderedResultIterator implements PeekingResultIterator {
         delegate.explain(planSteps);
         planSteps.add("CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW"  + (limit == 1 ? "" : "S"))  + " SORTED BY " + orderByExpressions.toString());
     }
+
+	@Override
+	public String toString() {
+		return "OrderedResultIterator [thresholdBytes=" + thresholdBytes
+				+ ", limit=" + limit + ", delegate=" + delegate
+				+ ", orderByExpressions=" + orderByExpressions
+				+ ", estimatedByteSize=" + estimatedByteSize
+				+ ", resultIterator=" + resultIterator + ", byteSize="
+				+ byteSize + "]";
+	}
 }

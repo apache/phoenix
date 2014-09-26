@@ -73,4 +73,10 @@ public class FilterResultIterator  extends LookAheadResultIterator {
         delegate.explain(planSteps);
         planSteps.add("CLIENT FILTER BY " + expression.toString());
     }
+
+	@Override
+	public String toString() {
+		return "FilterResultIterator [delegate=" + delegate + ", expression="
+				+ expression + ", ptr=" + ptr + "]";
+	}
 }

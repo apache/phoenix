@@ -101,4 +101,11 @@ public class GroupedAggregatingResultIterator implements AggregatingResultIterat
     public void explain(List<String> planSteps) {
         resultIterator.explain(planSteps);
     }
+
+	@Override
+	public String toString() {
+		return "GroupedAggregatingResultIterator [tempPtr=" + tempPtr
+				+ ", resultIterator=" + resultIterator + ", aggregators="
+				+ aggregators + "]";
+	}
 }

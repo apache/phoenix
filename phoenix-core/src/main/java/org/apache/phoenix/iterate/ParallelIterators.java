@@ -64,6 +64,7 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
@@ -361,7 +362,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                         long startTime = System.currentTimeMillis();
                         ResultIterator scanner = new TableResultIterator(context, tableRef, splitScan);
                         if (logger.isDebugEnabled()) {
-                            logger.debug("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + splitScan);
+                            logger.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + splitScan, ScanUtil.getCustomAnnotations(splitScan)));
                         }
                         return iteratorFactory.newIterator(context, scanner, splitScan);
                     }
@@ -393,4 +394,9 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         buf.append("CLIENT PARALLEL " + size() + "-WAY ");
         explain(buf.toString(),planSteps);
     }
+
+	@Override
+	public String toString() {
+		return "ParallelIterators [splits=" + splits + "]";
+	}
 }

@@ -56,4 +56,10 @@ public class MergeSortRowKeyResultIterator extends MergeSortResultIterator {
         resultIterators.explain(planSteps);
         planSteps.add("CLIENT MERGE SORT");
     }
+
+	@Override
+	public String toString() {
+		return "MergeSortRowKeyResultIterator [keyOffset=" + keyOffset
+				+ ", factor=" + factor + "]";
+	}
 }

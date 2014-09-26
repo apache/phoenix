@@ -57,4 +57,9 @@ public class RegionScannerResultIterator extends BaseResultIterator {
             throw ServerUtil.parseServerException(e);
         }
     }
+
+	@Override
+	public String toString() {
+		return "RegionScannerResultIterator [scanner=" + scanner + "]";
+	}
 }

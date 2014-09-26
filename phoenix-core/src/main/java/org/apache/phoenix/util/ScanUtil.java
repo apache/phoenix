@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
+
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -93,6 +95,14 @@ public class ScanUtil {
             return null;
         }
         return new ImmutableBytesWritable(tenantId);
+    }
+    
+    public static void setCustomAnnotations(Scan scan, byte[] annotations) {
+    	scan.setAttribute(CUSTOM_ANNOTATIONS, annotations);
+    }
+    
+    public static byte[] getCustomAnnotations(Scan scan) {
+    	return scan.getAttribute(CUSTOM_ANNOTATIONS);
     }
 
     public static Scan newScan(Scan scan) {

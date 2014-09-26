@@ -32,6 +32,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -163,7 +164,7 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
             }
         }
         if (logger.isDebugEnabled()) {
-            logger.debug("The captured guideposts are: " + guidePosts);
+            logger.debug(LogUtil.addCustomAnnotations("The captured guideposts are: " + guidePosts, ScanUtil.getCustomAnnotations(scan)));
         }
         return guidePosts;
     }

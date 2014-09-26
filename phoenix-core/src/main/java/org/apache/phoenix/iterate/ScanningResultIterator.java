@@ -56,4 +56,9 @@ public class ScanningResultIterator implements ResultIterator {
     @Override
     public void explain(List<String> planSteps) {
     }
+
+	@Override
+	public String toString() {
+		return "ScanningResultIterator [scanner=" + scanner + "]";
+	}
 }

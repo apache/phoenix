@@ -26,6 +26,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -60,6 +62,7 @@ import org.apache.phoenix.trace.TracingIterator;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
@@ -77,6 +80,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public abstract class BaseQueryPlan implements QueryPlan {
+	private static final Log LOG = LogFactory.getLog(BaseQueryPlan.class);
     protected static final long DEFAULT_ESTIMATED_SIZE = 10 * 1024; // 10 K
     
     protected final TableRef tableRef;
@@ -184,6 +188,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
             ScanUtil.setTimeRange(scan, context.getScanTimeRange());
         }
         ScanUtil.setTenantId(scan, connection.getTenantId() == null ? null : connection.getTenantId().getBytes());
+        String customAnnotations = LogUtil.customAnnotationsToString(connection);
+        ScanUtil.setCustomAnnotations(scan, customAnnotations == null ? null : customAnnotations.getBytes());
         // Set local index related scan attributes. 
         if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
             ScanUtil.setLocalIndex(scan);
@@ -213,6 +219,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 serializeViewConstantsIntoScan(scan, dataTable);
             }
         }
+        
+        if (LOG.isDebugEnabled()) {
+        	LOG.debug(LogUtil.addCustomAnnotations("Scan ready for iteration: " + scan, connection));
+        }
+        
         ResultIterator iterator = newIterator();
         iterator = dependencies.isEmpty() ?
                 iterator : new DelegateResultIterator(iterator) {
@@ -225,6 +236,10 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 }
             }
         };
+        
+        if (LOG.isDebugEnabled()) {
+        	LOG.debug(LogUtil.addCustomAnnotations("Iterator ready: " + iterator, connection));
+        }
 
         // wrap the iterator so we start/end tracing as we expect
         TraceScope scope =

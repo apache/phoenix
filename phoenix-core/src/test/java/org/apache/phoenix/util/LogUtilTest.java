@@ -19,25 +19,40 @@ package org.apache.phoenix.util;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.when;
 
-import java.util.Map;
-
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.runners.MockitoJUnitRunner;
 
 import com.google.common.collect.ImmutableMap;
 
+@RunWith(MockitoJUnitRunner.class)
 public class LogUtilTest {
     
+	@Mock PhoenixConnection con;
+	
     @Test
-    public void testAddCustomAnnotationsWithNull() {
-    	String logLine = LogUtil.addCustomAnnotations("log line", null);
+    public void testAddCustomAnnotationsWithNullConnection() {
+    	String logLine = LogUtil.addCustomAnnotations("log line", (PhoenixConnection)null);
+    	assertEquals(logLine, "log line");
+    }
+	
+    @Test
+    public void testAddCustomAnnotationsWithNullAnnotations() {
+    	when(con.getCustomTracingAnnotations()).thenReturn(null);
+    	
+    	String logLine = LogUtil.addCustomAnnotations("log line", con);
     	assertEquals(logLine, "log line");
     }
     
     @Test
     public void testAddCustomAnnotations() {
-    	Map<String, String> annotations = ImmutableMap.of("a1", "v1", "a2", "v2");
-    	String logLine = LogUtil.addCustomAnnotations("log line", annotations);
+    	when(con.getCustomTracingAnnotations()).thenReturn(ImmutableMap.of("a1", "v1", "a2", "v2"));
+    	
+    	String logLine = LogUtil.addCustomAnnotations("log line", con);
     	assertTrue(logLine.contains("log line"));
     	assertTrue(logLine.contains("a1=v1"));
     	assertTrue(logLine.contains("a2=v2"));

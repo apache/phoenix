@@ -54,4 +54,10 @@ public class SequenceResultIterator extends DelegateResultIterator {
         int nSequences = sequenceManager.getSequenceCount();
         planSteps.add("CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S"));
     }
+
+	@Override
+	public String toString() {
+		return "SequenceResultIterator [sequenceManager=" + sequenceManager
+				+ "]";
+	}
 }
