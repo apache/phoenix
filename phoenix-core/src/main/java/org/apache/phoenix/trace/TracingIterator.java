@@ -55,4 +55,9 @@ public class TracingIterator extends DelegateResultIterator {
         }
         return super.next();
     }
+
+	@Override
+	public String toString() {
+		return "TracingIterator [scope=" + scope + ", started=" + started + "]";
+	}
 }

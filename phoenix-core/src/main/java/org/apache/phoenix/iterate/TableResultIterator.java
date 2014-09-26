@@ -81,4 +81,10 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
         StringBuilder buf = new StringBuilder();
         explain(buf.toString(),planSteps);
     }
+
+	@Override
+	public String toString() {
+		return "TableResultIterator [htable=" + htable + ", delegate="
+				+ delegate + "]";
+	}
 }

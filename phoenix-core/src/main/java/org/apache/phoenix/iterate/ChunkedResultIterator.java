@@ -181,5 +181,12 @@ public class ChunkedResultIterator implements PeekingResultIterator {
 
             return Bytes.compareTo(currentKey, offset, length, lastKey.get(), lastKey.getOffset(), lastKey.getLength()) != 0;
         }
+
+		@Override
+		public String toString() {
+			return "SingleChunkResultIterator [rowCount=" + rowCount
+					+ ", chunkComplete=" + chunkComplete + ", delegate="
+					+ delegate + ", chunkSize=" + chunkSize + "]";
+		}
     }
 }
