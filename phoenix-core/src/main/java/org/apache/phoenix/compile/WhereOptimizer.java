@@ -476,10 +476,22 @@ public class WhereOptimizer {
             for (int i = 0; i < childSlots.size(); i++) {
                 KeySlots slots = childSlots.get(i);
                 KeySlot keySlot = slots.iterator().next();
+                List<Expression> childExtractNodes = keySlot.getKeyPart().getExtractNodes();
+                // Stop if there was a gap in extraction of RVC elements. This is required if the leading
+                // RVC has not row key columns, as we'll still get childSlots if the RVC has trailing row
+                // key columns. We can't rule the RVC out completely when the childSlots is less the the
+                // RVC length, as a partial, *leading* match is optimizable.
+                if (childExtractNodes.size() != 1 || !childExtractNodes.get(0).equals(rvc.getChildren().get(i))) {
+                    break;
+                }
+                int pkPosition = keySlot.getPKPosition();
+                if (pkPosition < 0) { // break for non PK columns
+                    break;
+                }
                 // Continue while we have consecutive pk columns
                 if (position == -1) {
-                    position = initialPosition = keySlot.getPKPosition();
-                } else if (keySlot.getPKPosition() != position) {
+                    position = initialPosition = pkPosition;
+                } else if (pkPosition != position) {
                     break;
                 }
                 position++;
@@ -518,6 +530,7 @@ public class WhereOptimizer {
             if (isDegenerate(slot.getKeyRanges())) {
                 return DEGENERATE_KEY_PARTS;
             }
+            final List<Expression> extractNodes = Collections.<Expression>singletonList(node);
             final KeyPart childPart = slot.getKeyPart();
             final ImmutableBytesWritable ptr = context.getTempPtr();
             return new SingleKeySlot(new KeyPart() {
@@ -547,7 +560,7 @@ public class WhereOptimizer {
 
                 @Override
                 public List<Expression> getExtractNodes() {
-                    return childPart.getExtractNodes();
+                    return extractNodes;
                 }
 
                 @Override
