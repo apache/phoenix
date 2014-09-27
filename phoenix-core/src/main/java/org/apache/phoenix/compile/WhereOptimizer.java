@@ -476,11 +476,7 @@ public class WhereOptimizer {
             for (int i = 0; i < childSlots.size(); i++) {
                 KeySlots slots = childSlots.get(i);
                 KeySlot keySlot = slots.iterator().next();
-                List<Expression> childExtractNodes = keySlot.getKeyPart().getExtractNodes();
-                // If columns are not in PK order, then stop iteration
-                if (childExtractNodes.size() != 1 || childExtractNodes.get(0) != rvc.getChildren().get(i)) {
-                    break;
-                }
+                // Continue while we have consecutive pk columns
                 if (position == -1) {
                     position = initialPosition = keySlot.getPKPosition();
                 } else if (keySlot.getPKPosition() != position) {

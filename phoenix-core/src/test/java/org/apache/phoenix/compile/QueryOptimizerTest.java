@@ -41,6 +41,17 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testRVCUsingPkColsReturnedByPlanShouldUseIndex() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE T (k VARCHAR NOT NULL PRIMARY KEY, v1 CHAR(15), v2 VARCHAR)");
+        conn.createStatement().execute("CREATE INDEX IDX ON T(v1, v2)");
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        String query = "select * from t where (v1, v2, k) > ('1', '2', '3')";
+        QueryPlan plan = stmt.optimizeQuery(query);
+        assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
+    }
+
+    @Test
     public void testOrderByOptimizedOut() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE foo (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) IMMUTABLE_ROWS=true");
