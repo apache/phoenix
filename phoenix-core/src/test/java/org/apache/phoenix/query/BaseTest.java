@@ -1325,7 +1325,7 @@ public abstract class BaseTest {
             count++;
         }
         assertTrue("Could not find " + errorResult + " in expected results: " + expectedResults + " with actual results: " + actualResults, errorResult == null);
-        assertEquals(count, expectedCount);
+        assertEquals(expectedCount, count);
     }
     
     public HBaseTestingUtility getUtility() {
