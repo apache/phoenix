@@ -38,6 +38,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
@@ -153,6 +154,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         if(scan.getAttribute(BaseScannerRegionObserver.ANALYZE_TABLE) != null && statsTable != null) {
             stats = new StatisticsCollector(statsTable, c.getEnvironment().getConfiguration());
             isAnalyze = true;
+            // We are setting the start row and stop row such that it covers the entire region. As part
+            // of Phonenix-1263 we are storing the guideposts against the physical table rather than 
+            // individual tenant specific tables.
+            scan.setStartRow(HConstants.EMPTY_START_ROW);
+            scan.setStopRow(HConstants.EMPTY_END_ROW);
         }
         if (ScanUtil.isLocalIndex(scan)) {
             /*
