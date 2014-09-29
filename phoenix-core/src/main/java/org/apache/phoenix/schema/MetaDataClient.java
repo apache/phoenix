@@ -963,9 +963,7 @@ public class MetaDataClient {
 
             boolean disableWAL = false;
             Boolean disableWALProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.DISABLE_WAL);
-            if (disableWALProp == null) {
-                disableWAL = isParentImmutableRows; // By default, disable WAL for immutable indexes
-            } else {
+            if (disableWALProp != null) {
                 disableWAL = disableWALProp;
             }
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
