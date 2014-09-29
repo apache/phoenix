@@ -43,27 +43,18 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AndParseNode;
-import org.apache.phoenix.parse.BetweenParseNode;
 import org.apache.phoenix.parse.BindTableNode;
-import org.apache.phoenix.parse.CaseParseNode;
-import org.apache.phoenix.parse.CastParseNode;
+import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.ComparisonParseNode;
 import org.apache.phoenix.parse.DerivedTableNode;
 import org.apache.phoenix.parse.EqualParseNode;
-import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
-import org.apache.phoenix.parse.InListParseNode;
-import org.apache.phoenix.parse.InParseNode;
-import org.apache.phoenix.parse.IsNullParseNode;
 import org.apache.phoenix.parse.JoinTableNode;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
-import org.apache.phoenix.parse.LikeParseNode;
 import org.apache.phoenix.parse.NamedTableNode;
-import org.apache.phoenix.parse.NotParseNode;
-import org.apache.phoenix.parse.OrParseNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
@@ -73,7 +64,6 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
 import org.apache.phoenix.parse.TableWildcardParseNode;
-import org.apache.phoenix.parse.TraverseNoParseNodeVisitor;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -796,83 +786,7 @@ public class JoinCompiler {
         }
     }
     
-    private static abstract class ConditionNodeVisitor extends TraverseNoParseNodeVisitor<Void> {
-        
-        protected abstract Void leaveBooleanNode(ParseNode node, List<Void> l) throws SQLException;
-
-        @Override
-        public Void visitLeave(LikeParseNode node,
-                List<Void> l) throws SQLException {                
-            return leaveBooleanNode(node, l);
-        }
-
-        @Override
-        public boolean visitEnter(AndParseNode node) {
-            return true;
-        }
-        
-        @Override
-        public Void visitLeave(OrParseNode node, List<Void> l)
-                throws SQLException {
-            return leaveBooleanNode(node, l);
-        }
-
-        @Override
-        public Void visitLeave(ComparisonParseNode node, List<Void> l) 
-                throws SQLException {
-            return leaveBooleanNode(node, l);
-        }
-
-        @Override
-        public Void visitLeave(NotParseNode node, List<Void> l)
-                throws SQLException {
-            return leaveBooleanNode(node, l);
-        }
-
-        @Override
-        public Void visitLeave(InListParseNode node,
-                List<Void> l) throws SQLException {
-            return leaveBooleanNode(node, l);
-        }
-
-        @Override
-        public Void visitLeave(InParseNode node,
-                List<Void> l) throws SQLException {
-            return leaveBooleanNode(node, l);
-        }
-        
-        @Override
-        public Void visitLeave(IsNullParseNode node, List<Void> l) 
-                throws SQLException {
-            return leaveBooleanNode(node, l);
-        }
-        
-        @Override
-        public Void visitLeave(FunctionParseNode node, List<Void> l) 
-                throws SQLException {
-            return leaveBooleanNode(node, l);
-        }
-        
-        @Override
-        public Void visitLeave(BetweenParseNode node, List<Void> l) 
-                throws SQLException {
-            return leaveBooleanNode(node, l);
-        }
-        
-        @Override
-        public Void visitLeave(CaseParseNode node, List<Void> l) 
-                throws SQLException {
-            return leaveBooleanNode(node, l);
-        }
-        
-        @Override
-        public Void visitLeave(CastParseNode node, List<Void> l) 
-                throws SQLException {
-            return leaveBooleanNode(node, l);
-        }           
-    }
-    
-    private static class WhereNodeVisitor extends ConditionNodeVisitor {
+    private static class WhereNodeVisitor extends BooleanParseNodeVisitor<Void> {
         private ColumnResolver resolver;
         private Table table;
         private List<ParseNode> postFilters;
@@ -889,6 +803,11 @@ public class JoinCompiler {
             this.selfTableRefs = selfTableRefs;
             this.hasRightJoin = hasRightJoin;
             this.prefilterAcceptedTables = prefilterAcceptedTables;
+        }
+        
+        @Override
+        protected boolean enterBooleanNode(ParseNode node) throws SQLException {
+            return false;
         }
         
         @Override
@@ -926,9 +845,29 @@ public class JoinCompiler {
             }
             return null;
         }
+        
+        @Override
+        protected boolean enterNonBooleanNode(ParseNode node) throws SQLException {
+            return false;
+        }
+        
+        @Override
+        protected Void leaveNonBooleanNode(ParseNode node, List<Void> l) throws SQLException {
+            return null;
+        }
+        
+        @Override
+        public boolean visitEnter(AndParseNode node) throws SQLException {
+            return true;
+        }
+
+        @Override
+        public Void visitLeave(AndParseNode node, List<Void> l) throws SQLException {
+            return null;
+        }
     }
     
-    private static class OnNodeVisitor extends ConditionNodeVisitor {
+    private static class OnNodeVisitor extends BooleanParseNodeVisitor<Void> {
         private ColumnResolver resolver;
         private List<ComparisonParseNode> onConditions;
         private Set<TableRef> dependencies;
@@ -940,6 +879,11 @@ public class JoinCompiler {
             this.onConditions = onConditions;
             this.dependencies = dependencies;
             this.joinTable = joinTable;
+        }
+        
+        @Override
+        protected boolean enterBooleanNode(ParseNode node) throws SQLException {
+            return false;
         }
         
         @Override
@@ -956,7 +900,27 @@ public class JoinCompiler {
             }
             return null;
         }
+        
+        @Override
+        protected boolean enterNonBooleanNode(ParseNode node) throws SQLException {
+            return false;
+        }
+        
+        @Override
+        protected Void leaveNonBooleanNode(ParseNode node, List<Void> l) throws SQLException {
+            return null;
+        }
+        
+        @Override
+        public boolean visitEnter(AndParseNode node) throws SQLException {
+            return true;
+        }
 
+        @Override
+        public Void visitLeave(AndParseNode node, List<Void> l) throws SQLException {
+            return null;
+        }
+        
         @Override
         public Void visitLeave(ComparisonParseNode node, List<Void> l) 
                 throws SQLException {
