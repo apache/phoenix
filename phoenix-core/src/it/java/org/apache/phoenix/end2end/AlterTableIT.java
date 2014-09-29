@@ -692,10 +692,10 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
             conn2 = DriverManager.getConnection(getUrl(), props);
             query = "SELECT * FROM i";
             rs = conn2.createStatement().executeQuery(query);
-            asssertIsWALDisabled(conn2,fullIndexName, true);
+            asssertIsWALDisabled(conn2,fullIndexName, false);
             assertFalse(rs.next());
             conn2.close();
-            asssertIsWALDisabled(conn,fullIndexName, true);
+            asssertIsWALDisabled(conn,fullIndexName, false);
             
             conn.createStatement().execute("DROP TABLE test_table");
         } finally {
@@ -722,10 +722,10 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
             conn2 = DriverManager.getConnection(getUrl(), props);
             query = "SELECT * FROM i";
             rs = conn2.createStatement().executeQuery(query);
-            asssertIsWALDisabled(conn2,fullIndexName, true);
+            asssertIsWALDisabled(conn2,fullIndexName, false);
             assertFalse(rs.next());
             conn2.close();
-            asssertIsWALDisabled(conn,fullIndexName, true);
+            asssertIsWALDisabled(conn,fullIndexName, false);
             conn.createStatement().execute("DROP TABLE test_table");
         } finally {
             conn.close();
