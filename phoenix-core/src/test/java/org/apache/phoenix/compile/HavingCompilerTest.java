@@ -132,6 +132,16 @@ public class HavingCompilerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
+    public void testInListHavingToWhere() throws SQLException {
+        String query = "select count(1) from atable group by a_string having a_string in ('foo', 'bar')";
+        List<Object> binds = Collections.emptyList();
+        Expressions expressions = compileStatement(query,binds);
+        Expression w = TestUtil.in(A_STRING,"foo","bar");
+        assertEquals(w, expressions.whereClause);
+        assertNull(expressions.havingClause);
+    }
+    
+    @Test
     public void testAggFuncInHaving() throws SQLException {
         String query = "select count(1) from atable group by a_string having count(a_string) >= 1";
         List<Object> binds = Collections.emptyList();

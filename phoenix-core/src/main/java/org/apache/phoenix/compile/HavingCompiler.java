@@ -27,22 +27,13 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.parse.AddParseNode;
 import org.apache.phoenix.parse.AndParseNode;
-import org.apache.phoenix.parse.BetweenParseNode;
-import org.apache.phoenix.parse.CaseParseNode;
+import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ColumnParseNode;
-import org.apache.phoenix.parse.ComparisonParseNode;
-import org.apache.phoenix.parse.DivideParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
-import org.apache.phoenix.parse.IsNullParseNode;
-import org.apache.phoenix.parse.MultiplyParseNode;
-import org.apache.phoenix.parse.OrParseNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SelectStatementRewriter;
-import org.apache.phoenix.parse.SubtractParseNode;
-import org.apache.phoenix.parse.TraverseNoParseNodeVisitor;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.TypeMismatchException;
@@ -110,7 +101,7 @@ public class HavingCompiler {
      * 
      * @since 0.1
      */
-    private static class HavingClauseVisitor extends TraverseNoParseNodeVisitor<Void> {
+    private static class HavingClauseVisitor extends BooleanParseNodeVisitor<Void> {
         private ParseNode topNode = null;
         private boolean hasNoAggregateFunctions = true;
         private Boolean hasOnlyAggregateColumns;
@@ -126,37 +117,18 @@ public class HavingCompiler {
         public Set<ParseNode> getMoveToWhereClauseExpressions() {
             return moveToWhereClause;
         }
-        
+
         @Override
-        public boolean visitEnter(AndParseNode node) throws SQLException {
-            return true;
-        }
-        
-        @Override
-        public boolean visitEnter(OrParseNode node) throws SQLException {
-            enterBooleanNode(node);
-            return true;
-        }
-        
-        @Override
-        public boolean visitEnter(ComparisonParseNode node) throws SQLException {
-            enterBooleanNode(node);
-            return true;
-        }
-        
-        @Override
-        public boolean visitEnter(IsNullParseNode node) throws SQLException {
-            enterBooleanNode(node);
-            return true;
-        }
-        
-        private void enterBooleanNode(ParseNode node) {
+        protected boolean enterBooleanNode(ParseNode node) throws SQLException {
             if (topNode == null) {
                 topNode = node;
             }
+            
+            return true;
         }
-        
-        private void leaveBooleanNode(ParseNode node) {
+
+        @Override
+        protected Void leaveBooleanNode(ParseNode node, List<Void> l) throws SQLException {
             if (topNode == node) {
                 if ( hasNoAggregateFunctions && !Boolean.FALSE.equals(hasOnlyAggregateColumns)) {
                     moveToWhereClause.add(node);
@@ -165,23 +137,27 @@ public class HavingCompiler {
                 hasOnlyAggregateColumns = null;
                 topNode = null;
             }
-        }
-
-        @Override
-        public Void visitLeave(OrParseNode node, List<Void> l) throws SQLException {
-            leaveBooleanNode(node);
+            
             return null;
         }
 
         @Override
-        public Void visitLeave(ComparisonParseNode node, List<Void> l) throws SQLException {
-            leaveBooleanNode(node);
-            return null;
+        protected boolean enterNonBooleanNode(ParseNode node) throws SQLException {
+            return true;
         }
 
         @Override
-        public Void visitLeave(IsNullParseNode node, List<Void> l) throws SQLException {
-            leaveBooleanNode(node);
+        protected Void leaveNonBooleanNode(ParseNode node, List<Void> l) throws SQLException {
+            return null;
+        }
+        
+        @Override
+        public boolean visitEnter(AndParseNode node) throws SQLException {
+            return true;
+        }
+
+        @Override
+        public Void visitLeave(AndParseNode node, List<Void> l) throws SQLException {
             return null;
         }
 
@@ -189,12 +165,7 @@ public class HavingCompiler {
         public boolean visitEnter(FunctionParseNode node) throws SQLException {
             boolean isAggregate = node.isAggregate();
             this.hasNoAggregateFunctions = this.hasNoAggregateFunctions && !isAggregate;
-            return !isAggregate;
-        }
-
-        @Override
-        public boolean visitEnter(CaseParseNode node) throws SQLException {
-            return true;
+            return !isAggregate && super.visitEnter(node);
         }
 
         @Override
@@ -208,31 +179,6 @@ public class HavingCompiler {
             }
             
             return null;
-        }
-
-        @Override
-        public boolean visitEnter(SubtractParseNode node) throws SQLException {
-            return true;
-        }
-
-        @Override
-        public boolean visitEnter(AddParseNode node) throws SQLException {
-            return true;
-        }
-
-        @Override
-        public boolean visitEnter(MultiplyParseNode node) throws SQLException {
-            return true;
-        }
-
-        @Override
-        public boolean visitEnter(DivideParseNode node) throws SQLException {
-            return true;
-        }
-
-        @Override
-        public boolean visitEnter(BetweenParseNode node) throws SQLException {
-            return true;
         }
 		
     }
