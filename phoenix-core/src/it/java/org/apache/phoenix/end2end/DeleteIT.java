@@ -344,6 +344,15 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testDeleteRowFromTableWithImmutableIndex() throws SQLException {
+        testDeleteRowFromTableWithImmutableIndex(false);
+    }
+    
+    @Test
+    public void testDeleteRowFromTableWithImmutableLocalIndex() throws SQLException {
+        testDeleteRowFromTableWithImmutableIndex(true);
+    }
+    
+    public void testDeleteRowFromTableWithImmutableIndex(boolean localIndex) throws SQLException {
         Connection con = null;
         try {
             boolean autoCommit = false;
@@ -360,7 +369,7 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
                     "USAGE.DB BIGINT," +
                     "STATS.ACTIVE_VISITOR INTEGER " +
                     "CONSTRAINT PK PRIMARY KEY (HOST, DOMAIN, FEATURE, DATE)) IMMUTABLE_ROWS=true");
-            stm.execute("CREATE INDEX web_stats_idx ON web_stats (DATE, FEATURE)");
+            stm.execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX web_stats_idx ON web_stats (DATE, FEATURE)");
             stm.close();
 
             Date date = new Date(0);

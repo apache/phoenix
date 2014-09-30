@@ -70,6 +70,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -170,9 +171,17 @@ public class DeleteCompiler {
         if (!hasImmutableIndex(tableRef)) {
             return false;
         }
+        boolean isMultiTenant = tableRef.getTable().isMultiTenant();
         for (PTable index : tableRef.getTable().getIndexes()) {
-            for (PColumn column : index.getPKColumns()) {
-                if (!IndexUtil.isDataPKColumn(column)) {
+            List<PColumn> pkColumns = index.getPKColumns();
+            boolean isLocalIndex = index.getIndexType() == IndexType.LOCAL;
+            int nIndexSaltBuckets =
+                    index.getBucketNum() == null ? 0 : index.getBucketNum();
+            int numNonKVColumns =
+                    (isMultiTenant ? 1 : 0) + (!isLocalIndex && nIndexSaltBuckets > 0 ? 1 : 0)
+                            + (isLocalIndex ? 1 : 0);
+            for (int i = numNonKVColumns; i < pkColumns.size(); i++) {
+                if (!IndexUtil.isDataPKColumn(pkColumns.get(i))) {
                     return true;
                 }
             }

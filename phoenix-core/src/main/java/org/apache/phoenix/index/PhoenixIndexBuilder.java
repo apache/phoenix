@@ -20,11 +20,14 @@ package org.apache.phoenix.index;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -49,13 +52,24 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
         // table rows being indexed into the block cache, as the index maintenance code
         // does a point scan per row
         List<KeyRange> keys = Lists.newArrayListWithExpectedSize(miniBatchOp.size());
-        List<IndexMaintainer> maintainers = new ArrayList<IndexMaintainer>();
+        Map<ImmutableBytesWritable, IndexMaintainer> maintainers =
+                new HashMap<ImmutableBytesWritable, IndexMaintainer>();
+        ImmutableBytesWritable indexTableName = new ImmutableBytesWritable();
         for (int i = 0; i < miniBatchOp.size(); i++) {
             Mutation m = miniBatchOp.getOperation(i);
             keys.add(PDataType.VARBINARY.getKeyRange(m.getRow()));
-            maintainers.addAll(getCodec().getIndexMaintainers(m.getAttributesMap()));
+            List<IndexMaintainer> indexMaintainers = getCodec().getIndexMaintainers(m.getAttributesMap());
+            
+            for(IndexMaintainer indexMaintainer: indexMaintainers) {
+                if (indexMaintainer.isImmutableRows() && indexMaintainer.isLocalIndex()) continue;
+                indexTableName.set(indexMaintainer.getIndexTableName());
+                if (maintainers.get(indexTableName) != null) continue;
+                maintainers.put(indexTableName, indexMaintainer);
+            }
+            
         }
-        Scan scan = IndexManagementUtil.newLocalStateScan(maintainers);
+        if (maintainers.isEmpty()) return;
+        Scan scan = IndexManagementUtil.newLocalStateScan(new ArrayList<IndexMaintainer>(maintainers.values()));
         ScanRanges scanRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
         scanRanges.setScanStartStopRow(scan);
         scan.setFilter(scanRanges.getSkipScanFilter());

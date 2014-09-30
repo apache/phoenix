@@ -135,6 +135,24 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         });
     }
     
+    public static Iterator<PTable> enabledGlobalIndexIterator(Iterator<PTable> indexes) {
+        return Iterators.filter(indexes, new Predicate<PTable>() {
+            @Override
+            public boolean apply(PTable index) {
+                return !PIndexState.DISABLE.equals(index.getIndexState()) && !index.getIndexType().equals(IndexType.LOCAL);
+            }
+        });
+    }
+    
+    public static Iterator<PTable> enabledLocalIndexIterator(Iterator<PTable> indexes) {
+        return Iterators.filter(indexes, new Predicate<PTable>() {
+            @Override
+            public boolean apply(PTable index) {
+                return !PIndexState.DISABLE.equals(index.getIndexState()) && index.getIndexType().equals(IndexType.LOCAL);
+            }
+        });
+    }
+    
     /**
      * For client-side to serialize all IndexMaintainers for a given table
      * @param dataTable data table
@@ -155,8 +173,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             List<PTable> indexes) {
         Iterator<PTable> indexesItr = nonDisabledIndexIterator(indexes.iterator());
         if ((dataTable.isImmutableRows()) || !indexesItr.hasNext()) {
-            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-            return;
+            indexesItr = enabledLocalIndexIterator(indexesItr);
+            if (!indexesItr.hasNext()) {
+                ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+                return;
+            }
         }
         int nIndexes = 0;
         int estimatedSize = dataTable.getRowKeySchema().getEstimatedByteSize() + 2;
@@ -172,7 +193,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             WritableUtils.writeVInt(output, nIndexes * (dataTable.getBucketNum() == null ? 1 : -1));
             // Write out data row key schema once, since it's the same for all index maintainers
             dataTable.getRowKeySchema().write(output);
-            indexesItr = nonDisabledIndexIterator(indexes.iterator());
+            indexesItr =
+                    dataTable.isImmutableRows() ? enabledLocalIndexIterator(indexes.iterator())
+                            : nonDisabledIndexIterator(indexes.iterator());
             while (indexesItr.hasNext()) {
                     indexesItr.next().getIndexMaintainer(dataTable).write(output);
             }
@@ -227,6 +250,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private int nDataCFs;
     private boolean indexWALDisabled;
     private boolean isLocalIndex;
+    private boolean immutableRows;
 
     // Transient state
     private final boolean isDataTableSalted;
@@ -299,6 +323,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.emptyKeyValueCFPtr = SchemaUtil.getEmptyColumnFamilyPtr(index);
         this.nDataCFs = dataTable.getColumnFamilies().size();
         this.indexWALDisabled = indexWALDisabled;
+        // TODO: check whether index is immutable or not. Currently it's always false so checking
+        // data table is with immutable rows or not.
+        this.immutableRows = dataTable.isImmutableRows();
     }
 
     public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr, byte[] regionStartKey, byte[] regionEndKey)  {
@@ -862,8 +889,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // Encode indexWALDisabled in nDataCFs
         indexWALDisabled = nDataCFs < 0;
         this.nDataCFs = Math.abs(nDataCFs) - 1;
-        this.estimatedIndexRowKeyBytes = WritableUtils.readVInt(input);
-        
+        int encodedEstimatedIndexRowKeyBytesAndImmutableRows = WritableUtils.readVInt(input);
+        this.immutableRows = encodedEstimatedIndexRowKeyBytesAndImmutableRows < 0;
+        this.estimatedIndexRowKeyBytes = Math.abs(encodedEstimatedIndexRowKeyBytesAndImmutableRows);
         initCachedState();
     }
     
@@ -898,7 +926,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         rowKeyMetaData.write(output);
         // Encode indexWALDisabled in nDataCFs
         WritableUtils.writeVInt(output, (nDataCFs + 1) * (indexWALDisabled ? -1 : 1));
-        WritableUtils.writeVInt(output, estimatedIndexRowKeyBytes);
+        // Encode estimatedIndexRowKeyBytes and immutableRows together.
+        WritableUtils.writeVInt(output, estimatedIndexRowKeyBytes * (immutableRows ? -1 : 1));
     }
 
     public int getEstimatedByteSize() {
@@ -1149,7 +1178,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return allColumns.iterator();
     }
 
-    public ValueGetter createGetterFromKeyValues(Collection<Cell> pendingUpdates) {
+    public ValueGetter createGetterFromKeyValues(Collection<? extends Cell> pendingUpdates) {
         final Map<ReferencingColumn, ImmutableBytesPtr> valueMap = Maps.newHashMapWithExpectedSize(pendingUpdates
                 .size());
         for (Cell kv : pendingUpdates) {
@@ -1166,5 +1195,17 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 return valueMap.get(ReferencingColumn.wrap(ref));
             }
         };
+    }
+
+    public byte[] getDataEmptyKeyValueCF() {
+        return dataEmptyKeyValueCF;
+    }
+    
+    public boolean isLocalIndex() {
+        return isLocalIndex;
+    }
+    
+    public boolean isImmutableRows() {
+        return immutableRows;
     }
 }
