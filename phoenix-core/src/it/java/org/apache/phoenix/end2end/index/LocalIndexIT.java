@@ -132,23 +132,6 @@ public class LocalIndexIT extends BaseIndexIT {
     }
 
     @Test
-    public void testLocalIndexOnTableWithImmutableRows() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, null);
-        Connection conn1 = DriverManager.getConnection(getUrl());
-        Connection conn2 = DriverManager.getConnection(getUrl());
-        try {
-            conn1.createStatement().execute("ALTER TABLE " + DATA_TABLE_NAME + " SET IMMUTABLE_ROWS=true");
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
-            fail("Local index aren't allowed on table with immutable rows");
-        } catch (SQLException e) { }
-        try {
-            conn2.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_FULL_NAME).next();
-            conn2.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,INDEX_TABLE_NAME));
-            fail("Local index should not be created.");
-        } catch (TableNotFoundException e) { }
-    }
-
-    @Test
     public void testLocalIndexTableRegionSplitPolicyAndSplitKeys() throws Exception {
         createBaseTable(DATA_TABLE_NAME, null,"('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
@@ -573,6 +556,49 @@ public class LocalIndexIT extends BaseIndexIT {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + DATA_TABLE_NAME);
             assertTrue(rs.next());
             assertEquals(4, rs.getInt(1));
+        } finally {
+            conn1.close();
+        }
+    }
+
+    @Test
+    public void testLocalIndexesOnTableWithImmutableRows() throws Exception {
+        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try {
+            conn1.createStatement().execute("ALTER TABLE "+ DATA_TABLE_NAME + " SET IMMUTABLE_ROWS=true");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("CREATE INDEX " + INDEX_TABLE_NAME + "2 ON " + DATA_TABLE_NAME + "(k3)");
+            conn1.commit();
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('q',3,1,1,'c')");
+            conn1.commit();
+            conn1 = DriverManager.getConnection(getUrl());
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + DATA_TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            rs = conn1.createStatement().executeQuery("SELECT v1 FROM " + DATA_TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString("v1"));
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString("v1"));
+            assertTrue(rs.next());
+            assertEquals("c", rs.getString("v1"));
+            assertTrue(rs.next());
+            assertEquals("z", rs.getString("v1"));
+            assertFalse(rs.next());
+            rs = conn1.createStatement().executeQuery("SELECT k3 FROM " + DATA_TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt("k3"));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt("k3"));
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt("k3"));
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt("k3"));
+            assertFalse(rs.next());
         } finally {
             conn1.close();
         }

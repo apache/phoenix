@@ -758,9 +758,6 @@ public class MetaDataClient {
                  * 2) for a view on an index.
                  */
                 if (statement.getIndexType() == IndexType.LOCAL || (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED)) {
-                    if (dataTable.isImmutableRows() && statement.getIndexType() == IndexType.LOCAL) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_LOCAL_INDEX_ON_TABLE_WITH_IMMUTABLE_ROWS).setTableName(indexTableName.getTableName()).build().buildException();
-                    }
                     allocateIndexId = true;
                     // Next add index ID column
                     PDataType dataType = MetaDataUtil.getViewIndexIdDataType();

@@ -31,7 +31,7 @@ public class IndexUpdate {
   byte[] tableName;
   ColumnTracker columns;
 
-  IndexUpdate(ColumnTracker tracker) {
+  public IndexUpdate(ColumnTracker tracker) {
     this.columns = tracker;
   }
 

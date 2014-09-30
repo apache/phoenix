@@ -40,12 +40,14 @@ import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.IndexCodec;
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
 import org.apache.phoenix.hbase.index.covered.TableState;
+import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ServerUtil;
 
@@ -109,41 +111,22 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
     
     @Override
     public Iterable<IndexUpdate> getIndexUpserts(TableState state) throws IOException {
-        List<IndexMaintainer> indexMaintainers = getIndexMaintainers(state.getUpdateAttributes());
-        if (indexMaintainers.isEmpty()) {
-            return Collections.emptyList();
-        }
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        List<IndexUpdate> indexUpdates = Lists.newArrayList();
-        // TODO: state.getCurrentRowKey() should take an ImmutableBytesWritable arg to prevent byte copy
-        byte[] dataRowKey = state.getCurrentRowKey();
-        for (IndexMaintainer maintainer : indexMaintainers) {
-            // Short-circuit building state when we know it's a row deletion
-            if (maintainer.isRowDeleted(state.getPendingUpdate())) {
-                continue;
-            }
-
-            // Get a scanner over the columns this maintainer would like to look at
-            // Any updates that we would make for those columns are then added to the index update
-            Pair<Scanner,IndexUpdate> statePair = state.getIndexedColumnsTableState(maintainer.getAllColumns());
-            IndexUpdate indexUpdate = statePair.getSecond();
-            Scanner scanner = statePair.getFirst();
-
-            // get the values from the scanner so we can actually use them
-            ValueGetter valueGetter = IndexManagementUtil.createGetterFromScanner(scanner, dataRowKey);
-            ptr.set(dataRowKey);
-            Put put = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, state.getCurrentTimestamp(), env.getRegion().getStartKey(), env.getRegion().getEndKey());
-            indexUpdate.setTable(maintainer.getIndexTableName());
-            indexUpdate.setUpdate(put);
-            //make sure we close the scanner when we are done
-            scanner.close();
-            indexUpdates.add(indexUpdate);
-        }
-        return indexUpdates;
+        return getIndexUpdates(state, true);
     }
 
     @Override
     public Iterable<IndexUpdate> getIndexDeletes(TableState state) throws IOException {
+        return getIndexUpdates(state, false);
+    }
+
+    /**
+     * 
+     * @param state
+     * @param upsert prepare index upserts if it's true otherwise prepare index deletes. 
+     * @return
+     * @throws IOException
+     */
+    private Iterable<IndexUpdate> getIndexUpdates(TableState state, boolean upsert) throws IOException {
         List<IndexMaintainer> indexMaintainers = getIndexMaintainers(state.getUpdateAttributes());
         if (indexMaintainers.isEmpty()) {
             return Collections.emptyList();
@@ -152,19 +135,51 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         // TODO: state.getCurrentRowKey() should take an ImmutableBytesWritable arg to prevent byte copy
         byte[] dataRowKey = state.getCurrentRowKey();
+        ptr.set(dataRowKey);
+        byte[] localIndexTableName = MetaDataUtil.getLocalIndexPhysicalName(env.getRegion().getTableDesc().getName());
+        ValueGetter valueGetter = null;
+        Scanner scanner = null;
         for (IndexMaintainer maintainer : indexMaintainers) {
-            // TODO: if more efficient, I could do this just once with all columns in all indexes
-            Pair<Scanner,IndexUpdate> statePair = state.getIndexedColumnsTableState(maintainer.getAllColumns());
-            Scanner scanner = statePair.getFirst();
-            IndexUpdate indexUpdate = statePair.getSecond();
-            indexUpdate.setTable(maintainer.getIndexTableName());
-            ValueGetter valueGetter = IndexManagementUtil.createGetterFromScanner(scanner, dataRowKey);
-            ptr.set(dataRowKey);
-            Delete delete =
-                maintainer.buildDeleteMutation(kvBuilder, valueGetter, ptr,
-                  state.getPendingUpdate(), state.getCurrentTimestamp(), env.getRegion().getStartKey(), env.getRegion().getEndKey());
-            scanner.close();
-            indexUpdate.setUpdate(delete);
+            if(upsert) {
+                // Short-circuit building state when we know it's a row deletion
+                if (maintainer.isRowDeleted(state.getPendingUpdate())) {
+                    continue;
+                }
+            }
+            IndexUpdate indexUpdate = null;
+            if (maintainer.isImmutableRows()) {
+                indexUpdate = new IndexUpdate(new ColumnTracker(maintainer.getAllColumns()));
+                if(maintainer.isLocalIndex()) {
+                    indexUpdate.setTable(localIndexTableName);
+                } else {
+                    indexUpdate.setTable(maintainer.getIndexTableName());
+                }
+                valueGetter = maintainer.createGetterFromKeyValues(state.getPendingUpdate());
+            } else {
+                // TODO: if more efficient, I could do this just once with all columns in all indexes
+                Pair<Scanner,IndexUpdate> statePair = state.getIndexedColumnsTableState(maintainer.getAllColumns());
+                scanner = statePair.getFirst();
+                indexUpdate = statePair.getSecond();
+                indexUpdate.setTable(maintainer.getIndexTableName());
+                valueGetter = IndexManagementUtil.createGetterFromScanner(scanner, dataRowKey);
+            }
+            Mutation mutation = null;
+            if (upsert) {
+                mutation =
+                        maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, state
+                                .getCurrentTimestamp(), env.getRegion().getStartKey(), env
+                                .getRegion().getEndKey());
+            } else {
+                mutation =
+                        maintainer.buildDeleteMutation(kvBuilder, valueGetter, ptr, state
+                                .getPendingUpdate(), state.getCurrentTimestamp(), env.getRegion()
+                                .getStartKey(), env.getRegion().getEndKey());
+            }
+            indexUpdate.setUpdate(mutation);
+            if (scanner != null) {
+                scanner.close();
+                scanner = null;
+            }
             indexUpdates.add(indexUpdate);
         }
         return indexUpdates;
