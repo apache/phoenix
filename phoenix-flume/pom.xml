@@ -56,6 +56,7 @@
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase</artifactId>
+      <scope>test</scope>
       <type>test-jar</type>
     </dependency>
   </dependencies>
