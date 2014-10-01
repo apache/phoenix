@@ -21,7 +21,7 @@ import java.sql.SQLException;
 
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 
 
@@ -30,8 +30,8 @@ import org.apache.phoenix.schema.PTable.IndexType;
  */
 public class ParallelIteratorRegionSplitterFactory {
 
-    public static ParallelIteratorRegionSplitter getSplitter(StatementContext context, TableRef table, HintNode hintNode) throws SQLException {
-        if(table.getTable().getIndexType() == IndexType.LOCAL) {
+    public static ParallelIteratorRegionSplitter getSplitter(StatementContext context, PTable table, HintNode hintNode) throws SQLException {
+        if(table.getIndexType() == IndexType.LOCAL) {
             return LocalIndexParallelIteratorRegionSplitter.getInstance(context, table, hintNode);
         }
         if (context.getScanRanges().useSkipScanFilter()) {

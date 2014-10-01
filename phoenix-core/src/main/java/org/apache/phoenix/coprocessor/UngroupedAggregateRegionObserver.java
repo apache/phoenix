@@ -145,20 +145,28 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     }
     
     @Override
-    protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
-        int offset = 0;
-        boolean isAnalyze = false;
-        HRegion region = c.getEnvironment().getRegion();
-        TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-        StatisticsCollector stats = null;
-        if(scan.getAttribute(BaseScannerRegionObserver.ANALYZE_TABLE) != null && statsTable != null) {
-            stats = new StatisticsCollector(statsTable, c.getEnvironment().getConfiguration());
-            isAnalyze = true;
+    public RegionScanner preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e, Scan scan, RegionScanner s)
+            throws IOException {
+        s = super.preScannerOpen(e, scan, s);
+        if (ScanUtil.isAnalyzeTable(scan)) {
             // We are setting the start row and stop row such that it covers the entire region. As part
             // of Phonenix-1263 we are storing the guideposts against the physical table rather than 
             // individual tenant specific tables.
             scan.setStartRow(HConstants.EMPTY_START_ROW);
             scan.setStopRow(HConstants.EMPTY_END_ROW);
+        }
+        return s;
+    }
+    
+    @Override
+    protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
+        int offset = 0;
+        boolean isAnalyze = false;
+        HRegion region = c.getEnvironment().getRegion();
+        StatisticsCollector stats = null;
+        if(ScanUtil.isAnalyzeTable(scan) && statsTable != null) {
+            stats = new StatisticsCollector(statsTable, c.getEnvironment().getConfiguration());
+            isAnalyze = true;
         }
         if (ScanUtil.isLocalIndex(scan)) {
             /*

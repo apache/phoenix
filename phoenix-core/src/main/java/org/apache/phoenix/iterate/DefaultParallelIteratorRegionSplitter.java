@@ -31,7 +31,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
@@ -55,16 +54,16 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
 
     protected final long guidePostsDepth;
     protected final StatementContext context;
-    protected final TableRef tableRef;
+    protected final PTable table;
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultParallelIteratorRegionSplitter.class);
-    public static DefaultParallelIteratorRegionSplitter getInstance(StatementContext context, TableRef table, HintNode hintNode) {
+    public static DefaultParallelIteratorRegionSplitter getInstance(StatementContext context, PTable table, HintNode hintNode) {
         return new DefaultParallelIteratorRegionSplitter(context, table, hintNode);
     }
 
-    protected DefaultParallelIteratorRegionSplitter(StatementContext context, TableRef table, HintNode hintNode) {
+    protected DefaultParallelIteratorRegionSplitter(StatementContext context, PTable table, HintNode hintNode) {
         this.context = context;
-        this.tableRef = table;
+        this.table = table;
         ReadOnlyProps props = context.getConnection().getQueryServices().getProps();
         this.guidePostsDepth = props.getLong(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB,
                 QueryServicesOptions.DEFAULT_HISTOGRAM_BYTE_DEPTH);
@@ -73,7 +72,6 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
     // Get the mapping between key range and the regions that contains them.
     protected List<HRegionLocation> getAllRegions() throws SQLException {
         Scan scan = context.getScan();
-        PTable table = tableRef.getTable();
         List<HRegionLocation> allTableRegions = context.getConnection().getQueryServices()
                 .getAllTableRegions(table.getPhysicalName().getBytes());
         // If we're not salting, then we've already intersected the minMaxRange with the scan range
@@ -110,7 +108,6 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
     protected List<KeyRange> genKeyRanges(List<HRegionLocation> regions) {
         if (regions.isEmpty()) { return Collections.emptyList(); }
         Scan scan = context.getScan();
-        PTable table = this.tableRef.getTable();
         byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(table);
         List<byte[]> gps = Lists.newArrayList();
         if (!ScanUtil.isAnalyzeTable(scan)) {
