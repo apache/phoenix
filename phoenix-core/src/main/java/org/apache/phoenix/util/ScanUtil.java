@@ -264,7 +264,7 @@ public class ScanUtil {
 
     private static byte[] getKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan, Bound bound) {
         if (slots.isEmpty()) {
-            return null;
+            return KeyRange.UNBOUND;
         }
         int[] position = new int[slots.size()];
         int maxLength = 0;
@@ -276,7 +276,7 @@ public class ScanUtil {
         byte[] key = new byte[maxLength];
         int length = setKey(schema, slots, slotSpan, position, bound, key, 0, 0, position.length);
         if (length == 0) {
-            return null;
+            return KeyRange.UNBOUND;
         }
         if (length == maxLength) {
             return key;

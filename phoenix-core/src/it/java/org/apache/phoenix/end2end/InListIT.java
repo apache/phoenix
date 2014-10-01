@@ -163,7 +163,7 @@ public class InListIT extends BaseHBaseManagedTimeIT {
     // the different combinations to check each test against
     private static final List<Boolean> TENANCIES = Arrays.asList(false, true);
     private static final List<PDataType> INTEGER_TYPES = Arrays.asList(PDataType.INTEGER, PDataType.LONG);
-    private static final List<Integer> SALT_BUCKET_NUMBERS = Arrays.asList(0, 4);
+    private static final List<Integer> SALT_BUCKET_NUMBERS = Arrays.asList(/*0,*/ 4);
 
     // we should be including the RANGE_SCAN hint here, but a bug with ParallelIterators causes tests to fail
     // see the relevant JIRA here: https://issues.apache.org/jira/browse/PHOENIX-1251

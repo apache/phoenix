@@ -192,14 +192,14 @@ public class StatementContext {
     }
     
     public void setScanRanges(ScanRanges scanRanges) {
-        setScanRanges(scanRanges, null);
+        setScanRanges(scanRanges, KeyRange.EVERYTHING_RANGE);
     }
 
     public void setScanRanges(ScanRanges scanRanges, KeyRange minMaxRange) {
         this.scanRanges = scanRanges;
-        this.scanRanges.setScanStartStopRow(scan);
-        PTable table = this.getCurrentTable().getTable();
-        if (minMaxRange != null) {
+        KeyRange scanRange = scanRanges.getMinMaxRange();
+        if (minMaxRange != KeyRange.EVERYTHING_RANGE) {
+            PTable table = this.getCurrentTable().getTable();
             // Ensure minMaxRange is lower inclusive and upper exclusive, as that's
             // what we need to intersect against for the HBase scan.
             byte[] lowerRange = minMaxRange.getLowerRange();
@@ -216,17 +216,12 @@ public class StatementContext {
                 }
             }
             if (minMaxRange.getLowerRange() != lowerRange || minMaxRange.getUpperRange() != upperRange) {
-                minMaxRange = KeyRange.getKeyRange(lowerRange, true, upperRange, false);
+                minMaxRange = KeyRange.getKeyRange(lowerRange, upperRange);
             }
-            // If we're not salting, we can intersect this now with the scan range.
-            // Otherwise, we have to wait to do this when we chunk up the scan.
-            if (table.getBucketNum() == null) {
-                minMaxRange = minMaxRange.intersect(KeyRange.getKeyRange(scan.getStartRow(), scan.getStopRow()));
-                scan.setStartRow(minMaxRange.getLowerRange());
-                scan.setStopRow(minMaxRange.getUpperRange());
-            }
-            this.minMaxRange = minMaxRange;
+            scanRange = scanRange.intersect(minMaxRange);
         }
+        scan.setStartRow(scanRange.getLowerRange());
+        scan.setStopRow(scanRange.getUpperRange());
     }
     
     public PhoenixConnection getConnection() {
