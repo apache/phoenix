@@ -53,7 +53,7 @@ import com.google.common.collect.Lists;
  * 
  * @since 0.1
  */
-public abstract class BasicQueryPlan implements QueryPlan {
+public abstract class BaseQueryPlan implements QueryPlan {
     protected static final long DEFAULT_ESTIMATED_SIZE = 10 * 1024; // 10 K
     
     protected final TableRef tableRef;
@@ -66,7 +66,7 @@ public abstract class BasicQueryPlan implements QueryPlan {
     protected final GroupBy groupBy;
     protected final ParallelIteratorFactory parallelIteratorFactory;
 
-    protected BasicQueryPlan(
+    protected BaseQueryPlan(
             StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projection, ParameterMetaData paramMetaData, Integer limit, OrderBy orderBy,
             GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory) {
@@ -207,5 +207,10 @@ public abstract class BasicQueryPlan implements QueryPlan {
         List<String> planSteps = Lists.newArrayListWithExpectedSize(5);
         iterator.explain(planSteps);
         return new ExplainPlan(planSteps);
+    }
+
+    @Override
+    public boolean isRowKeyOrdered() {
+        return groupBy.isEmpty() ? orderBy.getOrderByExpressions().isEmpty() : groupBy.isOrderPreserving();
     }
 }

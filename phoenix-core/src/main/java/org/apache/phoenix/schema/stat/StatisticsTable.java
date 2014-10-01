@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.util.ByteUtil;
 
 /**
  * Wrapper to access the statistics table SYSTEM.STATS using the HTable.
@@ -56,14 +57,12 @@ public class StatisticsTable implements Closeable {
         if (table == null) {
             // Map the statics table and the table with which the statistics is
             // associated. This is a workaround
-            HTablePool pool = new HTablePool(conf, 1);
-            try {
-                HTableInterface hTable = pool.getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
-                table = new StatisticsTable(hTable);
-                tableMap.put(primaryTableName, table);
-            } finally {
-                pool.close();
-            }
+            HTablePool pool = new HTablePool(conf,100);
+            //HTable hTable = new HTable(conf, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
+            HTableInterface hTable = pool.getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
+            //h.setAutoFlushTo(true);
+            table = new StatisticsTable(hTable);
+            tableMap.put(primaryTableName, table);
         }
         return table;
     }
@@ -132,6 +131,9 @@ public class StatisticsTable implements Closeable {
                 currentTime, PDataType.VARBINARY.toBytes(tracker.getMinKey(fam)));
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.MAX_KEY_BYTES,
                 currentTime, PDataType.VARBINARY.toBytes(tracker.getMaxKey(fam)));
+        // Add our empty column value so queries behave correctly
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
+                currentTime, ByteUtil.EMPTY_BYTE_ARRAY);
         mutations.add(put);
     }
 

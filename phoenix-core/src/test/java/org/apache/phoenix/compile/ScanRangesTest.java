@@ -72,7 +72,7 @@ public class ScanRangesTest {
             // incrementing the key too much.
             upperExclusiveKey = ByteUtil.nextKey(upperExclusiveKey);
         }
-        assertEquals(expectedResult, scanRanges.intersect(lowerInclusiveKey,upperExclusiveKey));
+        assertEquals(expectedResult, scanRanges.intersects(lowerInclusiveKey,upperExclusiveKey,0));
     }
 
     @Parameters(name="{0} {2}")

@@ -105,7 +105,7 @@ public class SkipScanFilter extends FilterBase {
     }
 
     // Exposed for testing.
-    List<List<KeyRange>> getSlots() {
+    public List<List<KeyRange>> getSlots() {
         return slots;
     }
 
@@ -178,14 +178,35 @@ public class SkipScanFilter extends FilterBase {
             schema.next(ptr, 0, schema.iterator(upperExclusiveKey,ptr), slotSpan[0]);
             endPos = ScanUtil.searchClosestKeyRangeWithUpperHigherThanPtr(slots.get(0), ptr, startPos);
             // Upper range lower than first lower range of first slot, so cannot possibly be in range
-            if (endPos == 0 && Bytes.compareTo(upperExclusiveKey, slots.get(0).get(0).getLowerRange()) <= 0) {
-                return false;
-            }
+//            if (endPos == 0 && Bytes.compareTo(upperExclusiveKey, slots.get(0).get(0).getLowerRange()) <= 0) {
+//                return false;
+//            }
             // Past last position, so we can include everything from the start position
             if (endPos >= slots.get(0).size()) {
                 upperUnbound = true;
                 endPos = slots.get(0).size()-1;
+            } else if (slots.get(0).get(endPos).compareLowerToUpperBound(upperExclusiveKey) >= 0) {
+                // We know that the endPos range is higher than the previous range, but we need
+                // to test if it ends before the next range starts.
+                endPos--;
             }
+            if (endPos < startPos) {
+                return false;
+            }
+            
+        }
+        // Short circuit out if we only have a single set of keys
+        if (slots.size() == 1) {
+//            int offset = slots.get(0).get(endPos).compareLowerToUpperBound(upperExclusiveKey) < 0 ? 1 : 0;
+//            if (endPos + offset <= startPos) {
+//                return false;
+//            }
+//            List<KeyRange> newRanges = slots.get(0).subList(startPos, endPos + offset);
+            if (newSlots != null) {
+                List<KeyRange> newRanges = slots.get(0).subList(startPos, endPos+1);
+                newSlots.add(newRanges);
+            }
+            return true;
         }
         if (!lowerUnbound) {
             position[0] = startPos;

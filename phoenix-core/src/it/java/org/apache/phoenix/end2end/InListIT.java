@@ -165,10 +165,7 @@ public class InListIT extends BaseHBaseManagedTimeIT {
     private static final List<PDataType> INTEGER_TYPES = Arrays.asList(PDataType.INTEGER, PDataType.LONG);
     private static final List<Integer> SALT_BUCKET_NUMBERS = Arrays.asList(0, 4);
 
-    // we should be including the RANGE_SCAN hint here, but a bug with ParallelIterators causes tests to fail
-    // see the relevant JIRA here: https://issues.apache.org/jira/browse/PHOENIX-1251
-    private static final List<String> HINTS = Arrays.asList("", "/*+ SKIP_SCAN */");
-//    private static final List<String> HINTS = Arrays.asList("", "/*+ SKIP_SCAN */", "/*+ RANGE_SCAN */");
+    private static final List<String> HINTS = Arrays.asList("", "/*+ SKIP_SCAN */", "/*+ RANGE_SCAN */");
     
     /**
      * Tests the given where clause against the given upserts by comparing against the list of

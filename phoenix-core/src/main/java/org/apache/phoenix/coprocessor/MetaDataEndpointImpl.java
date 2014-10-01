@@ -110,7 +110,6 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stat.PTableStats;
 import org.apache.phoenix.schema.stat.PTableStatsImpl;
-import org.apache.phoenix.schema.stat.StatisticsUtils;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -239,8 +238,14 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         int length = getVarCharLength(keyBuffer, keyOffset, keyLength);
         return PNameFactory.newName(keyBuffer, keyOffset, length);
     }
-    
-    private static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp) throws IOException {
+
+    private static Scan newTableRowsScan(byte[] key)
+            throws IOException {
+        return newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP, HConstants.LATEST_TIMESTAMP);
+    }
+
+    private static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp)
+            throws IOException {
         Scan scan = new Scan();
         scan.setTimeRange(startTimeStamp, stopTimeStamp);
         scan.setStartRow(key);
@@ -454,7 +459,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         }
         PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getTableName(
                 schemaName.getString(), tableName.getString())) : physicalTables.get(0);
-        PTableStats stats = updateStatsInternal(physicalTableName.getBytes(), columns);
+        PTableStats stats = tenantId == null ? updateStatsInternal(physicalTableName.getBytes()) : null;
         return PTableImpl
                 .makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, tableSeqNum, pkName,
                         saltBucketNum, columns, tableType == INDEX ? dataTableName : null, indexes, isImmutableRows,
@@ -462,62 +467,48 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                         viewIndexId, stats);
     }
     
-    private PTableStats updateStatsInternal(byte[] tableNameBytes, List<PColumn> columns) throws IOException {
-        List<PName> family = Lists.newArrayListWithExpectedSize(columns.size());
-        for (PColumn column : columns) {
-            PName familyName = column.getFamilyName();
-            if (familyName != null) {
-                family.add(familyName);
-            }
-        }
+    private PTableStats updateStatsInternal(byte[] tableNameBytes) throws IOException {
         HTable statsHTable = null;
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         try {
             // Can we do a new HTable instance here? Or get it from a pool or cache of these instances?
             statsHTable = new HTable(getEnvironment().getConfiguration(), PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
-            Scan s = new Scan();
-            if (tableNameBytes != null) {
-                // Check for an efficient way here
-                s.setStartRow(tableNameBytes);
-                s.setStopRow(ByteUtil.nextKey(tableNameBytes));
-            }
+            Scan s = newTableRowsScan(tableNameBytes);
+            s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
             ResultScanner scanner = statsHTable.getScanner(s);
             Result result = null;
-            byte[] fam = null;
-            List<byte[]> guidePosts = Lists.newArrayListWithExpectedSize(columns.size());
             TreeMap<byte[], List<byte[]>> guidePostsPerCf = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
             while ((result = scanner.next()) != null) {
-                KeyValue[] kvs = result.raw();
-                for(KeyValue kv : kvs) {
-                    // For now collect only guide posts
-                    if (Bytes.equals(kv.getQualifier(), PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES)) {
-                        byte[] cfInCell = StatisticsUtils.getCFFromRowKey(tableNameBytes, kv.getRow());
-                        if (fam == null) {
-                            fam = cfInCell;
-                        } else if (!Bytes.equals(fam, cfInCell)) {
-                            // Sort all the guide posts
-                            guidePostsPerCf.put(cfInCell, guidePosts);
-                            guidePosts = new ArrayList<byte[]>();
-                            fam = cfInCell;
+                KeyValue current = result.raw()[0];
+                int tableNameLength = tableNameBytes.length + 1;
+                int cfOffset = current.getRowOffset() + tableNameLength;
+                int cfLength = getVarCharLength(current.getRow(), cfOffset, current.getRowLength() - tableNameLength);
+                ptr.set(current.getRow(), cfOffset, cfLength);
+                byte[] cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(current.getValue(), current.getValueOffset(), current
+                        .getValueLength());
+                if (array != null && array.getDimensions() != 0) {
+                    List<byte[]> guidePosts = Lists.newArrayListWithExpectedSize(array.getDimensions());                        
+                    for (int j = 0; j < array.getDimensions(); j++) {
+                        byte[] gp = array.toBytes(j);
+                        if (gp.length != 0) {
+                            guidePosts.add(gp);
                         }
-                        byte[] guidePostVal = new ImmutableBytesPtr(kv.getBuffer(), kv.getValueOffset(),
-                                kv.getValueLength()).copyBytesIfNecessary();
-                        PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(guidePostVal);
-                        if (array != null && array.getDimensions() != 0) {
-                            for (int j = 0; j < array.getDimensions(); j++) {
-                                byte[] gp = array.toBytes(j);
-                                if (gp.length != 0) {
-                                    guidePosts.add(gp);
-                                }
-                            }
-                        }
+                    }
+                    List<byte[]> gps = guidePostsPerCf.put(cfName, guidePosts);
+                    if (gps != null) { // Add guidepost already there from other regions
+                        guidePosts.addAll(gps);
                     }
                 }
             }
-            if (fam != null) {
-                // Sort all the guideposts
-                guidePostsPerCf.put(fam, guidePosts);
+            if (!guidePostsPerCf.isEmpty()) {
+                // Sort guideposts, as the order above will depend on the order we traverse
+                // each region's worth of guideposts above.
+                for (List<byte[]> gps : guidePostsPerCf.values()) {
+                    Collections.sort(gps, Bytes.BYTES_COMPARATOR);
+                }
+                return new PTableStatsImpl(guidePostsPerCf);
             }
-            return new PTableStatsImpl(guidePostsPerCf);
         } catch (Exception e) {
             if (e instanceof org.apache.hadoop.hbase.TableNotFoundException) {
                 logger.warn("Stats table not yet online", e);

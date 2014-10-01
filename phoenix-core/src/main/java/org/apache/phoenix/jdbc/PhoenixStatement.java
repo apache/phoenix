@@ -426,6 +426,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 public boolean isDegenerate() {
                     return false;
                 }
+
+                @Override
+                public boolean isRowKeyOrdered() {
+                    return true;
+                }
                 
             };
         }

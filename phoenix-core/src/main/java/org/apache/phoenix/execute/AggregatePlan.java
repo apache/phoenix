@@ -65,7 +65,7 @@ import org.apache.phoenix.schema.TableRef;
  * 
  * @since 0.1
  */
-public class AggregatePlan extends BasicQueryPlan {
+public class AggregatePlan extends BaseQueryPlan {
     private final Aggregators aggregators;
     private final Expression having;
     private List<KeyRange> splits;
@@ -164,7 +164,7 @@ public class AggregatePlan extends BasicQueryPlan {
              */
             context.getScan().setAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT, PDataType.INTEGER.toBytes(limit));
         }
-        ParallelIterators parallelIterators = new ParallelIterators(context, tableRef, statement, projection, groupBy, null, wrapParallelIteratorFactory());
+        ParallelIterators parallelIterators = new ParallelIterators(this, null, wrapParallelIteratorFactory());
         splits = parallelIterators.getSplits();
 
         AggregatingResultIterator aggResultIterator;

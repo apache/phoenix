@@ -59,7 +59,6 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
         }
         Scan scan = IndexManagementUtil.newLocalStateScan(maintainers);
         ScanRanges scanRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
-        scanRanges.setScanStartStopRow(scan);
         scan.setFilter(scanRanges.getSkipScanFilter());
         HRegion region = this.env.getRegion();
         RegionScanner scanner = region.getScanner(scan);

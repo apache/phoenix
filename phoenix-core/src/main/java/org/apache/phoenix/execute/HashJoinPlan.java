@@ -79,7 +79,7 @@ public class HashJoinPlan implements QueryPlan {
     private static final Log LOG = LogFactory.getLog(HashJoinPlan.class);
 
     private final FilterableStatement statement;
-    private final BasicQueryPlan plan;
+    private final BaseQueryPlan plan;
     private final HashJoinInfo joinInfo;
     private final SubPlan[] subPlans;
     private final boolean recompileWhereClause;
@@ -93,8 +93,8 @@ public class HashJoinPlan implements QueryPlan {
     
     public static HashJoinPlan create(FilterableStatement statement, 
             QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans) {
-        if (plan instanceof BasicQueryPlan)
-            return new HashJoinPlan(statement, (BasicQueryPlan) plan, joinInfo, subPlans, joinInfo == null);
+        if (plan instanceof BaseQueryPlan)
+            return new HashJoinPlan(statement, (BaseQueryPlan) plan, joinInfo, subPlans, joinInfo == null);
         
         assert (plan instanceof HashJoinPlan);
         HashJoinPlan hashJoinPlan = (HashJoinPlan) plan;
@@ -111,7 +111,7 @@ public class HashJoinPlan implements QueryPlan {
     }
     
     private HashJoinPlan(FilterableStatement statement, 
-            BasicQueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans, boolean recompileWhereClause) {
+            BaseQueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans, boolean recompileWhereClause) {
         this.statement = statement;
         this.plan = plan;
         this.joinInfo = joinInfo;
@@ -461,6 +461,11 @@ public class HashJoinPlan implements QueryPlan {
             return Collections.<String> singletonList(step);
         }
         
+    }
+
+    @Override
+    public boolean isRowKeyOrdered() {
+        return plan.isRowKeyOrdered();
     }
 }
 
