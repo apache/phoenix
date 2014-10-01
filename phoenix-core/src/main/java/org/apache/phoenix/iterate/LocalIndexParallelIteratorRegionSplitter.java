@@ -23,21 +23,21 @@ import java.util.List;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.PTable;
 
 public class LocalIndexParallelIteratorRegionSplitter extends DefaultParallelIteratorRegionSplitter {
     
-    public static DefaultParallelIteratorRegionSplitter getInstance(StatementContext context, TableRef table, HintNode hintNode) {
+    public static DefaultParallelIteratorRegionSplitter getInstance(StatementContext context, PTable table, HintNode hintNode) {
         return new LocalIndexParallelIteratorRegionSplitter(context, table, hintNode);
     }
     
-    protected LocalIndexParallelIteratorRegionSplitter(StatementContext context, TableRef table, HintNode hintNode) {
+    protected LocalIndexParallelIteratorRegionSplitter(StatementContext context, PTable table, HintNode hintNode) {
         super(context,table,hintNode);
     }
 
     @Override
     protected List<HRegionLocation> getAllRegions() throws SQLException {
-        return context.getConnection().getQueryServices().getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
+        return context.getConnection().getQueryServices().getAllTableRegions(table.getPhysicalName().getBytes());
     }
     
 }

@@ -21,16 +21,16 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.HRegionLocation;
-
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SaltingUtil;
-import org.apache.phoenix.schema.TableRef;
+
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 
 
 /**
@@ -38,17 +38,17 @@ import org.apache.phoenix.schema.TableRef;
  */
 public class SkipRangeParallelIteratorRegionSplitter extends DefaultParallelIteratorRegionSplitter {
 
-    public static SkipRangeParallelIteratorRegionSplitter getInstance(StatementContext context, TableRef table, HintNode hintNode) {
+    public static SkipRangeParallelIteratorRegionSplitter getInstance(StatementContext context, PTable table, HintNode hintNode) {
         return new SkipRangeParallelIteratorRegionSplitter(context, table, hintNode);
     }
 
-    protected SkipRangeParallelIteratorRegionSplitter(StatementContext context, TableRef table, HintNode hintNode) {
+    protected SkipRangeParallelIteratorRegionSplitter(StatementContext context, PTable table, HintNode hintNode) {
         super(context, table, hintNode);
     }
 
     @Override
     protected List<HRegionLocation> getAllRegions() throws SQLException {
-        List<HRegionLocation> allTableRegions = context.getConnection().getQueryServices().getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
+        List<HRegionLocation> allTableRegions = context.getConnection().getQueryServices().getAllTableRegions(table.getPhysicalName().getBytes());
         return filterRegions(allTableRegions, context.getScanRanges());
     }
 
@@ -66,7 +66,7 @@ public class SkipRangeParallelIteratorRegionSplitter extends DefaultParallelIter
                         KeyRange minMaxRange = context.getMinMaxRange();
                         if (minMaxRange != null) {
                             KeyRange range = KeyRange.getKeyRange(region.getRegionInfo().getStartKey(), region.getRegionInfo().getEndKey());
-                            if (tableRef.getTable().getBucketNum() != null) {
+                            if (table.getBucketNum() != null) {
                                 // Add salt byte, as minMaxRange won't have it
                                 minMaxRange = SaltingUtil.addSaltByte(region.getRegionInfo().getStartKey(), minMaxRange);
                             }
