@@ -21,7 +21,7 @@ import java.sql.SQLException;
 
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.PTable;
 
 
 /**
@@ -29,7 +29,7 @@ import org.apache.phoenix.schema.TableRef;
  */
 public class ParallelIteratorRegionSplitterFactory {
 
-    public static ParallelIteratorRegionSplitter getSplitter(StatementContext context, TableRef table, HintNode hintNode) throws SQLException {
+    public static ParallelIteratorRegionSplitter getSplitter(StatementContext context, PTable table, HintNode hintNode) throws SQLException {
         if (context.getScanRanges().useSkipScanFilter()) {
             return SkipRangeParallelIteratorRegionSplitter.getInstance(context, table, hintNode);
         }

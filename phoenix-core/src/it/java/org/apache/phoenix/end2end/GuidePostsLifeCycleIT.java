@@ -89,7 +89,7 @@ public class GuidePostsLifeCycleIT extends BaseHBaseManagedTimeIT {
                 tableRef.getTable().getPhysicalName().getBytes());
         PhoenixStatement statement = new PhoenixStatement(pconn);
         StatementContext context = new StatementContext(statement, null, scan, new SequenceManager(statement));
-        DefaultParallelIteratorRegionSplitter splitter = new DefaultParallelIteratorRegionSplitter(context, tableRef,
+        DefaultParallelIteratorRegionSplitter splitter = new DefaultParallelIteratorRegionSplitter(context, tableRef.getTable(),
                 HintNode.EMPTY_HINT_NODE) {
             @Override
             protected List<HRegionLocation> getAllRegions() throws SQLException {
@@ -158,7 +158,7 @@ public class GuidePostsLifeCycleIT extends BaseHBaseManagedTimeIT {
         conn.commit();
         conn.close();
     }
-    
+
     protected static TableRef getTableRef(Connection conn) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         TableRef table = new TableRef(null, pconn.getMetaDataCache().getTable(

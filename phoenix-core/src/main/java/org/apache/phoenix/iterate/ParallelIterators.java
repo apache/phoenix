@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.job.JobManager.JobCallable;
@@ -53,9 +54,11 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
@@ -101,7 +104,25 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
             RowProjector projector, GroupBy groupBy, Integer limit, ParallelIteratorFactory iteratorFactory)
             throws SQLException {
         super(context, tableRef, groupBy);
-        this.splits = getSplits(context, tableRef, statement.getHint());
+        MetaDataClient client = new MetaDataClient(context.getConnection());
+        PTable physicalTable = tableRef.getTable();
+        String physicalName = tableRef.getTable().getPhysicalName().getString();
+        if ((physicalTable.getViewIndexId() == null) && (!physicalName.equals(physicalTable.getName().getString()))) { // tableRef is not for the physical table
+            String physicalSchemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
+            String physicalTableName = SchemaUtil.getTableNameFromFullName(physicalName);
+            // TODO: this will be an extra RPC to ensure we have the latest guideposts, but is almost always
+            // unnecessary. We should instead track when the last time an update cache was done for this
+            // for physical table and not do it again until some interval has passed (it's ok to use stale stats).
+            MetaDataMutationResult result = client.updateCache(null, /* use global tenant id to get physical table */
+                    physicalSchemaName, physicalTableName);
+            physicalTable = result.getTable();
+            if(physicalTable == null) {
+                client = new MetaDataClient(context.getConnection());
+                physicalTable = client.getConnection().getMetaDataCache()
+                        .getTable(new PTableKey(null, physicalTableName));
+            }
+        }
+        this.splits = getSplits(context, physicalTable, statement.getHint());
         this.iteratorFactory = iteratorFactory;
         Scan scan = context.getScan();
         PTable table = tableRef.getTable();
@@ -227,7 +248,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
      * @return the key ranges that should be scanned in parallel
      */
     // exposed for tests
-    public static List<KeyRange> getSplits(StatementContext context, TableRef table, HintNode hintNode) throws SQLException {
+    public static List<KeyRange> getSplits(StatementContext context, PTable table, HintNode hintNode) throws SQLException {
         return ParallelIteratorRegionSplitterFactory.getSplitter(context, table, hintNode).getSplits();
     }
 

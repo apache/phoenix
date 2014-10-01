@@ -28,9 +28,24 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.SequenceManager;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.iterate.DefaultParallelIteratorRegionSplitter;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -138,6 +153,9 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             assertTrue("Expected 1 row in result set", rs.next());
             assertEquals(2, rs.getInt(3));
             assertEquals("Viva Las Vegas", rs.getString(4));
+            conn1 = nextConnection(getUrl());
+            List<KeyRange> splits = getSplits(conn1, new Scan());
+            assertEquals(splits.size(), 5);
         }
         finally {
             conn1.close();
@@ -266,7 +284,6 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, user) values ('" + TENANT_ID + "', 1, 'Billy Gibbons')");
             conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, user) values ('" + TENANT_ID + "', 2, 'Billy Gibbons')");
             conn.close();
-            
             conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
             conn.setAutoCommit(true);
             int count = conn.createStatement().executeUpdate("delete from " + TENANT_TABLE_NAME_NO_TENANT_TYPE_ID);
@@ -490,5 +507,35 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         assertEquals(0, rs.getInt(1));
         assertFalse(rs.next());
         conn.close();
+    }
+    private static List<KeyRange> getSplits(Connection conn, final Scan scan) throws SQLException {
+        TableRef tableRef = getTableRef(conn);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        final List<HRegionLocation> regions = pconn.getQueryServices().getAllTableRegions(
+                tableRef.getTable().getPhysicalName().getBytes());
+        PhoenixStatement statement = new PhoenixStatement(pconn);
+        StatementContext context = new StatementContext(statement, null, scan, new SequenceManager(statement));
+        DefaultParallelIteratorRegionSplitter splitter = new DefaultParallelIteratorRegionSplitter(context, tableRef.getTable(),
+                HintNode.EMPTY_HINT_NODE) {
+            @Override
+            protected List<HRegionLocation> getAllRegions() throws SQLException {
+                return DefaultParallelIteratorRegionSplitter.filterRegions(regions, scan.getStartRow(),
+                        scan.getStopRow());
+            }
+        };
+        List<KeyRange> keyRanges = splitter.getSplits();
+        Collections.sort(keyRanges, new Comparator<KeyRange>() {
+            @Override
+            public int compare(KeyRange o1, KeyRange o2) {
+                return Bytes.compareTo(o1.getLowerRange(), o2.getLowerRange());
+            }
+        });
+        return keyRanges;
+    }
+    protected static TableRef getTableRef(Connection conn) throws SQLException {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        TableRef table = new TableRef(null, pconn.getMetaDataCache().getTable(
+                new PTableKey(pconn.getTenantId(), PARENT_TABLE_NAME)), System.currentTimeMillis(), false);
+        return table;
     }
 }

@@ -273,7 +273,16 @@ public class MetaDataClient {
         MetaDataMutationResult result = updateCache(schemaName, tableName, true);
         return result.getMutationTime();
     }
-    
+
+    private MetaDataMutationResult updateCache(String schemaName, String tableName, boolean alwaysHitServer)
+            throws SQLException {
+        return updateCache(connection.getTenantId(), schemaName, tableName, alwaysHitServer);
+    }
+
+    public MetaDataMutationResult updateCache(PName tenantId, String schemaName, String tableName) throws SQLException {
+        return updateCache(tenantId, schemaName, tableName, false);
+    }
+        
     /**
      * Update the cache with the latest as of the connection scn.
      * @param schemaName
@@ -285,11 +294,11 @@ public class MetaDataClient {
         return updateCache(schemaName, tableName, false);
     }
     
-    private MetaDataMutationResult updateCache(String schemaName, String tableName, boolean alwaysHitServer) throws SQLException {
+    private MetaDataMutationResult updateCache(PName tenantId, String schemaName, String tableName, boolean alwaysHitServer) throws SQLException {
         Long scn = connection.getSCN();
         boolean systemTable = SYSTEM_CATALOG_SCHEMA.equals(schemaName);
         // System tables must always have a null tenantId
-        PName tenantId = systemTable ? null : connection.getTenantId();
+        tenantId = systemTable ? null : tenantId;
         long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
         PTable table = null;
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
@@ -474,8 +483,9 @@ public class MetaDataClient {
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTS = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
-        connection.getQueryServices().clearCacheForTable(tenantIdBytes, table.getSchemaName().getBytes(),
-                table.getTableName().getBytes(), clientTS);
+        connection.getQueryServices().clearCacheForTable(tenantIdBytes,
+                Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())),
+                Bytes.toBytes(SchemaUtil.getTableNameFromFullName(physicalName.getString())), clientTS);
         String query = "SELECT CURRENT_DATE(),"+ LAST_STATS_UPDATE_TIME + " FROM " + SYSTEM_CATALOG_SCHEMA
                 + "." + SYSTEM_STATS_TABLE + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
                 + " IS NULL AND " + REGION_NAME + " IS NULL";
@@ -502,8 +512,9 @@ public class MetaDataClient {
             // A single Cell will be returned with the count(*) - we decode that here
             long rowCount = PDataType.LONG.getCodec().decodeLong(tempPtr, SortOrder.getDefault());
             // We need to update the stats table
-            connection.getQueryServices().clearCacheForTable(tenantIdBytes, table.getSchemaName().getBytes(),
-                    table.getTableName().getBytes(), clientTS);
+            connection.getQueryServices().clearCacheForTable(tenantIdBytes,
+                    Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())),
+                    Bytes.toBytes(SchemaUtil.getTableNameFromFullName(physicalName.getString())), clientTS);
             return new  MutationState(0, connection, rowCount);
         } else {
             return new MutationState(0, connection);

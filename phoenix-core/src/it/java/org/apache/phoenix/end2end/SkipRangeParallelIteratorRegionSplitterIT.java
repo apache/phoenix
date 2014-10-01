@@ -348,7 +348,7 @@ public class SkipRangeParallelIteratorRegionSplitterIT extends BaseClientManaged
         PhoenixStatement statement = new PhoenixStatement(connection);
         StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));
         context.setScanRanges(scanRanges);
-        SkipRangeParallelIteratorRegionSplitter splitter = SkipRangeParallelIteratorRegionSplitter.getInstance(context, tableRef, HintNode.EMPTY_HINT_NODE);
+        SkipRangeParallelIteratorRegionSplitter splitter = SkipRangeParallelIteratorRegionSplitter.getInstance(context, tableRef.getTable(), HintNode.EMPTY_HINT_NODE);
         List<KeyRange> keyRanges = splitter.getSplits();
         Collections.sort(keyRanges, new Comparator<KeyRange>() {
             @Override

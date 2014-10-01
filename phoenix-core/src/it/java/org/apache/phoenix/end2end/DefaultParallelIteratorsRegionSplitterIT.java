@@ -79,7 +79,7 @@ public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIterat
         final List<HRegionLocation> regions =  pconn.getQueryServices().getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
         PhoenixStatement statement = new PhoenixStatement(pconn);
         StatementContext context = new StatementContext(statement, null, scan, new SequenceManager(statement));
-        DefaultParallelIteratorRegionSplitter splitter = new DefaultParallelIteratorRegionSplitter(context, tableRef, HintNode.EMPTY_HINT_NODE) {
+        DefaultParallelIteratorRegionSplitter splitter = new DefaultParallelIteratorRegionSplitter(context, tableRef.getTable(), HintNode.EMPTY_HINT_NODE) {
             @Override
             protected List<HRegionLocation> getAllRegions() throws SQLException {
                 return DefaultParallelIteratorRegionSplitter.filterRegions(regions, scan.getStartRow(), scan.getStopRow());

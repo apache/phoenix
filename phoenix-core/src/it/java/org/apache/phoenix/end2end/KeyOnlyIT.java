@@ -200,7 +200,7 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
                 tableRef.getTable().getPhysicalName().getBytes());
         PhoenixStatement statement = new PhoenixStatement(pconn);
         StatementContext context = new StatementContext(statement, null, scan, new SequenceManager(statement));
-        DefaultParallelIteratorRegionSplitter splitter = new DefaultParallelIteratorRegionSplitter(context, tableRef,
+        DefaultParallelIteratorRegionSplitter splitter = new DefaultParallelIteratorRegionSplitter(context, tableRef.getTable(),
                 HintNode.EMPTY_HINT_NODE) {
             @Override
             protected List<HRegionLocation> getAllRegions() throws SQLException {
