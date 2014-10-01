@@ -139,9 +139,6 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
 	@Override
 	public void setStoreLocation(String location, Job job) throws IOException {
 	    URI locationURI;
-	    config = job.getConfiguration();
-        config.set(HConstants.ZOOKEEPER_QUORUM, server);
-        
         try {
             locationURI = new URI(location);
             if (!"hbase".equals(locationURI.getScheme())) {
@@ -152,10 +149,16 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
             String columns = null;
             if(!locationURI.getPath().isEmpty()) {
                 columns = locationURI.getPath().substring(1);
-                ConfigurationUtil.setUpsertColumnNames(config, columns);
             }
-           ConfigurationUtil.setOutputTableName(config,tableName);
-           ConfigurationUtil.setBatchSize(config,batchSize);
+            config = job.getConfiguration();
+            LOG.info(" about to call setoutp table name with params " + tableName + " configuraiton " + config.toString()) ;
+            config.set(HConstants.ZOOKEEPER_QUORUM, server);
+            config.set(ConfigurationUtil.OUTPUT_TABLE_NAME, tableName);
+            config.setLong(ConfigurationUtil.UPSERT_BATCH_SIZE, batchSize);
+            config.set(ConfigurationUtil.UPSERT_COLUMNS, columns);
+            //ConfigurationUtil.setOutputTableName(config,tableName);
+            //ConfigurationUtil.setBatchSize(config,batchSize);
+            //ConfigurationUtil.setUpsertColumnNames(config, columns);
             
             String serializedSchema = getUDFProperties().getProperty(contextSignature + SCHEMA);
             if (serializedSchema != null) {

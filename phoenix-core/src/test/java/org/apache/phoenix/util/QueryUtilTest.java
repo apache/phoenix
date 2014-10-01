@@ -21,7 +21,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import java.sql.Connection;
 import java.sql.Types;
 import java.util.Properties;
 
@@ -30,8 +29,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.junit.Test;
 
 import com.google.common.collect.ImmutableList;
-
-import javax.management.Query;
 
 public class QueryUtilTest {
 
@@ -67,7 +64,7 @@ public class QueryUtilTest {
     public void testConstructSelectStatement() {
         assertEquals(
                 "SELECT \"ID\",\"NAME\" FROM \"MYTAB\"",
-                QueryUtil.constructSelectStatement("MYTAB", ImmutableList.of(ID_COLUMN,NAME_COLUMN)));
+                QueryUtil.constructSelectStatement("MYTAB", ImmutableList.of(ID_COLUMN,NAME_COLUMN), null));
     }
 
     /**

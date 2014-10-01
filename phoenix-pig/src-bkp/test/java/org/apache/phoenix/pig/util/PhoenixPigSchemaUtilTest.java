@@ -31,7 +31,6 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.mapreduce.util.ConfigurationUtil;
-import org.apache.phoenix.mapreduce.util.ConfigurationUtil.SchemaType;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.pig.ResourceSchema;
@@ -59,7 +58,6 @@ public class PhoenixPigSchemaUtilTest {
         final List<ColumnInfo> columnInfos = ImmutableList.of(ID_COLUMN,NAME_COLUMN);
         final String encodedColumnInfos = ColumnInfoToStringEncoderDecoder.encode(columnInfos);
         when(configuration.get(ConfigurationUtil.SELECT_COLUMN_INFO_KEY)).thenReturn(encodedColumnInfos);
-        when(configuration.get(ConfigurationUtil.SCHEMA_TYPE)).thenReturn(SchemaType.TABLE.name());
         final ResourceSchema actual = PhoenixPigSchemaUtil.getResourceSchema(configuration);
         
         // expected schema.
