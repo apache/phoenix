@@ -33,6 +33,7 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,9 +72,8 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
     // Get the mapping between key range and the regions that contains them.
     protected List<HRegionLocation> getAllRegions() throws SQLException {
         Scan scan = context.getScan();
-        PTable table = tableRef.getTable();
         List<HRegionLocation> allTableRegions = context.getConnection().getQueryServices()
-                .getAllTableRegions(table.getPhysicalName().getBytes());
+                .getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
         // If we're not salting, then we've already intersected the minMaxRange with the scan range
         // so there's nothing to do here.
         return filterRegions(allTableRegions, scan.getStartRow(), scan.getStopRow());
@@ -107,27 +107,28 @@ public class DefaultParallelIteratorRegionSplitter implements ParallelIteratorRe
 
     protected List<KeyRange> genKeyRanges(List<HRegionLocation> regions) {
         if (regions.isEmpty()) { return Collections.emptyList(); }
+        PTable table = tableRef.getTable();
         Scan scan = context.getScan();
-        PTable table = this.tableRef.getTable();
         byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(table);
         List<byte[]> gps = Lists.newArrayList();
-
-        if (table.getColumnFamilies().isEmpty()) {
-            // For sure we can get the defaultCF from the table
-            gps = table.getGuidePosts();
-        } else {
-            try {
-                if (scan.getFamilyMap().size() > 0) {
-                    if (scan.getFamilyMap().containsKey(defaultCF)) { // Favor using default CF if it's used in scan
+        if (!ScanUtil.isAnalyzeTable(scan)) {
+            if (table.getColumnFamilies().isEmpty()) {
+                // For sure we can get the defaultCF from the table
+                gps = table.getGuidePosts();
+            } else {
+                try {
+                    if (scan.getFamilyMap().size() > 0) {
+                        if (scan.getFamilyMap().containsKey(defaultCF)) { // Favor using default CF if it's used in scan
+                            gps = table.getColumnFamily(defaultCF).getGuidePosts();
+                        } else { // Otherwise, just use first CF in use by scan
+                            gps = table.getColumnFamily(scan.getFamilyMap().keySet().iterator().next()).getGuidePosts();
+                        }
+                    } else {
                         gps = table.getColumnFamily(defaultCF).getGuidePosts();
-                    } else { // Otherwise, just use first CF in use by scan
-                        gps = table.getColumnFamily(scan.getFamilyMap().keySet().iterator().next()).getGuidePosts();
                     }
-                } else {
-                    gps = table.getColumnFamily(defaultCF).getGuidePosts();
+                } catch (ColumnFamilyNotFoundException cfne) {
+                    // Alter table does this
                 }
-            } catch (ColumnFamilyNotFoundException cfne) {
-                // Alter table does this
             }
 
         }

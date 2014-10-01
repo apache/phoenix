@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
@@ -461,5 +462,9 @@ public class ScanUtil {
         }
 
         return offset + slotPosition;
+    }
+
+    public static boolean isAnalyzeTable(Scan scan) {
+        return scan.getAttribute((BaseScannerRegionObserver.ANALYZE_TABLE)) != null;
     }
 }

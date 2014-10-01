@@ -102,9 +102,6 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.stat.StatisticsCollector;
-import org.apache.phoenix.schema.stat.StatisticsCollectorProtocol;
-import org.apache.phoenix.schema.stat.StatisticsCollectorResponse;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -121,7 +118,6 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.protobuf.ServiceException;
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
@@ -521,9 +517,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, 1, null);
-            }
-            if (!descriptor.hasCoprocessor(StatisticsCollector.class.getName())) {
-                descriptor.addCoprocessor(StatisticsCollector.class.getName(), null, 1, null);
             }
 
             // TODO: better encapsulation for this
@@ -1802,42 +1795,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void throwConnectionClosedException() {
         throw new IllegalStateException("Connection to the cluster is closed");
-    }
-
-    @Override
-    public long updateStatistics(final KeyRange keyRange, final byte[] tableName) throws SQLException {
-        HTableInterface ht = null;
-        try {
-            ht = this.getTable(tableName);
-            long noOfRowsScanned = 0;
-            Batch.Call<StatisticsCollectorProtocol, StatisticsCollectorResponse> callable = 
-                    new Batch.Call<StatisticsCollectorProtocol, StatisticsCollectorResponse>() {
-                  @Override
-                public StatisticsCollectorResponse call(StatisticsCollectorProtocol instance) throws IOException {
-                    return instance.collectStat(keyRange);
-                  }
-                };
-                Map<byte[], StatisticsCollectorResponse> result = ht.coprocessorExec(StatisticsCollectorProtocol.class,
-                    keyRange.getLowerRange(), keyRange.getUpperRange(), callable);
-                for (StatisticsCollectorResponse response : result.values()) {
-                    noOfRowsScanned += response.getRowsScanned();
-                }
-                return noOfRowsScanned;
-        } catch (ServiceException e) {
-            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
-        } catch (TableNotFoundException e) {
-            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
-        } catch (Throwable e) {
-            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
-        } finally {
-            if (ht != null) {
-                try {
-                    ht.close();
-                } catch (IOException e) {
-                    throw new SQLException("Unable to close the table " + tableName + " after collecting stats", e);
-                }
-            }
-        }
     }
 
     @Override

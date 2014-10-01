@@ -1,10 +1,5 @@
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
-import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
-import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertTrue;
 
@@ -18,9 +13,6 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -32,27 +24,19 @@ import com.google.common.collect.Maps;
 
 @Category(HBaseManagedTimeTest.class)
 public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
-    private static String url;
-    private static HBaseTestingUtility util;
-    private static int frequency = 4000;
-
+    //private static String url;
+    private static int frequency = 5000;
+    
     @BeforeClass
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
-        Configuration conf = HBaseConfiguration.create();
-        setUpConfigForMiniCluster(conf);
-        conf.setInt("hbase.client.retries.number", 2);
-        conf.setInt("hbase.client.pause", 5000);
-        conf.setLong(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB, 0);
-        util = new HBaseTestingUtility(conf);
-        util.startMiniCluster();
-        String clientPort = util.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
-        url = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_SEPARATOR + clientPort
-                + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
-        int histogramDepth = 60;
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
-        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Integer.toString(histogramDepth));
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        // Must update config before starting server
+        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Long.toString(20l));
         props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Integer.toString(frequency));
-        driver = initAndRegisterDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(20));
+        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(20));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     @Test
@@ -62,7 +46,7 @@ public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
         ResultSet rs;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         // props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(url, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(
                 "CREATE TABLE t ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
                         + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC)) \n");
@@ -98,7 +82,7 @@ public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
         ResultSet rs;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         // props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(url, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(
                 "CREATE TABLE x ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
                         + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC)) \n");
@@ -147,7 +131,7 @@ public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
         Connection conn;
         PreparedStatement stmt;
         // props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
-        conn = DriverManager.getConnection(url, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         stmt = upsertStmt(conn, tableName);
         stmt.setString(1, "a");
         String[] s = new String[] { "abc", "def", "ghi", "jkll", null, null, "xxx" };
@@ -218,7 +202,7 @@ public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
     }
 
     private void flush(String tableName) throws IOException, InterruptedException {
-        util.getHBaseAdmin().flush(tableName.toUpperCase());
+        //utility.getHBaseAdmin().flush(tableName.toUpperCase());
     }
 
     private PreparedStatement upsertStmt(Connection conn, String tableName) throws SQLException {

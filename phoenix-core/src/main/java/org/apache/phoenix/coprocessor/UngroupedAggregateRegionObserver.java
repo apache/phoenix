@@ -34,7 +34,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
@@ -45,8 +48,12 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.InternalScanner;
+import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.MultiVersionConsistencyControl;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScanType;
+import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
@@ -59,6 +66,7 @@ import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.query.QueryConstants;
@@ -70,6 +78,8 @@ import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.stat.StatisticsCollector;
+import org.apache.phoenix.schema.stat.StatisticsTable;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -91,6 +101,8 @@ import com.google.common.collect.Sets;
 public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver {
     private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
+    private static final Log LOG = LogFactory.getLog(UngroupedAggregateRegionObserver.class);
+    private StatisticsTable statsTable = null;
     
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
@@ -98,6 +110,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         // Can't use ClientKeyValueBuilder on server-side because the memstore expects to
         // be able to get a single backing buffer for a KeyValue.
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
+        String name = ((RegionCoprocessorEnvironment)e).getRegion().getTableDesc().getNameAsString();
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
+        if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
+            this.statsTable = StatisticsTable.getStatisticsTableForCoprocessor(e.getConfiguration(), name);
+        }
     }
 
     private static void commitBatch(HRegion region, List<Pair<Mutation,Integer>> mutations, byte[] indexUUID) throws IOException {
@@ -115,11 +132,31 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     public static void serializeIntoScan(Scan scan) {
         scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
     }
+    
+    @Override
+    public RegionScanner preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e, Scan scan, RegionScanner s)
+            throws IOException {
+        s = super.preScannerOpen(e, scan, s);
+        if(ScanUtil.isAnalyzeTable(scan)) {
+            scan.setStartRow(HConstants.EMPTY_START_ROW);
+            scan.setStopRow(HConstants.EMPTY_END_ROW);
+        }
+        return s;
+    }
 
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
+        boolean isAnalyze = false;
+        HRegion region = c.getEnvironment().getRegion();
+        String table = c.getEnvironment().getRegion().getRegionInfo().getTableNameAsString();;
+        StatisticsCollector stats = null;
+        if (ScanUtil.isAnalyzeTable(scan) && statsTable != null) {
+            stats = new StatisticsCollector(statsTable, c.getEnvironment().getConfiguration());
+            isAnalyze = true;
+        }
+
         RegionScanner theScanner = s;
         if (p != null || j != null)  {
             theScanner = new HashJoinRegionScanner(s, p, j, ScanUtil.getTenantId(scan), c.getEnvironment());
@@ -155,7 +192,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         
         int batchSize = 0;
         long ts = scan.getTimeRange().getMax();
-        HRegion region = c.getEnvironment().getRegion();
         List<Pair<Mutation,Integer>> mutations = Collections.emptyList();
         if (isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null) {
             // TODO: size better
@@ -169,7 +205,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         boolean hasAny = false;
         MultiKeyValueTuple result = new MultiKeyValueTuple();
         if (logger.isInfoEnabled()) {
-        	logger.info("Starting ungrouped coprocessor scan " + scan);
+        	logger.info("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo());
         }
         long rowCount = 0;
         MultiVersionConsistencyControl.setThreadReadPoint(innerScanner.getMvccReadPoint());
@@ -181,6 +217,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 // since this is an indication of whether or not there are more values after the
                 // ones returned
                 hasMore = innerScanner.nextRaw(results, null);
+                if (isAnalyze && stats != null) {
+                    stats.collectStatistics(results);
+                }
                 if (!results.isEmpty()) {
                 	rowCount++;
                     result.setKeyValues(results);
@@ -275,6 +314,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             } while (hasMore);
         } finally {
             try {
+                if (isAnalyze && stats != null) {
+                    stats.updateStatistic(region);
+                    stats.clear();
+                }
                 innerScanner.close();
             } finally {
                 region.closeRegionOperation();
@@ -383,6 +426,42 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 throw new RuntimeException(e);
             }
         }
+    }
+    
+    @Override
+    public InternalScanner preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
+            Store store, List<? extends KeyValueScanner> scanners, ScanType scanType,
+            long earliestPutTs, InternalScanner s) throws IOException {
+        InternalScanner internalScan = s;
+        String table = c.getEnvironment().getRegion().getRegionInfo().getTableNameAsString();
+        if (!table.equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)
+                && scanType.equals(ScanType.MAJOR_COMPACT)) {
+            StatisticsCollector stats = new StatisticsCollector(statsTable, c.getEnvironment().getConfiguration());
+            internalScan =
+                    stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanners, scanType, earliestPutTs, s);
+        }
+        return internalScan;
+    }
+    
+    
+    @Override
+    public void postSplit(ObserverContext<RegionCoprocessorEnvironment> e, HRegion l, HRegion r)
+            throws IOException {
+        HRegion region = e.getEnvironment().getRegion();
+        String table = region.getRegionInfo().getTableNameAsString();
+        if (!table.equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME) && statsTable != null) {
+            try {
+                StatisticsCollector stats = new StatisticsCollector(statsTable, e.getEnvironment()
+                        .getConfiguration());
+                stats.collectStatsDuringSplit(e.getEnvironment().getConfiguration(), l, r, region);
+                stats.clear();
+            } catch (IOException ioe) { 
+                if(LOG.isDebugEnabled()) {
+                    LOG.debug("Error while collecting stats during split ",ioe);
+                }
+            }
+        }
+            
     }
 
     public static byte[] serialize(List<Expression> selectExpressions) {

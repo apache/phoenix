@@ -48,6 +48,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String EMPTY_CF = "_EmptyCF";
     public static final String SPECIFIC_ARRAY_INDEX = "_SpecificArrayIndex";
     public static final String GROUP_BY_LIMIT = "_GroupByLimit";
+    public static final String ANALYZE_TABLE = "_AnalyzeTable";
 
     /**
      * Used by logger to identify coprocessor
@@ -73,6 +74,14 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     abstract protected boolean isRegionObserverFor(Scan scan);
     abstract protected RegionScanner doPostScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws Throwable;
     
+    @Override
+    public RegionScanner preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
+        final Scan scan, final RegionScanner s) throws IOException {
+        if (isRegionObserverFor(scan)) {
+            throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
+        }
+        return s;
+    }
     /**
      * Wrapper for {@link #postScannerOpen(ObserverContext, Scan, RegionScanner)} that ensures no non IOException is thrown,
      * to prevent the coprocessor from becoming blacklisted.
@@ -84,8 +93,6 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             if (!isRegionObserverFor(scan)) {
                 return s;
             }
-            HRegion region = c.getEnvironment().getRegion();
-            throwIfScanOutOfRegion(scan, region);
             return doPostScannerOpen(c, scan, s);
         } catch (Throwable t) {
             ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);

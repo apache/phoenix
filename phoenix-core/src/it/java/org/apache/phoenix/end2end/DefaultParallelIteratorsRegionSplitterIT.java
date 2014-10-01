@@ -27,6 +27,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -40,12 +41,17 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+
+import com.google.common.collect.Maps;
 
 
 /**
@@ -58,6 +64,14 @@ import org.junit.experimental.categories.Category;
 @Category(ClientManagedTimeTest.class)
 public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIteratorsRegionSplitterIT {
     
+    @BeforeClass
+    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
+    public static void doSetup() throws Exception {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        // Must update config before starting server
+        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Long.toString(20l));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
     private static List<KeyRange> getSplits(Connection conn, long ts, final Scan scan)
             throws SQLException {
         TableRef tableRef = getTableRef(conn, ts);
@@ -93,6 +107,7 @@ public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIterat
         Scan scan = new Scan();
         
         // number of regions > target query concurrency
+        conn.prepareStatement("SELECT COUNT(*) FROM STABLE").executeQuery();
         scan.setStartRow(K1);
         scan.setStopRow(K12);
         List<KeyRange> keyRanges = getSplits(conn, ts, scan);

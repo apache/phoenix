@@ -52,6 +52,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE =  1024L*1024L*4L; // 4 Mb
     public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE =  1024L*1024L*2L; // 2 Mb
     public static final long DEFAULT_HISTOGRAM_BYTE_DEPTH = 20;
+    public static final int DEFAULT_STATS_UPDATE_FREQ_MS = 2000;
     
     public QueryServicesTestImpl(ReadOnlyProps defaultProps) {
         this(defaultProps, ReadOnlyProps.EMPTY_PROPS);
@@ -60,6 +61,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     private static QueryServicesOptions getDefaultServicesOptions() {
     	return withDefaults()
     	        .setHistogramByteDepth(DEFAULT_HISTOGRAM_BYTE_DEPTH)
+    	        .setStatsUpdateFrequencyMs(DEFAULT_STATS_UPDATE_FREQ_MS)
                 .setThreadPoolSize(DEFAULT_THREAD_POOL_SIZE)
                 .setQueueSize(DEFAULT_QUEUE_SIZE)
                 .setMaxMemoryPerc(DEFAULT_MAX_MEMORY_PERC)

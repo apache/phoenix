@@ -25,15 +25,11 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.CoprocessorEnvironment;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.HTablePool;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
@@ -54,17 +50,17 @@ public class StatisticsTable implements Closeable {
      * @throws IOException
      *             if the table cannot be created due to an underlying HTable creation error
      */
-    public synchronized static StatisticsTable getStatisticsTableForCoprocessor(CoprocessorEnvironment env,
-            byte[] primaryTableName) throws IOException {
+    public synchronized static StatisticsTable getStatisticsTableForCoprocessor(Configuration conf,
+            String primaryTableName) throws IOException {
         StatisticsTable table = tableMap.get(primaryTableName);
         if (table == null) {
             // Map the statics table and the table with which the statistics is
             // associated. This is a workaround
-            HTablePool pool = new HTablePool(env.getConfiguration(), 1);
+            HTablePool pool = new HTablePool(conf, 1);
             try {
                 HTableInterface hTable = pool.getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
-                table = new StatisticsTable(hTable, primaryTableName);
-                tableMap.put(Bytes.toString(primaryTableName), table);
+                table = new StatisticsTable(hTable);
+                tableMap.put(primaryTableName, table);
             } finally {
                 pool.close();
             }
@@ -73,15 +69,9 @@ public class StatisticsTable implements Closeable {
     }
 
     private final HTableInterface statisticsTable;
-    private final byte[] sourceTableName;
 
-    private StatisticsTable(HTableInterface statsTable, byte[] sourceTableName) {
+    private StatisticsTable(HTableInterface statsTable) {
         this.statisticsTable = statsTable;
-        this.sourceTableName = sourceTableName;
-    }
-
-    public StatisticsTable(Configuration conf, HTableDescriptor source) throws IOException {
-        this(new HTable(conf, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME), source.getName());
     }
 
     /**
@@ -108,7 +98,7 @@ public class StatisticsTable implements Closeable {
      *             if we fail to do any of the puts. Any single failure will prevent any future attempts for the remaining list of stats to
      *             update
      */
-    public void addStats(String tableName, String regionName, StatisticsTracker tracker, String fam,
+    public void addStats(String tableName, String regionName, StatisticsCollector tracker, String fam,
             List<Mutation> mutations, long currentTime) throws IOException {
         if (tracker == null) { return; }
 
@@ -123,13 +113,15 @@ public class StatisticsTable implements Closeable {
     public void commitStats(List<Mutation> mutations) throws IOException {
         Object[] res = new Object[mutations.size()];
         try {
-            statisticsTable.batch(mutations, res);
+            if (mutations.size() > 0) {
+                statisticsTable.batch(mutations, res);
+            }
         } catch (InterruptedException e) {
             throw new IOException("Exception while adding deletes and puts");
         }
     }
 
-    private void formStatsUpdateMutation(StatisticsTracker tracker, String fam, List<Mutation> mutations,
+    private void formStatsUpdateMutation(StatisticsCollector tracker, String fam, List<Mutation> mutations,
             long currentTime, byte[] prefix) {
         Put put = new Put(prefix, currentTime);
         if (tracker.getGuidePosts(fam) != null) {
@@ -151,22 +143,11 @@ public class StatisticsTable implements Closeable {
         mutations.add(put);
     }
     
-    public void deleteStats(String tableName, String regionName, StatisticsTracker tracker, String fam,
+    public void deleteStats(String tableName, String regionName, StatisticsCollector tracker, String fam,
             List<Mutation> mutations, long currentTime)
             throws IOException {
         byte[] prefix = StatisticsUtils.getRowKey(PDataType.VARCHAR.toBytes(tableName), PDataType.VARCHAR.toBytes(fam),
                 PDataType.VARCHAR.toBytes(regionName));
         mutations.add(new Delete(prefix, currentTime - 1));
-    }
-
-    /**
-     * @return the underlying {@link HTableInterface} to which this table is writing
-     */
-    HTableInterface getUnderlyingTable() {
-        return statisticsTable;
-    }
-
-    byte[] getSourceTableName() {
-        return this.sourceTableName;
     }
 }

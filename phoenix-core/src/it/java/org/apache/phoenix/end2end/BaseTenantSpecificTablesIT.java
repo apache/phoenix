@@ -20,9 +20,15 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 
 import java.sql.SQLException;
+import java.util.Map;
 
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
+
+import com.google.common.collect.Maps;
 
 /**
  * Describe your class here.
@@ -35,9 +41,9 @@ import org.junit.experimental.categories.Category;
 public abstract class BaseTenantSpecificTablesIT extends BaseClientManagedTimeIT {
     protected static final String TENANT_ID = "ZZTop";
     protected static final String TENANT_TYPE_ID = "abc";
-    protected static final String PHOENIX_JDBC_TENANT_SPECIFIC_URL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + TENANT_ID;
+    protected static String PHOENIX_JDBC_TENANT_SPECIFIC_URL;
     protected static final String TENANT_ID2 = "Styx";
-    protected static final String PHOENIX_JDBC_TENANT_SPECIFIC_URL2 = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + TENANT_ID2;
+    protected static String PHOENIX_JDBC_TENANT_SPECIFIC_URL2;
     
     protected static final String PARENT_TABLE_NAME = "PARENT_TABLE";
     protected static final String PARENT_TABLE_DDL = "CREATE TABLE " + PARENT_TABLE_NAME + " ( \n" + 
@@ -64,11 +70,23 @@ public abstract class BaseTenantSpecificTablesIT extends BaseClientManagedTimeIT
             "                tenant_col VARCHAR) AS SELECT *\n" + 
             "                FROM " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID;
     
+    
     @Before
     public void createTables() throws SQLException {
         createTestTable(getUrl(), PARENT_TABLE_DDL, null, nextTimestamp());
         createTestTable(getUrl(), PARENT_TABLE_DDL_NO_TENANT_TYPE_ID, null, nextTimestamp());
         createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, TENANT_TABLE_DDL, null, nextTimestamp());
         createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, TENANT_TABLE_DDL_NO_TENANT_TYPE_ID, null, nextTimestamp());
+    }
+    
+    @BeforeClass
+    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
+    public static void doSetup() throws Exception {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        // Must update config before starting server
+        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Long.toString(20l));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        PHOENIX_JDBC_TENANT_SPECIFIC_URL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + TENANT_ID;
+        PHOENIX_JDBC_TENANT_SPECIFIC_URL2 = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + TENANT_ID2;
     }
 }
