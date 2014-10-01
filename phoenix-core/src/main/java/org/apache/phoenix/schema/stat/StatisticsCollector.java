@@ -38,6 +38,7 @@ import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.StoreScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -57,8 +58,7 @@ public class StatisticsCollector {
     private Map<String, byte[]> minMap = Maps.newHashMap();
     private Map<String, byte[]> maxMap = Maps.newHashMap();
     private long guidepostDepth;
-    private long byteCount = 0;
-    private Map<String, List<byte[]>> guidePostsMap = Maps.newHashMap();
+    private Map<String, Pair<Integer,List<byte[]>>> guidePostsMap = Maps.newHashMap();
     private Map<ImmutableBytesPtr, Boolean> familyMap = Maps.newHashMap();
     protected StatisticsTable statsTable;
     // Ensures that either analyze or compaction happens at any point of time.
@@ -135,7 +135,6 @@ public class StatisticsCollector {
         List<Cell> results = new ArrayList<Cell>();
         boolean hasMore = true;
         while (hasMore) {
-            // Am getting duplicates here. Need to avoid that
             hasMore = scanner.next(results);
             collectStatistics(results);
             count += results.size();
@@ -289,19 +288,21 @@ public class StatisticsCollector {
                 maxMap.put(fam, row);
             }
         }
-        byteCount += kv.getLength();
         // TODO : This can be moved to an interface so that we could collect guide posts in different ways
+        Pair<Integer,List<byte[]>> gps = guidePostsMap.get(fam);
+        if (gps == null) {
+            gps = new Pair<Integer,List<byte[]>>(0, Lists.<byte[]>newArrayList());
+            guidePostsMap.put(fam, gps);
+        }
+        int byteCount = gps.getFirst() + kv.getLength();
+        gps.setFirst(byteCount);
         if (byteCount >= guidepostDepth) {
-            if (guidePostsMap.get(fam) != null) {
-                guidePostsMap.get(fam).add(
-                        row);
-            } else {
-                List<byte[]> guidePosts = new ArrayList<byte[]>();
-                guidePosts.add(row);
-                guidePostsMap.put(fam, guidePosts);
+            // Prevent dups
+            List<byte[]> gpsKeys = gps.getSecond();
+            if (gpsKeys.isEmpty() || Bytes.compareTo(row, gpsKeys.get(gpsKeys.size()-1)) > 0) {
+                gpsKeys.add(row);
+                gps.setFirst(0); // Only reset count when adding guidepost
             }
-            // reset the count for the next key
-            byteCount = 0;
         }
     }
 
@@ -317,16 +318,19 @@ public class StatisticsCollector {
 
     public byte[] getGuidePosts(String fam) {
         if (!guidePostsMap.isEmpty()) {
-            List<byte[]> guidePosts = guidePostsMap.get(fam);
-            if (guidePosts != null) {
-                byte[][] array = new byte[guidePosts.size()][];
-                int i = 0;
-                for (byte[] element : guidePosts) {
-                    array[i] = element;
-                    i++;
+            Pair<Integer,List<byte[]>> gps = guidePostsMap.get(fam);
+            if (gps != null) {
+                List<byte[]> guidePosts = gps.getSecond();
+                if (!guidePosts.isEmpty()) {
+                    byte[][] array = new byte[guidePosts.size()][];
+                    int i = 0;
+                    for (byte[] element : guidePosts) {
+                        array[i] = element;
+                        i++;
+                    }
+                    PhoenixArray phoenixArray = new PhoenixArray(PDataType.VARBINARY, array);
+                    return PDataType.VARBINARY_ARRAY.toBytes(phoenixArray);
                 }
-                PhoenixArray phoenixArray = new PhoenixArray(PDataType.VARBINARY, array);
-                return PDataType.VARBINARY_ARRAY.toBytes(phoenixArray);
             }
         }
         return null;

@@ -389,4 +389,9 @@ public abstract class BaseQueryPlan implements QueryPlan {
         iterator.explain(planSteps);
         return planSteps;
     }
+
+    @Override
+    public boolean isRowKeyOrdered() {
+        return groupBy.isEmpty() ? orderBy.getOrderByExpressions().isEmpty() : groupBy.isOrderPreserving();
+    }
 }

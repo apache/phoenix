@@ -64,4 +64,6 @@ public interface QueryPlan extends StatementPlan {
     FilterableStatement getStatement();
 
     public boolean isDegenerate();
+    
+    public boolean isRowKeyOrdered();
 }

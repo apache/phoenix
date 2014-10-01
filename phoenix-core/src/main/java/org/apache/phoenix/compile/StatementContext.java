@@ -33,7 +33,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.parse.SelectStatement;
-import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.MetaDataClient;
@@ -42,7 +41,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
-import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.collect.Maps;
 
@@ -71,7 +69,6 @@ public class StatementContext {
     
     private long currentTime = QueryConstants.UNSET_TIMESTAMP;
     private ScanRanges scanRanges = ScanRanges.EVERYTHING;
-    private KeyRange minMaxRange = null;
     private final SequenceManager sequences; 
 
     private TableRef currentTable;
@@ -192,41 +189,8 @@ public class StatementContext {
     }
     
     public void setScanRanges(ScanRanges scanRanges) {
-        setScanRanges(scanRanges, null);
-    }
-
-    public void setScanRanges(ScanRanges scanRanges, KeyRange minMaxRange) {
         this.scanRanges = scanRanges;
-        this.scanRanges.setScanStartStopRow(scan);
-        PTable table = this.getCurrentTable().getTable();
-        if (minMaxRange != null) {
-            // Ensure minMaxRange is lower inclusive and upper exclusive, as that's
-            // what we need to intersect against for the HBase scan.
-            byte[] lowerRange = minMaxRange.getLowerRange();
-            if (!minMaxRange.lowerUnbound()) {
-                if (!minMaxRange.isLowerInclusive()) {
-                    lowerRange = ScanUtil.nextKey(lowerRange, table, tempPtr);
-                }
-            }
-            
-            byte[] upperRange = minMaxRange.getUpperRange();
-            if (!minMaxRange.upperUnbound()) {
-                if (minMaxRange.isUpperInclusive()) {
-                    upperRange = ScanUtil.nextKey(upperRange, table, tempPtr);
-                }
-            }
-            if (minMaxRange.getLowerRange() != lowerRange || minMaxRange.getUpperRange() != upperRange) {
-                minMaxRange = KeyRange.getKeyRange(lowerRange, true, upperRange, false);
-            }
-            // If we're not salting, we can intersect this now with the scan range.
-            // Otherwise, we have to wait to do this when we chunk up the scan.
-            if (table.getBucketNum() == null) {
-                minMaxRange = minMaxRange.intersect(KeyRange.getKeyRange(scan.getStartRow(), scan.getStopRow()));
-                scan.setStartRow(minMaxRange.getLowerRange());
-                scan.setStopRow(minMaxRange.getUpperRange());
-            }
-            this.minMaxRange = minMaxRange;
-        }
+        scanRanges.initializeScan(scan);
     }
     
     public PhoenixConnection getConnection() {
@@ -258,14 +222,6 @@ public class StatementContext {
         return currentTime;
     }
 
-    /**
-     * Get the key range derived from row value constructor usage in where clause. These are orthogonal to the ScanRanges
-     * and form a range for which each scan is intersected against.
-     */
-    public KeyRange getMinMaxRange () {
-        return minMaxRange;
-    }
-    
     public SequenceManager getSequenceManager(){
         return sequences;
     }

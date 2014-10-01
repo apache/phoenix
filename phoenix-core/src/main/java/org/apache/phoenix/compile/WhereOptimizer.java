@@ -58,6 +58,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
@@ -146,14 +147,30 @@ public class WhereOptimizer {
         RowKeySchema schema = table.getRowKeySchema();
         List<List<KeyRange>> cnf = Lists.newArrayListWithExpectedSize(schema.getMaxFields());
         KeyRange minMaxRange = keySlots.getMinMaxRange();
-        boolean hasMinMaxRange = (minMaxRange != null);
+        if (minMaxRange == null) {
+            minMaxRange = KeyRange.EVERYTHING_RANGE;
+        }
+        boolean hasMinMaxRange = (minMaxRange != KeyRange.EVERYTHING_RANGE);
         int minMaxRangeOffset = 0;
         byte[] minMaxRangePrefix = null;
+        boolean isSalted = nBuckets != null;
+        boolean isMultiTenant = tenantId != null && table.isMultiTenant();
+        boolean hasViewIndex = table.getViewIndexId() != null;
+        if (hasMinMaxRange) {
+            int minMaxRangeSize = (isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0)
+                    + (isMultiTenant ? tenantId.getBytes().length + 1 : 0) 
+                    + (hasViewIndex ? MetaDataUtil.getViewIndexIdDataType().getByteSize() : 0);
+            minMaxRangePrefix = new byte[minMaxRangeSize];
+        }
         
         Iterator<KeyExpressionVisitor.KeySlot> iterator = keySlots.iterator();
         // Add placeholder for salt byte ranges
-        if (nBuckets != null) {
+        if (isSalted) {
             cnf.add(SALT_PLACEHOLDER);
+            if (hasMinMaxRange) {
+	            System.arraycopy(SALT_PLACEHOLDER.get(0).getLowerRange(), 0, minMaxRangePrefix, minMaxRangeOffset, SaltingUtil.NUM_SALTING_BYTES);
+	            minMaxRangeOffset += SaltingUtil.NUM_SALTING_BYTES;
+            }
             // Increment the pkPos, as the salt column is in the row schema
             // Do not increment the iterator, though, as there will never be
             // an expression in the keySlots for the salt column
@@ -161,13 +178,12 @@ public class WhereOptimizer {
         }
         
         // Add tenant data isolation for tenant-specific tables
-        if (tenantId != null && table.isMultiTenant()) {
+        if (isMultiTenant) {
             byte[] tenantIdBytes = tenantId.getBytes();
             KeyRange tenantIdKeyRange = KeyRange.getKeyRange(tenantIdBytes);
             cnf.add(singletonList(tenantIdKeyRange));
             if (hasMinMaxRange) {
-                minMaxRangePrefix = new byte[tenantIdBytes.length + MetaDataUtil.getViewIndexIdDataType().getByteSize() + 1];
-                System.arraycopy(tenantIdBytes, 0, minMaxRangePrefix, 0, tenantIdBytes.length);
+                System.arraycopy(tenantIdBytes, 0, minMaxRangePrefix, minMaxRangeOffset, tenantIdBytes.length);
                 minMaxRangeOffset += tenantIdBytes.length;
                 if (!schema.getField(pkPos).getDataType().isFixedWidth()) {
                     minMaxRangePrefix[minMaxRangeOffset] = QueryConstants.SEPARATOR_BYTE;
@@ -178,14 +194,11 @@ public class WhereOptimizer {
         }
         // Add unique index ID for shared indexes on views. This ensures
         // that different indexes don't interleave.
-        if (table.getViewIndexId() != null) {
+        if (hasViewIndex) {
             byte[] viewIndexBytes = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
             KeyRange indexIdKeyRange = KeyRange.getKeyRange(viewIndexBytes);
             cnf.add(singletonList(indexIdKeyRange));
             if (hasMinMaxRange) {
-                if (minMaxRangePrefix == null) {
-                    minMaxRangePrefix = new byte[viewIndexBytes.length];
-                }
                 System.arraycopy(viewIndexBytes, 0, minMaxRangePrefix, minMaxRangeOffset, viewIndexBytes.length);
                 minMaxRangeOffset += viewIndexBytes.length;
             }
@@ -194,7 +207,7 @@ public class WhereOptimizer {
         
         // Prepend minMaxRange with fixed column values so we can properly intersect the
         // range with the other range.
-        if (minMaxRange != null) {
+        if (hasMinMaxRange) {
             minMaxRange = minMaxRange.prependRange(minMaxRangePrefix, 0, minMaxRangeOffset);
         }
         boolean forcedSkipScan = statement.getHint().hasHint(Hint.SKIP_SCAN);
@@ -285,9 +298,9 @@ public class WhereOptimizer {
         // If we have fully qualified point keys with multi-column spans (i.e. RVC),
         // we can still use our skip scan. The ScanRanges.create() call will explode
         // out the keys.
-        context.setScanRanges(
-                ScanRanges.create(schema, cnf, Arrays.copyOf(slotSpan, cnf.size()), forcedRangeScan, nBuckets),
-                minMaxRange);
+        slotSpan = Arrays.copyOf(slotSpan, cnf.size());
+        ScanRanges scanRanges = ScanRanges.create(schema, cnf, slotSpan, minMaxRange, forcedRangeScan, nBuckets);
+        context.setScanRanges(scanRanges);
         if (whereClause == null) {
             return null;
         } else {

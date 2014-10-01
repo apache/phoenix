@@ -28,7 +28,6 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -36,13 +35,9 @@ import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.pig.PhoenixPigConfiguration;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.SaltingUtil;
-import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -91,22 +86,8 @@ public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixR
         Preconditions.checkNotNull(qplan);
         Preconditions.checkNotNull(splits);
         final List<InputSplit> psplits = Lists.newArrayListWithExpectedSize(splits.size());
-        final StatementContext context = qplan.getContext();
-        final TableRef tableRef = qplan.getTableRef();
-        for (KeyRange split : splits) {
-            final Scan splitScan = new Scan(context.getScan());
-            if (tableRef.getTable().getBucketNum() != null) {
-                KeyRange minMaxRange = context.getMinMaxRange();
-                if (minMaxRange != null) {
-                    minMaxRange = SaltingUtil.addSaltByte(split.getLowerRange(), minMaxRange);
-                    split = split.intersect(minMaxRange);
-                }
-            }
-            // as the intersect code sets the actual start and stop row within the passed splitScan, we are fetching it back below.
-            if (ScanUtil.intersectScanRange(splitScan, split.getLowerRange(), split.getUpperRange(), context.getScanRanges().useSkipScanFilter())) {
-                final PhoenixInputSplit inputSplit = new PhoenixInputSplit(KeyRange.getKeyRange(splitScan.getStartRow(), splitScan.getStopRow()));
-                psplits.add(inputSplit);     
-            }
+        for (KeyRange split : qplan.getSplits()) {
+            psplits.add(new PhoenixInputSplit(split));
         }
         return psplits;
     }
@@ -147,6 +128,8 @@ public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixR
                 final Statement statement = connection.createStatement();
                 final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
                 this.queryPlan = pstmt.compileQuery(selectStatement);
+                // FIXME: why is getting the iterator necessary here, as it will
+                // cause the query to run.
                 this.queryPlan.iterator();
             } catch(Exception exception) {
                 LOG.error(String.format("Failed to get the query plan with error [%s]",exception.getMessage()));

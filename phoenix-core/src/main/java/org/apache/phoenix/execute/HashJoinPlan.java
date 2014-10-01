@@ -466,6 +466,11 @@ public class HashJoinPlan implements QueryPlan {
         }
         
     }
+
+    @Override
+    public boolean isRowKeyOrdered() {
+        return plan.isRowKeyOrdered();
+    }
 }
 
 

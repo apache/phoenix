@@ -230,9 +230,11 @@ public abstract class ExplainTable {
     
     private void appendScanRow(StringBuilder buf, Bound bound) {
         ScanRanges scanRanges = context.getScanRanges();
-        KeyRange minMaxRange = context.getMinMaxRange();
+        // TODO: review this and potentially intersect the scan ranges
+        // with the minMaxRange in ScanRanges to prevent having to do all this.
+        KeyRange minMaxRange = scanRanges.getMinMaxRange();
         Iterator<byte[]> minMaxIterator = Iterators.emptyIterator();
-        if (minMaxRange != null) {
+        if (minMaxRange != KeyRange.EVERYTHING_RANGE) {
             RowKeySchema schema = tableRef.getTable().getRowKeySchema();
             if (!minMaxRange.isUnbound(bound)) {
                 minMaxIterator = new RowKeyValueIterator(schema, minMaxRange.getRange(bound));
@@ -262,8 +264,7 @@ public abstract class ExplainTable {
     
     private void appendKeyRanges(StringBuilder buf) {
         ScanRanges scanRanges = context.getScanRanges();
-        KeyRange minMaxRange = context.getMinMaxRange();
-        if (minMaxRange == null && (scanRanges == ScanRanges.EVERYTHING || scanRanges == ScanRanges.NOTHING)) {
+        if (scanRanges.isDegenerate() || scanRanges.isEverything()) {
             return;
         }
         buf.append(" [");

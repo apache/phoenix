@@ -20,7 +20,6 @@ package org.apache.phoenix.end2end;
 import static com.google.common.collect.Sets.newHashSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -121,13 +120,13 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
         if(localIndex){
             assertEquals(saltBuckets == null ? 
                     "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T ['" + tenantId + "',-32768,'" + valuePrefix + "v2-1']\nCLIENT MERGE SORT" :
-                        "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _LOCAL_IDX_T ['" + tenantId + "',-32768,'" + valuePrefix + "v2-1']\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _LOCAL_IDX_T ['" + tenantId + "',-32768,'" + valuePrefix + "v2-1']\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         } else {
             String expected = saltBuckets == null ? 
-                    "RANGE SCAN OVER _IDX_T ['" + tenantId + "',-32768,'" + valuePrefix + "v2-1']" :
-                    "SKIP SCAN ON 3 KEYS OVER _IDX_T [0,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1'] - [2,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1']\n" + 
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T ['" + tenantId + "',-32768,'" + valuePrefix + "v2-1']" :
+                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _IDX_T [0,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1']\n" + 
                     "CLIENT MERGE SORT";
-            assertTrue(QueryUtil.getExplainPlan(rs).contains(expected));
+            assertEquals(expected, QueryUtil.getExplainPlan(rs));
         }
     }
     
