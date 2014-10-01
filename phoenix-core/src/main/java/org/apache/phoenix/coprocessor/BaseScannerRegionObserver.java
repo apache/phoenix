@@ -108,7 +108,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     abstract protected RegionScanner doPostScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws Throwable;
     
     @Override
-    public final RegionScanner preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
+    public RegionScanner preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
         final Scan scan, final RegionScanner s) throws IOException {
         if (isRegionObserverFor(scan)) {
             throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
