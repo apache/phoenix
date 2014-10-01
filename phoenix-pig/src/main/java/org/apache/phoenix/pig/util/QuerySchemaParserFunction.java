@@ -26,11 +26,12 @@ import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.pig.PhoenixPigConfiguration;
+import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
@@ -46,21 +47,21 @@ import com.google.common.collect.Lists;
 public class QuerySchemaParserFunction implements Function<String,Pair<String,String>> {
 
     private static final Log LOG = LogFactory.getLog(QuerySchemaParserFunction.class);
-    private PhoenixPigConfiguration phoenixConfiguration;
+    private final Configuration configuration;
     
-    public QuerySchemaParserFunction(PhoenixPigConfiguration phoenixConfiguration) {
-        Preconditions.checkNotNull(phoenixConfiguration);
-        this.phoenixConfiguration = phoenixConfiguration;
+    public QuerySchemaParserFunction(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        this.configuration = configuration;
     }
     
     @Override
     public Pair<String, String> apply(final String selectStatement) {
         Preconditions.checkNotNull(selectStatement);
         Preconditions.checkArgument(!selectStatement.isEmpty(), "Select Query is empty!!");
-        Preconditions.checkNotNull(this.phoenixConfiguration);
+        Preconditions.checkNotNull(this.configuration);
         Connection connection = null;
         try {
-            connection = this.phoenixConfiguration.getConnection();
+            connection = ConnectionUtil.getConnection(this.configuration);
             final Statement  statement = connection.createStatement();
             final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
             final QueryPlan queryPlan = pstmt.compileQuery(selectStatement);

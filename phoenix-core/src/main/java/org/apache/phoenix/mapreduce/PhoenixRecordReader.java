@@ -17,63 +17,64 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.pig.hadoop;
+package org.apache.phoenix.mapreduce;
 
 import java.io.IOException;
 import java.sql.SQLException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.db.DBWritable;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.pig.PhoenixPigConfiguration;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 
+
 /**
- * RecordReader that process the scan and returns PhoenixRecord
- * 
+ * Describe your class here.
+ *
+ * @since 138
  */
-public final class PhoenixRecordReader extends RecordReader<NullWritable,PhoenixRecord>{
-    
+public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<NullWritable,T>{
+
     private static final Log LOG = LogFactory.getLog(PhoenixRecordReader.class);
-    private final PhoenixPigConfiguration phoenixConfiguration;
+    private final Configuration  configuration;
     private final QueryPlan queryPlan;
-    private final int columnsCount;
     private NullWritable key =  NullWritable.get();
-    private PhoenixRecord value = null;
+    private T value = null;
+    private Class<T> inputClass;
     private ResultIterator resultIterator = null;
     private PhoenixResultSet resultSet;
     
-    public PhoenixRecordReader(final PhoenixPigConfiguration pConfiguration,final QueryPlan qPlan) throws SQLException {
-        
-        Preconditions.checkNotNull(pConfiguration);
-        Preconditions.checkNotNull(qPlan);
-        this.phoenixConfiguration = pConfiguration;
-        this.queryPlan = qPlan;
-        this.columnsCount = phoenixConfiguration.getSelectColumnsCount();
-     }
+    public PhoenixRecordReader(Class<T> inputClass, Configuration configuration, QueryPlan queryPlan) {
+        this.inputClass = inputClass;
+        this.configuration = configuration;
+        this.queryPlan = queryPlan;
+    }
 
     @Override
     public void close() throws IOException {
-       if(resultIterator != null) {
-           try {
-               resultIterator.close();
-        } catch (SQLException e) {
-           LOG.error(" Error closing resultset.");
+        if(resultIterator != null) {
+            try {
+                resultIterator.close();
+         } catch (SQLException e) {
+            LOG.error(" Error closing resultset.");
+         }
         }
-       }
     }
 
     @Override
@@ -82,7 +83,7 @@ public final class PhoenixRecordReader extends RecordReader<NullWritable,Phoenix
     }
 
     @Override
-    public PhoenixRecord getCurrentValue() throws IOException, InterruptedException {
+    public T getCurrentValue() throws IOException, InterruptedException {
         return value;
     }
 
@@ -111,7 +112,7 @@ public final class PhoenixRecordReader extends RecordReader<NullWritable,Phoenix
             Throwables.propagate(e);
         }
         
-   }
+    }
 
     @Override
     public boolean nextKeyValue() throws IOException, InterruptedException {
@@ -119,14 +120,15 @@ public final class PhoenixRecordReader extends RecordReader<NullWritable,Phoenix
             key = NullWritable.get();
         }
         if (value == null) {
-            value =  new PhoenixRecord();
+            value =  ReflectionUtils.newInstance(inputClass, this.configuration);
         }
         Preconditions.checkNotNull(this.resultSet);
         try {
             if(!resultSet.next()) {
                 return false;
             }
-            value.read(resultSet,columnsCount);
+            value.readFields(resultSet);
+            
             return true;
         } catch (SQLException e) {
             LOG.error(String.format(" Error [%s] occurred while iterating over the resultset. ",e.getMessage()));
@@ -134,4 +136,5 @@ public final class PhoenixRecordReader extends RecordReader<NullWritable,Phoenix
         }
         return false;
     }
+
 }

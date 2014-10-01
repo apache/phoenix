@@ -24,6 +24,8 @@ import static org.junit.Assert.assertEquals;
 import java.sql.SQLException;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.mapreduce.util.ConfigurationUtil;
 import org.junit.Test;
 
 
@@ -36,51 +38,14 @@ public class PhoenixPigConfigurationTest {
   
     @Test
     public void testBasicConfiguration() throws SQLException {
-        Configuration conf = new Configuration();
-        final PhoenixPigConfiguration phoenixConfiguration = new PhoenixPigConfiguration(conf);
-        final String zkQuorum = "localhost";
-        final String tableName = "TABLE";
-        final long batchSize = 100;
-        phoenixConfiguration.configure(zkQuorum, tableName, batchSize);
-        assertEquals(zkQuorum,phoenixConfiguration.getServer());
-        assertEquals(tableName,phoenixConfiguration.getTableName());
-        assertEquals(batchSize,phoenixConfiguration.getBatchSize());
-     }
-    
-   /* @Test
-    public void testConfiguration() throws SQLException {
         Configuration configuration = new Configuration();
-        final PhoenixPigConfiguration phoenixConfiguration = new PhoenixPigConfiguration(configuration);
         final String zkQuorum = "localhost";
         final String tableName = "TABLE";
         final long batchSize = 100;
-        phoenixConfiguration.configure(zkQuorum, tableName, batchSize);
-        PhoenixPigConfigurationUtil util = Mockito.mock(PhoenixPigConfigurationUtil.class);
-        phoenixConfiguration.setUtil(util);
-        phoenixConfiguration.getColumnMetadataList();
-        Mockito.verify(util).getUpsertColumnMetadataList(configuration, tableName);
-        Mockito.verifyNoMoreInteractions(util);
-        
-        phoenixConfiguration.getSelectStatement();
-        Mockito.verify(util).getSelectStatement(configuration, tableName);
-        Mockito.verifyNoMoreInteractions(util);
+        configuration.set(HConstants.ZOOKEEPER_QUORUM, zkQuorum);
+        ConfigurationUtil.setInputTableName(configuration, tableName);
+        ConfigurationUtil.setBatchSize(configuration, batchSize);
+        assertEquals(tableName,ConfigurationUtil.getInputTableName(configuration));
+        assertEquals(batchSize,ConfigurationUtil.getBatchSize(configuration));
      }
-    
-    @Test
-    public void testWithSpy() throws SQLException {
-        Configuration configuration = new Configuration();
-        final PhoenixPigConfiguration phoenixConfiguration = new PhoenixPigConfiguration(configuration);
-        final String zkQuorum = "localhost";
-        final String tableName = "TABLE";
-        final long batchSize = 100;
-        phoenixConfiguration.configure(zkQuorum, tableName, batchSize);
-        phoenixConfiguration.setSelectStatement("SELECT 1 from TABLE");
-        PhoenixPigConfigurationUtil util = new PhoenixPigConfigurationUtil();
-        PhoenixPigConfigurationUtil spied = Mockito.spy(util);
-        phoenixConfiguration.setUtil(spied);
-          
-        phoenixConfiguration.getSelectStatement();
-        Mockito.verify(spied,Mockito.times(1)).getSelectStatement(configuration, tableName);
-        Mockito.verifyNoMoreInteractions(util);
-     }*/
-}
+  }

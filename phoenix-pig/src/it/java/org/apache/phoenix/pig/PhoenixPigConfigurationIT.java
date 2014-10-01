@@ -29,8 +29,10 @@ import java.sql.DriverManager;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.HBaseManagedTimeTest;
+import org.apache.phoenix.mapreduce.util.ConfigurationUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -39,7 +41,7 @@ import org.junit.experimental.categories.Category;
 
 @Category(HBaseManagedTimeTest.class)
 public class PhoenixPigConfigurationIT extends BaseHBaseManagedTimeIT {
-    private static final String zkQuorum = TestUtil.LOCALHOST + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+private static final String zkQuorum = TestUtil.LOCALHOST + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
     
     @Test
     public void testUpsertStatement() throws Exception {
@@ -52,8 +54,10 @@ public class PhoenixPigConfigurationIT extends BaseHBaseManagedTimeIT {
                     "  (a_string varchar not null, a_binary varbinary not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary))\n";
             createTestTable(getUrl(), ddl);
-            final PhoenixPigConfiguration configuration = newConfiguration (tableName);
-            final String upserStatement = configuration.getUpsertStatement();
+            final Configuration configuration = new Configuration();
+            configuration.set(HConstants.ZOOKEEPER_QUORUM,zkQuorum);
+            ConfigurationUtil.setOutputTableName(configuration, tableName);
+            final String upserStatement = ConfigurationUtil.getUpsertStatement(configuration);
             final String expectedUpsertStatement = "UPSERT INTO " + tableName + " VALUES (?, ?, ?)"; 
             assertEquals(expectedUpsertStatement, upserStatement);
         } finally {
@@ -72,8 +76,10 @@ public class PhoenixPigConfigurationIT extends BaseHBaseManagedTimeIT {
                     "  (a_string varchar not null, a_binary varbinary not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary))\n";
             createTestTable(getUrl(), ddl);
-            final PhoenixPigConfiguration configuration = newConfiguration (tableName);
-            final String selectStatement = configuration.getSelectStatement();
+            final Configuration configuration = new Configuration();
+            configuration.set(HConstants.ZOOKEEPER_QUORUM,zkQuorum);
+            ConfigurationUtil.setInputTableName(configuration, tableName);
+            final String selectStatement = ConfigurationUtil.getSelectStatement(configuration); 
             final String expectedSelectStatement = "SELECT \"A_STRING\",\"A_BINARY\",\"0\".\"COL1\" FROM " + SchemaUtil.getEscapedArgument(tableName) ; 
             assertEquals(expectedSelectStatement, selectStatement);
         } finally {
@@ -92,20 +98,15 @@ public class PhoenixPigConfigurationIT extends BaseHBaseManagedTimeIT {
                     "  (a_string varchar not null, a_binary varbinary not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary))\n";
             createTestTable(getUrl(), ddl);
-            final PhoenixPigConfiguration configuration = newConfiguration (tableName);
-            configuration.setSelectColumns("a_binary");
-            final String selectStatement = configuration.getSelectStatement();
+            final Configuration configuration = new Configuration();
+            configuration.set(HConstants.ZOOKEEPER_QUORUM,zkQuorum);
+            ConfigurationUtil.setInputTableName(configuration, tableName);
+            ConfigurationUtil.setSelectColumnNames(configuration , "a_binary");
+            final String selectStatement = ConfigurationUtil.getSelectStatement(configuration);
             final String expectedSelectStatement = "SELECT \"A_BINARY\" FROM " + SchemaUtil.getEscapedArgument(tableName) ; 
             assertEquals(expectedSelectStatement, selectStatement);
         } finally {
             conn.close();
         }
-    }
-
-    private PhoenixPigConfiguration newConfiguration(String tableName) {
-        final Configuration configuration = new Configuration();
-        final PhoenixPigConfiguration phoenixConfiguration = new PhoenixPigConfiguration(configuration);
-        phoenixConfiguration.configure(zkQuorum, tableName.toUpperCase(), 100);
-        return phoenixConfiguration;
     }
 }

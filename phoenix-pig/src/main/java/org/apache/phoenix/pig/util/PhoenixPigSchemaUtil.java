@@ -25,8 +25,9 @@ import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.phoenix.pig.PhoenixPigConfiguration;
-import org.apache.phoenix.pig.PhoenixPigConfiguration.SchemaType;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.mapreduce.util.ConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.ConfigurationUtil.SchemaType;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.pig.ResourceSchema;
@@ -46,19 +47,20 @@ public final class PhoenixPigSchemaUtil {
     private PhoenixPigSchemaUtil() {
     }
     
-    public static ResourceSchema getResourceSchema(final PhoenixPigConfiguration phoenixConfiguration) throws IOException {
+    public static ResourceSchema getResourceSchema(final Configuration configuration) throws IOException {
         
         final ResourceSchema schema = new ResourceSchema();
         try {
-        	List<ColumnInfo> columns = null;
-        	if(SchemaType.QUERY.equals(phoenixConfiguration.getSchemaType())) {
-        		final String sqlQuery = phoenixConfiguration.getSelectStatement();
-        		Preconditions.checkNotNull(sqlQuery, "No Sql Query exists within the configuration");
-        		final SqlQueryToColumnInfoFunction function = new SqlQueryToColumnInfoFunction(phoenixConfiguration);
-        		columns = function.apply(sqlQuery);
-        	} else {
-        		columns = phoenixConfiguration.getSelectColumnMetadataList();
-        	}
+            List<ColumnInfo> columns = null;
+            final SchemaType schemaType = ConfigurationUtil.getSchemaType(configuration);
+            if(SchemaType.QUERY.equals(schemaType)) {
+                final String sqlQuery = ConfigurationUtil.getSelectStatement(configuration);
+                Preconditions.checkNotNull(sqlQuery, "No Sql Query exists within the configuration");
+                final SqlQueryToColumnInfoFunction function = new SqlQueryToColumnInfoFunction(configuration);
+                columns = function.apply(sqlQuery);
+            } else {
+                columns = ConfigurationUtil.getSelectColumnMetadataList(configuration);
+            }
             ResourceFieldSchema fields[] = new ResourceFieldSchema[columns.size()];
             int i = 0;
             for(ColumnInfo cinfo : columns) {

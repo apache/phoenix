@@ -17,7 +17,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.pig.hadoop;
+package org.apache.phoenix.mapreduce;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -30,11 +30,11 @@ import org.apache.phoenix.query.KeyRange;
 import com.google.common.base.Preconditions;
 
 /**
- * 
- * Input split class to hold the lower and upper bound range. {@link KeyRange}
- * 
+ * Describe your class here.
+ *
+ * @since 138
  */
-public class PhoenixInputSplit extends InputSplit implements Writable {
+public class PhoenixInputSplit  extends InputSplit implements Writable {
 
     private KeyRange keyRange;
    
@@ -101,4 +101,5 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
         } else if (!keyRange.equals(other.keyRange)) { return false; }
         return true;
     }
+
 }

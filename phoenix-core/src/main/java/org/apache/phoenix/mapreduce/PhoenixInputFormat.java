@@ -17,10 +17,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.pig.hadoop;
+package org.apache.phoenix.mapreduce;
 
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
@@ -30,15 +34,20 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.pig.PhoenixPigConfiguration;
+import org.apache.phoenix.mapreduce.util.ConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.ConfigurationUtil.SchemaType;
+import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
@@ -48,39 +57,35 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
 /**
- * The InputFormat class for generating the splits and creating the record readers.
- * 
+ * Describe your class here.
+ *
  */
-public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixRecord> {
+public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWritable,T> {
 
     private static final Log LOG = LogFactory.getLog(PhoenixInputFormat.class);
-    private PhoenixPigConfiguration phoenixConfiguration;
+    private Configuration configuration;
     private Connection connection;
     private QueryPlan  queryPlan;
-    
+   
     /**
      * instantiated by framework
      */
     public PhoenixInputFormat() {
     }
-
+    
     @Override
-    public RecordReader<NullWritable, PhoenixRecord> createRecordReader(InputSplit split, TaskAttemptContext context)
-            throws IOException, InterruptedException {       
+    public RecordReader<NullWritable,T> createRecordReader(InputSplit split, TaskAttemptContext context) throws IOException,
+            InterruptedException {
         setConf(context.getConfiguration());
         final QueryPlan queryPlan = getQueryPlan(context);
-        try {
-            return new PhoenixRecordReader(phoenixConfiguration,queryPlan);    
-        }catch(SQLException sqle) {
-            throw new IOException(sqle);
-        }
+        @SuppressWarnings("unchecked")
+		final Class<T> inputClass = (Class<T>) ConfigurationUtil.getInputClass(configuration);
+        return new PhoenixRecordReader<T>(inputClass , configuration, queryPlan);
     }
-    
-   
 
     @Override
-    public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {  
-        setConf(context.getConfiguration());
+    public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {
+    	setConf(context.getConfiguration());
         final QueryPlan queryPlan = getQueryPlan(context);
         final List<KeyRange> allSplits = queryPlan.getSplits();
         final List<InputSplit> splits = generateSplits(queryPlan,allSplits);
@@ -112,17 +117,17 @@ public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixR
     }
     
     public void setConf(Configuration configuration) {
-        this.phoenixConfiguration = new PhoenixPigConfiguration(configuration);
+        this.configuration = configuration;
     }
 
-    public PhoenixPigConfiguration getConf() {
-        return this.phoenixConfiguration;
+    public Configuration getConf() {
+        return this.configuration;
     }
     
     private Connection getConnection() {
         try {
             if (this.connection == null) {
-                this.connection = phoenixConfiguration.getConnection();
+                this.connection = ConnectionUtil.getConnection(this.configuration);
            }
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -142,7 +147,7 @@ public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixR
         if(queryPlan == null) {
             try{
                 final Connection connection = getConnection();
-                final String selectStatement = getConf().getSelectStatement();
+                final String selectStatement = ConfigurationUtil.getSelectStatement(this.configuration);
                 Preconditions.checkNotNull(selectStatement);
                 final Statement statement = connection.createStatement();
                 final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
@@ -154,5 +159,44 @@ public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixR
             }
         }
         return queryPlan;
+    }
+    
+    /**
+     * 
+     * @param job
+     * @param inputClass
+     * @param tableName
+     * @param fieldNames
+     */
+    public static void setInput(final Job job, final Class<? extends DBWritable> inputClass, final String tableName , final String conditions, final String... fieldNames) {
+          job.setInputFormatClass(PhoenixInputFormat.class);
+          final Configuration configuration = job.getConfiguration();
+          ConfigurationUtil.setInputTableName(configuration, tableName);
+          ConfigurationUtil.setSelectColumnNames(configuration,fieldNames);
+          ConfigurationUtil.setInputClass(configuration,inputClass);
+          ConfigurationUtil.setSchemaType(configuration, SchemaType.TABLE);
+    }
+    
+    public static void setInput(final Job job, final Class<? extends DBWritable> inputClass, final String tableName, final String inputQuery) {
+          job.setInputFormatClass(PhoenixInputFormat.class);
+          final Configuration configuration = job.getConfiguration();
+          ConfigurationUtil.setInputTableName(configuration, tableName);
+          ConfigurationUtil.setInputQuery(configuration, inputQuery);
+          ConfigurationUtil.setInputClass(configuration,inputClass);
+          ConfigurationUtil.setSchemaType(configuration, SchemaType.QUERY);
+     }
+    
+    /**
+     * 
+     */
+    public static class NullDBWritable implements DBWritable, Writable {
+      @Override
+      public void readFields(DataInput in) throws IOException { }
+      @Override
+      public void readFields(ResultSet arg0) throws SQLException { }
+      @Override
+      public void write(DataOutput out) throws IOException { }
+      @Override
+      public void write(PreparedStatement arg0) throws SQLException { }
     }
 }
