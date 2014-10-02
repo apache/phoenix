@@ -165,17 +165,22 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                               KeyRange.getKeyRange(startKey2)));
         if (Bytes.compareTo(startKey1, startKey2) > 0) {
             expectedStartKey = startKey2;
-            expectedEndKey = ByteUtil.concat(startKey1, QueryConstants.SEPARATOR_BYTE_ARRAY);
+            expectedEndKey = startKey1;
             Collections.reverse(expectedRanges.get(0));
         } else {
             expectedStartKey = startKey1;
-            expectedEndKey = ByteUtil.concat(startKey2, QueryConstants.SEPARATOR_BYTE_ARRAY);;
+            expectedEndKey = startKey2;
         }
-        assertTrue(Bytes.compareTo(expectedStartKey, startKey) == 0);
-        assertTrue(Bytes.compareTo(expectedEndKey, stopKey) == 0);
+        assertEquals(0,startKey.length);
+        assertEquals(0,stopKey.length);
 
         assertNotNull(filter);
         assertTrue(filter instanceof SkipScanFilter);
+        SkipScanFilter skipScanFilter = (SkipScanFilter)filter;
+        assertEquals(1,skipScanFilter.getSlots().size());
+        assertEquals(2,skipScanFilter.getSlots().get(0).size());
+        assertArrayEquals(expectedStartKey, skipScanFilter.getSlots().get(0).get(0).getLowerRange());
+        assertArrayEquals(expectedEndKey, skipScanFilter.getSlots().get(0).get(1).getLowerRange());
         StatementContext context = plan.getContext();
         ScanRanges scanRanges = context.getScanRanges();
         List<List<KeyRange>> ranges = scanRanges.getRanges();

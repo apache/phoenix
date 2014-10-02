@@ -210,6 +210,10 @@ public class KeyRange implements Writable {
         return compareLowerToUpperBound(b,o,l,true);
     }
 
+    public int compareLowerToUpperBound( byte[] b) {
+        return compareLowerToUpperBound(b,0,b.length);
+    }
+
     /**
      * Compares a lower bound against an upper bound
      * @param b upper bound byte array
@@ -235,6 +239,10 @@ public class KeyRange implements Writable {
             return 0;
         }
         return 1;
+    }
+    
+    public int compareUpperToLowerBound(byte[] b) {
+        return compareUpperToLowerBound(b,0,b.length);
     }
     
     public int compareUpperToLowerBound(byte[] b, int o, int l) {

@@ -46,7 +46,6 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 
 import com.google.common.collect.Lists;
@@ -60,6 +59,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class ScanUtil {
+    public static final int[] SINGLE_COLUMN_SLOT_SPAN = new int[1];
     /*
      * Max length that we fill our key when we turn an inclusive key
      * into a exclusive key.
@@ -68,7 +68,7 @@ public class ScanUtil {
     static {
         Arrays.fill(MAX_FILL_LENGTH_FOR_PREVIOUS_KEY, (byte)-1);
     }
-    public static final int[] SINGLE_COLUMN_SLOT_SPAN = new int[1];
+    private static final byte[] ZERO_BYTE_ARRAY = new byte[1024];
 
     private ScanUtil() {
     }
@@ -439,9 +439,35 @@ public class ScanUtil {
         return keyRanges;
     }
 
-    public static byte[] nextKey(byte[] key, PTable table, ImmutableBytesWritable ptr) {
+    /**
+     * Converts a partially qualified KeyRange into a KeyRange with a
+     * inclusive lower bound and an exclusive upper bound, widening
+     * as necessary.
+     */
+    public static KeyRange convertToInclusiveExclusiveRange (KeyRange partialRange, RowKeySchema schema, ImmutableBytesWritable ptr) {
+        // Ensure minMaxRange is lower inclusive and upper exclusive, as that's
+        // what we need to intersect against for the HBase scan.
+        byte[] lowerRange = partialRange.getLowerRange();
+        if (!partialRange.lowerUnbound()) {
+            if (!partialRange.isLowerInclusive()) {
+                lowerRange = ScanUtil.nextKey(lowerRange, schema, ptr);
+            }
+        }
+        
+        byte[] upperRange = partialRange.getUpperRange();
+        if (!partialRange.upperUnbound()) {
+            if (partialRange.isUpperInclusive()) {
+                upperRange = ScanUtil.nextKey(upperRange, schema, ptr);
+            }
+        }
+        if (partialRange.getLowerRange() != lowerRange || partialRange.getUpperRange() != upperRange) {
+            partialRange = KeyRange.getKeyRange(lowerRange, upperRange);
+        }
+        return partialRange;
+    }
+    
+    private static byte[] nextKey(byte[] key, RowKeySchema schema, ImmutableBytesWritable ptr) {
         int pos = 0;
-        RowKeySchema schema = table.getRowKeySchema();
         int maxOffset = schema.iterator(key, ptr);
         while (schema.next(ptr, pos, maxOffset) != null) {
             pos++;
@@ -500,6 +526,10 @@ public class ScanUtil {
         }
     }
 
+    public static int getRowKeyOffset(byte[] regionStartKey, byte[] regionEndKey) {
+        return regionStartKey.length > 0 ? regionStartKey.length : regionEndKey.length;
+    }
+    
     private static void setRowKeyOffset(Filter filter, int offset) {
         if (filter instanceof BooleanExpressionFilter) {
             BooleanExpressionFilter boolFilter = (BooleanExpressionFilter)filter;
@@ -565,5 +595,32 @@ public class ScanUtil {
 
     public static boolean isAnalyzeTable(Scan scan) {
         return scan.getAttribute((BaseScannerRegionObserver.ANALYZE_TABLE)) != null;
+    }
+
+    public static boolean crossesPrefixBoundary(byte[] key, byte[] prefixBytes, int prefixLength) {
+        if (key.length < prefixLength) {
+            return true;
+        }
+        if (prefixBytes.length >= prefixLength) {
+            return Bytes.compareTo(prefixBytes, 0, prefixLength, key, 0, prefixLength) != 0;
+        }
+        return hasNonZeroLeadingBytes(key, prefixLength);
+    }
+
+    public static byte[] getPrefix(byte[] startKey, int prefixLength) {
+        // If startKey is at beginning, then our prefix will be a null padded byte array
+        return startKey.length >= prefixLength ? startKey : ByteUtil.EMPTY_BYTE_ARRAY;
+    }
+
+    private static boolean hasNonZeroLeadingBytes(byte[] key, int nBytesToCheck) {
+        if (nBytesToCheck > ZERO_BYTE_ARRAY.length) {
+            do {
+                if (Bytes.compareTo(key, nBytesToCheck - ZERO_BYTE_ARRAY.length, ZERO_BYTE_ARRAY.length, ScanUtil.ZERO_BYTE_ARRAY, 0, ScanUtil.ZERO_BYTE_ARRAY.length) != 0) {
+                    return true;
+                }
+                nBytesToCheck -= ZERO_BYTE_ARRAY.length;
+            } while (nBytesToCheck > ZERO_BYTE_ARRAY.length);
+        }
+        return Bytes.compareTo(key, 0, nBytesToCheck, ZERO_BYTE_ARRAY, 0, nBytesToCheck) != 0;
     }
 }

@@ -30,7 +30,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.util.ByteUtil;
@@ -45,28 +44,40 @@ import com.google.common.collect.Lists;
 public class ScanRanges {
     private static final List<List<KeyRange>> EVERYTHING_RANGES = Collections.<List<KeyRange>>emptyList();
     private static final List<List<KeyRange>> NOTHING_RANGES = Collections.<List<KeyRange>>singletonList(Collections.<KeyRange>singletonList(KeyRange.EMPTY_RANGE));
-    public static final ScanRanges EVERYTHING = new ScanRanges(null,ScanUtil.SINGLE_COLUMN_SLOT_SPAN,EVERYTHING_RANGES, KeyRange.EVERYTHING_RANGE, false, false, null);
-    public static final ScanRanges NOTHING = new ScanRanges(null,ScanUtil.SINGLE_COLUMN_SLOT_SPAN,NOTHING_RANGES, KeyRange.EMPTY_RANGE, false, false, null);
+    public static final ScanRanges EVERYTHING = new ScanRanges(null,ScanUtil.SINGLE_COLUMN_SLOT_SPAN,EVERYTHING_RANGES, KeyRange.EVERYTHING_RANGE, KeyRange.EVERYTHING_RANGE, false, false, null);
+    public static final ScanRanges NOTHING = new ScanRanges(null,ScanUtil.SINGLE_COLUMN_SLOT_SPAN,NOTHING_RANGES, KeyRange.EMPTY_RANGE, KeyRange.EMPTY_RANGE, false, false, null);
+    private static final Scan HAS_INTERSECTION = new Scan();
 
     public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan) {
-        return create(schema, ranges, slotSpan, false, null);
+        return create(schema, ranges, slotSpan, KeyRange.EVERYTHING_RANGE, false, null);
     }
     
-    public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan, boolean forceRangeScan, Integer nBuckets) {
-        int offset = nBuckets == null ? 0 : 1;
-        if (ranges.size() == offset) {
+    public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan, KeyRange minMaxRange, boolean forceRangeScan, Integer nBuckets) {
+        int offset = nBuckets == null ? 0 : SaltingUtil.NUM_SALTING_BYTES;
+        if (ranges.size() == offset && minMaxRange == KeyRange.EVERYTHING_RANGE) {
             return EVERYTHING;
-        } else if (ranges.size() == 1 + offset && ranges.get(offset).size() == 1 && ranges.get(offset).get(0) == KeyRange.EMPTY_RANGE) {
+        } else if (minMaxRange == KeyRange.EMPTY_RANGE || (ranges.size() == 1 + offset && ranges.get(offset).size() == 1 && ranges.get(offset).get(0) == KeyRange.EMPTY_RANGE)) {
             return NOTHING;
         }
         boolean isPointLookup = !forceRangeScan && ScanRanges.isPointLookup(schema, ranges, slotSpan);
         if (isPointLookup) {
-            // TODO: consider keeping original to use for serialization as it would
-            // be smaller?
+            // TODO: consider keeping original to use for serialization as it would be smaller?
             List<byte[]> keys = ScanRanges.getPointKeys(ranges, slotSpan, schema, nBuckets);
             List<KeyRange> keyRanges = Lists.newArrayListWithExpectedSize(keys.size());
+            KeyRange unsaltedMinMaxRange = minMaxRange;
+            if (nBuckets != null && minMaxRange != KeyRange.EVERYTHING_RANGE) {
+                unsaltedMinMaxRange = KeyRange.getKeyRange(
+                        stripPrefix(minMaxRange.getLowerRange(),offset),
+                        minMaxRange.lowerUnbound(), 
+                        stripPrefix(minMaxRange.getUpperRange(),offset), 
+                        minMaxRange.upperUnbound());
+            }
             for (byte[] key : keys) {
-                keyRanges.add(KeyRange.getKeyRange(key));
+                // Filter now based on unsalted minMaxRange and ignore the point key salt byte
+                if ( unsaltedMinMaxRange.compareLowerToUpperBound(key, offset, key.length-offset, true) <= 0 &&
+                     unsaltedMinMaxRange.compareUpperToLowerBound(key, offset, key.length-offset, true) >= 0) {
+                    keyRanges.add(KeyRange.getKeyRange(key));
+                }
             }
             ranges = Collections.singletonList(keyRanges);
             if (keys.size() > 1) {
@@ -77,30 +88,46 @@ public class ScanRanges {
                 // when there's a single key.
                 slotSpan = new int[] {schema.getMaxFields()-1};
             }
-        } /*else if (nBuckets != null) {
-            List<List<KeyRange>> saltedRanges = Lists.newArrayListWithExpectedSize(ranges.size());
-            saltedRanges.add(SaltingUtil.generateAllSaltingRanges(nBuckets));
-            saltedRanges.addAll(ranges.subList(1, ranges.size()));
-            ranges = saltedRanges;
-        }*/
+        }
         List<List<KeyRange>> sortedRanges = Lists.newArrayListWithExpectedSize(ranges.size());
         for (int i = 0; i < ranges.size(); i++) {
             List<KeyRange> sorted = Lists.newArrayList(ranges.get(i));
             Collections.sort(sorted, KeyRange.COMPARATOR);
             sortedRanges.add(ImmutableList.copyOf(sorted));
         }
+        boolean useSkipScanFilter = useSkipScanFilter(forceRangeScan, isPointLookup, sortedRanges);
+        
         // Don't set minMaxRange for point lookup because it causes issues during intersect
-        // by us ignoring the salt byte
-        KeyRange minMaxRange = isPointLookup ? KeyRange.EVERYTHING_RANGE : calculateMinMaxRange(schema, slotSpan, sortedRanges);
-        return new ScanRanges(schema, slotSpan, sortedRanges, minMaxRange, forceRangeScan, isPointLookup, nBuckets);
+        // by going across region boundaries
+        KeyRange scanRange = KeyRange.EVERYTHING_RANGE;
+        // if (!isPointLookup && (nBuckets == null || !useSkipScanFilter)) {
+        // if (! ( isPointLookup || (nBuckets != null && useSkipScanFilter) ) ) {
+        // if (nBuckets == null || (nBuckets != null && (!isPointLookup || !useSkipScanFilter))) {
+        if (nBuckets == null || !isPointLookup || !useSkipScanFilter) {
+            byte[] minKey = ScanUtil.getMinKey(schema, sortedRanges, slotSpan);
+            byte[] maxKey = ScanUtil.getMaxKey(schema, sortedRanges, slotSpan);
+            // If the maxKey has crossed the salt byte boundary, then we do not
+            // have anything to filter at the upper end of the range
+            if (ScanUtil.crossesPrefixBoundary(maxKey, ScanUtil.getPrefix(minKey, offset), offset)) {
+                maxKey = KeyRange.UNBOUND;
+            }
+            // We won't filter anything at the low end of the range if we just have the salt byte
+            if (minKey.length <= offset) {
+                minKey = KeyRange.UNBOUND;
+            }
+            scanRange = KeyRange.getKeyRange(minKey, maxKey);
+        }
+        if (minMaxRange != KeyRange.EVERYTHING_RANGE) {
+            minMaxRange = ScanUtil.convertToInclusiveExclusiveRange(minMaxRange, schema, new ImmutableBytesWritable());
+            scanRange = scanRange.intersect(minMaxRange);
+        }
+        
+        if (scanRange == KeyRange.EMPTY_RANGE) {
+            return NOTHING;
+        }
+        return new ScanRanges(schema, slotSpan, sortedRanges, scanRange, minMaxRange, useSkipScanFilter, isPointLookup, nBuckets);
     }
 
-    private static KeyRange calculateMinMaxRange(RowKeySchema schema, int[] slotSpan, List<List<KeyRange>> ranges) {
-        byte[] minKey = ScanUtil.getMinKey(schema, ranges, slotSpan);
-        byte[] maxKey = ScanUtil.getMaxKey(schema, ranges, slotSpan);
-        return KeyRange.getKeyRange(minKey, maxKey);
-    }
-    
     private SkipScanFilter filter;
     private final List<List<KeyRange>> ranges;
     private final int[] slotSpan;
@@ -108,13 +135,15 @@ public class ScanRanges {
     private final boolean isPointLookup;
     private final boolean isSalted;
     private final boolean useSkipScanFilter;
+    private final KeyRange scanRange;
     private final KeyRange minMaxRange;
 
-    private ScanRanges (RowKeySchema schema, int[] slotSpan, List<List<KeyRange>> ranges, KeyRange minMaxRange, boolean forceRangeScan, boolean isPointLookup, Integer bucketNum) {
+    private ScanRanges (RowKeySchema schema, int[] slotSpan, List<List<KeyRange>> ranges, KeyRange scanRange, KeyRange minMaxRange, boolean useSkipScanFilter, boolean isPointLookup, Integer bucketNum) {
         this.isPointLookup = isPointLookup;
         this.isSalted = bucketNum != null;
+        this.useSkipScanFilter = useSkipScanFilter;
+        this.scanRange = scanRange;
         this.minMaxRange = minMaxRange;
-        this.useSkipScanFilter = useSkipScanFilter(forceRangeScan, isPointLookup, ranges);
         
         // Only blow out the bucket values if we're using the skip scan. We need all the
         // bucket values in this case because we use intersect against a key that may have
@@ -131,11 +160,26 @@ public class ScanRanges {
         }
     }
     
+    /**
+     * Get the minMaxRange that is applied in addition to the scan range.
+     * Only used by the ExplainTable to generate the explain plan.
+     */
+    public KeyRange getMinMaxRange() {
+        return minMaxRange;
+    }
+    
+    public void initializeScan(Scan scan) {
+        scan.setStartRow(scanRange.getLowerRange());
+        scan.setStopRow(scanRange.getUpperRange());
+    }
+    
     private static byte[] prefixKey(byte[] key, int keyOffset, byte[] prefixKey, int prefixKeyOffset) {
         if (key.length > 0) {
             byte[] newKey = new byte[key.length + prefixKeyOffset];
             int totalKeyOffset = keyOffset + prefixKeyOffset;
-            System.arraycopy(prefixKey, 0, newKey, 0, totalKeyOffset);
+            if (prefixKey.length >= totalKeyOffset) { // otherwise it's null padded
+                System.arraycopy(prefixKey, 0, newKey, 0, totalKeyOffset);
+            }
             System.arraycopy(key, keyOffset, newKey, totalKeyOffset, key.length - keyOffset);
             return newKey;
         }
@@ -147,12 +191,14 @@ public class ScanRanges {
             return key;
         }
         byte[] temp = new byte[key.length];
-        System.arraycopy(saltKey, 0, temp, 0, SaltingUtil.NUM_SALTING_BYTES);
+        if (saltKey.length >= SaltingUtil.NUM_SALTING_BYTES) { // Otherwise it's null padded
+            System.arraycopy(saltKey, 0, temp, 0, SaltingUtil.NUM_SALTING_BYTES);
+        }
         System.arraycopy(key, SaltingUtil.NUM_SALTING_BYTES, temp, SaltingUtil.NUM_SALTING_BYTES, key.length - SaltingUtil.NUM_SALTING_BYTES);
         return temp;
     }
     
-    private static byte[] stripLocalIndexPrefix(byte[] key, int keyOffset) {
+    private static byte[] stripPrefix(byte[] key, int keyOffset) {
         if (key.length == 0) {
             return key;
         }
@@ -160,12 +206,15 @@ public class ScanRanges {
         System.arraycopy(key, keyOffset, temp, 0, key.length - keyOffset);
         return temp;
     }
-
-    public Scan intersect(Scan scan, final byte[] originalStartKey, final byte[] originalStopKey, final int keyOffset) {
+    
+    public Scan intersectScan(Scan scan, final byte[] originalStartKey, final byte[] originalStopKey, final int keyOffset) {
         byte[] startKey = originalStartKey;
         byte[] stopKey = originalStopKey;
         boolean mayHaveRows = false;
-        final int scanKeyOffset = this.isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0;
+        // Keep the keys as they are if we have a point lookup, as we've already resolved the
+        // salt bytes in that case.
+        final int scanKeyOffset = this.isSalted && !this.isPointLookup ? SaltingUtil.NUM_SALTING_BYTES : 0;
+        assert (scanKeyOffset == 0 || keyOffset == 0);
         // Offset for startKey/stopKey. Either 1 for salted tables or the prefix length
         // of the current region for local indexes.
         final int totalKeyOffset = scanKeyOffset + keyOffset;
@@ -174,14 +223,13 @@ public class ScanRanges {
         // intersection.
         byte[] prefixBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         if (totalKeyOffset > 0) {
-            prefixBytes = startKey.length > 0 ? startKey : (this.isSalted ? QueryConstants.SEPARATOR_BYTE_ARRAY : stopKey);
+            prefixBytes = ScanUtil.getPrefix(startKey, totalKeyOffset);
+            if (ScanUtil.crossesPrefixBoundary(stopKey, prefixBytes, totalKeyOffset)) {
+                stopKey = ByteUtil.EMPTY_BYTE_ARRAY;
+            }
         }
-        if (stopKey.length < totalKeyOffset || Bytes.compareTo(prefixBytes, 0, totalKeyOffset, stopKey, 0, totalKeyOffset) != 0) {
-            stopKey = ByteUtil.EMPTY_BYTE_ARRAY;
-        }
-        assert (scanKeyOffset == 0 || keyOffset == 0);
         int scanStartKeyOffset = scanKeyOffset;
-        byte[] scanStartKey = scan.getStartRow();
+        byte[] scanStartKey = scan == null ? ByteUtil.EMPTY_BYTE_ARRAY : scan.getStartRow();
         // Compare ignoring key prefix and salt byte
         if (scanStartKey.length > 0) {
             if (startKey.length > 0 && Bytes.compareTo(scanStartKey, scanKeyOffset, scanStartKey.length - scanKeyOffset, startKey, totalKeyOffset, startKey.length - totalKeyOffset) < 0) {
@@ -194,7 +242,7 @@ public class ScanRanges {
             mayHaveRows = true;
         }
         int scanStopKeyOffset = scanKeyOffset;
-        byte[] scanStopKey = scan.getStopRow();
+        byte[] scanStopKey = scan == null ? ByteUtil.EMPTY_BYTE_ARRAY : scan.getStopRow();
         if (scanStopKey.length > 0) {
             if (stopKey.length > 0 && Bytes.compareTo(scanStopKey, scanKeyOffset, scanStopKey.length - scanKeyOffset, stopKey, totalKeyOffset, stopKey.length - totalKeyOffset) > 0) {
                 scanStopKey = stopKey;
@@ -213,9 +261,9 @@ public class ScanRanges {
         if (originalStopKey.length != 0 && scanStopKey.length == 0) {
             scanStopKey = originalStopKey;
         }
-        Filter newFilter = scan.getFilter();
+        Filter newFilter = null;
         // If the scan is using skip scan filter, intersect and replace the filter.
-        if (this.useSkipScanFilter()) {
+        if (scan == null || this.useSkipScanFilter()) {
             byte[] skipScanStartKey = scanStartKey;
             byte[] skipScanStopKey = scanStopKey;
             // If we have a keyOffset and we've used the startKey/stopKey that
@@ -233,16 +281,20 @@ public class ScanRanges {
                 }
             } else if (keyOffset > 0) {
                 if (skipScanStartKey == originalStartKey) {
-                    skipScanStartKey = stripLocalIndexPrefix(skipScanStartKey, keyOffset);
+                    skipScanStartKey = stripPrefix(skipScanStartKey, keyOffset);
                 }
                 if (skipScanStopKey == originalStopKey) {
-                    skipScanStopKey = stripLocalIndexPrefix(skipScanStopKey, keyOffset);
+                    skipScanStopKey = stripPrefix(skipScanStopKey, keyOffset);
                 }
             }
+            if (scan == null) {
+                return filter.hasIntersect(skipScanStartKey, skipScanStopKey) ? HAS_INTERSECTION : null;
+            }
             Filter filter = scan.getFilter();
+            SkipScanFilter newSkipScanFilter = null;
             if (filter instanceof SkipScanFilter) {
                 SkipScanFilter oldSkipScanFilter = (SkipScanFilter)filter;
-                newFilter = oldSkipScanFilter.intersect(skipScanStartKey, skipScanStopKey);
+                newFilter = newSkipScanFilter = oldSkipScanFilter.intersect(skipScanStartKey, skipScanStopKey);
                 if (newFilter == null) {
                     return null;
                 }
@@ -252,7 +304,7 @@ public class ScanRanges {
                 newFilter = newList;
                 for (Filter f : oldList.getFilters()) {
                     if (f instanceof SkipScanFilter) {
-                        SkipScanFilter newSkipScanFilter = ((SkipScanFilter)f).intersect(skipScanStartKey, skipScanStopKey);
+                        newSkipScanFilter = ((SkipScanFilter)f).intersect(skipScanStartKey, skipScanStopKey);
                         if (newSkipScanFilter == null) {
                             return null;
                         }
@@ -262,6 +314,15 @@ public class ScanRanges {
                     }
                 }
             }
+            // TODO: it seems that our SkipScanFilter or HBase runs into problems if we don't
+            // have an enclosing range when we do a point lookup.
+            if (isPointLookup) {
+                scanStartKey = ScanUtil.getMinKey(schema, newSkipScanFilter.getSlots(), slotSpan);
+                scanStopKey = ScanUtil.getMaxKey(schema, newSkipScanFilter.getSlots(), slotSpan);
+            }
+        }
+        if (newFilter == null) {
+            newFilter = scan.getFilter();
         }
         Scan newScan = ScanUtil.newScan(scan);
         newScan.setFilter(newFilter);
@@ -283,6 +344,30 @@ public class ScanRanges {
         return newScan;
     }
 
+    /**
+     * Return true if the range formed by the lowerInclusiveKey and upperExclusiveKey
+     * intersects with any of the scan ranges and false otherwise. We cannot pass in
+     * a KeyRange here, because the underlying compare functions expect lower inclusive
+     * and upper exclusive keys. We cannot get their next key because the key must
+     * conform to the row key schema and if a null byte is added to a lower inclusive
+     * key, it's no longer a valid, real key.
+     * @param lowerInclusiveKey lower inclusive key
+     * @param upperExclusiveKey upper exclusive key
+     * @return true if the scan range intersects with the specified lower/upper key
+     * range
+     */
+    public boolean intersects(byte[] lowerInclusiveKey, byte[] upperExclusiveKey, int keyOffset) {
+        if (isEverything()) {
+            return true;
+        }
+        if (isDegenerate()) {
+            return false;
+        }
+        
+        //return filter.hasIntersect(lowerInclusiveKey, upperExclusiveKey);
+        return intersectScan(null, lowerInclusiveKey, upperExclusiveKey, keyOffset) == HAS_INTERSECTION;
+    }
+    
     public SkipScanFilter getSkipScanFilter() {
         return filter;
     }
@@ -401,34 +486,6 @@ public class ScanRanges {
         return isPointLookup ? ranges.get(0).iterator() : Iterators.<KeyRange>emptyIterator();
     }
 
-    public KeyRange getMinMaxRange() {
-        return minMaxRange;
-    }
-    
-    public static final ImmutableBytesWritable UNBOUND = new ImmutableBytesWritable(KeyRange.UNBOUND);
-
-    /**
-     * Return true if the range formed by the lowerInclusiveKey and upperExclusiveKey
-     * intersects with any of the scan ranges and false otherwise. We cannot pass in
-     * a KeyRange here, because the underlying compare functions expect lower inclusive
-     * and upper exclusive keys. We cannot get their next key because the key must
-     * conform to the row key schema and if a null byte is added to a lower inclusive
-     * key, it's no longer a valid, real key.
-     * @param lowerInclusiveKey lower inclusive key
-     * @param upperExclusiveKey upper exclusive key
-     * @return true if the scan range intersects with the specified lower/upper key
-     * range
-     */
-    public boolean intersect(byte[] lowerInclusiveKey, byte[] upperExclusiveKey) {
-        if (isEverything()) {
-            return true;
-        }
-        if (isDegenerate()) {
-            return false;
-        }
-        return filter.hasIntersect(lowerInclusiveKey, upperExclusiveKey);
-    }
-    
     public int getPkColumnSpan() {
         return this == ScanRanges.NOTHING ? 0 : ScanUtil.getTotalSpan(ranges, slotSpan);
     }

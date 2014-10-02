@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.cache;
 
-import static java.util.Collections.emptyMap;
 import static org.apache.phoenix.util.LogUtil.addCustomAnnotations;
 
 import java.io.Closeable;
@@ -60,10 +59,13 @@ import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
+import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.HBaseZeroCopyByteString;
@@ -157,15 +159,20 @@ public class ServerCacheClient {
         ExecutorService executor = services.getExecutor();
         List<Future<Boolean>> futures = Collections.emptyList();
         try {
-            List<HRegionLocation> locations = services.getAllTableRegions(cacheUsingTableRef.getTable().getPhysicalName().getBytes());
+            PTable cacheUsingTable = cacheUsingTableRef.getTable();
+            List<HRegionLocation> locations = services.getAllTableRegions(cacheUsingTable.getPhysicalName().getBytes());
             int nRegions = locations.size();
             // Size these based on worst case
             futures = new ArrayList<Future<Boolean>>(nRegions);
             Set<HRegionLocation> servers = new HashSet<HRegionLocation>(nRegions);
             for (HRegionLocation entry : locations) {
                 // Keep track of servers we've sent to and only send once
+                byte[] regionStartKey = entry.getRegionInfo().getStartKey();
+                byte[] regionEndKey = entry.getRegionInfo().getEndKey();
                 if ( ! servers.contains(entry) && 
-                        keyRanges.intersect(entry.getRegionInfo().getStartKey(), entry.getRegionInfo().getEndKey())) {  // Call RPC once per server
+                        keyRanges.intersects(regionStartKey, regionEndKey,
+                                cacheUsingTable.getIndexType() == IndexType.LOCAL ? 
+                                    ScanUtil.getRowKeyOffset(regionStartKey, regionEndKey) : 0)) {  // Call RPC once per server
                     servers.add(entry);
                     if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Adding cache entry to be sent for " + entry, connection));}
                     final byte[] key = entry.getRegionInfo().getStartKey();
@@ -312,13 +319,11 @@ public class ServerCacheClient {
     					remainingOnServers.remove(entry);
     				} catch (Throwable t) {
     					lastThrowable = t;
-    					Map<String, String> customAnnotations = emptyMap();
     					LOG.error(addCustomAnnotations("Error trying to remove hash cache for " + entry, connection), t);
     				}
     			}
     		}
     		if (!remainingOnServers.isEmpty()) {
-				Map<String, String> customAnnotations = emptyMap();
     			LOG.warn(addCustomAnnotations("Unable to remove hash cache for " + remainingOnServers, connection), lastThrowable);
     		}
     	} finally {
