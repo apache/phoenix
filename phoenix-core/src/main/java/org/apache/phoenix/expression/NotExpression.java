@@ -43,9 +43,9 @@ public class NotExpression extends BaseSingleExpression {
         }
         if (child.isStateless()) {
             if (!child.evaluate(null, ptr) || ptr.getLength() == 0) {
-                return LiteralExpression.newConstant(null, PDataType.BOOLEAN, child.isDeterministic());
+                return LiteralExpression.newConstant(null, PDataType.BOOLEAN, child.getDeterminism());
             }
-            return LiteralExpression.newConstant(!(Boolean)PDataType.BOOLEAN.toObject(ptr), PDataType.BOOLEAN, child.isDeterministic());
+            return LiteralExpression.newConstant(!(Boolean)PDataType.BOOLEAN.toObject(ptr), PDataType.BOOLEAN, child.getDeterminism());
         }
         return new NotExpression(child);
     }

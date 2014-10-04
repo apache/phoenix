@@ -27,6 +27,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.IllegalDataException;
@@ -37,7 +38,6 @@ import com.google.common.collect.Lists;
 import java.util.Collections;
 import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.phoenix.compile.KeyPart;
-import static org.apache.phoenix.expression.function.ScalarFunction.evaluateExpression;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
 import static org.apache.phoenix.schema.PDataType.DECIMAL;
@@ -62,7 +62,7 @@ public class RoundDecimalExpression extends ScalarFunction {
         if (expr.getDataType().isCoercibleTo(PDataType.LONG)) {
             return expr;
         }
-        Expression scaleExpr = LiteralExpression.newConstant(scale, PDataType.INTEGER, true);
+        Expression scaleExpr = LiteralExpression.newConstant(scale, PDataType.INTEGER, Determinism.ALWAYS);
         List<Expression> expressions = Lists.newArrayList(expr, scaleExpr);
         return new RoundDecimalExpression(expressions);
     }
@@ -81,7 +81,7 @@ public class RoundDecimalExpression extends ScalarFunction {
             return expr;
         }
         if (exprs.size() == 1) {
-            Expression scaleExpr = LiteralExpression.newConstant(0, PDataType.INTEGER, true);
+            Expression scaleExpr = LiteralExpression.newConstant(0, PDataType.INTEGER, Determinism.ALWAYS);
             exprs = Lists.newArrayList(expr, scaleExpr);
         }
         return new RoundDecimalExpression(exprs);

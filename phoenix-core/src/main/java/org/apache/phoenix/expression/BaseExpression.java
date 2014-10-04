@@ -168,7 +168,7 @@ public abstract class BaseExpression implements Expression {
         } else if (lhs == null) { 
             return rhs;
         } else if (rhs == null) {
-            return LiteralExpression.newConstant(null, lhs.getDataType(), lhs.isDeterministic());
+            return LiteralExpression.newConstant(null, lhs.getDataType(), lhs.getDeterminism());
         } else {
             if (rhs.getDataType() != null && lhs.getDataType() != null && !rhs.getDataType().isCastableTo(lhs.getDataType())) {
                 throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType());
@@ -239,8 +239,8 @@ public abstract class BaseExpression implements Expression {
     }
     
     @Override
-    public boolean isDeterministic() {
-        return true;
+    public Determinism getDeterminism() {
+        return Determinism.ALWAYS;
     }
     
     @Override

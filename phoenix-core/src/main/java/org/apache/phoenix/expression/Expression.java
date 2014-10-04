@@ -34,6 +34,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * @since 0.1
  */
 public interface Expression extends PDatum, Writable {
+	
     /**
      * Access the value by setting a pointer to it (as opposed to making
      * a copy of it which can be expensive)
@@ -75,10 +76,9 @@ public interface Expression extends PDatum, Writable {
     boolean isStateless();
     
     /**
-     * @return true if the expression returns the same output every
-     * time given the same input.
+     * @return Determinism enum 
      */
-    boolean isDeterministic();
+    Determinism getDeterminism();
     
     /**
      * Determines if an evaluate is required after partial evaluation

@@ -133,7 +133,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         } else if(lhsExprDataType != null && rhsExprDataType != null && !lhsExprDataType.isComparableTo(rhsExprDataType)) {
             throw TypeMismatchException.newException(lhsExprDataType, rhsExprDataType, toString(op, children));
         }
-        boolean isDeterministic = lhsExpr.isDeterministic() || rhsExpr.isDeterministic();
+        Determinism determinism =  lhsExpr.getDeterminism().combine(rhsExpr.getDeterminism());
         
         Object lhsValue = null;
         // Can't use lhsNode.isConstant(), because we have cases in which we don't know
@@ -142,7 +142,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         if (lhsExpr instanceof LiteralExpression) {
             lhsValue = ((LiteralExpression)lhsExpr).getValue();
             if (lhsValue == null) {
-                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, lhsExpr.isDeterministic());
+                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, lhsExpr.getDeterminism());
             }
         }
         Object rhsValue = null;
@@ -150,11 +150,11 @@ public class ComparisonExpression extends BaseCompoundExpression {
         if (rhsExpr instanceof LiteralExpression) {
             rhsValue = ((LiteralExpression)rhsExpr).getValue();
             if (rhsValue == null) {
-                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, rhsExpr.isDeterministic());
+                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, rhsExpr.getDeterminism());
             }
         }
         if (lhsValue != null && rhsValue != null) {
-            return LiteralExpression.newConstant(ByteUtil.compare(op,lhsExprDataType.compareTo(lhsValue, rhsValue, rhsExprDataType)), isDeterministic);
+            return LiteralExpression.newConstant(ByteUtil.compare(op,lhsExprDataType.compareTo(lhsValue, rhsValue, rhsExprDataType)), determinism);
         }
         // Coerce constant to match type of lhs so that we don't need to
         // convert at filter time. Since we normalize the select statement
@@ -168,11 +168,11 @@ public class ComparisonExpression extends BaseCompoundExpression {
                 // TODO: if lengths are unequal and fixed width?
                 if (rhsExprDataType.isCoercibleTo(lhsExprDataType, rhsValue)) { // will convert 2.0 -> 2
                     children = Arrays.asList(children.get(0), LiteralExpression.newConstant(rhsValue, lhsExprDataType, 
-                            lhsExpr.getMaxLength(), null, lhsExpr.getSortOrder(), isDeterministic));
+                            lhsExpr.getMaxLength(), null, lhsExpr.getSortOrder(), determinism));
                 } else if (op == CompareOp.EQUAL) {
-                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, true);
+                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, Determinism.ALWAYS);
                 } else if (op == CompareOp.NOT_EQUAL) {
-                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, true);
+                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, Determinism.ALWAYS);
                 } else { // TODO: generalize this with PDataType.getMinValue(), PDataTypeType.getMaxValue() methods
                     switch(rhsExprDataType) {
                     case DECIMAL:
@@ -190,7 +190,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
                         default: // Else, we truncate the value
                             BigDecimal bd = (BigDecimal)rhsValue;
                             rhsValue = bd.longValue() + increment;
-                            children = Arrays.asList(lhsExpr, LiteralExpression.newConstant(rhsValue, lhsExprDataType, lhsExpr.getSortOrder(), rhsExpr.isDeterministic()));
+                            children = Arrays.asList(lhsExpr, LiteralExpression.newConstant(rhsValue, lhsExprDataType, lhsExpr.getSortOrder(), rhsExpr.getDeterminism()));
                             break;
                         }
                         break;
@@ -212,16 +212,16 @@ public class ComparisonExpression extends BaseCompoundExpression {
                             case LESS:
                             case LESS_OR_EQUAL:
                                 if ((Long)rhsValue > 0) {
-                                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, isDeterministic);
+                                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, determinism);
                                 } else {
-                                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, isDeterministic);
+                                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, determinism);
                                 }
                             case GREATER:
                             case GREATER_OR_EQUAL:
                                 if ((Long)rhsValue > 0) {
-                                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, isDeterministic);
+                                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, determinism);
                                 } else {
-                                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, isDeterministic);
+                                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, determinism);
                                 }
                             default:
                                 break;
@@ -230,15 +230,15 @@ public class ComparisonExpression extends BaseCompoundExpression {
                             switch (op) {
                             case LESS:
                             case LESS_OR_EQUAL:
-                                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, isDeterministic);
+                                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, determinism);
                             case GREATER:
                             case GREATER_OR_EQUAL:
-                                return LiteralExpression.newConstant(true, PDataType.BOOLEAN, isDeterministic);
+                                return LiteralExpression.newConstant(true, PDataType.BOOLEAN, determinism);
                             default:
                                 break;
                             }
                         }
-                        children = Arrays.asList(lhsExpr, LiteralExpression.newConstant(rhsValue, rhsExprDataType, lhsExpr.getSortOrder(), isDeterministic));
+                        children = Arrays.asList(lhsExpr, LiteralExpression.newConstant(rhsValue, rhsExprDataType, lhsExpr.getSortOrder(), determinism));
                         break;
                     }
                 }
@@ -249,9 +249,9 @@ public class ComparisonExpression extends BaseCompoundExpression {
             if (children.get(1).getMaxLength() != null && lhsExpr.getMaxLength() != null && lhsExpr.getMaxLength() < children.get(1).getMaxLength()) {
                 switch (op) {
                 case EQUAL:
-                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, isDeterministic);
+                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, determinism);
                 case NOT_EQUAL:
-                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, isDeterministic);
+                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, determinism);
                 default:
                     break;
                 }

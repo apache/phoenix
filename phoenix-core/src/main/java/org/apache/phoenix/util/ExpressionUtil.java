@@ -13,6 +13,7 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.CurrentDateFunction;
@@ -24,16 +25,20 @@ import com.google.common.collect.Lists;
 
 public class ExpressionUtil {
 
-    @SuppressWarnings("unchecked")
-    private static final List<Class<? extends FunctionExpression>> OVERRIDE_LITERAL_FUNCTIONS = Lists
-            .<Class<? extends FunctionExpression>> newArrayList(CurrentDateFunction.class, CurrentTimeFunction.class);
+	@SuppressWarnings("unchecked")
+	private static final List<Class<? extends FunctionExpression>> OVERRIDE_LITERAL_FUNCTIONS = Lists
+			.<Class<? extends FunctionExpression>> newArrayList(
+					CurrentDateFunction.class, CurrentTimeFunction.class);
 
-    private ExpressionUtil() {}
+	private ExpressionUtil() {
+	}
 
-    public static boolean isConstant(Expression expression) {
-        return (expression.isStateless() && expression.isDeterministic() || OVERRIDE_LITERAL_FUNCTIONS
-                .contains(expression.getClass()));
-    }
+	public static boolean isConstant(Expression expression) {
+		return (expression.isStateless() && (expression.getDeterminism() == Determinism.ALWAYS
+				|| expression.getDeterminism() == Determinism.PER_STATEMENT 
+				// TODO remove this in 3.4/4.4 (need to support clients on 3.1/4.1)
+				|| OVERRIDE_LITERAL_FUNCTIONS.contains(expression.getClass())));
+	}
 
     public static LiteralExpression getConstantExpression(Expression expression, ImmutableBytesWritable ptr)
             throws SQLException {
@@ -42,16 +47,15 @@ public class ExpressionUtil {
         if (expression.evaluate(null, ptr) && ptr.getLength() != 0) {
             value = type.toObject(ptr);
         }
-        return LiteralExpression.newConstant(value, type, expression.isDeterministic());
+        return LiteralExpression.newConstant(value, type, expression.getDeterminism());
     }
 
     public static boolean isNull(Expression expression, ImmutableBytesWritable ptr) {
-        return expression.isStateless() && expression.isDeterministic()
-                && (!expression.evaluate(null, ptr) || ptr.getLength() == 0);
+        return isConstant(expression) && (!expression.evaluate(null, ptr) || ptr.getLength() == 0);
     }
 
     public static LiteralExpression getNullExpression(Expression expression) throws SQLException {
-        return LiteralExpression.newConstant(null, expression.getDataType(), expression.isDeterministic());
+        return LiteralExpression.newConstant(null, expression.getDataType(), expression.getDeterminism());
     }
 
 }
