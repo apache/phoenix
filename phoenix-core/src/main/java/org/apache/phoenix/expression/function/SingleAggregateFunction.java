@@ -25,7 +25,7 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
@@ -43,7 +43,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * @since 0.1
  */
 abstract public class SingleAggregateFunction extends AggregateFunction {
-    private static final List<Expression> DEFAULT_EXPRESSION_LIST = Arrays.<Expression>asList(LiteralExpression.newConstant(1, true));
+    private static final List<Expression> DEFAULT_EXPRESSION_LIST = Arrays.<Expression>asList(LiteralExpression.newConstant(1, Determinism.ALWAYS));
     protected boolean isConstant;
     private Aggregator aggregator;
     

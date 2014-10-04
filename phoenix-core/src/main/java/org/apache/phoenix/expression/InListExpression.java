@@ -60,7 +60,7 @@ public class InListExpression extends BaseSingleExpression {
         Expression firstChild = children.get(0);
         
         if (firstChild.isStateless() && (!firstChild.evaluate(null, ptr) || ptr.getLength() == 0)) {
-            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, firstChild.isDeterministic());
+            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, firstChild.getDeterminism());
         }
         if (children.size() == 2) {
             return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, children, ptr);
@@ -86,7 +86,7 @@ public class InListExpression extends BaseSingleExpression {
             throw sqlE;
         }
         if (coercedKeyExpressions.size() == 2 && addedNull) {
-            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, true);
+            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, Determinism.ALWAYS);
         }
         Expression expression = new InListExpression(coercedKeyExpressions);
         if (isNegate) { 

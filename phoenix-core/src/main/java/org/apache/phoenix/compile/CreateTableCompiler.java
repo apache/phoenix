@@ -32,6 +32,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -257,7 +258,8 @@ public class CreateTableCompiler {
 
         @Override
         public Iterator<Expression> visitEnter(ComparisonExpression node) {
-            if (node.getFilterOp() == CompareOp.EQUAL && node.getChildren().get(1).isStateless() && node.getChildren().get(1).isDeterministic()) {
+            if (node.getFilterOp() == CompareOp.EQUAL && node.getChildren().get(1).isStateless() 
+            		&& node.getChildren().get(1).getDeterminism() == Determinism.ALWAYS ) {
                 return Iterators.singletonIterator(node.getChildren().get(0));
             }
             return super.visitEnter(node);

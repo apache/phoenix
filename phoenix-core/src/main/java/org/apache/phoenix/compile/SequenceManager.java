@@ -26,6 +26,7 @@ import java.util.Map;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.BaseTerminalExpression;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.TableName;
@@ -202,8 +203,8 @@ public class SequenceManager {
         }
         
         @Override
-        public boolean isDeterministic() {
-            return false;
+        public Determinism getDeterminism() {
+            return Determinism.PER_ROW;
         }
         
         @Override

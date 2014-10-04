@@ -36,7 +36,7 @@ public abstract class CurrentDateTimeFunction extends ScalarFunction {
     }
 
     @Override
-    public boolean isDeterministic() {
-        return false;
+    public Determinism getDeterminism() {
+        return Determinism.PER_STATEMENT;
     }
 }

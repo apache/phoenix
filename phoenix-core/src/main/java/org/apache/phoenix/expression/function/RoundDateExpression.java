@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.KeyPart;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.query.KeyRange;
@@ -92,11 +93,11 @@ public class RoundDateExpression extends ScalarFunction {
     }
     
     static Expression getTimeUnitExpr(TimeUnit timeUnit) throws SQLException {
-        return LiteralExpression.newConstant(timeUnit.name(), PDataType.VARCHAR, true);
+        return LiteralExpression.newConstant(timeUnit.name(), PDataType.VARCHAR, Determinism.ALWAYS);
     }
     
     static Expression getMultiplierExpr(int multiplier) throws SQLException {
-        return LiteralExpression.newConstant(multiplier, PDataType.INTEGER, true);
+        return LiteralExpression.newConstant(multiplier, PDataType.INTEGER, Determinism.ALWAYS);
     }
     
     RoundDateExpression(List<Expression> children) {
