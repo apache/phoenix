@@ -149,6 +149,9 @@ public class SkipScanFilter extends FilterBase implements Writable {
 
         // we should either have no previous hint, or the next hint should always come after the previous hint
         // TODO: put this assert back after trying failing tests without it
+        // Tests failing with this assert include: 
+        // DeleteIT.testDeleteAllFromTableWithIndexNoAutoCommitNoSalting()
+        // MutableIndexIT.testCoveredColumnUpdatesWithLocalIndex()
 //        assert previousCellHint == null || KeyValue.COMPARATOR.compare(nextCellHint, previousCellHint) > 0
 //                : "next hint must come after previous hint (prev=" + previousCellHint + ", next=" + nextCellHint + ", kv=" + kv + ")";
     }
