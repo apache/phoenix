@@ -22,6 +22,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -36,6 +37,7 @@ import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
@@ -111,6 +113,8 @@ public class SpillManager implements Closeable {
             this.numSpillFiles = numSpillFiles;
             this.aggregators = serverAggregators;
             this.conf = conf;
+            File spillFilesDir = conf.get(QueryServices.SPOOL_DIRECTORY) != null ?
+                new File(conf.get(QueryServices.SPOOL_DIRECTORY)) : null;
             
             // Ensure that a single element fits onto a page!!!
             Preconditions.checkArgument(SpillFile.DEFAULT_PAGE_SIZE > estValueSize);
@@ -118,7 +122,7 @@ public class SpillManager implements Closeable {
             // Create a list of spillFiles
             // Each Spillfile only handles up to 2GB data
             for (int i = 0; i < numSpillFiles; i++) {
-                SpillFile file = SpillFile.createSpillFile();
+                SpillFile file = SpillFile.createSpillFile(spillFilesDir);
                 spillMaps.add(new SpillMap(file, SpillFile.DEFAULT_PAGE_SIZE, estValueSize, cache));
             }
         } catch (IOException ioe) {
