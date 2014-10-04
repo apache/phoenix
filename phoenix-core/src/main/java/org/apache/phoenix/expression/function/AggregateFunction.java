@@ -19,6 +19,7 @@ package org.apache.phoenix.expression.function;
 
 import java.util.List;
 
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 
 
@@ -46,7 +47,7 @@ abstract public class AggregateFunction extends FunctionExpression {
     }
 
     @Override
-    public boolean isDeterministic() {
-        return false;
+    public Determinism getDeterminism() {
+        return Determinism.PER_ROW;
     }
 }

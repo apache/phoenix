@@ -49,6 +49,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -217,7 +218,7 @@ public class HashJoinPlan implements QueryPlan {
             Expression rhsExpression, List<ImmutableBytesWritable> rhsValues, 
             ImmutableBytesWritable ptr, boolean hasFilters) throws SQLException {
         if (rhsValues.isEmpty())
-            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, true);
+            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, Determinism.ALWAYS);
         
         PDataType type = rhsExpression.getDataType();
         if (!useInClause(hasFilters)) {

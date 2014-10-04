@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.AndExpression;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -120,7 +121,7 @@ public class WhereCompiler {
         
         Set<Expression> extractedNodes = Sets.<Expression>newHashSet();
         WhereExpressionCompiler whereCompiler = new WhereExpressionCompiler(context);
-        Expression expression = where == null ? LiteralExpression.newConstant(true,PDataType.BOOLEAN,true) : where.accept(whereCompiler);
+        Expression expression = where == null ? LiteralExpression.newConstant(true,PDataType.BOOLEAN,Determinism.ALWAYS) : where.accept(whereCompiler);
         if (whereCompiler.isAggregate()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_IN_WHERE).build().buildException();
         }

@@ -37,7 +37,7 @@ public class AndExpression extends AndOrExpression {
     private static final String AND = "AND";
     
     public static Expression create(List<Expression> children) throws SQLException {
-        boolean isDeterministic = true;
+    	Determinism determinism = Determinism.ALWAYS;
         Iterator<Expression> iterator = children.iterator();
         while (iterator.hasNext()) {
             Expression child = iterator.next();
@@ -50,10 +50,10 @@ public class AndExpression extends AndOrExpression {
             if (LiteralExpression.isTrue(child)) {
                 iterator.remove();
             }
-            isDeterministic &= child.isDeterministic();
+			determinism.combine(child.getDeterminism());
         }
         if (children.size() == 0) {
-            return LiteralExpression.newConstant(true, isDeterministic);
+            return LiteralExpression.newConstant(true, determinism);
         }
         if (children.size() == 1) {
             return children.get(0);

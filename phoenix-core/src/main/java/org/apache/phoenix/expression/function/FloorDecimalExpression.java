@@ -21,13 +21,17 @@ import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.PDataType;
 
 import com.google.common.collect.Lists;
+
 import java.math.BigDecimal;
+
 import org.apache.phoenix.query.KeyRange;
+
 import static org.apache.phoenix.schema.PDataType.DECIMAL;
 
 /**
@@ -54,7 +58,7 @@ public class FloorDecimalExpression extends RoundDecimalExpression {
         if (expr.getDataType().isCoercibleTo(PDataType.LONG)) {
             return expr;
         }
-        Expression scaleExpr = LiteralExpression.newConstant(scale, PDataType.INTEGER, true);
+        Expression scaleExpr = LiteralExpression.newConstant(scale, PDataType.INTEGER, Determinism.ALWAYS);
         List<Expression> expressions = Lists.newArrayList(expr, scaleExpr);
         return new FloorDecimalExpression(expressions);
     }
@@ -65,7 +69,7 @@ public class FloorDecimalExpression extends RoundDecimalExpression {
             return expr;
         }
         if (exprs.size() == 1) {
-            Expression scaleExpr = LiteralExpression.newConstant(0, PDataType.INTEGER, true);
+            Expression scaleExpr = LiteralExpression.newConstant(0, PDataType.INTEGER, Determinism.ALWAYS);
             exprs = Lists.newArrayList(expr, scaleExpr);
         }
         return new FloorDecimalExpression(exprs);

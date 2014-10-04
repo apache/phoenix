@@ -37,6 +37,7 @@ import org.apache.phoenix.expression.BaseExpression.ExpressionComparabilityWrapp
 import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
@@ -407,7 +408,7 @@ public class WhereOptimizer {
             if (l.size() != node.getChildren().size()) {
                 if (l.isEmpty()) {
                     // Don't return null here, because then our defaultReturn will kick in
-                    return LiteralExpression.newConstant(true, true);
+                    return LiteralExpression.newConstant(true, Determinism.ALWAYS);
                 }
                 if (l.size() == 1) {
                     return l.get(0);

@@ -34,7 +34,7 @@ public abstract class BaseCompoundExpression extends BaseExpression {
     protected List<Expression> children;
     private boolean isNullable;
     private boolean isStateless;
-    private boolean isDeterministic;
+    private Determinism determinism;
     private boolean requiresFinalEvaluation;
    
     public BaseCompoundExpression() {
@@ -48,18 +48,17 @@ public abstract class BaseCompoundExpression extends BaseExpression {
     private void init(List<Expression> children) {
         this.children = ImmutableList.copyOf(children);
         boolean isStateless = true;
-        boolean isDeterministic = true;
         boolean isNullable = false;
         boolean requiresFinalEvaluation = false;
+        this.determinism = Determinism.ALWAYS;
         for (int i = 0; i < children.size(); i++) {
             Expression child = children.get(i);
             isNullable |= child.isNullable();
             isStateless &= child.isStateless();
-            isDeterministic &= child.isDeterministic();
+            this.determinism = this.determinism.combine(child.getDeterminism());
             requiresFinalEvaluation |= child.requiresFinalEvaluation();
         }
         this.isStateless = isStateless;
-        this.isDeterministic = isDeterministic;
         this.isNullable = isNullable;
         this.requiresFinalEvaluation = requiresFinalEvaluation;
     }
@@ -71,8 +70,8 @@ public abstract class BaseCompoundExpression extends BaseExpression {
     
     
     @Override
-    public boolean isDeterministic() {
-        return isDeterministic;
+    public Determinism getDeterminism() {
+        return determinism;
     }
     
     @Override

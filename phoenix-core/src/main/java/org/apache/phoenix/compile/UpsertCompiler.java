@@ -42,6 +42,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -511,7 +512,7 @@ public class UpsertCompiler {
                         }
                         // Add literal null for missing PK columns
                         pos = projectedExpressions.size();
-                        Expression literalNull = LiteralExpression.newConstant(null, column.getDataType(), true);
+                        Expression literalNull = LiteralExpression.newConstant(null, column.getDataType(), Determinism.ALWAYS);
                         projectedExpressions.add(literalNull);
                         allColumnsIndexes[pos] = column.getPosition();
                     } 
@@ -812,7 +813,7 @@ public class UpsertCompiler {
             if (isTopLevel()) {
                 context.getBindManager().addParamMetaData(node, column);
                 Object value = context.getBindManager().getBindValue(node);
-                return LiteralExpression.newConstant(value, column.getDataType(), column.getSortOrder(), true);
+                return LiteralExpression.newConstant(value, column.getDataType(), column.getSortOrder(), Determinism.ALWAYS);
             }
             return super.visit(node);
         }    
@@ -820,7 +821,7 @@ public class UpsertCompiler {
         @Override
         public Expression visit(LiteralParseNode node) throws SQLException {
             if (isTopLevel()) {
-                return LiteralExpression.newConstant(node.getValue(), column.getDataType(), column.getSortOrder(), true);
+                return LiteralExpression.newConstant(node.getValue(), column.getDataType(), column.getSortOrder(), Determinism.ALWAYS);
             }
             return super.visit(node);
         }

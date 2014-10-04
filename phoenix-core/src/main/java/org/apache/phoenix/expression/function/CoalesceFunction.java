@@ -30,6 +30,7 @@ import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ExpressionUtil;
 
 
 /**
@@ -59,7 +60,7 @@ public class CoalesceFunction extends ScalarFunction {
         Expression firstChild = children.get(0);
         Expression secondChild = children.get(1);
 
-        if (secondChild.isStateless() && secondChild.isDeterministic()) { // is literal
+        if (ExpressionUtil.isConstant(secondChild)) { // is literal
 
             ImmutableBytesWritable ptr = new ImmutableBytesPtr();
             secondChild.evaluate(null, ptr);

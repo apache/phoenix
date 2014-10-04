@@ -33,7 +33,9 @@ import java.util.Set;
 import org.apache.http.annotation.Immutable;
 
 import com.google.common.collect.ImmutableSet;
+
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.AggregateFunction;
@@ -137,7 +139,7 @@ public class FunctionParseNode extends CompoundParseNode {
         if (args.length > children.size()) {
             List<Expression> moreChildren = new ArrayList<Expression>(children);
             for (int i = children.size(); i < info.getArgs().length; i++) {
-                moreChildren.add(LiteralExpression.newConstant(null, args[i].allowedTypes.length == 0 ? null :  args[i].allowedTypes[0], true));
+                moreChildren.add(LiteralExpression.newConstant(null, args[i].allowedTypes.length == 0 ? null :  args[i].allowedTypes[0], Determinism.ALWAYS));
             }
             children = moreChildren;
         }
@@ -174,7 +176,7 @@ public class FunctionParseNode extends CompoundParseNode {
                     // based on the function argument annonation set the parameter meta data.
                     if (child.getDataType() == null) {
                         if (allowedTypes.length > 0) {
-                            context.getBindManager().addParamMetaData(bindNode, LiteralExpression.newConstant(null, allowedTypes[0], true));
+                            context.getBindManager().addParamMetaData(bindNode, LiteralExpression.newConstant(null, allowedTypes[0], Determinism.ALWAYS));
                         }
                     } else { // Use expression as is, since we already have the data type set
                         context.getBindManager().addParamMetaData(bindNode, child);
@@ -376,11 +378,11 @@ public class FunctionParseNode extends CompoundParseNode {
                 SQLParser parser = new SQLParser(strValue);
                 try {
                     LiteralParseNode node = parser.parseLiteral();
-                    LiteralExpression defaultValue = LiteralExpression.newConstant(node.getValue(), this.allowedTypes[0], true);
+                    LiteralExpression defaultValue = LiteralExpression.newConstant(node.getValue(), this.allowedTypes[0], Determinism.ALWAYS);
                     if (this.getAllowedTypes().length > 0) {
                         for (PDataType type : this.getAllowedTypes()) {
                             if (defaultValue.getDataType() == null || defaultValue.getDataType().isCoercibleTo(type, node.getValue())) {
-                                return LiteralExpression.newConstant(node.getValue(), type, true);
+                                return LiteralExpression.newConstant(node.getValue(), type, Determinism.ALWAYS);
                             }
                         }
                         throw new IllegalStateException("Unable to coerce default value " + strValue + " to any of the allowed types of " + Arrays.toString(this.getAllowedTypes()));

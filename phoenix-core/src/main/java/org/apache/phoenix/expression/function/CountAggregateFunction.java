@@ -22,7 +22,7 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
@@ -45,7 +45,7 @@ import org.apache.phoenix.util.SchemaUtil;
 @BuiltInFunction(name=CountAggregateFunction.NAME, args= {@Argument()} )
 public class CountAggregateFunction extends SingleAggregateFunction {
     public static final String NAME = "COUNT";
-    public static final List<Expression> STAR = Arrays.<Expression>asList(LiteralExpression.newConstant(1, true));
+    public static final List<Expression> STAR = Arrays.<Expression>asList(LiteralExpression.newConstant(1, Determinism.ALWAYS));
     public static final String NORMALIZED_NAME = SchemaUtil.normalizeIdentifier(NAME);
     
     public CountAggregateFunction() {
