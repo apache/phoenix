@@ -50,6 +50,7 @@ import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
+import org.apache.hadoop.hbase.coprocessor.MultiRowMutationEndpoint;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
@@ -103,7 +104,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.schema.EmptySequenceCacheException;
-import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -590,12 +590,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, 1, null);
             }
             // TODO: better encapsulation for this
-            // Since indexes can't have indexes, don't install our indexing coprocessor for indexes. Also,
-            // don't install on the metadata table until we fix the TODO there.
-            if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW) && !SchemaUtil.isMetaTable(tableName) && !descriptor.hasCoprocessor(Indexer.class.getName())) {
+            // Since indexes can't have indexes, don't install our indexing coprocessor for indexes.
+            // Also don't install on the SYSTEM.CATALOG and SYSTEM.STATS table because we use
+            // all-or-none mutate class which break when this coprocessor is installed (PHOENIX-1318).
+            if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW) 
+                    && !SchemaUtil.isMetaTable(tableName)
+                    && !SchemaUtil.isStatsTable(tableName) 
+                    && !descriptor.hasCoprocessor(Indexer.class.getName())) {
                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                 opts.put(CoveredColumnsIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                 Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts);
+            }
+            if (SchemaUtil.isStatsTable(tableName) && !descriptor.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
+                descriptor.addCoprocessor(MultiRowMutationEndpoint.class.getName(),
+                        null, 1, null);
             }
             
             if (descriptor.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null
@@ -730,12 +738,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             HTableDescriptor newDesc = generateTableDescriptor(tableName, existingDesc, tableType , props, families, splits);
             
             if (!tableExist) {
-                /*
-                 * Remove the splitPolicy attribute due to an HBase bug (see below)
-                 */
-                if (isMetaTable) {
-                    newDesc.remove(HTableDescriptor.SPLIT_POLICY);
-                }
                 if (newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
                     newDesc.setValue(HTableDescriptor.SPLIT_POLICY, IndexRegionSplitPolicy.class.getName());
                 }
@@ -752,31 +754,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 if (isMetaTable) {
                     checkClientServerCompatibility();
-                    /*
-                     * Now we modify the table to add the split policy, since we know that the client and
-                     * server and compatible. This works around a nasty, known HBase bug where if a split
-                     * policy class cannot be found on the server, the HBase table is left in a horrible
-                     * "ghost" state where it can't be used and can't be deleted without bouncing the master. 
-                     */
-                    newDesc.setValue(HTableDescriptor.SPLIT_POLICY, MetaDataSplitPolicy.class.getName());
-                    admin.disableTable(tableName);
-                    admin.modifyTable(tableName, newDesc);
-                    admin.enableTable(tableName);
                 }
                 return null;
             } else {
-                if (!modifyExistingMetaData || existingDesc.equals(newDesc)) {
-                    // Table is already created. Note that the presplits are ignored in this case
-                    if (isMetaTable) {
-                        checkClientServerCompatibility();
-                    }
-                    return existingDesc;
-                }
-
                 if (isMetaTable) {
                     checkClientServerCompatibility();
                 }
                          
+                if (!modifyExistingMetaData || existingDesc.equals(newDesc)) {
+                    return existingDesc;
+                }
+
                 // TODO: Take advantage of online schema change ability by setting "hbase.online.schema.update.enable" to true
                 admin.disableTable(tableName);
                 admin.modifyTable(tableName, newDesc);

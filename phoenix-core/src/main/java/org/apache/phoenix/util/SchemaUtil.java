@@ -18,6 +18,7 @@
 package org.apache.phoenix.util;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES;
 
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -342,6 +343,10 @@ public class SchemaUtil {
 
     public static boolean isMetaTable(byte[] tableName) {
         return Bytes.compareTo(tableName, SYSTEM_CATALOG_NAME_BYTES) == 0;
+    }
+    
+    public static boolean isStatsTable(byte[] tableName) {
+        return Bytes.compareTo(tableName, SYSTEM_STATS_NAME_BYTES) == 0;
     }
     
     public static boolean isSequenceTable(byte[] tableName) {

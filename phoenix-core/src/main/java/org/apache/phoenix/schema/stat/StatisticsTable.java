@@ -20,28 +20,30 @@ package org.apache.phoenix.schema.stat;
 import java.io.Closeable;
 import java.io.IOException;
 import java.sql.Date;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.client.HTablePool;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
+import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
+import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MultiRowMutationService;
+import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MutateRowsRequest;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.TrustedByteArrayOutputStream;
+
+import com.google.protobuf.ServiceException;
 
 /**
  * Wrapper to access the statistics table SYSTEM.STATS using the HTable.
  */
-@SuppressWarnings("deprecation")
 public class StatisticsTable implements Closeable {
-    /** Map of the currently open statistics tables */
-    private static final Map<String, StatisticsTable> tableMap = new HashMap<String, StatisticsTable>();
     /**
      * @param Configuration
      *            Configruation to update the stats table.
@@ -51,20 +53,8 @@ public class StatisticsTable implements Closeable {
      * @throws IOException
      *             if the table cannot be created due to an underlying HTable creation error
      */
-    public synchronized static StatisticsTable getStatisticsTableForCoprocessor(Configuration conf,
-            String primaryTableName) throws IOException {
-        StatisticsTable table = tableMap.get(primaryTableName);
-        if (table == null) {
-            // Map the statics table and the table with which the statistics is
-            // associated. This is a workaround
-            HTablePool pool = new HTablePool(conf,100);
-            //HTable hTable = new HTable(conf, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
-            HTableInterface hTable = pool.getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
-            //h.setAutoFlushTo(true);
-            table = new StatisticsTable(hTable);
-            tableMap.put(primaryTableName, table);
-        }
-        return table;
+    public static StatisticsTable getStatisticsTable(HTableInterface hTable) throws IOException {
+        return new StatisticsTable(hTable);
     }
 
     private final HTableInterface statisticsTable;
@@ -102,21 +92,39 @@ public class StatisticsTable implements Closeable {
         if (tracker == null) { return; }
 
         // Add the timestamp header
-        formLastUpdatedStatsMutation(tableName, currentTime, mutations);
+        commitLastStatsUpdatedTime(tableName, currentTime);
 
         byte[] prefix = StatisticsUtils.getRowKey(PDataType.VARCHAR.toBytes(tableName), PDataType.VARCHAR.toBytes(fam),
                 PDataType.VARCHAR.toBytes(regionName));
         formStatsUpdateMutation(tracker, fam, mutations, currentTime, prefix);
     }
 
+    private static MutationType getMutationType(Mutation m) throws IOException {
+        if (m instanceof Put) {
+            return MutationType.PUT;
+        } else if (m instanceof Delete) {
+            return MutationType.DELETE;
+        } else {
+            throw new DoNotRetryIOException("Unsupported mutation type in stats commit"
+                    + m.getClass().getName());
+        }
+    }
     public void commitStats(List<Mutation> mutations) throws IOException {
-        Object[] res = new Object[mutations.size()];
-        try {
-            if (mutations.size() > 0) {
-                statisticsTable.batch(mutations, res);
+        if (mutations.size() > 0) {
+            byte[] row = mutations.get(0).getRow();
+            MutateRowsRequest.Builder mrmBuilder = MutateRowsRequest.newBuilder();
+            for (Mutation m : mutations) {
+                mrmBuilder.addMutationRequest(ProtobufUtil.toMutation(getMutationType(m), m));
             }
-        } catch (InterruptedException e) {
-            throw new IOException("Exception while adding deletes and puts");
+            MutateRowsRequest mrm = mrmBuilder.build();
+            CoprocessorRpcChannel channel = statisticsTable.coprocessorService(row);
+            MultiRowMutationService.BlockingInterface service =
+                    MultiRowMutationService.newBlockingStub(channel);
+            try {
+              service.mutateRows(null, mrm);
+            } catch (ServiceException ex) {
+              ProtobufUtil.toIOException(ex);
+            }
         }
     }
 
@@ -137,12 +145,20 @@ public class StatisticsTable implements Closeable {
         mutations.add(put);
     }
 
-    private void formLastUpdatedStatsMutation(String tableName, long currentTime, List<Mutation> mutations) throws IOException {
-        byte[] prefix = StatisticsUtils.getRowKeyForTSUpdate(PDataType.VARCHAR.toBytes(tableName));
+    public static byte[] getRowKeyForTSUpdate(byte[] table) throws IOException {
+        // always starts with the source table
+        TrustedByteArrayOutputStream os = new TrustedByteArrayOutputStream(table.length);
+        os.write(table);
+        os.close();
+        return os.getBuffer();
+    }
+
+    public void commitLastStatsUpdatedTime(String tableName, long currentTime) throws IOException {
+        byte[] prefix = PDataType.VARCHAR.toBytes(tableName);
         Put put = new Put(prefix);
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES, currentTime,
                 PDataType.DATE.toBytes(new Date(currentTime)));
-        mutations.add(put);
+        statisticsTable.put(put);
     }
     
     public void deleteStats(String tableName, String regionName, StatisticsCollector tracker, String fam,
