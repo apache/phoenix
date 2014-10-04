@@ -33,7 +33,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
 
     private static final int DEFAULT_THREAD_POOL_SIZE = 16;
-    private static final int DEFAULT_QUEUE_SIZE = 0;
+    private static final int DEFAULT_QUEUE_SIZE = 5000;
     // TODO: setting this down to 5mb causes insufficient memory exceptions. Need to investigate why
     private static final int DEFAULT_MAX_MEMORY_PERC = 30; // 30% of heap
     private static final int DEFAULT_THREAD_TIMEOUT_MS = 60000*5; //5min
@@ -51,7 +51,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     private static final String DEFAULT_WAL_EDIT_CODEC = IndexedWALEditCodec.class.getName();
     public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE =  1024L*1024L*4L; // 4 Mb
     public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE =  1024L*1024L*2L; // 2 Mb
-    public static final long DEFAULT_HISTOGRAM_BYTE_DEPTH = 20;
+    public static final long DEFAULT_HISTOGRAM_BYTE_DEPTH = 2000;
     public static final int DEFAULT_STATS_UPDATE_FREQ_MS = 2000;
     
     public QueryServicesTestImpl(ReadOnlyProps defaultProps) {

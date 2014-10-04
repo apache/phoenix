@@ -53,6 +53,7 @@ import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
+import org.apache.hadoop.hbase.coprocessor.MultiRowMutationEndpoint;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -520,12 +521,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
 
             // TODO: better encapsulation for this
-            // Since indexes can't have indexes, don't install our indexing coprocessor for indexes. Also,
-            // don't install on the metadata table until we fix the TODO there.
-            if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW) && !SchemaUtil.isMetaTable(tableName) && !descriptor.hasCoprocessor(Indexer.class.getName())) {
+            // Since indexes can't have indexes, don't install our indexing coprocessor for indexes.
+            // Also don't install on the SYSTEM.CATALOG and SYSTEM.STATS table because we use
+            // all-or-none mutate class which break when this coprocessor is installed (PHOENIX-1318).
+            if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW) 
+                    && !SchemaUtil.isMetaTable(tableName)
+                    && !SchemaUtil.isStatsTable(tableName) 
+                    && !descriptor.hasCoprocessor(Indexer.class.getName())) {
                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                 opts.put(CoveredColumnsIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                 Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts);
+            }
+            if (SchemaUtil.isStatsTable(tableName) && !descriptor.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
+                descriptor.addCoprocessor(MultiRowMutationEndpoint.class.getName(),
+                        null, 1, null);
             }
 
             // Setup split policy on Phoenix metadata table to ensure that the key values of a Phoenix table

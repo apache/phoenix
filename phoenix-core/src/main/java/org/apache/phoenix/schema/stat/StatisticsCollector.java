@@ -16,10 +16,10 @@ import java.util.Map;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
@@ -41,17 +41,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 /**
- * An endpoint implementation that allows to collect the stats for a given region and groups the stat per family. This is also an
- * RegionObserver that collects the information on compaction also. The user would be allowed to invoke this endpoint and thus populate the
- * Phoenix stats table with the max key, min key and guide posts for the given region. The stats can be consumed by the stats associated
- * with every PTable and the same can be used to parallelize the queries
+ * A default implementation of the Statistics tracker that helps to collect stats like min key, max key and
+ * guideposts.
+ * TODO: review timestamps used for stats. We support the user controlling the timestamps, so we should
+ * honor that with timestamps for stats as well. The issue is for compaction, though. I don't know of
+ * a way for the user to specify any timestamp for that. Perhaps best to use current time across the
+ * board for now.
  */
 public class StatisticsCollector {
-
-    public static void addToTable(HTableDescriptor desc) throws IOException {
-        desc.addCoprocessor(StatisticsCollector.class.getName());
-    }
-
     private Map<String, byte[]> minMap = Maps.newHashMap();
     private Map<String, byte[]> maxMap = Maps.newHashMap();
     private long guidepostDepth;
@@ -60,12 +57,19 @@ public class StatisticsCollector {
     protected StatisticsTable statsTable;
     private static final Log LOG = LogFactory.getLog(StatisticsCollector.class);
 
-    public StatisticsCollector(StatisticsTable statsTable, Configuration conf) throws IOException {
+    public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName) throws IOException {
+        guidepostDepth =
+            env.getConfiguration().getLong(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB,
+                QueryServicesOptions.DEFAULT_HISTOGRAM_BYTE_DEPTH);
         // Get the stats table associated with the current table on which the CP is
         // triggered
-        this.statsTable = statsTable;
-        guidepostDepth = conf.getLong(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB,
-                QueryServicesOptions.DEFAULT_HISTOGRAM_BYTE_DEPTH);
+        this.statsTable = StatisticsTable.getStatisticsTable(
+                env.getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES));
+        this.statsTable.commitLastStatsUpdatedTime(tableName, TimeKeeper.SYSTEM.getCurrentTime());
+    }
+    
+    public void close() throws IOException {
+        this.statsTable.close();
     }
 
     public void updateStatistic(HRegion region) {
@@ -115,10 +119,11 @@ public class StatisticsCollector {
     private void deleteStatsFromStatsTable(final HRegion region, List<Mutation> mutations, long currentTime)
             throws IOException {
         try {
+            String tableName = region.getRegionInfo().getTableNameAsString();
+            String regionName = region.getRegionInfo().getRegionNameAsString();
             // update the statistics table
             for (ImmutableBytesPtr fam : familyMap.keySet()) {
-                String tableName = region.getRegionInfo().getTableNameAsString();
-                statsTable.deleteStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
+                statsTable.deleteStats(tableName, regionName, this,
                         Bytes.toString(fam.copyBytesIfNecessary()), mutations, currentTime);
             }
         } catch (IOException e) {
@@ -151,30 +156,22 @@ public class StatisticsCollector {
     public void collectStatsDuringSplit(Configuration conf, HRegion l, HRegion r, HRegion parent)
             throws IOException {
         // Invoke collectStat here
-        String tableName = parent.getRegionInfo().getTableNameAsString();
         try {
-            if (!tableName.equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
-                if (familyMap != null) {
-                    familyMap.clear();
-                }
-                // Create a delete operation on the parent region
-                // Then write the new guide posts for individual regions
-                // TODO : Try making this atomic
-                List<Mutation> mutations = Lists.newArrayListWithExpectedSize(3);
-                long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Collecting stats for the daughter region " + l.getRegionInfo());
-                }
-                collectStatsForSplitRegions(conf, l, parent, true, mutations, currentTime);
-                clear();
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Collecting stats for the daughter region " + r.getRegionInfo());
-                }
-                collectStatsForSplitRegions(conf, r, parent, false, mutations, currentTime);
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Committing stats for the daughter regions as part of split " + r.getRegionInfo());
-                }
-                commitStats(mutations);
+            // Create a delete operation on the parent region
+            // Then write the new guide posts for individual regions
+            List<Mutation> mutations = Lists.newArrayListWithExpectedSize(3);
+            long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
+            deleteStatsFromStatsTable(parent, mutations, currentTime);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Collecting stats for the daughter region " + l.getRegionInfo());
+            }
+            collectStatsForSplitRegions(conf, l, mutations, currentTime);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Collecting stats for the daughter region " + r.getRegionInfo());
+            }
+            collectStatsForSplitRegions(conf, r, mutations, currentTime);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Committing stats for the daughter regions as part of split " + r.getRegionInfo());
             }
         } catch (IOException e) {
             LOG.error("Error while capturing stats after split of region "
@@ -182,32 +179,29 @@ public class StatisticsCollector {
         }
     }
 
-    private void collectStatsForSplitRegions(Configuration conf, HRegion daughter, HRegion parent, boolean delete,
+    private void collectStatsForSplitRegions(Configuration conf, HRegion daughter,
             List<Mutation> mutations, long currentTime) throws IOException {
+        IOException toThrow = null;
+        clear();
         Scan scan = createScan(conf);
         RegionScanner scanner = null;
         int count = 0;
         try {
             scanner = daughter.getScanner(scan);
             count = scanRegion(scanner, count);
+            writeStatsToStatsTable(daughter, false, mutations, currentTime);
         } catch (IOException e) {
             LOG.error(e);
-            throw e;
+            toThrow = e;
         } finally {
-            if (scanner != null) {
                 try {
-                    if (delete) {
-                        if (LOG.isDebugEnabled()) {
-                            LOG.debug("Deleting the stats for the parent region " + parent.getRegionInfo());
-                        }
-                        deleteStatsFromStatsTable(parent, mutations, currentTime);
-                    }
-                    writeStatsToStatsTable(daughter, false, mutations, currentTime);
+                    if (scanner != null) scanner.close();
                 } catch (IOException e) {
                     LOG.error(e);
-                    throw e;
+                    if (toThrow != null) toThrow = e;
+                } finally {
+                    if (toThrow != null) throw toThrow;
                 }
-            }
         }
     }
     
@@ -248,7 +242,7 @@ public class StatisticsCollector {
 
     protected InternalScanner getInternalScanner(HRegion region, Store store,
             InternalScanner internalScan, String family) {
-        return new StatisticsScanner(this, statsTable, region.getRegionInfo(), internalScan,
+        return new StatisticsScanner(this, statsTable, region, internalScan,
                 Bytes.toBytes(family));
     }
 

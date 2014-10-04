@@ -49,15 +49,7 @@ public class StatisticsUtils {
         return os.getBuffer();
     }
     
-    public static byte[] getRowKeyForTSUpdate(byte[] table) throws IOException {
-        // always starts with the source table
-        TrustedByteArrayOutputStream os = new TrustedByteArrayOutputStream(table.length);
-        os.write(table);
-        os.close();
-        return os.getBuffer();
-    }
-
-    public static byte[] getCFFromRowKey(byte[] table, byte[] row) {
+    public static byte[] getCFFromRowKey(byte[] table, byte[] row, int rowOffset, int rowLength) {
         // Move over the the sepeartor byte that would be written after the table name
         int startOff = indexOf(row, table) + (table.length) + 1;
         int endOff = startOff;

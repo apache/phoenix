@@ -34,8 +34,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -79,7 +77,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.stat.StatisticsCollector;
-import org.apache.phoenix.schema.stat.StatisticsTable;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -101,8 +98,6 @@ import com.google.common.collect.Sets;
 public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver {
     private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
-    private static final Log LOG = LogFactory.getLog(UngroupedAggregateRegionObserver.class);
-    private StatisticsTable statsTable = null;
     
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
@@ -110,11 +105,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         // Can't use ClientKeyValueBuilder on server-side because the memstore expects to
         // be able to get a single backing buffer for a KeyValue.
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
-        String name = ((RegionCoprocessorEnvironment)e).getRegion().getTableDesc().getNameAsString();
-        String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
-        if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
-            this.statsTable = StatisticsTable.getStatisticsTableForCoprocessor(e.getConfiguration(), name);
-        }
     }
 
     private static void commitBatch(HRegion region, List<Pair<Mutation,Integer>> mutations, byte[] indexUUID) throws IOException {
@@ -148,13 +138,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
-        boolean isAnalyze = false;
         HRegion region = c.getEnvironment().getRegion();
-        String table = c.getEnvironment().getRegion().getRegionInfo().getTableNameAsString();;
         StatisticsCollector stats = null;
-        if (ScanUtil.isAnalyzeTable(scan) && statsTable != null) {
-            stats = new StatisticsCollector(statsTable, c.getEnvironment().getConfiguration());
-            isAnalyze = true;
+        if(ScanUtil.isAnalyzeTable(scan)) {
+            // Let this throw, as this scan is being done for the sole purpose of collecting stats
+            stats = new StatisticsCollector(c.getEnvironment(), region.getRegionInfo().getTableNameAsString());
         }
 
         RegionScanner theScanner = s;
@@ -217,7 +205,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 // since this is an indication of whether or not there are more values after the
                 // ones returned
                 hasMore = innerScanner.nextRaw(results, null);
-                if (isAnalyze && stats != null) {
+                if(stats != null) {
                     stats.collectStatistics(results);
                 }
                 if (!results.isEmpty()) {
@@ -314,13 +302,19 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             } while (hasMore);
         } finally {
             try {
-                if (isAnalyze && stats != null) {
-                    stats.updateStatistic(region);
-                    stats.clear();
+                if (stats != null) {
+                    try {
+                        stats.updateStatistic(region);
+                    } finally {
+                        stats.close();
+                    }
                 }
-                innerScanner.close();
             } finally {
-                region.closeRegionOperation();
+                try {
+                    innerScanner.close();
+                } finally {
+                    region.closeRegionOperation();
+                }
             }
         }
         
@@ -436,9 +430,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         String table = c.getEnvironment().getRegion().getRegionInfo().getTableNameAsString();
         if (!table.equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)
                 && scanType.equals(ScanType.MAJOR_COMPACT)) {
-            StatisticsCollector stats = new StatisticsCollector(statsTable, c.getEnvironment().getConfiguration());
-            internalScan =
-                    stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanners, scanType, earliestPutTs, s);
+            try {
+                StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table);
+                internalScan =
+                        stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanners, scanType, earliestPutTs, s);
+            } catch (IOException e) {
+                // If we can't reach the stats table, don't interrupt the normal
+                // compaction operation, just log a warning.
+                if(logger.isWarnEnabled()) {
+                    logger.warn("Unable to collect stats for " + table, e);
+                }
+            }
         }
         return internalScan;
     }
@@ -449,16 +451,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             throws IOException {
         HRegion region = e.getEnvironment().getRegion();
         String table = region.getRegionInfo().getTableNameAsString();
-        if (!table.equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME) && statsTable != null) {
+        if (!table.equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
+            StatisticsCollector stats = null;
             try {
-                StatisticsCollector stats = new StatisticsCollector(statsTable, e.getEnvironment()
-                        .getConfiguration());
+                stats = new StatisticsCollector(e.getEnvironment(), table);
                 stats.collectStatsDuringSplit(e.getEnvironment().getConfiguration(), l, r, region);
-                stats.clear();
             } catch (IOException ioe) { 
-                if(LOG.isDebugEnabled()) {
-                    LOG.debug("Error while collecting stats during split ",ioe);
+                if(logger.isDebugEnabled()) {
+                    logger.debug("Error while collecting stats during split ",ioe);
                 }
+            } finally {
+                if (stats != null) stats.close();
             }
         }
             

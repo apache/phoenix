@@ -14,9 +14,9 @@ import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.SchemaUtil;
@@ -29,11 +29,11 @@ public class StatisticsScanner implements InternalScanner {
     private static final Log LOG = LogFactory.getLog(StatisticsScanner.class);
     private InternalScanner delegate;
     private StatisticsTable stats;
-    private HRegionInfo region;
+    private HRegion region;
     private StatisticsCollector tracker;
     private byte[] family;
 
-    public StatisticsScanner(StatisticsCollector tracker, StatisticsTable stats, HRegionInfo region,
+    public StatisticsScanner(StatisticsCollector tracker, StatisticsTable stats, HRegion region,
             InternalScanner delegate, byte[] family) {
         // should there be only one tracker?
         this.tracker = tracker;
@@ -74,10 +74,11 @@ public class StatisticsScanner implements InternalScanner {
 
     @Override
     public void close() throws IOException {
+        IOException toThrow = null;
         try {
             // update the statistics table
             // Just verify if this if fine
-            String tableName = SchemaUtil.getTableNameFromFullName(region.getTableNameAsString());
+            String tableName = SchemaUtil.getTableNameFromFullName(region.getRegionInfo().getTableNameAsString());
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
             long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
             if (LOG.isDebugEnabled()) {
@@ -99,13 +100,26 @@ public class StatisticsScanner implements InternalScanner {
             stats.commitStats(mutations);
         } catch (IOException e) {
             LOG.error("Failed to update statistics table!", e);
-        }
-        // close the delegate scanner
-        try {
-            delegate.close();
-        } catch (IOException e) {
-            LOG.error("Error while closing the scanner");
-            // TODO : We should throw the exception
+            toThrow = e;
+        } finally {
+            try {
+                stats.close();
+            } catch (IOException e) {
+                if (toThrow == null) toThrow = e;
+                LOG.error("Error while closing the stats table", e);
+            } finally {
+                // close the delegate scanner
+                try {
+                    delegate.close();
+                } catch (IOException e) {
+                    if (toThrow == null) toThrow = e;
+                    LOG.error("Error while closing the scanner", e);
+                } finally {
+                    if (toThrow != null) {
+                        throw toThrow;
+                    }
+                }
+            }
         }
     }
 

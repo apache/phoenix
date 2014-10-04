@@ -863,7 +863,6 @@ public class MetaDataClient {
             String parentTableName = null;
             PName tenantId = connection.getTenantId();
             String tenantIdStr = tenantId == null ? null : connection.getTenantId().getString();
-            boolean isParentImmutableRows = false;
             boolean multiTenant = false;
             Integer saltBucketNum = null;
             String defaultFamilyName = null;
@@ -885,7 +884,6 @@ public class MetaDataClient {
                 }
                 
                 multiTenant = parent.isMultiTenant();
-                isParentImmutableRows = parent.isImmutableRows();
                 parentTableName = parent.getTableName().getString();
                 // Pass through data table sequence number so we can check it hasn't changed
                 PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM);

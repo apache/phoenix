@@ -63,7 +63,7 @@ public class ParallelIteratorsIT extends BaseHBaseManagedTimeIT {
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
-        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Long.toString(20l));
+        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Long.toString(20));
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
@@ -83,7 +83,7 @@ public class ParallelIteratorsIT extends BaseHBaseManagedTimeIT {
         pstmt = conn.prepareStatement("SELECT COUNT(*) FROM STABLE").unwrap(PhoenixPreparedStatement.class);
         pstmt.execute();
         keyRanges = getAllSplits(conn);
-        assertEquals("Unexpected number of splits: " + keyRanges, 7, keyRanges.size());
+        assertEquals("Unexpected number of splits: " + keyRanges, 5, keyRanges.size());
         assertEquals(newKeyRange(KeyRange.UNBOUND, KMIN), keyRanges.get(0));
         assertEquals(newKeyRange(KMIN, K3), keyRanges.get(1));
         assertEquals(newKeyRange(K3, K4), keyRanges.get(2));
@@ -123,7 +123,7 @@ public class ParallelIteratorsIT extends BaseHBaseManagedTimeIT {
         stmt.execute();
         conn.prepareStatement("SELECT COUNT(*) FROM STABLE").executeQuery(); 
         keyRanges = getAllSplits(conn);
-        assertEquals(7, keyRanges.size());
+        assertEquals(4, keyRanges.size());
         upsert(conn, new byte[][] { KMIN2, K5, K12 });
         stmt = conn.prepareStatement("ANALYZE STABLE");
         stmt.execute();
