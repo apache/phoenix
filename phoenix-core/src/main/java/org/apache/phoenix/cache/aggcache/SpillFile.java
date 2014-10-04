@@ -18,6 +18,12 @@
 
 package org.apache.phoenix.cache.aggcache;
 
+import com.google.common.collect.Maps;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.util.Closeables;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
@@ -27,12 +33,6 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
 import java.util.Map;
 import java.util.UUID;
-
-import org.apache.phoenix.util.Closeables;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.collect.Maps;
 
 /**
  * This class abstracts a SpillFile It is a accessible on a per page basis
@@ -49,6 +49,8 @@ public class SpillFile implements Closeable {
     static final int DEFAULT_PAGE_SIZE = 4096;
     // Map of initial SpillFile at index 0, and overflow spillFiles
     private Map<Integer, TempFile> tempFiles;
+    // Custom spill files directory
+    private File spillFilesDirectory = null;
     
     // Wrapper class for a TempFile: File + RandomAccessFile
     private static class TempFile implements Closeable{
@@ -81,22 +83,31 @@ public class SpillFile implements Closeable {
             }
 		}
     }
-    
+
+    private SpillFile(File spillFilesDirectory) throws IOException {
+      this.spillFilesDirectory = spillFilesDirectory;
+      this.tempFiles = Maps.newHashMap();
+      // Init the first pre-allocated spillFile
+      tempFiles.put(0, createTempFile());
+    }
+
     /**
      * Create a new SpillFile using the Java TempFile creation function. SpillFile is access in
      * pages.
      */
-    public static SpillFile createSpillFile() {
-    	try {    		
-    		return new SpillFile(createTempFile());    		
+    public static SpillFile createSpillFile(File spillFilesDir) {
+    	try {
+    		return new SpillFile(spillFilesDir);
     	} catch (IOException ioe) {
         	throw new RuntimeException("Could not create Spillfile " + ioe);
         }
     }
     
     
-    private static TempFile createTempFile() throws IOException {
-        File tempFile = File.createTempFile(UUID.randomUUID().toString(), null);
+    private TempFile createTempFile() throws IOException {
+        // Create temp file in temp dir or custom dir if provided
+        File tempFile = File.createTempFile(UUID.randomUUID().toString(),
+          null, spillFilesDirectory);
         if (logger.isDebugEnabled()) {
             logger.debug("Creating new SpillFile: " + tempFile.getAbsolutePath());
         }
@@ -104,13 +115,6 @@ public class SpillFile implements Closeable {
         file.setLength(SPILL_FILE_SIZE);
         
         return new TempFile(tempFile, file);
-    }
-
-    
-    private SpillFile(TempFile spFile) throws IOException {
-        this.tempFiles = Maps.newHashMap();
-        // Init the first pre-allocated spillFile
-        tempFiles.put(0, spFile);
     }
 
     /**
