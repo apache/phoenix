@@ -210,6 +210,9 @@ public class ScanRanges {
     public Scan intersectScan(Scan scan, final byte[] originalStartKey, final byte[] originalStopKey, final int keyOffset) {
         byte[] startKey = originalStartKey;
         byte[] stopKey = originalStopKey;
+        if (stopKey.length > 0 && Bytes.compareTo(startKey, stopKey) >= 0) {
+            return null;
+        }
         boolean mayHaveRows = false;
         // Keep the keys as they are if we have a point lookup, as we've already resolved the
         // salt bytes in that case.
@@ -337,6 +340,9 @@ public class ScanRanges {
             if (scanStopKey != originalStopKey) {
                 scanStopKey = prefixKey(scanStopKey, scanKeyOffset, prefixBytes, keyOffset);
             }
+        }
+        if (scanStopKey.length > 0 && Bytes.compareTo(scanStartKey, scanStopKey) >= 0) {
+            return null;
         }
         newScan.setStartRow(scanStartKey);
         newScan.setStopRow(scanStopKey);

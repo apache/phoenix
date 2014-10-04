@@ -1448,14 +1448,14 @@ public class MetaDataClient {
                                 tableRefs.add(new TableRef(null, viewIndexTable, ts, false));
                             }
                         }
+                        // Delete everything in the column. You'll still be able to do queries at earlier timestamps
+                        tableRefs.add(new TableRef(null, table, ts, false));
+                        // TODO: Let the standard mutable secondary index maintenance handle this?
+                        for (PTable index: table.getIndexes()) {
+                            tableRefs.add(new TableRef(null, index, ts, false));
+                        }
+                        deleteFromStatsTable(tableRefs, ts);
                         if (!dropMetaData) {
-                            // Delete everything in the column. You'll still be able to do queries at earlier timestamps
-                            tableRefs.add(new TableRef(null, table, ts, false));
-                            // TODO: Let the standard mutable secondary index maintenance handle this?
-                            for (PTable index: table.getIndexes()) {
-                                tableRefs.add(new TableRef(null, index, ts, false));
-                            }
-                            deleteFromStatsTable(tableRefs, ts);
                             MutationPlan plan = new PostDDLCompiler(connection).compile(tableRefs, null, null, Collections.<PColumn>emptyList(), ts);
                             return connection.getQueryServices().updateData(plan);
                         }

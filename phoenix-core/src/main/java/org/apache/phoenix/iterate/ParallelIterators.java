@@ -332,7 +332,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         for (int i = 0; i < gps.size(); i++) {
             buf.append(Bytes.toStringBinary(gps.get(i)));
             buf.append(",");
-            if (i < gps.size()-1 && (i % 10) == 0) {
+            if (i+1 < gps.size() && ((i+1) % 10) == 0) {
                 buf.append("\n");
             }
         }

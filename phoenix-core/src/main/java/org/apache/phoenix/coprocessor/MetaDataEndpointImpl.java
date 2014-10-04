@@ -482,10 +482,10 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                 KeyValue current = result.raw()[0];
                 int tableNameLength = tableNameBytes.length + 1;
                 int cfOffset = current.getRowOffset() + tableNameLength;
-                int cfLength = getVarCharLength(current.getRow(), cfOffset, current.getRowLength() - tableNameLength);
-                ptr.set(current.getRow(), cfOffset, cfLength);
+                int cfLength = getVarCharLength(current.getBuffer(), cfOffset, current.getRowLength() - tableNameLength);
+                ptr.set(current.getBuffer(), cfOffset, cfLength);
                 byte[] cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(current.getValue(), current.getValueOffset(), current
+                PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(current.getBuffer(), current.getValueOffset(), current
                         .getValueLength());
                 if (array != null && array.getDimensions() != 0) {
                     List<byte[]> guidePosts = Lists.newArrayListWithExpectedSize(array.getDimensions());                        
