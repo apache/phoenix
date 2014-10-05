@@ -69,6 +69,7 @@ public class AggregatePlan extends BaseQueryPlan {
     private final Aggregators aggregators;
     private final Expression having;
     private List<KeyRange> splits;
+    private List<List<Scan>> scans;
 
     public AggregatePlan(
             StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
@@ -86,6 +87,11 @@ public class AggregatePlan extends BaseQueryPlan {
     @Override
     public List<KeyRange> getSplits() {
         return splits;
+    }
+
+    @Override
+    public List<List<Scan>> getScans() {
+        return scans;
     }
 
     private static class OrderingResultIteratorFactory implements ParallelIteratorFactory {

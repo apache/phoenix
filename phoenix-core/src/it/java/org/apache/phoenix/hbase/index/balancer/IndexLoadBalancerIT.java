@@ -84,12 +84,15 @@ public class IndexLoadBalancerIT {
 
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
-        if (admin != null) {
-            admin.disableTables(".*");
-            admin.deleteTables(".*");
-            admin.close();
+        try {
+            if (admin != null) {
+                admin.disableTables(".*");
+                admin.deleteTables(".*");
+                admin.close();
+            }
+        } finally {
+            UTIL.shutdownMiniCluster();
         }
-        UTIL.shutdownMiniCluster();
     }
 
     @Test(timeout = 180000)

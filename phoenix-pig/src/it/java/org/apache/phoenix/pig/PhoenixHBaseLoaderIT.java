@@ -113,7 +113,7 @@ public class PhoenixHBaseLoaderIT {
         conn.createStatement().execute(ddl);
 
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://table/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", TABLE_FULL_NAME,
+                "A = load 'hbase://table/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE_FULL_NAME,
                 zkQuorum));
         
         final Schema schema = pigServer.dumpSchema("A");
@@ -144,7 +144,7 @@ public class PhoenixHBaseLoaderIT {
         
         final String selectColumns = "ID,NAME";
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://table/%s/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');",
+                "A = load 'hbase://table/%s/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');",
                 TABLE_FULL_NAME, selectColumns, zkQuorum));
         
         Schema schema = pigServer.dumpSchema("A");
@@ -175,7 +175,7 @@ public class PhoenixHBaseLoaderIT {
         //sql query for LOAD
         final String sqlQuery = "SELECT A_STRING,CF1.A_INTEGER,CF2.A_DOUBLE FROM " + TABLE_FULL_NAME;
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');",
+                "A = load 'hbase://query/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');",
                 sqlQuery, zkQuorum));
         
         //assert the schema.
@@ -209,7 +209,7 @@ public class PhoenixHBaseLoaderIT {
         LOG.info(String.format("Generated SQL Query [%s]",sqlQuery));
         
         pigServer.registerQuery(String.format(
-                "raw = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s') AS (a:chararray,b:bigdecimal,c:int,d:double);",
+                "raw = load 'hbase://query/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s') AS (a:chararray,b:bigdecimal,c:int,d:double);",
                 sqlQuery, zkQuorum));
         
         //test the schema.
@@ -252,7 +252,7 @@ public class PhoenixHBaseLoaderIT {
          
         //load data and filter rows whose age is > 25
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://table/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", TABLE_FULL_NAME,
+                "A = load 'hbase://table/%s' using "  + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE_FULL_NAME,
                 zkQuorum));
         pigServer.registerQuery("B = FILTER A BY AGE > 25;");
         
@@ -340,7 +340,7 @@ public class PhoenixHBaseLoaderIT {
         final String sqlQuery = String.format(" SELECT FOO, BAZ FROM %s WHERE BAR = -1 " , TABLE_FULL_NAME);
       
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", sqlQuery,
+                "A = load 'hbase://query/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", sqlQuery,
                 zkQuorum));
         
         final Iterator<Tuple> iterator = pigServer.openIterator("A");
@@ -404,7 +404,7 @@ public class PhoenixHBaseLoaderIT {
          //load data and filter rows whose age is > 25
         pigServer.setBatchOn();
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://table/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", TABLE_FULL_NAME,
+                "A = load 'hbase://table/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE_FULL_NAME,
                 zkQuorum));
         
         pigServer.registerQuery("B = GROUP A BY AGE;");
@@ -458,7 +458,7 @@ public class PhoenixHBaseLoaderIT {
          //load data and filter rows whose age is > 25
         pigServer.setBatchOn();
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://table/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", TABLE_FULL_NAME,
+                "A = load 'hbase://table/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE_FULL_NAME,
                 zkQuorum));
         
         pigServer.registerQuery("B = GROUP A BY AGE;");
@@ -471,11 +471,11 @@ public class PhoenixHBaseLoaderIT {
         //validate the data with what is stored.
         final String selectQuery = "SELECT AGE , MIN_SAL ,MAX_SAL FROM " + targetTable + " ORDER BY AGE";
         final ResultSet rs = conn.createStatement().executeQuery(selectQuery);
-        rs.next();
+        assertTrue(rs.next());
         assertEquals(25, rs.getInt("AGE"));
         assertEquals(0, rs.getInt("MIN_SAL"));
         assertEquals(180, rs.getInt("MAX_SAL"));
-        rs.next();
+        assertTrue(rs.next());
         assertEquals(30, rs.getInt("AGE"));
         assertEquals(0, rs.getInt("MIN_SAL"));
         assertEquals(270, rs.getInt("MAX_SAL"));
@@ -513,7 +513,7 @@ public class PhoenixHBaseLoaderIT {
         //sql query load data and filter rows whose age is > 25
         final String sqlQuery = " SELECT NEXT VALUE FOR my_sequence AS my_seq,ID,NAME,AGE FROM " + TABLE_FULL_NAME + " WHERE AGE > 25";
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", sqlQuery,
+                "A = load 'hbase://query/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", sqlQuery,
                 zkQuorum));
         
         
@@ -550,7 +550,7 @@ public class PhoenixHBaseLoaderIT {
         final String sqlQuery = " SELECT UPPER(NAME) AS n FROM " + TABLE_FULL_NAME + " ORDER BY ID" ;
 
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", sqlQuery,
+                "A = load 'hbase://query/%s' using "  + PhoenixHBaseLoader.class.getName() + "('%s');", sqlQuery,
                 zkQuorum));
         
         

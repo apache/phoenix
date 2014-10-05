@@ -28,21 +28,22 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(BaseHBaseManagedTimeIT.class)
+@Category(HBaseManagedTimeTest.class)
 public class EvaluationOfORIT extends BaseHBaseManagedTimeIT{
 		
 	@Test
 	public void testPKOrNotPKInOREvaluation() throws SQLException {
-	    Properties props = new Properties(TEST_PROPERTIES);
+	    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 	    Connection conn = DriverManager.getConnection(getUrl(), props);	    
 	    conn.setAutoCommit(false);
 	    
-            String create = "CREATE TABLE DIE ( ID INTEGER NOT NULL PRIMARY KEY,NAME VARCHAR(50) NOT NULL)";
+            String create = "CREATE TABLE DIE ( ID INTEGER NOT NULL PRIMARY KEY,NAME VARCHAR(50))";
             PreparedStatement createStmt = conn.prepareStatement(create);
-            createStmt.executeUpdate();
+            createStmt.execute();
             PreparedStatement stmt = conn.prepareStatement(
                     "upsert into " +
                     "DIE VALUES (?, ?)");

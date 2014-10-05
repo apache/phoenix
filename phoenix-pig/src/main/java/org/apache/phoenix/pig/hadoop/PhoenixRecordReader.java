@@ -21,6 +21,7 @@ package org.apache.phoenix.pig.hadoop;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -30,16 +31,18 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.iterate.ConcatResultIterator;
+import org.apache.phoenix.iterate.LookAheadResultIterator;
+import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.pig.PhoenixPigConfiguration;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
+import com.google.common.collect.Lists;
 
 /**
  * RecordReader that process the scan and returns PhoenixRecord
@@ -94,17 +97,19 @@ public final class PhoenixRecordReader extends RecordReader<NullWritable,Phoenix
     @Override
     public void initialize(InputSplit split, TaskAttemptContext context) throws IOException, InterruptedException {
         final PhoenixInputSplit pSplit = (PhoenixInputSplit)split;
-        final KeyRange keyRange = pSplit.getKeyRange();
-        final Scan splitScan = queryPlan.getContext().getScan();
-        final Scan scan = new Scan(splitScan);
-        ScanUtil.intersectScanRange(scan, keyRange.getLowerRange(), keyRange.getUpperRange(), queryPlan.getContext().getScanRanges().useSkipScanFilter());
+        final List<Scan> scans = pSplit.getScans();
         try {
-             TableResultIterator tableResultIterator = new TableResultIterator(queryPlan.getContext(), queryPlan.getTableRef(),scan);
-            if(queryPlan.getContext().getSequenceManager().getSequenceCount() > 0) {
-                    this.resultIterator = new SequenceResultIterator(tableResultIterator, queryPlan.getContext().getSequenceManager());
-            } else {
-                this.resultIterator = tableResultIterator;
+            List<PeekingResultIterator> iterators = Lists.newArrayListWithExpectedSize(scans.size());
+            for (Scan scan : scans) {
+                final TableResultIterator tableResultIterator = new TableResultIterator(queryPlan.getContext(), queryPlan.getTableRef(),scan);
+                PeekingResultIterator peekingResultIterator = LookAheadResultIterator.wrap(tableResultIterator);
+                iterators.add(peekingResultIterator);
             }
+            ResultIterator iterator = ConcatResultIterator.newConcatResultIterator(iterators);
+            if(queryPlan.getContext().getSequenceManager().getSequenceCount() > 0) {
+                iterator = new SequenceResultIterator(iterator, queryPlan.getContext().getSequenceManager());
+            }
+            this.resultIterator = iterator;
             this.resultSet = new PhoenixResultSet(this.resultIterator, queryPlan.getProjector(),queryPlan.getContext().getStatement());
         } catch (SQLException e) {
             LOG.error(String.format(" Error [%s] initializing PhoenixRecordReader. ",e.getMessage()));

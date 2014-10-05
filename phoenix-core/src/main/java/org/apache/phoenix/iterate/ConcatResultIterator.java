@@ -91,4 +91,33 @@ public class ConcatResultIterator implements PeekingResultIterator {
 		return "ConcatResultIterator [resultIterators=" + resultIterators
 				+ ", iterators=" + iterators + ", index=" + index + "]";
 	}
+
+    public static PeekingResultIterator newConcatResultIterator(final List<PeekingResultIterator> concatIterators) {
+        if (concatIterators.isEmpty()) {
+            return PeekingResultIterator.EMPTY_ITERATOR;
+        } 
+        
+        if (concatIterators.size() == 1) {
+            return concatIterators.get(0);
+        }
+        return new ConcatResultIterator(new ResultIterators() {
+
+            @Override
+            public List<PeekingResultIterator> getIterators() throws SQLException {
+                return concatIterators;
+            }
+
+            @Override
+            public int size() {
+                return concatIterators.size();
+            }
+
+            @Override
+            public void explain(List<String> planSteps) {
+                // TODO: review what we should for explain plan here
+                concatIterators.get(0).explain(planSteps);
+            }
+            
+        });
+    }
 }

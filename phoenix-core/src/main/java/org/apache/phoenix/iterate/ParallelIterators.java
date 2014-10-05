@@ -271,6 +271,10 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         return splits;
     }
 
+    public List<List<Scan>> getScans() {
+        return scans;
+    }
+
     private static List<byte[]> toBoundaries(List<HRegionLocation> regionLocations) {
         int nBoundaries = regionLocations.size() - 1;
         List<byte[]> ranges = Lists.newArrayListWithExpectedSize(nBoundaries);
@@ -442,36 +446,6 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         return parallelScans;
     }
 
-    private static void addConcatResultIterator(List<PeekingResultIterator> iterators, final List<PeekingResultIterator> concatIterators) {
-        if (!concatIterators.isEmpty()) {
-            if (concatIterators.size() == 1) {
-                iterators.add(concatIterators.get(0));
-            } else {
-                // TODO: should ConcatResultIterator have a constructor that takes
-                // a List<PeekingResultIterator>?
-                iterators.add(new ConcatResultIterator(new ResultIterators() {
-    
-                    @Override
-                    public List<PeekingResultIterator> getIterators() throws SQLException {
-                        return concatIterators;
-                    }
-    
-                    @Override
-                    public int size() {
-                        return concatIterators.size();
-                    }
-    
-                    @Override
-                    public void explain(List<String> planSteps) {
-                        // TODO: review what we should for explain plan here
-                        concatIterators.get(0).explain(planSteps);
-                    }
-                    
-                }));
-            }
-        }
-    }
-    
     public static <T> List<T> reverseIfNecessary(List<T> list, boolean reverse) {
         if (!reverse) {
             return list;
@@ -479,6 +453,11 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         return Lists.reverse(list);
     }
     
+    private static void addConcatResultIterator(List<PeekingResultIterator> iterators, final List<PeekingResultIterator> concatIterators) {
+        if (!concatIterators.isEmpty()) {
+            iterators.add(ConcatResultIterator.newConcatResultIterator(concatIterators));
+        }
+    }
     /**
      * Executes the scan in parallel across all regions, blocking until all scans are complete.
      * @return the result iterators for the scan of each region
