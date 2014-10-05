@@ -31,7 +31,6 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 
 
 public class ServerUtil {
-
     private static final String FORMAT = "ERROR %d (%s): %s";
     private static final Pattern PATTERN = Pattern.compile("ERROR (\\d+) \\((\\w+)\\): (.*)");
     private static final Map<Class<? extends Exception>, SQLExceptionCode> errorcodeMap
@@ -122,5 +121,4 @@ public class ServerUtil {
         	}
         return null;
     }
-
 }

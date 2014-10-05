@@ -467,11 +467,9 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
     }
     
     private PTableStats updateStatsInternal(byte[] tableNameBytes) throws IOException {
-        HTableInterface statsHTable = null;
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        HTableInterface statsHTable = getEnvironment().getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
         try {
-            // Can we do a new HTable instance here? Or get it from a pool or cache of these instances?
-            statsHTable = getEnvironment().getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
             Scan s = newTableRowsScan(tableNameBytes);
             s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
             ResultScanner scanner = statsHTable.getScanner(s);
@@ -519,9 +517,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                 throw new IOException(e);
             }
         } finally {
-            if (statsHTable != null) {
-                statsHTable.close();
-            }
+            statsHTable.close();
         }
         return PTableStatsImpl.NO_STATS;
     }
@@ -700,33 +696,35 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         scan.setFilter(filter);
         scan.addColumn(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
         HTableInterface hTable = getEnvironment().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
-        ResultScanner scanner = hTable.getScanner(scan);
-
-        boolean allViewsInCurrentRegion = true;
-        int numOfChildViews = 0;
-        List<Result> results = Lists.newArrayList();
         try {
-            for (Result result = scanner.next(); (result != null); result = scanner.next()) {
-                numOfChildViews++;
-                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                ResultTuple resultTuple = new ResultTuple(result);
-                resultTuple.getKey(ptr);
-                byte[] key = ptr.copyBytes();
-                if (checkTableKeyInRegion(key, region) != null) {
-                    allViewsInCurrentRegion = false;
+            ResultScanner scanner = hTable.getScanner(scan);
+    
+            boolean allViewsInCurrentRegion = true;
+            int numOfChildViews = 0;
+            List<Result> results = Lists.newArrayList();
+            try {
+                for (Result result = scanner.next(); (result != null); result = scanner.next()) {
+                    numOfChildViews++;
+                    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                    ResultTuple resultTuple = new ResultTuple(result);
+                    resultTuple.getKey(ptr);
+                    byte[] key = ptr.copyBytes();
+                    if (checkTableKeyInRegion(key, region) != null) {
+                        allViewsInCurrentRegion = false;
+                    }
+                    results.add(result);
                 }
-                results.add(result);
+                TableViewFinderResult tableViewFinderResult = new TableViewFinderResult(results);
+                if (numOfChildViews > 0 && !allViewsInCurrentRegion) {
+                    tableViewFinderResult.setAllViewsNotInSingleRegion();
+                }
+                return tableViewFinderResult;
+            } finally {
+                scanner.close();
             }
         } finally {
-            scanner.close();
             hTable.close();
         }
-        TableViewFinderResult tableViewFinderResult = new TableViewFinderResult(results);
-        if (numOfChildViews > 0 && !allViewsInCurrentRegion) {
-            tableViewFinderResult.setAllViewsNotInSingleRegion();
-        }
-        return tableViewFinderResult;
-
     }
 
     @Override
