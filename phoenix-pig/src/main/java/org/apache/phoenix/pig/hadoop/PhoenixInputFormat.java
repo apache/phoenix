@@ -28,6 +28,7 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -86,8 +87,8 @@ public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixR
         Preconditions.checkNotNull(qplan);
         Preconditions.checkNotNull(splits);
         final List<InputSplit> psplits = Lists.newArrayListWithExpectedSize(splits.size());
-        for (KeyRange split : qplan.getSplits()) {
-            psplits.add(new PhoenixInputSplit(split));
+        for (List<Scan> scans : qplan.getScans()) {
+            psplits.add(new PhoenixInputSplit(scans));
         }
         return psplits;
     }
@@ -127,10 +128,10 @@ public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixR
                 Preconditions.checkNotNull(selectStatement);
                 final Statement statement = connection.createStatement();
                 final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
-                this.queryPlan = pstmt.compileQuery(selectStatement);
-                // FIXME: why is getting the iterator necessary here, as it will
-                // cause the query to run.
-                this.queryPlan.iterator();
+                // Optimize the query plan so that we potentially use secondary indexes
+                this.queryPlan = pstmt.optimizeQuery(selectStatement);
+                // Initialize the query plan so it sets up the parallel scans
+                queryPlan.iterator();
             } catch(Exception exception) {
                 LOG.error(String.format("Failed to get the query plan with error [%s]",exception.getMessage()));
                 throw new RuntimeException(exception);

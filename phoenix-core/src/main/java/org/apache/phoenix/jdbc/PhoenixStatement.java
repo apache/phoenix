@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -409,6 +410,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
                 @Override
                 public List<KeyRange> getSplits() {
+                    return Collections.emptyList();
+                }
+
+                @Override
+                public List<List<Scan>> getScans() {
                     return Collections.emptyList();
                 }
 

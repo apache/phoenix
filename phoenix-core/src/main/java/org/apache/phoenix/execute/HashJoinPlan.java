@@ -468,6 +468,11 @@ public class HashJoinPlan implements QueryPlan {
     public boolean isRowKeyOrdered() {
         return plan.isRowKeyOrdered();
     }
+
+    @Override
+    public List<List<Scan>> getScans() {
+        return plan.getScans();
+    }
 }
 
 

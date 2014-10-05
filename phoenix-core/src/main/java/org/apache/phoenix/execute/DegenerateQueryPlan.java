@@ -21,13 +21,16 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.compile.*;
+import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.parse.FilterableStatement;
-import org.apache.phoenix.query.*;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
 
 public class DegenerateQueryPlan extends BaseQueryPlan {
@@ -39,6 +42,11 @@ public class DegenerateQueryPlan extends BaseQueryPlan {
 
     @Override
     public List<KeyRange> getSplits() {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public List<List<Scan>> getScans() {
         return Collections.emptyList();
     }
 

@@ -18,12 +18,33 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
+import java.util.List;
 
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
 abstract public class LookAheadResultIterator implements PeekingResultIterator {
+    public static LookAheadResultIterator wrap(final ResultIterator iterator) {
+        return new LookAheadResultIterator() {
+
+            @Override
+            public void explain(List<String> planSteps) {
+                iterator.explain(planSteps);
+            }
+
+            @Override
+            public void close() throws SQLException {
+                iterator.close();
+            }
+
+            @Override
+            protected Tuple advance() throws SQLException {
+                return iterator.next();
+            }
+        };
+    }
+    
     private final static Tuple UNINITIALIZED = new ResultTuple();
     private Tuple next = UNINITIALIZED;
     
