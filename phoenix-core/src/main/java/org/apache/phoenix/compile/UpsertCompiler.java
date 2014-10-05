@@ -374,6 +374,7 @@ public class UpsertCompiler {
                     select = prependTenantAndViewConstants(table, select, tenantId, addViewColumnsToBe);
                     sameTable = select.getFrom().size() == 1
                         && tableRefToBe.equals(selectResolver.getTables().get(0));
+                    tableRefToBe = adjustTimestampToMinOfSameTable(tableRefToBe, selectResolver.getTables());
                     /* We can run the upsert in a coprocessor if:
                      * 1) from has only 1 table and the into table matches from table
                      * 2) the select query isn't doing aggregation (which requires a client-side final merge)
@@ -797,6 +798,24 @@ public class UpsertCompiler {
         };
     }
     
+    private TableRef adjustTimestampToMinOfSameTable(TableRef upsertRef, List<TableRef> selectRefs) {
+        long minTimestamp = Long.MAX_VALUE;
+        for (TableRef selectRef : selectRefs) {
+            if (selectRef.equals(upsertRef)) {
+                minTimestamp = Math.min(minTimestamp, selectRef.getTimeStamp());
+            }
+        }
+        if (minTimestamp != Long.MAX_VALUE) {
+            // If we found the same table is selected from that is being upserted to,
+            // reset the timestamp of the upsert (which controls the Put timestamp)
+            // to the lowest timestamp we found to ensure that the data being selected
+            // will not see the data being upserted. This prevents infinite loops
+            // like the one in PHOENIX-1257.
+            return new TableRef(upsertRef, minTimestamp);
+        }
+        return upsertRef;
+    }
+
     private static final class UpsertValuesCompiler extends ExpressionCompiler {
         private PColumn column;
         

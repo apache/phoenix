@@ -218,7 +218,9 @@ public class ToCharFunctionIT extends BaseClientManagedTimeIT {
     }
     
     private void runOneRowQueryTest(String oneRowQuery, Integer pkValue, String projectedValue) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        long ts = nextTimestamp();
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        Connection conn = DriverManager.getConnection(url);
         try {
             PreparedStatement statement = conn.prepareStatement(oneRowQuery);
             ResultSet rs = statement.executeQuery();

@@ -29,8 +29,10 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Properties;
 
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -135,4 +137,25 @@ public class UpsertSelectAutoCommitIT extends BaseHBaseManagedTimeIT {
         conn.commit();
     }
     
+    
+    @Test
+    public void testUpsertSelectDoesntSeeUpsertedData() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(3));
+        props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(3));
+        props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, Integer.toString(3));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+        conn.createStatement().execute("CREATE SEQUENCE keys");
+        conn.createStatement().execute("CREATE TABLE foo (pk INTEGER PRIMARY KEY, val INTEGER)");
+
+        conn.createStatement().execute("UPSERT INTO foo VALUES (NEXT VALUE FOR keys,1)");
+        for (int i=0; i<6; i++) {
+            Statement stmt = conn.createStatement();
+            int upsertCount = stmt.executeUpdate("UPSERT INTO foo SELECT NEXT VALUE FOR keys, val FROM foo");
+            assertEquals((int)Math.pow(2, i), upsertCount);
+        }
+        conn.close();
+    }
+
 }
