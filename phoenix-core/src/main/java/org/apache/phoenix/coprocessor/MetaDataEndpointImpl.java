@@ -73,9 +73,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.client.HTablePool;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -692,13 +690,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             multiTenant, viewType, viewIndexId, indexType, stats);
     }
 
-    private PTableStats updateStatsInternal(byte[] tableNameBytes)
-            throws IOException {
-        HTable statsHTable = null;
+    private PTableStats updateStatsInternal(byte[] tableNameBytes) throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        HTableInterface statsHTable = ServerUtil.getHTableForCoprocessorScan(env, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
         try {
-            // Can we do a new HTable instance here? Or get it from a pool or cache of these instances?
-            statsHTable = new HTable(this.env.getConfiguration(), PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
             Scan s = newTableRowsScan(tableNameBytes);
             s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
             ResultScanner scanner = statsHTable.getScanner(s);
@@ -745,9 +740,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 throw new IOException(e);
             }
         } finally {
-            if (statsHTable != null) {
-                statsHTable.close();
-            }
+            statsHTable.close();
         }
         return PTableStatsImpl.NO_STATS;
     }
@@ -970,13 +963,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // TableName systemCatalogTableName = region.getTableDesc().getTableName();
         // HTableInterface hTable = env.getTable(systemCatalogTableName);
         // These deprecated calls work around the issue
-        HTablePool pool = new HTablePool (env.getConfiguration(),1);
+        HTableInterface hTable = ServerUtil.getHTableForCoprocessorScan(env, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
         try {
-            HTableInterface hTable = pool.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
-            ResultScanner scanner = hTable.getScanner(scan);
             boolean allViewsInCurrentRegion = true;
             int numOfChildViews = 0;
             List<Result> results = Lists.newArrayList();
+            ResultScanner scanner = hTable.getScanner(scan);
             try {
                 for (Result result = scanner.next(); (result != null); result = scanner.next()) {
                     numOfChildViews++;
@@ -989,17 +981,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                     results.add(result);
                 }
+                TableViewFinderResult tableViewFinderResult = new TableViewFinderResult(results);
+                if (numOfChildViews > 0 && !allViewsInCurrentRegion) {
+                    tableViewFinderResult.setAllViewsNotInSingleRegion();
+                }
+                return tableViewFinderResult;
             } finally {
-                scanner.close();
-                hTable.close();
+                    scanner.close();
             }
-            TableViewFinderResult tableViewFinderResult = new TableViewFinderResult(results);
-            if (numOfChildViews > 0 && !allViewsInCurrentRegion) {
-                tableViewFinderResult.setAllViewsNotInSingleRegion();
-            }
-            return tableViewFinderResult;
         } finally {
-            pool.close();
+            hTable.close();
         }
     }
     
