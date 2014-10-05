@@ -67,7 +67,7 @@ public class CoalesceFunctionIT extends BaseHBaseManagedTimeIT {
     public void coalesceWithSumExplicitLong() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS TEST_COALESCE("
+        String ddl = "CREATE TABLE TEST_COALESCE("
                 + "    ID BIGINT NOT NULL, "
                 + "    COUNT BIGINT "
                 + "    CONSTRAINT pk PRIMARY KEY(ID))";
@@ -91,7 +91,7 @@ public class CoalesceFunctionIT extends BaseHBaseManagedTimeIT {
     public void coalesceWithSumImplicitLong() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS TEST_COALESCE("
+        String ddl = "CREATE TABLE TEST_COALESCE("
                 + "    ID BIGINT NOT NULL, "
                 + "    COUNT BIGINT "
                 + "    CONSTRAINT pk PRIMARY KEY(ID))";
@@ -115,7 +115,7 @@ public class CoalesceFunctionIT extends BaseHBaseManagedTimeIT {
     public void coalesceWithSecondParamAsExpression() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS TEST_COALESCE("
+        String ddl = "CREATE TABLE TEST_COALESCE("
                 + "    ID BIGINT NOT NULL, "
                 + "    COUNT BIGINT "
                 + "    CONSTRAINT pk PRIMARY KEY(ID))";
@@ -139,7 +139,7 @@ public class CoalesceFunctionIT extends BaseHBaseManagedTimeIT {
     public void nonTypedSecondParameterLong() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS TEST_COALESCE("
+        String ddl = "CREATE TABLE TEST_COALESCE("
                 + "    ID BIGINT NOT NULL, "
                 + "    COUNT BIGINT " //first parameter to coalesce
                 + "    CONSTRAINT pk PRIMARY KEY(ID))";
@@ -163,47 +163,32 @@ public class CoalesceFunctionIT extends BaseHBaseManagedTimeIT {
     public void nonTypedSecondParameterUnsignedDataTypes() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String[] dataTypes = {
-            "UNSIGNED_INT",
-            "UNSIGNED_LONG",
-            "UNSIGNED_TINYINT",
-            "UNSIGNED_SMALLINT",
-            "UNSIGNED_FLOAT",
-            "UNSIGNED_DOUBLE",
-            "UNSIGNED_TIME",
-            "UNSIGNED_DATE",
-            "UNSIGNED_TIMESTAMP"
-        };
+        String ddl = "CREATE TABLE TEST_COALESCE ("
+                + "    ID BIGINT NOT NULL, "
+                + "    COUNT UNSIGNED_INT " //first parameter to coalesce
+                + "    CONSTRAINT pk PRIMARY KEY(ID))";
+        conn.createStatement().execute(ddl);
 
-        for (String dataType : dataTypes) {
+        conn.createStatement().execute("UPSERT INTO TEST_COALESCE (ID, COUNT) VALUES(2, null)");
+        conn.commit();
 
-            String ddl = "CREATE TABLE IF NOT EXISTS TEST_COALESCE("
-                    + "    ID BIGINT NOT NULL, "
-                    + "    COUNT " + dataType //first parameter to coalesce
-                    + "    CONSTRAINT pk PRIMARY KEY(ID))";
-            conn.createStatement().execute(ddl);
+        //second param to coalesce is signed int
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT "
+                + " COALESCE(NTH_VALUE(COUNT, 100) WITHIN GROUP (ORDER BY COUNT DESC), 1) "
+                + " FROM TEST_COALESCE" 
+                + " GROUP BY ID");
 
-            conn.createStatement().execute("UPSERT INTO TEST_COALESCE(ID, COUNT) VALUES(2, null)");
-            conn.commit();
-
-            //second param to coalesce is signed int
-            ResultSet rs = conn.createStatement().executeQuery(
-                    "SELECT "
-                    + "COALESCE(NTH_VALUE(COUNT, 100) WITHIN GROUP (ORDER BY COUNT DESC), 1) "
-                    + "FROM TEST_COALESCE "
-                    + "GROUP BY ID");
-
-            assertTrue(rs.next());
-            assertEquals(1, rs.getInt(1));
-            assertFalse(rs.wasNull());
-        }
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertFalse(rs.wasNull());
     }
 
     @Test
     public void testWithNthValueAggregationFunction() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS TEST_NTH("
+        String ddl = "CREATE TABLE TEST_NTH("
                 + "    ID BIGINT NOT NULL, "
                 + "    DATE TIMESTAMP NOT NULL, "
                 + "    COUNT BIGINT "
@@ -234,7 +219,7 @@ public class CoalesceFunctionIT extends BaseHBaseManagedTimeIT {
     public void wrongDataTypeOfSecondParameter() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS TEST_COALESCE("
+        String ddl = "CREATE TABLE TEST_COALESCE("
                 + "    ID UNSIGNED_INT NOT NULL, "
                 + "    COUNT UNSIGNED_INT "
                 + "    CONSTRAINT pk PRIMARY KEY(ID))";
@@ -260,7 +245,7 @@ public class CoalesceFunctionIT extends BaseHBaseManagedTimeIT {
     public void testImplicitSecondArgCastingException() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS TEST_COALESCE("
+        String ddl = "CREATE TABLE TEST_COALESCE("
                 + "    ID INTEGER NOT NULL, "
                 + "    COUNT UNSIGNED_INT " //first parameter to coalesce
                 + "    CONSTRAINT pk PRIMARY KEY(ID))";
@@ -288,7 +273,7 @@ public class CoalesceFunctionIT extends BaseHBaseManagedTimeIT {
     public void testImplicitSecondArgCasting() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS TEST_COALESCE("
+        String ddl = "CREATE TABLE TEST_COALESCE("
                 + "    ID DOUBLE NOT NULL, "
                 + "    COUNT INTEGER " //first parameter to coalesce
                 + "    CONSTRAINT pk PRIMARY KEY(ID))";

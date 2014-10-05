@@ -155,9 +155,9 @@ public class FromCompiler {
     		throws SQLException {
     	List<TableNode> fromNodes = statement.getFrom();
         if (!statement.isJoin() && fromNodes.get(0) instanceof NamedTableNode)
-            return new SingleTableColumnResolver(connection, (NamedTableNode) fromNodes.get(0), true);
+            return new SingleTableColumnResolver(connection, (NamedTableNode) fromNodes.get(0), true, 1);
         
-        MultiTableColumnResolver visitor = new MultiTableColumnResolver(connection);
+        MultiTableColumnResolver visitor = new MultiTableColumnResolver(connection, 1);
         for (TableNode node : fromNodes) {
             node.accept(visitor);
         }
@@ -186,11 +186,11 @@ public class FromCompiler {
     }
     
     private static class SingleTableColumnResolver extends BaseColumnResolver {
-        	private final List<TableRef> tableRefs;
-        	private final String alias;
+    	private final List<TableRef> tableRefs;
+    	private final String alias;
     	
        public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode table, long timeStamp) throws SQLException  {
-           super(connection);
+           super(connection, 0);
            List<PColumnFamily> families = Lists.newArrayListWithExpectedSize(table.getDynamicColumns().size());
            for (ColumnDef def : table.getDynamicColumns()) {
                if (def.getColumnDefName().getFamilyName() != null) {
@@ -205,13 +205,17 @@ public class FromCompiler {
        }
        
         public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode, boolean updateCacheImmediately) throws SQLException {
-            super(connection);
+            this(connection, tableNode, updateCacheImmediately, 0);
+        }
+
+        public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode, boolean updateCacheImmediately, int tsAddition) throws SQLException {
+            super(connection, tsAddition);
             alias = tableNode.getAlias();
             TableRef tableRef = createTableRef(tableNode, updateCacheImmediately);
             tableRefs = ImmutableList.of(tableRef);
         }
 
-		@Override
+        @Override
 		public List<TableRef> getTables() {
 			return tableRefs;
 		}
@@ -272,10 +276,15 @@ public class FromCompiler {
     private static abstract class BaseColumnResolver implements ColumnResolver {
         protected final PhoenixConnection connection;
         protected final MetaDataClient client;
+        // Fudge factor to add to current time we calculate. We need this when we do a SELECT
+        // on Windows because the millis timestamp granularity is so bad we sometimes won't
+        // get the data back that we just upsert.
+        private final int tsAddition;
         
-        private BaseColumnResolver(PhoenixConnection connection) {
+        private BaseColumnResolver(PhoenixConnection connection, int tsAddition) {
         	this.connection = connection;
             this.client = new MetaDataClient(connection);
+            this.tsAddition = tsAddition;
         }
 
         protected TableRef createTableRef(NamedTableNode tableNode, boolean updateCacheImmediately) throws SQLException {
@@ -318,6 +327,9 @@ public class FromCompiler {
             // Add any dynamic columns to the table declaration
             List<ColumnDef> dynamicColumns = tableNode.getDynamicColumns();
             theTable = addDynamicColumns(dynamicColumns, theTable);
+            if (timeStamp != QueryConstants.UNSET_TIMESTAMP) {
+                timeStamp += tsAddition;
+            }
             TableRef tableRef = new TableRef(tableNode.getAlias(), theTable, timeStamp, !dynamicColumns.isEmpty());
             if (logger.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
                 logger.debug("Re-resolved stale table " + fullTableName + " with seqNum " + tableRef.getTable().getSequenceNumber() + " at timestamp " + tableRef.getTable().getTimeStamp() + " with " + tableRef.getTable().getColumns().size() + " columns: " + tableRef.getTable().getColumns());
@@ -358,8 +370,8 @@ public class FromCompiler {
         private final ListMultimap<String, TableRef> tableMap;
         private final List<TableRef> tables;
 
-        private MultiTableColumnResolver(PhoenixConnection connection) {
-        	super(connection);
+        private MultiTableColumnResolver(PhoenixConnection connection, int tsAddition) {
+        	super(connection, tsAddition);
             tableMap = ArrayListMultimap.<String, TableRef> create();
             tables = Lists.newArrayList();
         }

@@ -506,7 +506,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             conn.close();
             
             // Global connection sees all tenant tables
-            conn = DriverManager.getConnection(getUrl());
+            conn = DriverManager.getConnection(getUrl(), props);
             rs = conn.getMetaData().getSuperTables(TENANT_ID, null, null);
             assertTrue(rs.next());
             assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));

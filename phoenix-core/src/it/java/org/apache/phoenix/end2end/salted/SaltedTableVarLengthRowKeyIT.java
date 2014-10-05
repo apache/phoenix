@@ -29,14 +29,14 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
-import org.apache.phoenix.end2end.ClientManagedTimeTest;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(ClientManagedTimeTest.class)
-public class SaltedTableVarLengthRowKeyIT extends BaseClientManagedTimeIT {
+@Category(HBaseManagedTimeTest.class)
+public class SaltedTableVarLengthRowKeyIT extends BaseHBaseManagedTimeIT {
 
     private static void initTableValues() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
