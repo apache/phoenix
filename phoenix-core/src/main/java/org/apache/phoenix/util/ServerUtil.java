@@ -25,13 +25,19 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.HTablePool;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.hbase.index.util.VersionUtil;
 
 
 public class ServerUtil {
-
+    private static final int COPROCESSOR_SCAN_WORKS = VersionUtil.encodeVersion("0.98.6");
+    
     private static final String FORMAT = "ERROR %d (%s): %s";
     private static final Pattern PATTERN = Pattern.compile("ERROR (\\d+) \\((\\w+)\\): (.*)");
     private static final Map<Class<? extends Exception>, SQLExceptionCode> errorcodeMap
@@ -127,4 +133,19 @@ public class ServerUtil {
         return null;
     }
 
+    @SuppressWarnings("deprecation")
+    public static HTableInterface getHTableForCoprocessorScan (RegionCoprocessorEnvironment env, String tableName) throws IOException {
+        String versionString = env.getHBaseVersion();
+        int version = VersionUtil.encodeVersion(versionString);
+        if (version >= COPROCESSOR_SCAN_WORKS) {
+            // The following *should* work, but doesn't due to HBASE-11837 which was fixed in 0.98.6
+            return env.getTable(TableName.valueOf(tableName));
+        }
+        // This code works around HBASE-11837
+        // It's ok to not ever do a pool.close() as we're storing a single
+        // table only. The HTablePool holds no other resources that this table
+        // which will be closed itself when it's no longer needed.
+        HTablePool pool = new HTablePool(env.getConfiguration(),1);
+        return pool.getTable(tableName);
+    }
 }
