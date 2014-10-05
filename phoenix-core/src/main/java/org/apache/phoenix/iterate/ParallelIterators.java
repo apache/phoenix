@@ -426,12 +426,12 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
             }
             while (guideIndex < gpsSize
                     && (Bytes.compareTo(currentGuidePost = gps.get(guideIndex), endKey) <= 0 || endKey.length == 0)) {
-                Scan newScan = scanRanges.intersectScan(scan, currentKey, currentGuidePost, keyOffset);
+                Scan newScan = scanRanges.intersectScan(scan, currentKey, currentGuidePost, keyOffset, false);
                 scans = addNewScan(parallelScans, scans, newScan, false);
                 currentKey = currentGuidePost;
                 guideIndex++;
             }
-            Scan newScan = scanRanges.intersectScan(scan, currentKey, endKey, keyOffset);
+            Scan newScan = scanRanges.intersectScan(scan, currentKey, endKey, keyOffset, true);
             scans = addNewScan(parallelScans, scans, newScan, true);
             currentKey = endKey;
             regionIndex++;

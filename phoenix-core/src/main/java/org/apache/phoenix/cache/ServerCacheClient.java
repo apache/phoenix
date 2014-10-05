@@ -172,7 +172,8 @@ public class ServerCacheClient {
                 if ( ! servers.contains(entry) && 
                         keyRanges.intersects(regionStartKey, regionEndKey,
                                 cacheUsingTable.getIndexType() == IndexType.LOCAL ? 
-                                    ScanUtil.getRowKeyOffset(regionStartKey, regionEndKey) : 0)) {  // Call RPC once per server
+                                    ScanUtil.getRowKeyOffset(regionStartKey, regionEndKey) : 0, true)) {  
+                    // Call RPC once per server
                     servers.add(entry);
                     if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Adding cache entry to be sent for " + entry, connection));}
                     final byte[] key = entry.getRegionInfo().getStartKey();

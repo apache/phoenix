@@ -207,7 +207,7 @@ public class ScanRanges {
         return temp;
     }
     
-    public Scan intersectScan(Scan scan, final byte[] originalStartKey, final byte[] originalStopKey, final int keyOffset) {
+    public Scan intersectScan(Scan scan, final byte[] originalStartKey, final byte[] originalStopKey, final int keyOffset, boolean crossesRegionBoundary) {
         byte[] startKey = originalStartKey;
         byte[] stopKey = originalStopKey;
         if (stopKey.length > 0 && Bytes.compareTo(startKey, stopKey) >= 0) { 
@@ -218,16 +218,22 @@ public class ScanRanges {
         // salt bytes in that case.
         final int scanKeyOffset = this.isSalted && !this.isPointLookup ? SaltingUtil.NUM_SALTING_BYTES : 0;
         assert (scanKeyOffset == 0 || keyOffset == 0);
-        // Offset for startKey/stopKey. Either 1 for salted tables or the prefix length
-        // of the current region for local indexes.
+        // Total offset for startKey/stopKey. Either 1 for salted tables or the prefix length
+        // of the current region for local indexes. We'll never have a case where a table is
+        // both salted and local.
         final int totalKeyOffset = scanKeyOffset + keyOffset;
-        // In this case, we've crossed the "prefix" boundary and should consider everything after the startKey
-        // This prevents us from having to prefix the key prior to knowing whether or not there may be an
-        // intersection.
         byte[] prefixBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         if (totalKeyOffset > 0) {
             prefixBytes = ScanUtil.getPrefix(startKey, totalKeyOffset);
-            if (ScanUtil.crossesPrefixBoundary(stopKey, prefixBytes, totalKeyOffset)) {
+            /*
+             * If our startKey to stopKey crosses a region boundary consider everything after the startKey as our scan
+             * is always done within a single region. This prevents us from having to prefix the key prior to knowing
+             * whether or not there may be an intersection. We can't calculate whether or not we've crossed a region
+             * boundary for local indexes, because we don't know the key offset of the next region, but only for the
+             * current one (which is the one passed in). If the next prefix happened to be a subset of the previous
+             * prefix, then this wouldn't detect that we crossed a region boundary.
+             */
+            if (crossesRegionBoundary) {
                 stopKey = ByteUtil.EMPTY_BYTE_ARRAY;
             }
         }
@@ -352,17 +358,19 @@ public class ScanRanges {
 
     /**
      * Return true if the range formed by the lowerInclusiveKey and upperExclusiveKey
-     * intersects with any of the scan ranges and false otherwise. We cannot pass in
+     * intersects with the scan ranges and false otherwise. We cannot pass in
      * a KeyRange here, because the underlying compare functions expect lower inclusive
      * and upper exclusive keys. We cannot get their next key because the key must
      * conform to the row key schema and if a null byte is added to a lower inclusive
      * key, it's no longer a valid, real key.
      * @param lowerInclusiveKey lower inclusive key
      * @param upperExclusiveKey upper exclusive key
+     * @param crossesRegionBoundary whether or not the upperExclusiveKey spans upto
+     * or after the next region.
      * @return true if the scan range intersects with the specified lower/upper key
      * range
      */
-    public boolean intersects(byte[] lowerInclusiveKey, byte[] upperExclusiveKey, int keyOffset) {
+    public boolean intersects(byte[] lowerInclusiveKey, byte[] upperExclusiveKey, int keyOffset, boolean crossesRegionBoundary) {
         if (isEverything()) {
             return true;
         }
@@ -371,7 +379,7 @@ public class ScanRanges {
         }
         
         //return filter.hasIntersect(lowerInclusiveKey, upperExclusiveKey);
-        return intersectScan(null, lowerInclusiveKey, upperExclusiveKey, keyOffset) == HAS_INTERSECTION;
+        return intersectScan(null, lowerInclusiveKey, upperExclusiveKey, keyOffset, crossesRegionBoundary) == HAS_INTERSECTION;
     }
     
     public SkipScanFilter getSkipScanFilter() {
