@@ -58,7 +58,7 @@ public class ScanRangesIntersectTest {
         scan.setFilter(ranges.getSkipScanFilter());
         byte[] startKey = lowerRange == null ? KeyRange.UNBOUND : PDataType.VARCHAR.toBytes(lowerRange);
         byte[] stopKey = upperRange == null ? KeyRange.UNBOUND : PDataType.VARCHAR.toBytes(upperRange);
-        Scan newScan = ranges.intersectScan(scan, startKey, stopKey, 0);
+        Scan newScan = ranges.intersectScan(scan, startKey, stopKey, 0, true);
         if (expectedPoints.length == 0) {
             assertNull(newScan);
         } else {

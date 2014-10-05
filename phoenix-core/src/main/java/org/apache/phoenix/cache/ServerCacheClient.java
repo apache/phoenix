@@ -157,7 +157,8 @@ public class ServerCacheClient {
                 byte[] regionStartKey = entry.getRegionInfo().getStartKey();
                 byte[] regionEndKey = entry.getRegionInfo().getEndKey();
                 if ( ! servers.contains(entry) && 
-                        keyRanges.intersects(regionStartKey, regionEndKey, 0) ) {
+                        keyRanges.intersects(regionStartKey, regionEndKey, 0, true) ) {
+                    // Call RPC once per server
                     servers.add(entry);
                     if (LOG.isDebugEnabled()) {LOG.debug("Adding cache entry to be sent for " + entry);}
                     final byte[] key = entry.getRegionInfo().getStartKey();
