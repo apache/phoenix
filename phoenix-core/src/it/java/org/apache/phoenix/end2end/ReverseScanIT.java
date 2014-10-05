@@ -47,8 +47,8 @@ import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(HBaseManagedTimeTest.class)
-public class ReverseScanIT extends BaseClientManagedTimeIT {
+@Category(ClientManagedTimeTest.class)
+public class ReverseScanIT extends BaseHBaseManagedTimeIT {
     @BeforeClass
     @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
