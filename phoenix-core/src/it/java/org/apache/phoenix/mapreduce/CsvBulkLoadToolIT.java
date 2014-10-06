@@ -26,7 +26,6 @@ import static org.junit.Assert.assertTrue;
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
@@ -67,10 +66,23 @@ public class CsvBulkLoadToolIT {
 
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
-        conn.close();
-        PhoenixDriver.INSTANCE.close();
-        hbaseTestUtil.shutdownMiniMapReduceCluster();
-        hbaseTestUtil.shutdownMiniCluster();
+        try {
+            conn.close();
+        } finally {
+            try {
+                PhoenixDriver.INSTANCE.close();
+            } finally {
+                try {
+                    DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
+                } finally {                    
+                    try {
+                        hbaseTestUtil.shutdownMiniMapReduceCluster();
+                    } finally {
+                        hbaseTestUtil.shutdownMiniCluster();
+                    }
+                }
+            }
+        }
     }
 
     @Test

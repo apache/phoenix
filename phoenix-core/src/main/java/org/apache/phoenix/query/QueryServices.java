@@ -70,7 +70,6 @@ public interface QueryServices extends SQLCloseable {
     public static final String MAX_SERVER_CACHE_SIZE_ATTRIB = "phoenix.query.maxServerCacheBytes";
     public static final String DATE_FORMAT_ATTRIB = "phoenix.query.dateFormat";
     public static final String NUMBER_FORMAT_ATTRIB = "phoenix.query.numberFormat";
-    public static final String STATS_UPDATE_FREQ_MS_ATTRIB = "phoenix.query.statsUpdateFrequency";
     public static final String CALL_QUEUE_ROUND_ROBIN_ATTRIB = "ipc.server.callqueue.roundrobin";
     public static final String SCAN_CACHE_SIZE_ATTRIB = "hbase.client.scanner.caching";
     public static final String MAX_MUTATION_SIZE_ATTRIB = "phoenix.mutate.maxSize";
@@ -123,7 +122,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String MAX_INDEX_PRIOIRTY_ATTRIB = "phoenix.regionserver.index.priority.max";
     public static final String INDEX_HANDLER_COUNT_ATTRIB = "phoenix.regionserver.index.handler.count";
 
-    // Constants for for configuring tracing
+    // Config parameters for for configuring tracing
     public static final String TRACING_FREQ_ATTRIB = "phoenix.trace.frequency";
     public static final String TRACING_PAGE_SIZE_ATTRIB = "phoenix.trace.read.pagesize";
     public static final String TRACING_PROBABILITY_THRESHOLD_ATTRIB = "phoenix.trace.probability.threshold";
@@ -132,7 +131,10 @@ public interface QueryServices extends SQLCloseable {
 
     public static final String USE_REVERSE_SCAN_ATTRIB = "phoenix.query.useReverseScan";
 
-    public static final String HISTOGRAM_BYTE_DEPTH_ATTRIB = "phoenix.guidepost.width";
+    // Config parameters for stats collection
+    public static final String STATS_UPDATE_FREQ_MS_ATTRIB = "phoenix.stats.updateFrequency";
+    public static final String MIN_STATS_UPDATE_FREQ_MS_ATTRIB = "phoenix.stats.minUpdateFrequency";
+    public static final String STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB = "phoenix.stats.guidepost.width";
 
     /**
      * Get executor service used for parallel scans

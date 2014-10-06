@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -71,15 +72,14 @@ public class StatisticsCollector {
     // Ensures that either analyze or compaction happens at any point of time.
     private static final Log LOG = LogFactory.getLog(StatisticsCollector.class);
 
-    public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName) throws IOException {
+    public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp) throws IOException {
         guidepostDepth =
-            env.getConfiguration().getLong(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB,
-                QueryServicesOptions.DEFAULT_HISTOGRAM_BYTE_DEPTH);
+            env.getConfiguration().getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                QueryServicesOptions.DEFAULT_STATS_HISTOGRAM_DEPTH_BYTE);
         // Get the stats table associated with the current table on which the CP is
         // triggered
-        this.statsTable = StatisticsTable.getStatisticsTable(
-                env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES)));
-        this.statsTable.commitLastStatsUpdatedTime(tableName, TimeKeeper.SYSTEM.getCurrentTime());
+        HTableInterface statsHTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES));
+        this.statsTable = StatisticsTable.getStatisticsTable(statsHTable, tableName, clientTimeStamp);
     }
     
     public void close() throws IOException {
@@ -106,19 +106,18 @@ public class StatisticsCollector {
         try {
             // update the statistics table
             for (ImmutableBytesPtr fam : familyMap.keySet()) {
-                String tableName = region.getRegionInfo().getTable().getNameAsString();
                 if (delete) {
                     if(LOG.isDebugEnabled()) {
                         LOG.debug("Deleting the stats for the region "+region.getRegionInfo());
                     }
-                    statsTable.deleteStats(tableName, region.getRegionInfo().getRegionNameAsString(), this,
-                            Bytes.toString(fam.copyBytesIfNecessary()), mutations, currentTime);
+                    statsTable.deleteStats(region.getRegionInfo().getRegionNameAsString(), this, Bytes.toString(fam.copyBytesIfNecessary()),
+                            mutations);
                 }
                 if(LOG.isDebugEnabled()) {
                     LOG.debug("Adding new stats for the region "+region.getRegionInfo());
                 }
-                statsTable.addStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
-                        Bytes.toString(fam.copyBytesIfNecessary()), mutations, currentTime);
+                statsTable.addStats((region.getRegionInfo().getRegionNameAsString()), this, Bytes.toString(fam.copyBytesIfNecessary()),
+                        mutations);
             }
         } catch (IOException e) {
             LOG.error("Failed to update statistics table!", e);
@@ -132,12 +131,11 @@ public class StatisticsCollector {
 
     private void deleteStatsFromStatsTable(final HRegion region, List<Mutation> mutations, long currentTime) throws IOException {
         try {
-            String tableName = region.getRegionInfo().getTable().getNameAsString();
             String regionName = region.getRegionInfo().getRegionNameAsString();
             // update the statistics table
             for (ImmutableBytesPtr fam : familyMap.keySet()) {
-                statsTable.deleteStats(tableName, regionName, this,
-                        Bytes.toString(fam.copyBytesIfNecessary()), mutations, currentTime);
+                statsTable.deleteStats(regionName, this, Bytes.toString(fam.copyBytesIfNecessary()),
+                        mutations);
             }
         } catch (IOException e) {
             LOG.error("Failed to delete from statistics table!", e);
@@ -274,6 +272,7 @@ public class StatisticsCollector {
     }
 
     public void updateStatistic(KeyValue kv) {
+        @SuppressWarnings("deprecation")
         byte[] cf = kv.getFamily();
         familyMap.put(new ImmutableBytesPtr(cf), true);
         

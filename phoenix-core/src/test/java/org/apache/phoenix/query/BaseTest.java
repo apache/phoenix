@@ -599,7 +599,7 @@ public abstract class BaseTest {
         conf.setInt("hbase.hlog.asyncer.number", 2);
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
-        conf.setInt(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, 20);
+        conf.setInt(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, 20);
         return conf;
     }
 

@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HConnectionManager;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.RequestConverter;
@@ -406,4 +407,15 @@ public class MetaDataUtil {
 
     public static final String IS_LOCAL_INDEX_TABLE_PROP_NAME = "IS_LOCAL_INDEX_TABLE";
     public static final byte[] IS_LOCAL_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_LOCAL_INDEX_TABLE_PROP_NAME);
+
+    public static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp)
+            throws IOException {
+        Scan scan = new Scan();
+        scan.setTimeRange(startTimeStamp, stopTimeStamp);
+        scan.setStartRow(key);
+        byte[] stopKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
+        ByteUtil.nextKey(stopKey, stopKey.length);
+        scan.setStopRow(stopKey);
+        return scan;
+    }
 }
