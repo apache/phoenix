@@ -41,6 +41,7 @@ import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
+import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
@@ -121,7 +122,7 @@ public class StatementNormalizer extends ParseNodeRewriter {
         @Override
         public List<TableName> visit(JoinTableNode joinNode) throws SQLException {
             List<TableName> lhs = joinNode.getLHS().accept(this);
-            List<TableName> rhs = joinNode.getRHS().accept(this);
+            List<TableName> rhs = joinNode.getType() == JoinType.Semi || joinNode.getType() == JoinType.Anti ? Collections.<TableName> emptyList() : joinNode.getRHS().accept(this);
             List<TableName> ret = Lists.<TableName>newArrayListWithExpectedSize(lhs.size() + rhs.size());
             ret.addAll(lhs);
             ret.addAll(rhs);

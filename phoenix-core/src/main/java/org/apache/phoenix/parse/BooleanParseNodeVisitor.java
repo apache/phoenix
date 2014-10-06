@@ -139,6 +139,16 @@ public abstract class BooleanParseNodeVisitor<T> extends BaseParseNodeVisitor<T>
     }
 
     @Override
+    public boolean visitEnter(ExistsParseNode node) throws SQLException {
+        return enterBooleanNode(node);
+    }
+
+    @Override
+    public T visitLeave(ExistsParseNode node, List<T> l) throws SQLException {
+        return leaveBooleanNode(node, l);
+    }
+
+    @Override
     public boolean visitEnter(InListParseNode node) throws SQLException {
         return enterBooleanNode(node);
     }

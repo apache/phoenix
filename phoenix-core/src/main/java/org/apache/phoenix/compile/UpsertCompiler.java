@@ -372,6 +372,11 @@ public class UpsertCompiler {
                     ColumnResolver selectResolver = FromCompiler.getResolverForQuery(select, connection);
                     select = StatementNormalizer.normalize(select, selectResolver);
                     select = prependTenantAndViewConstants(table, select, tenantId, addViewColumnsToBe);
+                    SelectStatement transformedSelect = SubqueryRewriter.transform(select, selectResolver, connection);
+                    if (transformedSelect != select) {
+                        selectResolver = FromCompiler.getResolverForQuery(transformedSelect, connection);
+                        select = StatementNormalizer.normalize(transformedSelect, selectResolver);
+                    }
                     sameTable = select.getFrom().size() == 1
                         && tableRefToBe.equals(selectResolver.getTables().get(0));
                     tableRefToBe = adjustTimestampToMinOfSameTable(tableRefToBe, selectResolver.getTables());

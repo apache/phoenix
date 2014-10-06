@@ -72,7 +72,7 @@ public class HashJoinRegionScanner implements RegionScanner {
         this.limit = Long.MAX_VALUE;
         if (joinInfo != null) {
             for (JoinType type : joinInfo.getJoinTypes()) {
-                if (type != JoinType.Inner && type != JoinType.Left)
+                if (type != JoinType.Inner && type != JoinType.Left && type != JoinType.Semi && type != JoinType.Anti)
                     throw new DoNotRetryIOException("Got join type '" + type + "'. Expect only INNER or LEFT with hash-joins.");
             }
             if (joinInfo.getLimit() != null) {
@@ -85,6 +85,12 @@ public class HashJoinRegionScanner implements RegionScanner {
             TenantCache cache = GlobalCache.getTenantCache(env, tenantId);
             for (int i = 0; i < count; i++) {
                 ImmutableBytesPtr joinId = joinInfo.getJoinIds()[i];
+                if (joinId.getLength() == 0) { // semi-join optimized into skip-scan
+                    hashCaches[i] = null;
+                    tempSrcBitSet[i] = null;
+                    tempTuples[i] = null;
+                    continue;
+                }
                 HashCache hashCache = (HashCache)cache.getServerCache(joinId);
                 if (hashCache == null)
                     throw new DoNotRetryIOException("Could not find hash cache for joinId: " 
@@ -119,12 +125,13 @@ public class HashJoinRegionScanner implements RegionScanner {
         int count = joinInfo.getJoinIds().length;
         boolean cont = true;
         for (int i = 0; i < count; i++) {
-            if (!(joinInfo.earlyEvaluation()[i]))
+            if (!(joinInfo.earlyEvaluation()[i]) || hashCaches[i] == null)
                 continue;
             ImmutableBytesPtr key = TupleUtil.getConcatenatedValue(tuple, joinInfo.getJoinExpressions()[i]);
             tempTuples[i] = hashCaches[i].get(key);
             JoinType type = joinInfo.getJoinTypes()[i];
-            if (type == JoinType.Inner && tempTuples[i] == null) {
+            if (((type == JoinType.Inner || type == JoinType.Semi) && tempTuples[i] == null)
+                    || (type == JoinType.Anti && tempTuples[i] != null)) {
                 cont = false;
                 break;
             }
@@ -146,7 +153,8 @@ public class HashJoinRegionScanner implements RegionScanner {
                 resultQueue.offer(tuple);
                 for (int i = 0; i < count; i++) {
                     boolean earlyEvaluation = joinInfo.earlyEvaluation()[i];
-                    if (earlyEvaluation && tempTuples[i] == null)
+                    JoinType type = joinInfo.getJoinTypes()[i];
+                    if (earlyEvaluation && (tempTuples[i] == null || type == JoinType.Semi))
                         continue;
                     int j = resultQueue.size();
                     while (j-- > 0) {
@@ -155,7 +163,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                             ImmutableBytesPtr key = TupleUtil.getConcatenatedValue(lhs, joinInfo.getJoinExpressions()[i]);
                             tempTuples[i] = hashCaches[i].get(key);                        	
                             if (tempTuples[i] == null) {
-                                if (joinInfo.getJoinTypes()[i] != JoinType.Inner) {
+                                if (type != JoinType.Inner && type != JoinType.Semi) {
                                     resultQueue.offer(lhs);
                                 }
                                 continue;

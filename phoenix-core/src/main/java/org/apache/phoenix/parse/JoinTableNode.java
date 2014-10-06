@@ -29,7 +29,15 @@ import java.sql.SQLException;
  * @since 0.1
  */
 public class JoinTableNode extends TableNode {
-    public enum JoinType {Inner, Left, Right, Full};
+    public enum JoinType {
+        Inner, 
+        Left, 
+        Right, 
+        Full,
+        // the following two types derive from sub-query rewriting
+        Semi, 
+        Anti,
+    };
     
     private final JoinType type;
     private final TableNode lhs;

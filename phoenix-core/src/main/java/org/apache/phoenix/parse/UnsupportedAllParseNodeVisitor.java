@@ -76,6 +76,11 @@ abstract public class UnsupportedAllParseNodeVisitor<E> extends BaseParseNodeVis
     }
 
     @Override
+    public E visit(SubqueryParseNode node) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+
+    @Override
     public boolean visitEnter(AndParseNode node) throws SQLException {
         throw new SQLFeatureNotSupportedException(node.toString());
     }
@@ -139,6 +144,16 @@ abstract public class UnsupportedAllParseNodeVisitor<E> extends BaseParseNodeVis
     public boolean visitEnter(NotParseNode node) throws SQLException {
         throw new SQLFeatureNotSupportedException(node.toString());
     }
+
+    @Override
+    public E visitLeave(ExistsParseNode node, List<E> l) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public boolean visitEnter(ExistsParseNode node) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
     
     @Override
     public E visitLeave(CastParseNode node, List<E> l) throws SQLException {
@@ -154,6 +169,11 @@ abstract public class UnsupportedAllParseNodeVisitor<E> extends BaseParseNodeVis
     public E visitLeave(InListParseNode node, List<E> l) throws SQLException {
         throw new SQLFeatureNotSupportedException(node.toString());
     }
+    
+    @Override
+    public E visitLeave(InParseNode node, List<E> l) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
 
     @Override
     public E visitLeave(BetweenParseNode node, List<E> l) throws SQLException {
@@ -162,6 +182,11 @@ abstract public class UnsupportedAllParseNodeVisitor<E> extends BaseParseNodeVis
     
     @Override
     public boolean visitEnter(InListParseNode node) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public boolean visitEnter(InParseNode node) throws SQLException {
         throw new SQLFeatureNotSupportedException(node.toString());
     }
 

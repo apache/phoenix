@@ -23,6 +23,10 @@ import java.util.List;
 
 public class StatelessTraverseAllParseNodeVisitor extends TraverseAllParseNodeVisitor<Void> {
     @Override
+    protected void enterParseNode(ParseNode node) {
+    }
+    
+    @Override
     public Void visitLeave(LikeParseNode node, List<Void> l) throws SQLException {
         return null;
     }
@@ -79,6 +83,11 @@ public class StatelessTraverseAllParseNodeVisitor extends TraverseAllParseNodeVi
 
     @Override
     public Void visitLeave(NotParseNode node, List<Void> l) throws SQLException {
+        return null;
+    }
+
+    @Override
+    public Void visitLeave(ExistsParseNode node, List<Void> l) throws SQLException {
         return null;
     }
     

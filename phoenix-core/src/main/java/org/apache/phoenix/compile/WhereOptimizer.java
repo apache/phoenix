@@ -311,12 +311,14 @@ public class WhereOptimizer {
     
     /**
      * Get an optimal combination of key expressions for hash join key range optimization.
+     * @return returns true if the entire combined expression is covered by key range optimization
+     * @param result the optimal combination of key expressions
      * @param context the temporary context to get scan ranges set by pushKeyExpressionsToScan()
      * @param statement the statement being compiled
      * @param expressions the join key expressions
      * @return the optimal list of key expressions
      */
-    public static List<Expression> getKeyExpressionCombination(StatementContext context, FilterableStatement statement, List<Expression> expressions) throws SQLException {
+    public static boolean getKeyExpressionCombination(List<Expression> result, StatementContext context, FilterableStatement statement, List<Expression> expressions) throws SQLException {
         List<Integer> candidateIndexes = Lists.newArrayList();
         final List<Integer> pkPositions = Lists.newArrayList();
         for (int i = 0; i < expressions.size(); i++) {
@@ -339,7 +341,7 @@ public class WhereOptimizer {
         }
         
         if (candidateIndexes.isEmpty())
-            return Collections.<Expression> emptyList();
+            return false;
         
         Collections.sort(candidateIndexes, new Comparator<Integer>() {
             @Override
@@ -364,12 +366,13 @@ public class WhereOptimizer {
         
         int count = 0;
         int maxPkSpan = 0;
+        Expression remaining = null;
         while (count < candidates.size()) {
             Expression lhs = count == 0 ? candidates.get(0) : new RowValueConstructorExpression(candidates.subList(0, count + 1), false);
             Expression firstRhs = count == 0 ? sampleValues.get(0).get(0) : new RowValueConstructorExpression(sampleValues.get(0).subList(0, count + 1), true);
             Expression secondRhs = count == 0 ? sampleValues.get(1).get(0) : new RowValueConstructorExpression(sampleValues.get(1).subList(0, count + 1), true);
             Expression testExpression = InListExpression.create(Lists.newArrayList(lhs, firstRhs, secondRhs), false, context.getTempPtr());
-            pushKeyExpressionsToScan(context, statement, testExpression);
+            remaining = pushKeyExpressionsToScan(context, statement, testExpression);
             int pkSpan = context.getScanRanges().getPkColumnSpan();
             if (pkSpan <= maxPkSpan) {
                 break;
@@ -378,7 +381,11 @@ public class WhereOptimizer {
             count++;
         }
         
-        return candidates.subList(0, count);
+        result.addAll(candidates.subList(0, count));
+        
+        return count == candidates.size() 
+                && (context.getScanRanges().isPointLookup() || context.getScanRanges().useSkipScanFilter())
+                && (remaining == null || remaining.equals(LiteralExpression.newConstant(true, Determinism.ALWAYS)));
     }
 
     private static class RemoveExtractedNodesVisitor extends TraverseNoExpressionVisitor<Expression> {

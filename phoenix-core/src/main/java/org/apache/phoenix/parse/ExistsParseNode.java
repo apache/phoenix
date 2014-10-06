@@ -30,11 +30,11 @@ import java.util.List;
  * 
  * @since 0.1
  */
-public class ExistsParseNode extends BinaryParseNode {
+public class ExistsParseNode extends UnaryParseNode {
     private final boolean negate;
 
-    ExistsParseNode(ParseNode l, ParseNode r, boolean negate) {
-        super(l, r);
+    ExistsParseNode(ParseNode child, boolean negate) {
+        super(child);
         this.negate = negate;
     }
     

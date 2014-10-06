@@ -716,7 +716,6 @@ boolean_expression returns [ParseNode ret]
                   |  (IS n=NOT? NULL {$ret = factory.isNull(l,n!=null); } )
                   |  ( n=NOT? ((LIKE r=value_expression {$ret = factory.like(l,r,n!=null,LikeType.CASE_SENSITIVE); } )
                       |        (ILIKE r=value_expression {$ret = factory.like(l,r,n!=null,LikeType.CASE_INSENSITIVE); } )
-                      |        (EXISTS LPAREN r=subquery_expression RPAREN {$ret = factory.exists(l,r,n!=null);} )
                       |        (BETWEEN r1=value_expression AND r2=value_expression {$ret = factory.between(l,r1,r2,n!=null); } )
                       |        ((IN ((r=bind_expression {$ret = factory.inList(Arrays.asList(l,r),n!=null);} )
                                 | (LPAREN r=subquery_expression RPAREN {$ret = factory.in(l,r,n!=null);} )
@@ -724,6 +723,7 @@ boolean_expression returns [ParseNode ret]
                                 )))
                       ))
                    |  { $ret = l; } )
+    |   EXISTS LPAREN s=subquery_expression RPAREN {$ret = factory.exists(s,false);}
     ;
 
 bind_expression  returns [BindParseNode ret]

@@ -204,16 +204,20 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         this.nodeCount = 0;
     }
 
-    private static interface CompoundNodeFactory {
+    protected static interface CompoundNodeFactory {
         ParseNode createNode(List<ParseNode> children);
     }
 
-    private ParseNode leaveCompoundNode(CompoundParseNode node, List<ParseNode> children, CompoundNodeFactory factory) {
+    protected ParseNode leaveCompoundNode(CompoundParseNode node, List<ParseNode> children, CompoundNodeFactory factory) {
         if (children.equals(node.getChildren())) {
             return node;
         } else { // Child nodes have been inverted (because a literal was found on LHS)
             return factory.createNode(children);
         }
+    }
+    
+    @Override
+    protected void enterParseNode(ParseNode node) {
     }
 
     @Override
@@ -322,6 +326,16 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
             @Override
             public ParseNode createNode(List<ParseNode> children) {
                 return NODE_FACTORY.not(children.get(0));
+            }
+        });
+    }
+
+    @Override
+    public ParseNode visitLeave(final ExistsParseNode node, List<ParseNode> nodes) throws SQLException {
+        return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+            @Override
+            public ParseNode createNode(List<ParseNode> children) {
+                return NODE_FACTORY.exists(children.get(0), node.isNegate());
             }
         });
     }
