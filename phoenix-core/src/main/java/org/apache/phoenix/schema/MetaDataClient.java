@@ -48,7 +48,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
@@ -474,7 +473,7 @@ public class MetaDataClient {
 
     public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt) throws SQLException {
         // Check before updating the stats if we have reached the configured time to reupdate the stats once again
-        long minTimeForStatsUpdate = connection.getQueryServices().getProps()
+        long msMinBetweenUpdates = connection.getQueryServices().getProps()
                 .getLong(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
         ColumnResolver resolver = FromCompiler.getResolver(updateStatisticsStmt, connection);
         PTable table = resolver.getTables().get(0).getTable();
@@ -486,15 +485,15 @@ public class MetaDataClient {
         connection.getQueryServices().clearCacheForTable(tenantIdBytes,
                 Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())),
                 Bytes.toBytes(SchemaUtil.getTableNameFromFullName(physicalName.getString())), clientTS);
-        String query = "SELECT CURRENT_DATE(),"+ LAST_STATS_UPDATE_TIME + " FROM " + SYSTEM_CATALOG_SCHEMA
-                + "." + SYSTEM_STATS_TABLE + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
+        String query = "SELECT CURRENT_DATE(),"+ LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
+                + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
                 + " IS NULL AND " + REGION_NAME + " IS NULL";
         ResultSet rs = connection.createStatement().executeQuery(query);
-        long lastUpdatedTime = 0;
+        long msSinceLastUpdate = Long.MAX_VALUE;
         if (rs.next() && rs.getDate(2) != null) {
-            lastUpdatedTime = rs.getDate(1).getTime() - rs.getDate(2).getTime();
+            msSinceLastUpdate = rs.getDate(1).getTime() - rs.getDate(2).getTime();
         }
-        if (minTimeForStatsUpdate  > lastUpdatedTime) {
+        if (msSinceLastUpdate >= msMinBetweenUpdates) {
             // Here create the select query.
             String countQuery = "SELECT /*+ NO_CACHE */ count(*) FROM " + table.getName().getString();
             PhoenixStatement statement = (PhoenixStatement) connection.createStatement();
