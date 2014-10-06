@@ -19,8 +19,6 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TimeKeeper;
 
 /**
  * The scanner that does the scanning to collect the stats during major compaction.{@link StatisticsCollector}
@@ -78,21 +76,17 @@ public class StatisticsScanner implements InternalScanner {
         try {
             // update the statistics table
             // Just verify if this if fine
-            String tableName = SchemaUtil.getTableNameFromFullName(region.getRegionInfo().getTableNameAsString());
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
-            long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Deleting the stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
             }
-            stats.deleteStats(tableName, region.getRegionNameAsString(), this.tracker, Bytes.toString(family),
-                    mutations, currentTime);
+            stats.deleteStats(region.getRegionNameAsString(), this.tracker, Bytes.toString(family), mutations);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Adding new stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
             }
-            stats.addStats(tableName, region.getRegionNameAsString(), this.tracker, Bytes.toString(family), mutations,
-                    currentTime);
+            stats.addStats(region.getRegionNameAsString(), this.tracker, Bytes.toString(family), mutations);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Committing new stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");

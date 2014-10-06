@@ -32,7 +32,7 @@ public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
-        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Long.toString(20l));
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20l));
         props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Integer.toString(frequency));
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(20));
         props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(20));

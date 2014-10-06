@@ -82,6 +82,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -139,10 +140,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         HRegion region = c.getEnvironment().getRegion();
+        long ts = scan.getTimeRange().getMax();
         StatisticsCollector stats = null;
         if(ScanUtil.isAnalyzeTable(scan)) {
             // Let this throw, as this scan is being done for the sole purpose of collecting stats
-            stats = new StatisticsCollector(c.getEnvironment(), region.getRegionInfo().getTableNameAsString());
+            stats = new StatisticsCollector(c.getEnvironment(), region.getRegionInfo().getTableNameAsString(), ts);
         }
 
         RegionScanner theScanner = s;
@@ -179,7 +181,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
         
         int batchSize = 0;
-        long ts = scan.getTimeRange().getMax();
         List<Pair<Mutation,Integer>> mutations = Collections.emptyList();
         if (isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null) {
             // TODO: size better
@@ -431,7 +432,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (!table.equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)
                 && scanType.equals(ScanType.MAJOR_COMPACT)) {
             try {
-                StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table);
+                // TODO: for users that manage timestamps themselves, we should provide
+                // a means of specifying/getting this.
+                long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
+                StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table, clientTimeStamp);
                 internalScan =
                         stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanners, scanType, earliestPutTs, s);
             } catch (IOException e) {
@@ -454,7 +458,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (!table.equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
             StatisticsCollector stats = null;
             try {
-                stats = new StatisticsCollector(e.getEnvironment(), table);
+                // TODO: for users that manage timestamps themselves, we should provide
+                // a means of specifying/getting this.
+                long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
+                stats = new StatisticsCollector(e.getEnvironment(), table, clientTimeStamp);
                 stats.collectStatsDuringSplit(e.getEnvironment().getConfiguration(), l, r, region);
             } catch (IOException ioe) { 
                 if(logger.isDebugEnabled()) {

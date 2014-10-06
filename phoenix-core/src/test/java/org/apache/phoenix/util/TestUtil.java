@@ -31,6 +31,7 @@ import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -484,5 +485,17 @@ public class TestUtil {
     public static void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
         String query = "ANALYZE " + tableName;
         conn.createStatement().execute(query);
+    }
+    
+    public static void analyzeTable(String url, long ts, String tableName) throws IOException, SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        analyzeTable(url, props, tableName);
+    }
+
+    public static void analyzeTable(String url, Properties props, String tableName) throws IOException, SQLException {
+        Connection conn = DriverManager.getConnection(url, props);
+        analyzeTable(conn, tableName);
+        conn.close();
     }
 }

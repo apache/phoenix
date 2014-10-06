@@ -59,7 +59,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
@@ -104,11 +103,10 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stat.PTableStats;
-import org.apache.phoenix.schema.stat.PTableStatsImpl;
+import org.apache.phoenix.schema.stat.StatisticsUtils;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -238,29 +236,24 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         return PNameFactory.newName(keyBuffer, keyOffset, length);
     }
 
-    private static Scan newTableRowsScan(byte[] key)
-            throws IOException {
-        return newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP, HConstants.LATEST_TIMESTAMP);
-    }
 
-    private static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp)
-            throws IOException {
-        Scan scan = new Scan();
-        scan.setTimeRange(startTimeStamp, stopTimeStamp);
-        scan.setStartRow(key);
-        byte[] stopKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
-        ByteUtil.nextKey(stopKey, stopKey.length);
-        scan.setStopRow(stopKey);
-        return scan;
-    }
-
+    /**
+     * Stores a reference to the coprocessor environment provided by the
+     * {@link org.apache.hadoop.hbase.regionserver.RegionCoprocessorHost} from the region where this
+     * coprocessor is loaded. Since this is a coprocessor endpoint, it always expects to be loaded
+     * on a table region, so always expects this to be an instance of
+     * {@link RegionCoprocessorEnvironment}.
+     * @param env the environment provided by the coprocessor host
+     * @throws IOException if the provided environment is not an instance of
+     *             {@code RegionCoprocessorEnvironment}
+     */
     @Override
     public RegionCoprocessorEnvironment getEnvironment() {
         return (RegionCoprocessorEnvironment)super.getEnvironment();
     }
     
     private PTable buildTable(byte[] key, ImmutableBytesPtr cacheKey, HRegion region, long clientTimeStamp) throws IOException, SQLException {
-        Scan scan = newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
         RegionScanner scanner = region.getScanner(scan);
         Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.getEnvironment()).getMetaDataCache();
         try {
@@ -273,7 +266,13 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             }
             if (oldTable == null || tableTimeStamp < newTable.getTimeStamp()) {
                 if (logger.isDebugEnabled()) {
-                    logger.debug("Caching table " + Bytes.toStringBinary(cacheKey.get(), cacheKey.getOffset(), cacheKey.getLength()) + " at seqNum " + newTable.getSequenceNumber() + " with newer timestamp " + newTable.getTimeStamp() + " versus " + tableTimeStamp);
+                    logger.debug("Caching table " 
+                            + Bytes.toStringBinary(cacheKey.get(), 
+                                    cacheKey.getOffset(), 
+                                    cacheKey.getLength()) 
+                            + " at seqNum " + newTable.getSequenceNumber() 
+                            + " with newer timestamp " + newTable.getTimeStamp() 
+                            + " versus " + tableTimeStamp);
                 }
                 metaDataCache.put(cacheKey, newTable);
             }
@@ -337,7 +336,8 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         columns.add(column);
     }
 
-    private PTable getTable(RegionScanner scanner, long clientTimeStamp, long tableTimeStamp) throws IOException, SQLException {
+    private PTable getTable(RegionScanner scanner, long clientTimeStamp, long tableTimeStamp)
+        throws IOException, SQLException {
         List<KeyValue> results = Lists.newArrayList();
         scanner.next(results);
         if (results.isEmpty()) {
@@ -372,9 +372,9 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         // bump up the timeStamp to right before the client time stamp, since
         // we know it can't possibly change.
         long timeStamp = keyValue.getTimestamp();
-//        long timeStamp = tableTimeStamp > keyValue.getTimestamp() && 
+//        long timeStamp = clientTimeStamp > keyValue.getTimestamp() && 
 //                         clientTimeStamp < tableTimeStamp
-//                         ? clientTimeStamp-1 
+//                         ? buildAsOfTimeStamp-1 
 //                         : keyValue.getTimestamp();
 
         int i = 0;
@@ -458,7 +458,17 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         }
         PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getTableName(
                 schemaName.getString(), tableName.getString())) : physicalTables.get(0);
-        PTableStats stats = tenantId == null ? updateStatsInternal(physicalTableName.getBytes()) : null;
+        PTableStats stats = null;
+        if (tenantId == null) {
+            HTableInterface statsHTable = getEnvironment().getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+            try {
+                StatisticsUtils.readStatistics(statsHTable, physicalTableName.getBytes(), clientTimeStamp);
+            } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
+                logger.warn(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " not online yet?");
+            } finally {
+                statsHTable.close();
+            }
+        }
         return PTableImpl
                 .makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, tableSeqNum, pkName,
                         saltBucketNum, columns, tableType == INDEX ? dataTableName : null, indexes, isImmutableRows,
@@ -466,67 +476,12 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                         viewIndexId, stats);
     }
     
-    private PTableStats updateStatsInternal(byte[] tableNameBytes) throws IOException {
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        HTableInterface statsHTable = getEnvironment().getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
-        try {
-            Scan s = newTableRowsScan(tableNameBytes);
-            s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
-            ResultScanner scanner = statsHTable.getScanner(s);
-            try {
-                Result result = null;
-                TreeMap<byte[], List<byte[]>> guidePostsPerCf = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
-                while ((result = scanner.next()) != null) {
-                    KeyValue current = result.raw()[0];
-                    int tableNameLength = tableNameBytes.length + 1;
-                    int cfOffset = current.getRowOffset() + tableNameLength;
-                    int cfLength = getVarCharLength(current.getBuffer(), cfOffset, current.getRowLength() - tableNameLength);
-                    ptr.set(current.getBuffer(), cfOffset, cfLength);
-                    byte[] cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                    PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(current.getBuffer(), current.getValueOffset(), current
-                            .getValueLength());
-                    if (array != null && array.getDimensions() != 0) {
-                        List<byte[]> guidePosts = Lists.newArrayListWithExpectedSize(array.getDimensions());                        
-                        for (int j = 0; j < array.getDimensions(); j++) {
-                            byte[] gp = array.toBytes(j);
-                            if (gp.length != 0) {
-                                guidePosts.add(gp);
-                            }
-                        }
-                        List<byte[]> gps = guidePostsPerCf.put(cfName, guidePosts);
-                        if (gps != null) { // Add guidepost already there from other regions
-                            guidePosts.addAll(gps);
-                        }
-                    }
-                }
-                if (!guidePostsPerCf.isEmpty()) {
-                    // Sort guideposts, as the order above will depend on the order we traverse
-                    // each region's worth of guideposts above.
-                    for (List<byte[]> gps : guidePostsPerCf.values()) {
-                        Collections.sort(gps, Bytes.BYTES_COMPARATOR);
-                    }
-                    return new PTableStatsImpl(guidePostsPerCf);
-            }
-            } finally {
-                scanner.close();
-            }
-        } catch (Exception e) {
-            if (e instanceof org.apache.hadoop.hbase.TableNotFoundException) {
-                logger.warn("Stats table not yet online", e);
-            } else {
-                throw new IOException(e);
-            }
-        } finally {
-            statsHTable.close();
-        }
-        return PTableStatsImpl.NO_STATS;
-    }
     private PTable buildDeletedTable(byte[] key, ImmutableBytesPtr cacheKey, HRegion region, long clientTimeStamp) throws IOException {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
             return null;
         }
         
-        Scan scan = newTableRowsScan(key, clientTimeStamp, HConstants.LATEST_TIMESTAMP);
+        Scan scan = MetaDataUtil.newTableRowsScan(key, clientTimeStamp, HConstants.LATEST_TIMESTAMP);
         scan.setFilter(new FirstKeyOnlyFilter());
         scan.setRaw(true);
         RegionScanner scanner = region.getScanner(scan);
@@ -553,12 +508,12 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         return table.getName() == null;
     }
 
-    private PTable loadTable(RegionCoprocessorEnvironment env, byte[] key, ImmutableBytesPtr cacheKey, long clientTimeStamp, long asOfTimeStamp) throws IOException, SQLException {
+    private PTable loadTable(RegionCoprocessorEnvironment env, byte[] key, ImmutableBytesPtr cacheKey, long clientTimeStamp) throws IOException, SQLException {
         HRegion region = env.getRegion();
         Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.getEnvironment()).getMetaDataCache();
         PTable table = metaDataCache.getIfPresent(cacheKey);
         // We always cache the latest version - fault in if not in cache
-        if (table != null || (table = buildTable(key, cacheKey, region, asOfTimeStamp)) != null) {
+        if (table != null || (table = buildTable(key, cacheKey, region, clientTimeStamp)) != null) {
             return table;
         }
         // if not found then check if newer table already exists and add delete marker for timestamp found
@@ -602,7 +557,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                 ImmutableBytesPtr parentCacheKey = null;
                 if (parentKey != null) {
                     parentCacheKey = new ImmutableBytesPtr(parentKey);
-                    parentTable = loadTable(env, parentKey, parentCacheKey, clientTimeStamp, clientTimeStamp);
+                    parentTable = loadTable(env, parentKey, parentCacheKey, clientTimeStamp);
                     if (parentTable == null || isTableDeleted(parentTable)) {
                         return new MetaDataMutationResult(MutationCode.PARENT_TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), parentTable);
                     }
@@ -615,7 +570,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                 ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
                 // Get as of latest timestamp so we can detect if we have a newer table that already exists
                 // without making an additional query
-                PTable table = loadTable(env, key, cacheKey, clientTimeStamp, HConstants.LATEST_TIMESTAMP);
+                PTable table = loadTable(env, key, cacheKey, clientTimeStamp);
                 if (table != null) {
                     if (table.getTimeStamp() < clientTimeStamp) {
                         // If the table is older than the client time stamp and it's deleted, continue
@@ -826,7 +781,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         // Since we don't allow back in time DDL, we know if we have a table it's the one
         // we want to delete. FIXME: we shouldn't need a scan here, but should be able to
         // use the table to generate the Delete markers.
-        Scan scan = newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
         RegionScanner scanner = region.getScanner(scan);
         List<KeyValue> results = Lists.newArrayList();
         scanner.next(results);

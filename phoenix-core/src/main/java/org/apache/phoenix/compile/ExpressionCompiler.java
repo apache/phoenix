@@ -55,6 +55,7 @@ import org.apache.phoenix.expression.LongAddExpression;
 import org.apache.phoenix.expression.LongDivideExpression;
 import org.apache.phoenix.expression.LongMultiplyExpression;
 import org.apache.phoenix.expression.LongSubtractExpression;
+import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
@@ -65,7 +66,6 @@ import org.apache.phoenix.expression.TimestampSubtractExpression;
 import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.InlineArrayElemRefExpression;
-import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.parse.AddParseNode;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.ArithmeticParseNode;
@@ -82,11 +82,10 @@ import org.apache.phoenix.parse.DivideParseNode;
 import org.apache.phoenix.parse.ExistsParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
-import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.InListParseNode;
-import org.apache.phoenix.parse.InParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
 import org.apache.phoenix.parse.LikeParseNode;
+import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.ModulusParseNode;
 import org.apache.phoenix.parse.MultiplyParseNode;
@@ -116,9 +115,6 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
-
-import com.google.common.collect.Lists;
-
 
 public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expression> {
     private boolean isAggregate;
