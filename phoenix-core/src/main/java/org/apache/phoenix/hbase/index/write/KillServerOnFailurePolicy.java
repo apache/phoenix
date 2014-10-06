@@ -61,7 +61,7 @@ public class KillServerOnFailurePolicy implements IndexFailurePolicy {
 
   @Override
   public void
-      handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted, Exception cause) throws IOException {
+      handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted, Exception cause){
     // cleanup resources
     this.stop("Killing ourselves because of an error:" + cause);
     // notify the regionserver of the failure
