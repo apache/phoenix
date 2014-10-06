@@ -267,7 +267,6 @@ public class HashJoinPlan implements QueryPlan {
     public ExplainPlan getExplainPlan() throws SQLException {
         List<String> planSteps = Lists.newArrayList(plan.getExplainPlan().getPlanSteps());
         int count = subPlans.length;
-        planSteps.add("    PARALLEL EQUI/SEMI/ANTI-JOIN " + count + " TABLES:");
         for (int i = 0; i < count; i++) {
             planSteps.addAll(subPlans[i].getPreSteps(this));
         }
@@ -422,12 +421,29 @@ public class HashJoinPlan implements QueryPlan {
             if (keyRangeRhsExpression != null) {
                 keyRangeRhsValues = Lists.<ImmutableBytesWritable>newArrayList();
             }
-            ServerCache cache = parent.hashClient.addHashCache(ranges, plan.iterator(), 
-                    clientProjector, plan.getEstimatedSize(), hashExpressions, parent.plan.getTableRef(), keyRangeRhsExpression, keyRangeRhsValues);
-            long endTime = System.currentTimeMillis();
-            boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);
-            if (!isSet && (endTime - parent.firstJobEndTime.get()) > parent.maxServerCacheTimeToLive) {
-                LOG.warn(addCustomAnnotations("Hash plan [" + index + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.", parent.plan.context.getConnection()));
+            ServerCache cache = null;
+            if (hashExpressions != null) {
+                cache = parent.hashClient.addHashCache(ranges, plan.iterator(), 
+                        clientProjector, plan.getEstimatedSize(), hashExpressions, parent.plan.getTableRef(), keyRangeRhsExpression, keyRangeRhsValues);
+                long endTime = System.currentTimeMillis();
+                boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);
+                if (!isSet && (endTime - parent.firstJobEndTime.get()) > parent.maxServerCacheTimeToLive) {
+                    LOG.warn(addCustomAnnotations("Hash plan [" + index + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.", parent.plan.context.getConnection()));
+                }
+            } else {
+                assert(keyRangeRhsExpression != null);
+                ResultIterator iterator = plan.iterator();
+                for (Tuple result = iterator.next(); result != null; result = iterator.next()) {
+                    if (clientProjector != null) {
+                        result = clientProjector.projectResults(result);
+                    }
+                    // Evaluate key expressions for hash join key range optimization.
+                    ImmutableBytesWritable value = new ImmutableBytesWritable();
+                    keyRangeRhsExpression.reset();
+                    if (keyRangeRhsExpression.evaluate(result, value)) {
+                        keyRangeRhsValues.add(value);
+                    }
+                }
             }
             if (keyRangeRhsValues != null) {
                 parent.keyRangeExpressions.add(parent.createKeyRangeExpression(keyRangeLhsExpression, keyRangeRhsExpression, keyRangeRhsValues, plan.getContext().getTempPtr(), hasFilters));
@@ -439,8 +455,10 @@ public class HashJoinPlan implements QueryPlan {
         public void postProcess(Object result, HashJoinPlan parent)
                 throws SQLException {
             ServerCache cache = (ServerCache) result;
-            parent.joinInfo.getJoinIds()[index].set(cache.getId());
-            parent.dependencies.add(cache);
+            if (cache != null) {
+                parent.joinInfo.getJoinIds()[index].set(cache.getId());
+                parent.dependencies.add(cache);
+            }
         }
 
         @Override
@@ -448,7 +466,13 @@ public class HashJoinPlan implements QueryPlan {
             List<String> steps = Lists.newArrayList();
             boolean earlyEvaluation = parent.joinInfo.earlyEvaluation()[index];
             boolean skipMerge = parent.joinInfo.getSchemas()[index].getFieldCount() == 0;
-            steps.add("    BUILD HASH TABLE " + index + (earlyEvaluation ? "" : "(DELAYED EVALUATION)") + (skipMerge ? " (SKIP MERGE)" : ""));
+            if (hashExpressions != null) {
+                steps.add("    PARALLEL " + parent.joinInfo.getJoinTypes()[index].toString().toUpperCase()
+                        + "-JOIN TABLE " + index + (earlyEvaluation ? "" : "(DELAYED EVALUATION)") + (skipMerge ? " (SKIP MERGE)" : ""));
+            }
+            else {
+                steps.add("    SKIP-SCAN-JOIN TABLE " + index);
+            }
             for (String step : plan.getExplainPlan().getPlanSteps()) {
                 steps.add("        " + step);
             }

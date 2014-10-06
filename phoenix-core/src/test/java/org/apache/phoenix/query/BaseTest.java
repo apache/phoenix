@@ -45,6 +45,7 @@ import static org.apache.phoenix.util.TestUtil.HBASE_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.util.TestUtil.HBASE_NATIVE;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_TABLE;
+import static org.apache.phoenix.util.TestUtil.JOIN_COITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
@@ -433,6 +434,13 @@ public abstract class BaseTest {
                 "    phone varchar(12), " +
                 "    address varchar, " +
                 "    loc_id varchar(5))");
+        builder.put(JOIN_COITEM_TABLE_FULL_NAME, "create table " + JOIN_COITEM_TABLE_FULL_NAME +
+                "   (item_id varchar(10) NOT NULL, " +
+                "    item_name varchar NOT NULL, " +
+                "    co_item_id varchar(10), " +
+                "    co_item_name varchar " +
+                "   CONSTRAINT pk PRIMARY KEY (item_id, item_name)) " +
+                "   SALT_BUCKETS=4");
         tableDDLMap = builder.build();
     }
     

@@ -78,6 +78,9 @@ public interface ParseNodeVisitor<E> {
     public boolean visitEnter(NotParseNode node) throws SQLException;
     public E visitLeave(NotParseNode node, List<E> l) throws SQLException;
     
+    public boolean visitEnter(ExistsParseNode node) throws SQLException;
+    public E visitLeave(ExistsParseNode node, List<E> l) throws SQLException;
+    
     public boolean visitEnter(InListParseNode node) throws SQLException;
     public E visitLeave(InListParseNode node, List<E> l) throws SQLException;
     
