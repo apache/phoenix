@@ -34,10 +34,16 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.end2end.Shadower;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.parse.NamedTableNode;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -62,6 +68,50 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+    
+    @Test
+    public void testIndexCreateWithoutOptions()  throws Exception {
+        createIndexOnTableWithSpecifiedDefaultCF(false);
+    }
+    
+    @Test
+    public void testIndexCreateWithOptions()  throws Exception {
+        createIndexOnTableWithSpecifiedDefaultCF(true);
+    }
+    
+    private void createIndexOnTableWithSpecifiedDefaultCF(boolean hasOptions) throws Exception {
+        String query;
+        ResultSet rs;
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(
+                "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) DEFAULT_COLUMN_FAMILY='A'");
+        query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertFalse(rs.next());
+
+        String options = hasOptions ? "SALT_BUCKETS=10, MULTI_TENANT=true, IMMUTABLE_ROWS=true, DISABLE_WAL=true" : "";
+        conn.createStatement().execute(
+                "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) INCLUDE (v2) " + options);
+        query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertFalse(rs.next());
+        
+        //check options set correctly on index
+        TableName indexName = TableName.create(SCHEMA_NAME, INDEX_TABLE_NAME);
+        NamedTableNode indexNode = NamedTableNode.create(null, indexName, null);
+        ColumnResolver resolver = FromCompiler.getResolver(indexNode, conn.unwrap(PhoenixConnection.class));
+        PTable indexTable = resolver.getTables().get(0).getTable();
+        // Can't set IMMUTABLE_ROWS, MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an index
+        assertNull(indexTable.getDefaultFamilyName());
+        assertFalse(indexTable.isMultiTenant());
+        assertFalse(indexTable.isImmutableRows());
+        if(hasOptions) {
+            assertEquals(10, indexTable.getBucketNum().intValue());
+            assertTrue(indexTable.isWALDisabled());
+        }
     }
 
     @Test

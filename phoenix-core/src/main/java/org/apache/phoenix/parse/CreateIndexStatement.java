@@ -23,6 +23,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.PTable.IndexType;
 
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 
 
@@ -43,7 +44,7 @@ public class CreateIndexStatement extends SingleTableStatement {
         this.indexConstraint = indexConstraint == null ? PrimaryKeyConstraint.EMPTY : indexConstraint;
         this.includeColumns = includeColumns == null ? Collections.<ColumnName>emptyList() : includeColumns;
         this.splitNodes = splits == null ? Collections.<ParseNode>emptyList() : splits;
-        this.props = props;
+        this.props = props == null ? ArrayListMultimap.<String,Pair<String,Object>>create() : props;
         this.ifNotExists = ifNotExists;
         this.indexType = indexType;
     }
