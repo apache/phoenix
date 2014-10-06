@@ -65,7 +65,6 @@ public class ParallelIteratorsIT extends BaseHBaseManagedTimeIT {
         // Must update config before starting server
         props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Long.toString(20));
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Integer.toString(1));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
