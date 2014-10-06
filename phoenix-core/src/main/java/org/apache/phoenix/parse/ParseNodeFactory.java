@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Pair;
@@ -179,6 +180,12 @@ public class ParseNodeFactory {
     }
 
     public ParseNodeFactory() {
+    }
+    
+    private static AtomicInteger tempAliasCounter = new AtomicInteger(0);
+    
+    public static String createTempAlias() {
+        return "$" + tempAliasCounter.incrementAndGet();
     }
 
     public ExplainStatement explain(BindableStatement statement) {
@@ -395,8 +402,8 @@ public class ParseNodeFactory {
         return new InListParseNode(children, negate);
     }
 
-    public ExistsParseNode exists(ParseNode l, ParseNode r, boolean negate) {
-        return new ExistsParseNode(l, r, negate);
+    public ExistsParseNode exists(ParseNode child, boolean negate) {
+        return new ExistsParseNode(child, negate);
     }
 
     public InParseNode in(ParseNode l, ParseNode r, boolean negate) {
@@ -555,7 +562,11 @@ public class ParseNodeFactory {
         return new NotEqualParseNode(lhs, rhs);
     }
 
-    public NotParseNode not(ParseNode child) {
+    public ParseNode not(ParseNode child) {
+        if (child instanceof ExistsParseNode) {
+            return exists(child.getChildren().get(0), !((ExistsParseNode) child).isNegate());
+        }
+        
         return new NotParseNode(child);
     }
 

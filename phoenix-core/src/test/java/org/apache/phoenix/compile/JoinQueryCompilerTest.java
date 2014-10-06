@@ -59,14 +59,12 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
         assertEquals(
         		"CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
         		"    SERVER FILTER BY FIRST KEY ONLY\n" +
-        		"    PARALLEL EQUI/SEMI/ANTI-JOIN 1 TABLES:\n" +
-        		"    BUILD HASH TABLE 0\n" +
+        		"    PARALLEL LEFT-JOIN TABLE 0\n" +
         		"        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-        		"            PARALLEL EQUI/SEMI/ANTI-JOIN 2 TABLES:\n" +
-        		"            BUILD HASH TABLE 0\n" +
+        		"            PARALLEL LEFT-JOIN TABLE 0\n" +
         		"                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + "\n" +
         		"                    SERVER FILTER BY NAME LIKE 'C%'\n" +
-        		"            BUILD HASH TABLE 1\n" +
+        		"            PARALLEL LEFT-JOIN TABLE 1\n" +
         		"                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
         		"    AFTER-JOIN SERVER FILTER BY I.NAME LIKE 'T%'", QueryUtil.getExplainPlan(rs));
     }
@@ -133,6 +131,11 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
         SelectStatement select = SubselectRewriter.flatten(parser.parseQuery(), connection);
         ColumnResolver resolver = FromCompiler.getResolverForQuery(select, connection);
         select = StatementNormalizer.normalize(select, resolver);
+        SelectStatement transformedSelect = SubqueryRewriter.transform(select, resolver, connection);
+        if (transformedSelect != select) {
+            resolver = FromCompiler.getResolverForQuery(transformedSelect, connection);
+            select = StatementNormalizer.normalize(transformedSelect, resolver);
+        }
         PhoenixStatement stmt = connection.createStatement().unwrap(PhoenixStatement.class);
         return JoinCompiler.compile(stmt, select, resolver);        
     }

@@ -79,6 +79,7 @@ import org.apache.phoenix.parse.CastParseNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.ComparisonParseNode;
 import org.apache.phoenix.parse.DivideParseNode;
+import org.apache.phoenix.parse.ExistsParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
@@ -1246,29 +1247,15 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     }
 
     @Override
-    public boolean visitEnter(InParseNode node) throws SQLException {
+    public boolean visitEnter(ExistsParseNode node) throws SQLException {
         return true;
     }
 
     @Override
-    public Expression visitLeave(InParseNode node, List<Expression> l)
-            throws SQLException {
-        Expression firstChild = l.get(0);
-        LiteralExpression secondChild = (LiteralExpression) l.get(1);
-        ImmutableBytesWritable ptr = context.getTempPtr();
-        ParseNode firstChildNode = node.getChildren().get(0);
-        
-        if (firstChildNode instanceof BindParseNode) {
-            context.getBindManager().addParamMetaData((BindParseNode)firstChildNode, firstChild);
-        }
-        
-        List<Expression> children = Lists.<Expression> newArrayList(firstChild);
-        PhoenixArray array = (PhoenixArray) secondChild.getValue();
-        PDataType type = PDataType.fromTypeId(array.getBaseType());
-        for (Object obj : (Object[]) array.getArray()) {
-            children.add(LiteralExpression.newConstant(obj, type));
-        }
-        return wrapGroupByExpression(InListExpression.create(children, node.isNegate(), ptr));
+    public Expression visitLeave(ExistsParseNode node, List<Expression> l) throws SQLException {
+        LiteralExpression child = (LiteralExpression) l.get(0);
+        PhoenixArray array = (PhoenixArray) child.getValue();
+        return LiteralExpression.newConstant(array.getDimensions() > 0 ^ node.isNegate(), PDataType.BOOLEAN);
     }
 
     @Override

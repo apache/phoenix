@@ -18,7 +18,6 @@
 package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
-import java.util.List;
 
 
 /**
@@ -29,158 +28,197 @@ import java.util.List;
  * @since 0.1
  */
 public abstract class TraverseAllParseNodeVisitor<T> extends BaseParseNodeVisitor<T> {
+    protected abstract void enterParseNode(ParseNode node) throws SQLException;
+    
     @Override
     public boolean visitEnter(AndParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
 
     @Override
     public boolean visitEnter(OrParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
 
     @Override
     public boolean visitEnter(FunctionParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
 
     @Override
     public boolean visitEnter(CaseParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
 
     @Override
     public boolean visitEnter(ComparisonParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(LikeParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(NotParseNode node) throws SQLException {
+        enterParseNode(node);
+        return true;
+    }
+    
+    @Override
+    public boolean visitEnter(ExistsParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(CastParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(InListParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(InParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(IsNullParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(MultiplyParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(SubtractParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(AddParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(DivideParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(ModulusParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
 
     @Override
     public boolean visitEnter(BetweenParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public T visit(ColumnParseNode node) throws SQLException {
+        enterParseNode(node);
         return null;
     }
     
     @Override
     public T visit(LiteralParseNode node) throws SQLException {
+        enterParseNode(node);
         return null;
     }
     
     @Override
     public T visit(BindParseNode node) throws SQLException {
+        enterParseNode(node);
         return null;
     }
 
     @Override
     public T visit(WildcardParseNode node) throws SQLException {
+        enterParseNode(node);
         return null;
     }
 
     @Override
     public T visit(TableWildcardParseNode node) throws SQLException {
+        enterParseNode(node);
         return null;
     }
 
     @Override
     public T visit(FamilyWildcardParseNode node) throws SQLException {
+        enterParseNode(node);
         return null;
     }
 
     @Override
     public T visit(SubqueryParseNode node) throws SQLException {
+        enterParseNode(node);
         return null;
     }
     
     @Override
     public boolean visitEnter(StringConcatParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(RowValueConstructorParseNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public T visit(SequenceValueParseNode node) throws SQLException {			
+        enterParseNode(node);
 		return null;
 	}
     
     @Override
     public boolean visitEnter(ArrayConstructorNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(ArrayAllComparisonNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(ArrayAnyComparisonNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
     
     @Override
     public boolean visitEnter(ArrayElemRefNode node) throws SQLException {
+        enterParseNode(node);
         return true;
     }
 }
