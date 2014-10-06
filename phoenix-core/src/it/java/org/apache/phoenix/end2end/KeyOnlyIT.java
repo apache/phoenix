@@ -52,7 +52,7 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
-        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Long.toString(20l));
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     @Test
@@ -60,11 +60,14 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         ensureTableCreated(getUrl(),KEYONLY_NAME,null, ts);
         initTableValues(ts+1);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+30));
+        Connection conn3 = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn3, KEYONLY_NAME);
+        conn3.close();
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+5));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+50));
         Connection conn5 = DriverManager.getConnection(getUrl(), props);
-        analyzeTable(conn5, KEYONLY_NAME);
         String query = "SELECT i1, i2 FROM KEYONLY";
         PreparedStatement statement = conn5.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
@@ -79,12 +82,12 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         assertEquals(3, splits.size());
         conn5.close();
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+6));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+60));
         Connection conn6 = DriverManager.getConnection(getUrl(), props);
         conn6.createStatement().execute("ALTER TABLE KEYONLY ADD s1 varchar");
         conn6.close();
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+7));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+70));
         Connection conn7 = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn7.prepareStatement(
                 "upsert into " +
@@ -96,11 +99,15 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         conn7.commit();
         conn7.close();
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+8));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+80));
         Connection conn8 = DriverManager.getConnection(getUrl(), props);
         analyzeTable(conn8, KEYONLY_NAME);
+        conn8.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+90));
+        Connection conn9 = DriverManager.getConnection(getUrl(), props);
         query = "SELECT i1 FROM KEYONLY";
-        statement = conn8.prepareStatement(query);
+        statement = conn9.prepareStatement(query);
         rs = statement.executeQuery();
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
@@ -111,7 +118,7 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         assertFalse(rs.next());
         
         query = "SELECT i1,s1 FROM KEYONLY";
-        statement = conn8.prepareStatement(query);
+        statement = conn9.prepareStatement(query);
         rs = statement.executeQuery();
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
@@ -124,7 +131,7 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         assertEquals("foo", rs.getString(2));
         assertFalse(rs.next());
 
-        conn8.close();
+        conn9.close();
     }
     
     @Test
@@ -134,9 +141,13 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         initTableValues(ts+1);
         Properties props = new Properties();
         
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+3));
+        Connection conn3 = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn3, KEYONLY_NAME);
+        conn3.close();
+        
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+5));
         Connection conn5 = DriverManager.getConnection(getUrl(), props);
-        analyzeTable(conn5, KEYONLY_NAME);
         String query = "SELECT i1 FROM KEYONLY WHERE i1 < 2 or i1 = 3";
         PreparedStatement statement = conn5.prepareStatement(query);
         ResultSet rs = statement.executeQuery();

@@ -60,12 +60,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.TreeMap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
@@ -131,11 +129,10 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stat.PTableStats;
-import org.apache.phoenix.schema.stat.PTableStatsImpl;
+import org.apache.phoenix.schema.stat.StatisticsUtils;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
@@ -273,22 +270,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return PNameFactory.newName(keyBuffer, keyOffset, length);
     }
 
-    private static Scan newTableRowsScan(byte[] key)
-            throws IOException {
-        return newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP, HConstants.LATEST_TIMESTAMP);
-    }
-
-    private static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp)
-            throws IOException {
-        Scan scan = new Scan();
-        scan.setTimeRange(startTimeStamp, stopTimeStamp);
-        scan.setStartRow(key);
-        byte[] stopKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
-        ByteUtil.nextKey(stopKey, stopKey.length);
-        scan.setStopRow(stopKey);
-        return scan;
-    }
-
     private RegionCoprocessorEnvironment env;
          
     private static final Log LOG = LogFactory.getLog(MetaDataEndpointImpl.class);
@@ -416,20 +397,20 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 return table;
             }
             // Query for the latest table first, since it's not cached
-            table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP);
+            table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP, clientTimeStamp);
             if (table != null && table.getTimeStamp() < clientTimeStamp) {
                 return table;
             }
             // Otherwise, query for an older version of the table - it won't be cached
-            return buildTable(key, cacheKey, region, clientTimeStamp);
+            return buildTable(key, cacheKey, region, clientTimeStamp, clientTimeStamp);
         } finally {
             rowLock.release();
         }
     }
 
     private PTable buildTable(byte[] key, ImmutableBytesPtr cacheKey, HRegion region,
-            long clientTimeStamp) throws IOException, SQLException {
-        Scan scan = newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
+            long buildAsOfTimeStamp, long clientTimeStamp) throws IOException, SQLException {
+        Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, buildAsOfTimeStamp);
         RegionScanner scanner = region.getScanner(scan);
 
         Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
@@ -437,7 +418,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             PTable oldTable = metaDataCache.getIfPresent(cacheKey);
             long tableTimeStamp = oldTable == null ? MIN_TABLE_TIMESTAMP-1 : oldTable.getTimeStamp();
             PTable newTable;
-            newTable = getTable(scanner, clientTimeStamp, tableTimeStamp);
+            newTable = getTable(scanner, buildAsOfTimeStamp, tableTimeStamp, clientTimeStamp);
             if (newTable == null) {
                 return null;
             }
@@ -536,7 +517,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         columns.add(column);
     }
     
-    private PTable getTable(RegionScanner scanner, long clientTimeStamp, long tableTimeStamp)
+    private PTable getTable(RegionScanner scanner, long buildAsOfTimeStamp, long tableTimeStamp, long clientTimeStamp)
         throws IOException, SQLException {
         List<Cell> results = Lists.newArrayList();
         scanner.next(results);
@@ -671,7 +652,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
           if (colName.getString().isEmpty() && famName != null) {
               LinkType linkType = LinkType.fromSerializedValue(colKv.getValueArray()[colKv.getValueOffset()]);
               if (linkType == LinkType.INDEX_TABLE) {
-                  addIndexToTable(tenantId, schemaName, famName, tableName, clientTimeStamp, indexes);
+                  addIndexToTable(tenantId, schemaName, famName, tableName, buildAsOfTimeStamp, indexes);
               } else if (linkType == LinkType.PHYSICAL_TABLE) {
                   physicalTables.add(famName);
               } else {
@@ -683,66 +664,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
         PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getTableName(
                 schemaName.getString(), tableName.getString())) : physicalTables.get(0);
-        PTableStats stats = tenantId == null ? updateStatsInternal(physicalTableName.getBytes()) : null;
+        PTableStats stats = tenantId == null ? StatisticsUtils.readStatistics(
+                ServerUtil.getHTableForCoprocessorScan(env, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME),
+                physicalTableName.getBytes(), 
+                clientTimeStamp) : null;
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, 
             tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? dataTableName : null, 
             indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement, disableWAL, 
             multiTenant, viewType, viewIndexId, indexType, stats);
-    }
-
-    private PTableStats updateStatsInternal(byte[] tableNameBytes) throws IOException {
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        HTableInterface statsHTable = ServerUtil.getHTableForCoprocessorScan(env, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
-        try {
-            Scan s = newTableRowsScan(tableNameBytes);
-            s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
-            ResultScanner scanner = statsHTable.getScanner(s);
-            Result result = null;
-            TreeMap<byte[], List<byte[]>> guidePostsPerCf = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
-            while ((result = scanner.next()) != null) {
-                CellScanner cellScanner = result.cellScanner();
-                while (cellScanner.advance()) {
-                    Cell current = cellScanner.current();
-                    int tableNameLength = tableNameBytes.length + 1;
-                    int cfOffset = current.getRowOffset() + tableNameLength;
-                    int cfLength = getVarCharLength(current.getRowArray(), cfOffset, current.getRowLength() - tableNameLength);
-                    ptr.set(current.getRowArray(), cfOffset, cfLength);
-                    byte[] cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                    PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(current.getValueArray(), current.getValueOffset(), current
-                            .getValueLength());
-                    if (array != null && array.getDimensions() != 0) {
-                        List<byte[]> guidePosts = Lists.newArrayListWithExpectedSize(array.getDimensions());                        
-                        for (int j = 0; j < array.getDimensions(); j++) {
-                            byte[] gp = array.toBytes(j);
-                            if (gp.length != 0) {
-                                guidePosts.add(gp);
-                            }
-                        }
-                        List<byte[]> gps = guidePostsPerCf.put(cfName, guidePosts);
-                        if (gps != null) { // Add guidepost already there from other regions
-                            guidePosts.addAll(gps);
-                        }
-                    }
-                }
-            }
-            if (!guidePostsPerCf.isEmpty()) {
-                // Sort guideposts, as the order above will depend on the order we traverse
-                // each region's worth of guideposts above.
-                for (List<byte[]> gps : guidePostsPerCf.values()) {
-                    Collections.sort(gps, Bytes.BYTES_COMPARATOR);
-                }
-                return new PTableStatsImpl(guidePostsPerCf);
-            }
-        } catch (Exception e) {
-            if (e instanceof org.apache.hadoop.hbase.TableNotFoundException) {
-                logger.warn("Stats table not yet online", e);
-            } else {
-                throw new IOException(e);
-            }
-        } finally {
-            statsHTable.close();
-        }
-        return PTableStatsImpl.NO_STATS;
     }
 
     private PTable buildDeletedTable(byte[] key, ImmutableBytesPtr cacheKey, HRegion region,
@@ -751,7 +680,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             return null;
         }
     
-        Scan scan = newTableRowsScan(key, clientTimeStamp, HConstants.LATEST_TIMESTAMP);
+        Scan scan = MetaDataUtil.newTableRowsScan(key, clientTimeStamp, HConstants.LATEST_TIMESTAMP);
         scan.setFilter(new FirstKeyOnlyFilter());
         scan.setRaw(true);
         RegionScanner scanner = region.getScanner(scan);
@@ -786,7 +715,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
         PTable table = metaDataCache.getIfPresent(cacheKey);
         // We always cache the latest version - fault in if not in cache
-        if (table != null || (table = buildTable(key, cacheKey, region, asOfTimeStamp)) != null) {
+        if (table != null || (table = buildTable(key, cacheKey, region, asOfTimeStamp, clientTimeStamp)) != null) {
             return table;
         }
         // if not found then check if newer table already exists and add delete marker for timestamp
@@ -1087,7 +1016,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
        
         // We always cache the latest version - fault in if not in cache
         if (table != null
-                || (table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP)) != null) {
+                || (table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP, clientTimeStamp)) != null) {
             if (table.getTimeStamp() < clientTimeStamp) {
                 if (isTableDeleted(table) || tableType != table.getType()) {
                     return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
@@ -1112,7 +1041,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // Since we don't allow back in time DDL, we know if we have a table it's the one
         // we want to delete. FIXME: we shouldn't need a scan here, but should be able to
         // use the table to generate the Delete markers.
-        Scan scan = newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
         RegionScanner scanner = region.getScanner(scan);
         List<Cell> results = Lists.newArrayList();
         scanner.next(results);
@@ -1244,7 +1173,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // Get client timeStamp from mutations
                 long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 if (table == null
-                        && (table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP)) == null) {
+                        && (table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP, clientTimeStamp)) == null) {
                     // if not found then call newerTableExists and add delete marker for timestamp
                     // found
                     if (buildDeletedTable(key, cacheKey, region, clientTimeStamp) != null) {

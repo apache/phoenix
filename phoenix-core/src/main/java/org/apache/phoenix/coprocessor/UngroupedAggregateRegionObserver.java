@@ -89,6 +89,7 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -155,10 +156,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
         int offset = 0;
         HRegion region = c.getEnvironment().getRegion();
+        long ts = scan.getTimeRange().getMax();
         StatisticsCollector stats = null;
         if(ScanUtil.isAnalyzeTable(scan)) {
             // Let this throw, as this scan is being done for the sole purpose of collecting stats
-            stats = new StatisticsCollector(c.getEnvironment(), region.getRegionInfo().getTable().getNameAsString());
+            stats = new StatisticsCollector(c.getEnvironment(), region.getRegionInfo().getTable().getNameAsString(), ts);
         }
         if (ScanUtil.isLocalIndex(scan)) {
             /*
@@ -225,7 +227,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         innerScanner = theScanner;
         
         int batchSize = 0;
-        long ts = scan.getTimeRange().getMax();
         List<Mutation> mutations = Collections.emptyList();
         boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
         if (isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
@@ -457,8 +458,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         if (!table.getNameAsString().equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)
                 && scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             try {
-                // TODO: when does this get closed?
-                StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table.getNameAsString());
+                // TODO: for users that manage timestamps themselves, we should provide
+                // a means of specifying/getting this.
+                long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
+                StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table.getNameAsString(), clientTimeStamp);
                 internalScan =
                         stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanners, scanType, earliestPutTs, s);
             } catch (IOException e) {
@@ -481,7 +484,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         if (!table.getNameAsString().equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
             StatisticsCollector stats = null;
             try {
-                stats = new StatisticsCollector(e.getEnvironment(), table.getNameAsString());
+                // TODO: for users that manage timestamps themselves, we should provide
+                // a means of specifying/getting this.
+                long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
+                stats = new StatisticsCollector(e.getEnvironment(), table.getNameAsString(), clientTimeStamp);
                 stats.collectStatsDuringSplit(e.getEnvironment().getConfiguration(), l, r, region);
             } catch (IOException ioe) { 
                 if(logger.isWarnEnabled()) {
