@@ -94,8 +94,8 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
                 "                id INTEGER not null primary key desc\n" + 
                 "                ) ";
         conn.createStatement().execute(ddl);
-        conn = DriverManager.getConnection(getUrl(), props);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.createStatement().execute(ddl);
             fail();

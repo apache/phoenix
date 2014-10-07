@@ -487,6 +487,11 @@ public class TestUtil {
         conn.createStatement().execute(query);
     }
     
+    public static void analyzeTable(Connection conn) throws IOException, SQLException {
+        String query = "ANALYZE " + STABLE_NAME;
+        conn.createStatement().execute(query);
+    }
+    
     public static void analyzeTable(String url, long ts, String tableName) throws IOException, SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
