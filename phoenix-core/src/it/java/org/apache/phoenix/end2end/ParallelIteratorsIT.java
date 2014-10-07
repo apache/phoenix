@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.analyzeTable;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.apache.phoenix.util.TestUtil.getSplits;
 import static org.junit.Assert.assertEquals;
@@ -29,7 +30,6 @@ import java.sql.PreparedStatement;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PDataType;
@@ -40,8 +40,8 @@ import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(HBaseManagedTimeTest.class)
-public class ParallelIteratorsIT extends BaseHBaseManagedTimeIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     protected static final byte[] KMIN  = new byte[] {'!'};
     protected static final byte[] KMIN2  = new byte[] {'.'};
@@ -59,7 +59,6 @@ public class ParallelIteratorsIT extends BaseHBaseManagedTimeIT {
     protected static final byte[] KP = new byte[] { 'p' };
     
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
@@ -76,12 +75,8 @@ public class ParallelIteratorsIT extends BaseHBaseManagedTimeIT {
         PreparedStatement stmt = conn.prepareStatement("ANALYZE STABLE");
         stmt.execute();
         
-        // number of regions > target query concurrency
-        PhoenixPreparedStatement pstmt;
         List<KeyRange> keyRanges;
         
-        pstmt = conn.prepareStatement("SELECT COUNT(*) FROM STABLE").unwrap(PhoenixPreparedStatement.class);
-        pstmt.execute();
         keyRanges = getAllSplits(conn);
         assertEquals("Unexpected number of splits: " + keyRanges, 7, keyRanges.size());
         assertEquals(newKeyRange(KeyRange.UNBOUND, KMIN), keyRanges.get(0));
@@ -114,26 +109,18 @@ public class ParallelIteratorsIT extends BaseHBaseManagedTimeIT {
         byte[][] splits = new byte[][] { K3, K9, KR };
         ensureTableCreated(getUrl(), STABLE_NAME, splits);
 
-        PreparedStatement stmt = conn.prepareStatement("ANALYZE STABLE");
-        stmt.execute();
         List<KeyRange> keyRanges = getAllSplits(conn);
         assertEquals(4, keyRanges.size());
         upsert(conn, new byte[][] { KMIN, K4, K11 });
-        stmt = conn.prepareStatement("ANALYZE STABLE");
-        stmt.execute();
-        conn.prepareStatement("SELECT COUNT(*) FROM STABLE").executeQuery(); 
+        analyzeTable(conn);
         keyRanges = getAllSplits(conn);
         assertEquals(7, keyRanges.size());
         upsert(conn, new byte[][] { KMIN2, K5, K12 });
-        stmt = conn.prepareStatement("ANALYZE STABLE");
-        stmt.execute();
-        conn.prepareStatement("SELECT COUNT(*) FROM STABLE").executeQuery();
+        analyzeTable(conn);
         keyRanges = getAllSplits(conn);
         assertEquals(10, keyRanges.size());
         upsert(conn, new byte[][] { K1, K6, KP });
-        stmt = conn.prepareStatement("ANALYZE STABLE");
-        stmt.execute();
-        conn.prepareStatement("SELECT COUNT(*) FROM STABLE").executeQuery();
+        analyzeTable(conn);
         keyRanges = getAllSplits(conn);
         assertEquals(13, keyRanges.size());
         conn.close();

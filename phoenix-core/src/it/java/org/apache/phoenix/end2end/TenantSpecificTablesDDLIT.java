@@ -56,7 +56,7 @@ import org.apache.phoenix.util.StringUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(ClientManagedTimeTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test

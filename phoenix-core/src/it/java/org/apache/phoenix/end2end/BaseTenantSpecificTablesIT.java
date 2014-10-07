@@ -30,15 +30,8 @@ import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-/**
- * Describe your class here.
- *
- * 
- * @since 2.2
- */
-
-@Category(ClientManagedTimeTest.class)
-public abstract class BaseTenantSpecificTablesIT extends BaseClientManagedTimeIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public abstract class BaseTenantSpecificTablesIT extends BaseOwnClusterClientManagedTimeIT {
     protected static final String TENANT_ID = "ZZTop";
     protected static final String TENANT_TYPE_ID = "abc";
     protected static String PHOENIX_JDBC_TENANT_SPECIFIC_URL;
@@ -80,7 +73,6 @@ public abstract class BaseTenantSpecificTablesIT extends BaseClientManagedTimeIT
     }
     
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
