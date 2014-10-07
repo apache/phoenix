@@ -101,7 +101,7 @@ public class StatisticsTable implements Closeable {
     public void addStats(String regionName, StatisticsCollector tracker, String fam, List<Mutation> mutations) throws IOException {
         if (tracker == null) { return; }
 
-        byte[] prefix = StatisticsUtils.getRowKey(tableName, PDataType.VARCHAR.toBytes(fam),
+        byte[] prefix = StatisticsUtil.getRowKey(tableName, PDataType.VARCHAR.toBytes(fam),
                 PDataType.VARCHAR.toBytes(regionName));
         Put put = new Put(prefix);
         if (tracker.getGuidePosts(fam) != null) {
@@ -160,7 +160,7 @@ public class StatisticsTable implements Closeable {
     
     public void deleteStats(String regionName, StatisticsCollector tracker, String fam, List<Mutation> mutations)
             throws IOException {
-        byte[] prefix = StatisticsUtils.getRowKey(tableName, PDataType.VARCHAR.toBytes(fam),
+        byte[] prefix = StatisticsUtil.getRowKey(tableName, PDataType.VARCHAR.toBytes(fam),
                 PDataType.VARCHAR.toBytes(regionName));
         mutations.add(new Delete(prefix, clientTimeStamp - 1));
     }

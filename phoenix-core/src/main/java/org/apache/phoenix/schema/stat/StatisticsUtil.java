@@ -40,17 +40,13 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 /**
  * Simple utility class for managing multiple key parts of the statistic
  */
-public class StatisticsUtils {
-    private static final Logger logger = LoggerFactory.getLogger(StatisticsUtils.class);
-
-    private StatisticsUtils() {
+public class StatisticsUtil {
+    private StatisticsUtil() {
         // private ctor for utility classes
     }
 
@@ -77,54 +73,44 @@ public class StatisticsUtils {
 
     public static PTableStats readStatistics(HTableInterface statsHTable, byte[] tableNameBytes, long clientTimeStamp) throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        try {
-            Scan s = MetaDataUtil.newTableRowsScan(tableNameBytes, MetaDataProtocol.MIN_TABLE_TIMESTAMP, clientTimeStamp);
-            s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
-            ResultScanner scanner = statsHTable.getScanner(s);
-            Result result = null;
-            TreeMap<byte[], List<byte[]>> guidePostsPerCf = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
-            while ((result = scanner.next()) != null) {
-                CellScanner cellScanner = result.cellScanner();
-                while (cellScanner.advance()) {
-                    Cell current = cellScanner.current();
-                    int tableNameLength = tableNameBytes.length + 1;
-                    int cfOffset = current.getRowOffset() + tableNameLength;
-                    int cfLength = getVarCharLength(current.getRowArray(), cfOffset, current.getRowLength() - tableNameLength);
-                    ptr.set(current.getRowArray(), cfOffset, cfLength);
-                    byte[] cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                    PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(current.getValueArray(), current.getValueOffset(), current
-                            .getValueLength());
-                    if (array != null && array.getDimensions() != 0) {
-                        List<byte[]> guidePosts = Lists.newArrayListWithExpectedSize(array.getDimensions());                        
-                        for (int j = 0; j < array.getDimensions(); j++) {
-                            byte[] gp = array.toBytes(j);
-                            if (gp.length != 0) {
-                                guidePosts.add(gp);
-                            }
+        Scan s = MetaDataUtil.newTableRowsScan(tableNameBytes, MetaDataProtocol.MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
+        ResultScanner scanner = statsHTable.getScanner(s);
+        Result result = null;
+        TreeMap<byte[], List<byte[]>> guidePostsPerCf = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
+        while ((result = scanner.next()) != null) {
+            CellScanner cellScanner = result.cellScanner();
+            while (cellScanner.advance()) {
+                Cell current = cellScanner.current();
+                int tableNameLength = tableNameBytes.length + 1;
+                int cfOffset = current.getRowOffset() + tableNameLength;
+                int cfLength = getVarCharLength(current.getRowArray(), cfOffset, current.getRowLength() - tableNameLength);
+                ptr.set(current.getRowArray(), cfOffset, cfLength);
+                byte[] cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(current.getValueArray(), current.getValueOffset(), current
+                        .getValueLength());
+                if (array != null && array.getDimensions() != 0) {
+                    List<byte[]> guidePosts = Lists.newArrayListWithExpectedSize(array.getDimensions());                        
+                    for (int j = 0; j < array.getDimensions(); j++) {
+                        byte[] gp = array.toBytes(j);
+                        if (gp.length != 0) {
+                            guidePosts.add(gp);
                         }
-                        List<byte[]> gps = guidePostsPerCf.put(cfName, guidePosts);
-                        if (gps != null) { // Add guidepost already there from other regions
-                            guidePosts.addAll(gps);
-                        }
+                    }
+                    List<byte[]> gps = guidePostsPerCf.put(cfName, guidePosts);
+                    if (gps != null) { // Add guidepost already there from other regions
+                        guidePosts.addAll(gps);
                     }
                 }
             }
-            if (!guidePostsPerCf.isEmpty()) {
-                // Sort guideposts, as the order above will depend on the order we traverse
-                // each region's worth of guideposts above.
-                for (List<byte[]> gps : guidePostsPerCf.values()) {
-                    Collections.sort(gps, Bytes.BYTES_COMPARATOR);
-                }
-                return new PTableStatsImpl(guidePostsPerCf);
+        }
+        if (!guidePostsPerCf.isEmpty()) {
+            // Sort guideposts, as the order above will depend on the order we traverse
+            // each region's worth of guideposts above.
+            for (List<byte[]> gps : guidePostsPerCf.values()) {
+                Collections.sort(gps, Bytes.BYTES_COMPARATOR);
             }
-        } catch (Exception e) {
-            if (e instanceof org.apache.hadoop.hbase.TableNotFoundException) {
-                logger.warn("Stats table not yet online", e);
-            } else {
-                throw new IOException(e);
-            }
-        } finally {
-            statsHTable.close();
+            return new PTableStatsImpl(guidePostsPerCf);
         }
         return PTableStatsImpl.NO_STATS;
     }
