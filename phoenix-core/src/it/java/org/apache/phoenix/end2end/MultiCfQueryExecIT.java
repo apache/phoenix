@@ -44,18 +44,18 @@ import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(ClientManagedTimeTest.class)
-public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class MultiCfQueryExecIT extends BaseOwnClusterClientManagedTimeIT {
     private static final String MULTI_CF = "MULTI_CF";
     
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
-        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20l));
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
+    
     protected static void initTableValues(long ts) throws Exception {
         ensureTableCreated(getUrl(),MULTI_CF,null, ts-2);
         

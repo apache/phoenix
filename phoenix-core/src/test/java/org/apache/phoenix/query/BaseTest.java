@@ -154,7 +154,7 @@ import com.google.common.collect.Sets;
 public abstract class BaseTest {
     private static final Map<String,String> tableDDLMap;
     private static Logger logger = Logger.getLogger("BaseTest.class");
-    private static HBaseTestingUtility utility = null; 
+
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
         builder.put(ENTITY_HISTORY_TABLE_NAME,"create table " + ENTITY_HISTORY_TABLE_NAME +
@@ -454,6 +454,7 @@ public abstract class BaseTest {
     private static String url;
     protected static PhoenixTestDriver driver;
     private static boolean clusterInitialized = false;
+    private static HBaseTestingUtility utility;
     protected static final Configuration config = HBaseConfiguration.create(); 
     
     protected static String getUrl() {
@@ -485,6 +486,39 @@ public abstract class BaseTest {
         }
     }
     
+    protected static void destroyDriver() throws Exception {
+        if (driver != null) {
+            try {
+                assertTrue(destroyDriver(driver));
+            } finally {
+                driver = null;
+            }
+        }
+    }
+    
+    protected static void dropNonSystemTables() throws Exception {
+        try {
+            disableAndDropNonSystemTables();
+        } finally {
+            destroyDriver();
+        }
+    }
+
+    protected static void tearDownMiniCluster() throws Exception {
+        try {
+            destroyDriver();
+        } finally {
+            try {
+                if (utility != null) {
+                    utility.shutdownMiniCluster();
+                }
+            } finally {
+                utility = null;
+                clusterInitialized = false;
+            }
+        }
+    }
+            
     protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
         String url = checkClusterInitialized(props);
         if (driver == null) {
@@ -1051,16 +1085,28 @@ public abstract class BaseTest {
             conn.close();
         }
     }
-
+    
+    protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        initATableValues(tenantId, splits, date, ts, getUrl());
+    }
+    
+    protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        initEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
+    }
+    
+    protected static void initSaltedEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        initSaltedEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
+    }
+        
     protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, String url) throws Exception {
-        initEntityHistoryTableValues(tenantId, splits, null);
+        initEntityHistoryTableValues(tenantId, splits, null, null, url);
     }
     
     protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, String url) throws Exception {
-        initEntityHistoryTableValues(tenantId, splits, date, null);
+        initEntityHistoryTableValues(tenantId, splits, date, null, url);
     }
     
-    protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+    private static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
         if (ts == null) {
             ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, splits);
         } else {
@@ -1271,7 +1317,7 @@ public abstract class BaseTest {
     /**
      * Disable and drop all the tables except SYSTEM.CATALOG and SYSTEM.SEQUENCE
      */
-    protected static void disableAndDropNonSystemTables(PhoenixTestDriver driver) throws Exception {
+    private static void disableAndDropNonSystemTables() throws Exception {
         HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {
             HTableDescriptor[] tables = admin.listTables();

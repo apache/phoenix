@@ -39,7 +39,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(ClientManagedTimeTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
 
     @Test

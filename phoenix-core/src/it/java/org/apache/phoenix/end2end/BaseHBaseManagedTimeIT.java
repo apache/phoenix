@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertTrue;
-
 import javax.annotation.concurrent.NotThreadSafe;
 
 import org.apache.hadoop.conf.Configuration;
@@ -51,27 +49,18 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
         return new Configuration(config);
     }
     
-    @After
-    public void cleanUpAfterTest() throws Exception {
-        deletePriorTables(HConstants.LATEST_TIMESTAMP, getUrl());    
-    }
-    
     @BeforeClass
     public static void doSetup() throws Exception {
         setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
     }
     
     @AfterClass
-    public static void dropTables() throws Exception {
-        try {
-            disableAndDropNonSystemTables(driver);
-        } finally {
-            try {
-                assertTrue(destroyDriver(driver));
-            } finally {
-                driver = null;
-            }
-        }
+    public static void doTeardown() throws Exception {
+        dropNonSystemTables();
     }
-        
+    
+    @After
+    public void cleanUpAfterTest() throws Exception {
+        deletePriorTables(HConstants.LATEST_TIMESTAMP, getUrl());    
+    }
 }

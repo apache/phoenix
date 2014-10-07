@@ -17,10 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertTrue;
-
-import java.sql.Date;
-
 import javax.annotation.concurrent.NotThreadSafe;
 
 import org.apache.hadoop.conf.Configuration;
@@ -64,28 +60,7 @@ public abstract class BaseClientManagedTimeIT extends BaseTest {
     }
     
     @AfterClass
-    public static void dropTables() throws Exception {
-        try {
-            disableAndDropNonSystemTables(driver);
-        } finally {
-            try {
-                assertTrue(destroyDriver(driver));
-            } finally {
-                driver = null;
-            }
-        }
+    public static void doTeardown() throws Exception {
+        dropNonSystemTables();
     }
-    
-    protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
-        BaseTest.initATableValues(tenantId, splits, date, ts, getUrl());
-    }
-    
-    protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
-        BaseTest.initEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
-    }
-    
-    protected static void initSaltedEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
-        BaseTest.initSaltedEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
-    }
-        
 }

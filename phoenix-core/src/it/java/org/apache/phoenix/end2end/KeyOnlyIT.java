@@ -44,17 +44,17 @@ import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(ClientManagedTimeTest.class)
-public class KeyOnlyIT extends BaseClientManagedTimeIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class KeyOnlyIT extends BaseOwnClusterClientManagedTimeIT {
     
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
+    
     @Test
     public void testKeyOnly() throws Exception {
         long ts = nextTimestamp();

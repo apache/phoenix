@@ -265,4 +265,8 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
     public Iterator<Entry<String, String>> iterator() {
         return props.entrySet().iterator();
     }
+    
+    public boolean isEmpty() {
+        return props.isEmpty();
+    }
 }
