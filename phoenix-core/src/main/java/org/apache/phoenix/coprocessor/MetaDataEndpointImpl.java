@@ -92,8 +92,6 @@ import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.CreateTableRequest;
@@ -102,6 +100,8 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.DropTableRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetTableRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
@@ -144,7 +144,6 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.cache.Cache;
 import com.google.common.collect.Lists;
-import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
@@ -343,64 +342,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         	logger.error("getTable failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
-        }
-    }
-
-    private PTable doGetTable(byte[] key, long clientTimeStamp) throws IOException, SQLException {
-        ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
-        Cache<ImmutableBytesPtr, PTable> metaDataCache =
-                GlobalCache.getInstance(this.env).getMetaDataCache();
-        PTable table = metaDataCache.getIfPresent(cacheKey);
-        // We only cache the latest, so we'll end up building the table with every call if the
-        // client connection has specified an SCN.
-        // TODO: If we indicate to the client that we're returning an older version, but there's a
-        // newer version available, the client
-        // can safely not call this, since we only allow modifications to the latest.
-        if (table != null && table.getTimeStamp() < clientTimeStamp) {
-            // Table on client is up-to-date with table on server, so just return
-            if (isTableDeleted(table)) {
-                return null;
-            }
-            return table;
-        }
-        // Ask Lars about the expense of this call - if we don't take the lock, we still won't get
-        // partial results
-        // get the co-processor environment
-        // TODO: check that key is within region.getStartKey() and region.getEndKey()
-        // and return special code to force client to lookup region from meta.
-        HRegion region = env.getRegion();
-        /*
-         * Lock directly on key, though it may be an index table. This will just prevent a table
-         * from getting rebuilt too often.
-         */
-        RowLock rowLock = region.getRowLock(key);
-        if (rowLock == null) {
-            throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
-        }
-        try {
-            // Try cache again in case we were waiting on a lock
-            table = metaDataCache.getIfPresent(cacheKey);
-            // We only cache the latest, so we'll end up building the table with every call if the
-            // client connection has specified an SCN.
-            // TODO: If we indicate to the client that we're returning an older version, but there's
-            // a newer version available, the client
-            // can safely not call this, since we only allow modifications to the latest.
-            if (table != null && table.getTimeStamp() < clientTimeStamp) {
-                // Table on client is up-to-date with table on server, so just return
-                if (isTableDeleted(table)) {
-                    return null;
-                }
-                return table;
-            }
-            // Query for the latest table first, since it's not cached
-            table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP);
-            if (table != null && table.getTimeStamp() < clientTimeStamp) {
-                return table;
-            }
-            // Otherwise, query for an older version of the table - it won't be cached
-            return buildTable(key, cacheKey, region, clientTimeStamp);
-        } finally {
-            rowLock.release();
         }
     }
 
@@ -1323,6 +1264,97 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
     }
     
+    private PTable incrementTableTimestamp(byte[] key, long clientTimeStamp) throws IOException, SQLException {
+        HRegion region = env.getRegion();
+        RowLock lid = region.getRowLock(key);
+        if (lid == null) {
+            throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
+        }
+        try {
+            PTable table = doGetTable(key, clientTimeStamp, lid);
+            if (table != null) {
+                long tableTimeStamp = table.getTimeStamp() + 1;
+                List<Mutation> mutations = Lists.newArrayListWithExpectedSize(1);
+                Put p = new Put(key);
+                p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, tableTimeStamp, ByteUtil.EMPTY_BYTE_ARRAY);
+                mutations.add(p);
+                region.mutateRowsWithLocks(mutations, Collections.<byte[]> emptySet());
+                
+                Cache<ImmutableBytesPtr, PTable> metaDataCache = GlobalCache.getInstance(env).getMetaDataCache();
+                ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
+                metaDataCache.invalidate(cacheKey);
+            }
+            return table;
+        } finally {
+            lid.release();
+        }
+    }
+    
+    private PTable doGetTable(byte[] key, long clientTimeStamp) throws IOException, SQLException {
+        return doGetTable(key, clientTimeStamp, null);
+    }
+    
+    private PTable doGetTable(byte[] key, long clientTimeStamp, RowLock rowLock) throws IOException, SQLException {
+        ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
+        Cache<ImmutableBytesPtr, PTable> metaDataCache =
+                GlobalCache.getInstance(this.env).getMetaDataCache();
+        PTable table = metaDataCache.getIfPresent(cacheKey);
+        // We only cache the latest, so we'll end up building the table with every call if the
+        // client connection has specified an SCN.
+        // TODO: If we indicate to the client that we're returning an older version, but there's a
+        // newer version available, the client
+        // can safely not call this, since we only allow modifications to the latest.
+        if (table != null && table.getTimeStamp() < clientTimeStamp) {
+            // Table on client is up-to-date with table on server, so just return
+            if (isTableDeleted(table)) {
+                return null;
+            }
+            return table;
+        }
+        // Ask Lars about the expense of this call - if we don't take the lock, we still won't get
+        // partial results
+        // get the co-processor environment
+        // TODO: check that key is within region.getStartKey() and region.getEndKey()
+        // and return special code to force client to lookup region from meta.
+        HRegion region = env.getRegion();
+        /*
+         * Lock directly on key, though it may be an index table. This will just prevent a table
+         * from getting rebuilt too often.
+         */
+        final boolean wasLocked = (rowLock != null);
+        if (!wasLocked) {
+            rowLock = region.getRowLock(key);
+            if (rowLock == null) {
+                throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
+            }
+        }
+        try {
+            // Try cache again in case we were waiting on a lock
+            table = metaDataCache.getIfPresent(cacheKey);
+            // We only cache the latest, so we'll end up building the table with every call if the
+            // client connection has specified an SCN.
+            // TODO: If we indicate to the client that we're returning an older version, but there's
+            // a newer version available, the client
+            // can safely not call this, since we only allow modifications to the latest.
+            if (table != null && table.getTimeStamp() < clientTimeStamp) {
+                // Table on client is up-to-date with table on server, so just return
+                if (isTableDeleted(table)) {
+                    return null;
+                }
+                return table;
+            }
+            // Query for the latest table first, since it's not cached
+            table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP);
+            if (table != null && table.getTimeStamp() < clientTimeStamp) {
+                return table;
+            }
+            // Otherwise, query for an older version of the table - it won't be cached
+            return buildTable(key, cacheKey, region, clientTimeStamp);
+        } finally {
+            if (!wasLocked) rowLock.release();
+        }
+    }
+
     @Override
     public void dropColumn(RpcController controller, DropColumnRequest request,
             RpcCallback<MetaDataResponse> done) {
@@ -1674,36 +1706,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
     
     @Override
-    public void clearCacheForTable(RpcController controller, ClearCacheForTableRequest request,
-            RpcCallback<ClearCacheForTableResponse> done) {
-        ByteString tenantId = request.getTenantId();
-        ByteString schemaName = request.getSchemaName();
-        ByteString tableName = request.getTableName();
-        byte[] tableKey = SchemaUtil.getTableKey(tenantId.toByteArray(), schemaName.toByteArray(),
-                tableName.toByteArray());
-        ImmutableBytesPtr key = new ImmutableBytesPtr(tableKey);
+    public void incrementTableTimeStamp(RpcController controller, IncrementTableTimeStampRequest request,
+            RpcCallback<IncrementTableTimeStampResponse> done) {
+        byte[] schemaName = request.getSchemaName().toByteArray();
+        byte[] tableName = request.getTableName().toByteArray();
         try {
-            PTable table = doGetTable(tableKey, request.getClientTimestamp());
-            if (table != null) {
-                Cache<ImmutableBytesPtr, PTable> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
-                // Add +1 to the ts
-                // TODO : refactor doGetTable() to do this - optionally increment the timestamp
-                // TODO : clear metadata if it is spread across multiple region servers
-                long ts = table.getTimeStamp() + 1;
-                // Here we could add an empty puti
-                HRegion region = env.getRegion();
-                List<Mutation> mutations = new ArrayList<Mutation>();
-                Put p = new Put(tableKey);
-                p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, ts, ByteUtil.EMPTY_BYTE_ARRAY);
-                mutations.add(p);
-                region.mutateRowsWithLocks(mutations, Collections.<byte[]> emptySet());
-                metaDataCache.invalidate(key);
-            }
+            byte[] tenantId = request.getTenantId().toByteArray();
+            long clientTimeStamp = request.getClientTimestamp();
+            byte[] tableKey = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+            incrementTableTimestamp(tableKey, clientTimeStamp);
         } catch (Throwable t) {
-            // We could still invalidate it
-            logger.error("clearCacheForTable failed to update the latest ts ", t);
-            ProtobufUtil.setControllerException(controller, ServerUtil.createIOException(
-                    SchemaUtil.getTableName(schemaName.toString(), tableName.toString()), t));
+            logger.error("incrementTableTimeStamp failed", t);
+            ProtobufUtil.setControllerException(controller,
+                ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
         }
     }
     

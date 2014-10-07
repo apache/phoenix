@@ -228,8 +228,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
     
     @Override
-    public void clearCacheForTable(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTS)
+    public void incrementTableTimeStamp(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTS)
             throws SQLException {
-        getDelegate().clearCacheForTable(tenantId, schemaName, tableName, clientTS);
+        getDelegate().incrementTableTimeStamp(tenantId, schemaName, tableName, clientTS);
     }
 }

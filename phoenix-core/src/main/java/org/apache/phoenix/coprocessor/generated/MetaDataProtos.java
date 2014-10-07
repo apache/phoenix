@@ -6316,7 +6316,7 @@ public final class MetaDataProtos {
     // @@protoc_insertion_point(class_scope:GetVersionResponse)
   }
 
-  public interface ClearCacheForTableRequestOrBuilder
+  public interface IncrementTableTimeStampRequestOrBuilder
       extends com.google.protobuf.MessageOrBuilder {
 
     // required bytes tenantId = 1;
@@ -6360,24 +6360,24 @@ public final class MetaDataProtos {
     long getClientTimestamp();
   }
   /**
-   * Protobuf type {@code ClearCacheForTableRequest}
+   * Protobuf type {@code IncrementTableTimeStampRequest}
    */
-  public static final class ClearCacheForTableRequest extends
+  public static final class IncrementTableTimeStampRequest extends
       com.google.protobuf.GeneratedMessage
-      implements ClearCacheForTableRequestOrBuilder {
-    // Use ClearCacheForTableRequest.newBuilder() to construct.
-    private ClearCacheForTableRequest(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      implements IncrementTableTimeStampRequestOrBuilder {
+    // Use IncrementTableTimeStampRequest.newBuilder() to construct.
+    private IncrementTableTimeStampRequest(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
       this.unknownFields = builder.getUnknownFields();
     }
-    private ClearCacheForTableRequest(boolean noInit) { this.unknownFields = com.google.protobuf.UnknownFieldSet.getDefaultInstance(); }
+    private IncrementTableTimeStampRequest(boolean noInit) { this.unknownFields = com.google.protobuf.UnknownFieldSet.getDefaultInstance(); }
 
-    private static final ClearCacheForTableRequest defaultInstance;
-    public static ClearCacheForTableRequest getDefaultInstance() {
+    private static final IncrementTableTimeStampRequest defaultInstance;
+    public static IncrementTableTimeStampRequest getDefaultInstance() {
       return defaultInstance;
     }
 
-    public ClearCacheForTableRequest getDefaultInstanceForType() {
+    public IncrementTableTimeStampRequest getDefaultInstanceForType() {
       return defaultInstance;
     }
 
@@ -6387,7 +6387,7 @@ public final class MetaDataProtos {
         getUnknownFields() {
       return this.unknownFields;
     }
-    private ClearCacheForTableRequest(
+    private IncrementTableTimeStampRequest(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws com.google.protobuf.InvalidProtocolBufferException {
@@ -6444,28 +6444,28 @@ public final class MetaDataProtos {
     }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
-      return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableRequest_descriptor;
+      return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_IncrementTableTimeStampRequest_descriptor;
     }
 
     protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
-      return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableRequest_fieldAccessorTable
+      return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_IncrementTableTimeStampRequest_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
-              org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.class, org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.Builder.class);
+              org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest.class, org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest.Builder.class);
     }
 
-    public static com.google.protobuf.Parser<ClearCacheForTableRequest> PARSER =
-        new com.google.protobuf.AbstractParser<ClearCacheForTableRequest>() {
-      public ClearCacheForTableRequest parsePartialFrom(
+    public static com.google.protobuf.Parser<IncrementTableTimeStampRequest> PARSER =
+        new com.google.protobuf.AbstractParser<IncrementTableTimeStampRequest>() {
+      public IncrementTableTimeStampRequest parsePartialFrom(
           com.google.protobuf.CodedInputStream input,
           com.google.protobuf.ExtensionRegistryLite extensionRegistry)
           throws com.google.protobuf.InvalidProtocolBufferException {
-        return new ClearCacheForTableRequest(input, extensionRegistry);
+        return new IncrementTableTimeStampRequest(input, extensionRegistry);
       }
     };
 
     @java.lang.Override
-    public com.google.protobuf.Parser<ClearCacheForTableRequest> getParserForType() {
+    public com.google.protobuf.Parser<IncrementTableTimeStampRequest> getParserForType() {
       return PARSER;
     }
 
@@ -6622,10 +6622,10 @@ public final class MetaDataProtos {
       if (obj == this) {
        return true;
       }
-      if (!(obj instanceof org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest)) {
+      if (!(obj instanceof org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest)) {
         return super.equals(obj);
       }
-      org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest other = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest) obj;
+      org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest other = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest) obj;
 
       boolean result = true;
       result = result && (hasTenantId() == other.hasTenantId());
@@ -6682,53 +6682,53 @@ public final class MetaDataProtos {
       return hash;
     }
 
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest parseFrom(
         com.google.protobuf.ByteString data)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest parseFrom(
         com.google.protobuf.ByteString data,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data, extensionRegistry);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(byte[] data)
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest parseFrom(byte[] data)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest parseFrom(
         byte[] data,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data, extensionRegistry);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(java.io.InputStream input)
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest parseFrom(java.io.InputStream input)
         throws java.io.IOException {
       return PARSER.parseFrom(input);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
       return PARSER.parseFrom(input, extensionRegistry);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseDelimitedFrom(java.io.InputStream input)
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return PARSER.parseDelimitedFrom(input);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseDelimitedFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
       return PARSER.parseDelimitedFrom(input, extensionRegistry);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
       return PARSER.parseFrom(input);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
@@ -6737,7 +6737,7 @@ public final class MetaDataProtos {
 
     public static Builder newBuilder() { return Builder.create(); }
     public Builder newBuilderForType() { return newBuilder(); }
-    public static Builder newBuilder(org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest prototype) {
+    public static Builder newBuilder(org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest prototype) {
       return newBuilder().mergeFrom(prototype);
     }
     public Builder toBuilder() { return newBuilder(this); }
@@ -6749,24 +6749,24 @@ public final class MetaDataProtos {
       return builder;
     }
     /**
-     * Protobuf type {@code ClearCacheForTableRequest}
+     * Protobuf type {@code IncrementTableTimeStampRequest}
      */
     public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder>
-       implements org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequestOrBuilder {
+       implements org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequestOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
           getDescriptor() {
-        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableRequest_descriptor;
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_IncrementTableTimeStampRequest_descriptor;
       }
 
       protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
-        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableRequest_fieldAccessorTable
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_IncrementTableTimeStampRequest_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
-                org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.class, org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.Builder.class);
+                org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest.class, org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest.Builder.class);
       }
 
-      // Construct using org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.newBuilder()
+      // Construct using org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest.newBuilder()
       private Builder() {
         maybeForceBuilderInitialization();
       }
@@ -6803,23 +6803,23 @@ public final class MetaDataProtos {
 
       public com.google.protobuf.Descriptors.Descriptor
           getDescriptorForType() {
-        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableRequest_descriptor;
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_IncrementTableTimeStampRequest_descriptor;
       }
 
-      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest getDefaultInstanceForType() {
-        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.getDefaultInstance();
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest getDefaultInstanceForType() {
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest.getDefaultInstance();
       }
 
-      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest build() {
-        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest result = buildPartial();
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest build() {
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest result = buildPartial();
         if (!result.isInitialized()) {
           throw newUninitializedMessageException(result);
         }
         return result;
       }
 
-      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest buildPartial() {
-        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest result = new org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest(this);
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest buildPartial() {
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest result = new org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest(this);
         int from_bitField0_ = bitField0_;
         int to_bitField0_ = 0;
         if (((from_bitField0_ & 0x00000001) == 0x00000001)) {
@@ -6844,16 +6844,16 @@ public final class MetaDataProtos {
       }
 
       public Builder mergeFrom(com.google.protobuf.Message other) {
-        if (other instanceof org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest) {
-          return mergeFrom((org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest)other);
+        if (other instanceof org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest) {
+          return mergeFrom((org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest)other);
         } else {
           super.mergeFrom(other);
           return this;
         }
       }
 
-      public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest other) {
-        if (other == org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.getDefaultInstance()) return this;
+      public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest other) {
+        if (other == org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest.getDefaultInstance()) return this;
         if (other.hasTenantId()) {
           setTenantId(other.getTenantId());
         }
@@ -6894,11 +6894,11 @@ public final class MetaDataProtos {
           com.google.protobuf.CodedInputStream input,
           com.google.protobuf.ExtensionRegistryLite extensionRegistry)
           throws java.io.IOException {
-        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parsedMessage = null;
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest parsedMessage = null;
         try {
           parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
         } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-          parsedMessage = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest) e.getUnfinishedMessage();
+          parsedMessage = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest) e.getUnfinishedMessage();
           throw e;
         } finally {
           if (parsedMessage != null) {
@@ -7050,39 +7050,39 @@ public final class MetaDataProtos {
         return this;
       }
 
-      // @@protoc_insertion_point(builder_scope:ClearCacheForTableRequest)
+      // @@protoc_insertion_point(builder_scope:IncrementTableTimeStampRequest)
     }
 
     static {
-      defaultInstance = new ClearCacheForTableRequest(true);
+      defaultInstance = new IncrementTableTimeStampRequest(true);
       defaultInstance.initFields();
     }
 
-    // @@protoc_insertion_point(class_scope:ClearCacheForTableRequest)
+    // @@protoc_insertion_point(class_scope:IncrementTableTimeStampRequest)
   }
 
-  public interface ClearCacheForTableResponseOrBuilder
+  public interface IncrementTableTimeStampResponseOrBuilder
       extends com.google.protobuf.MessageOrBuilder {
   }
   /**
-   * Protobuf type {@code ClearCacheForTableResponse}
+   * Protobuf type {@code IncrementTableTimeStampResponse}
    */
-  public static final class ClearCacheForTableResponse extends
+  public static final class IncrementTableTimeStampResponse extends
       com.google.protobuf.GeneratedMessage
-      implements ClearCacheForTableResponseOrBuilder {
-    // Use ClearCacheForTableResponse.newBuilder() to construct.
-    private ClearCacheForTableResponse(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      implements IncrementTableTimeStampResponseOrBuilder {
+    // Use IncrementTableTimeStampResponse.newBuilder() to construct.
+    private IncrementTableTimeStampResponse(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
       this.unknownFields = builder.getUnknownFields();
     }
-    private ClearCacheForTableResponse(boolean noInit) { this.unknownFields = com.google.protobuf.UnknownFieldSet.getDefaultInstance(); }
+    private IncrementTableTimeStampResponse(boolean noInit) { this.unknownFields = com.google.protobuf.UnknownFieldSet.getDefaultInstance(); }
 
-    private static final ClearCacheForTableResponse defaultInstance;
-    public static ClearCacheForTableResponse getDefaultInstance() {
+    private static final IncrementTableTimeStampResponse defaultInstance;
+    public static IncrementTableTimeStampResponse getDefaultInstance() {
       return defaultInstance;
     }
 
-    public ClearCacheForTableResponse getDefaultInstanceForType() {
+    public IncrementTableTimeStampResponse getDefaultInstanceForType() {
       return defaultInstance;
     }
 
@@ -7092,7 +7092,7 @@ public final class MetaDataProtos {
         getUnknownFields() {
       return this.unknownFields;
     }
-    private ClearCacheForTableResponse(
+    private IncrementTableTimeStampResponse(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws com.google.protobuf.InvalidProtocolBufferException {
@@ -7128,28 +7128,28 @@ public final class MetaDataProtos {
     }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
-      return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableResponse_descriptor;
+      return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_IncrementTableTimeStampResponse_descriptor;
     }
 
     protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
-      return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableResponse_fieldAccessorTable
+      return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_IncrementTableTimeStampResponse_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
-              org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.class, org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.Builder.class);
+              org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse.class, org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse.Builder.class);
     }
 
-    public static com.google.protobuf.Parser<ClearCacheForTableResponse> PARSER =
-        new com.google.protobuf.AbstractParser<ClearCacheForTableResponse>() {
-      public ClearCacheForTableResponse parsePartialFrom(
+    public static com.google.protobuf.Parser<IncrementTableTimeStampResponse> PARSER =
+        new com.google.protobuf.AbstractParser<IncrementTableTimeStampResponse>() {
+      public IncrementTableTimeStampResponse parsePartialFrom(
           com.google.protobuf.CodedInputStream input,
           com.google.protobuf.ExtensionRegistryLite extensionRegistry)
           throws com.google.protobuf.InvalidProtocolBufferException {
-        return new ClearCacheForTableResponse(input, extensionRegistry);
+        return new IncrementTableTimeStampResponse(input, extensionRegistry);
       }
     };
 
     @java.lang.Override
-    public com.google.protobuf.Parser<ClearCacheForTableResponse> getParserForType() {
+    public com.google.protobuf.Parser<IncrementTableTimeStampResponse> getParserForType() {
       return PARSER;
     }
 
@@ -7193,10 +7193,10 @@ public final class MetaDataProtos {
       if (obj == this) {
        return true;
       }
-      if (!(obj instanceof org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse)) {
+      if (!(obj instanceof org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse)) {
         return super.equals(obj);
       }
-      org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse other = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse) obj;
+      org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse other = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse) obj;
 
       boolean result = true;
       result = result &&
@@ -7217,53 +7217,53 @@ public final class MetaDataProtos {
       return hash;
     }
 
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse parseFrom(
         com.google.protobuf.ByteString data)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse parseFrom(
         com.google.protobuf.ByteString data,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data, extensionRegistry);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(byte[] data)
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse parseFrom(byte[] data)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse parseFrom(
         byte[] data,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data, extensionRegistry);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(java.io.InputStream input)
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse parseFrom(java.io.InputStream input)
         throws java.io.IOException {
       return PARSER.parseFrom(input);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
       return PARSER.parseFrom(input, extensionRegistry);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseDelimitedFrom(java.io.InputStream input)
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return PARSER.parseDelimitedFrom(input);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseDelimitedFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
       return PARSER.parseDelimitedFrom(input, extensionRegistry);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
       return PARSER.parseFrom(input);
     }
-    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
@@ -7272,7 +7272,7 @@ public final class MetaDataProtos {
 
     public static Builder newBuilder() { return Builder.create(); }
     public Builder newBuilderForType() { return newBuilder(); }
-    public static Builder newBuilder(org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse prototype) {
+    public static Builder newBuilder(org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse prototype) {
       return newBuilder().mergeFrom(prototype);
     }
     public Builder toBuilder() { return newBuilder(this); }
@@ -7284,24 +7284,24 @@ public final class MetaDataProtos {
       return builder;
     }
     /**
-     * Protobuf type {@code ClearCacheForTableResponse}
+     * Protobuf type {@code IncrementTableTimeStampResponse}
      */
     public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder>
-       implements org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponseOrBuilder {
+       implements org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponseOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
           getDescriptor() {
-        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableResponse_descriptor;
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_IncrementTableTimeStampResponse_descriptor;
       }
 
       protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
-        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableResponse_fieldAccessorTable
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_IncrementTableTimeStampResponse_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
-                org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.class, org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.Builder.class);
+                org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse.class, org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse.Builder.class);
       }
 
-      // Construct using org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.newBuilder()
+      // Construct using org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse.newBuilder()
       private Builder() {
         maybeForceBuilderInitialization();
       }
@@ -7330,38 +7330,38 @@ public final class MetaDataProtos {
 
       public com.google.protobuf.Descriptors.Descriptor
           getDescriptorForType() {
-        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableResponse_descriptor;
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_IncrementTableTimeStampResponse_descriptor;
       }
 
-      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse getDefaultInstanceForType() {
-        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance();
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse getDefaultInstanceForType() {
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse.getDefaultInstance();
       }
 
-      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse build() {
-        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse result = buildPartial();
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse build() {
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse result = buildPartial();
         if (!result.isInitialized()) {
           throw newUninitializedMessageException(result);
         }
         return result;
       }
 
-      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse buildPartial() {
-        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse result = new org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse(this);
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse buildPartial() {
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse result = new org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse(this);
         onBuilt();
         return result;
       }
 
       public Builder mergeFrom(com.google.protobuf.Message other) {
-        if (other instanceof org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse) {
-          return mergeFrom((org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse)other);
+        if (other instanceof org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse) {
+          return mergeFrom((org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse)other);
         } else {
           super.mergeFrom(other);
           return this;
         }
       }
 
-      public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse other) {
-        if (other == org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance()) return this;
+      public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse other) {
+        if (other == org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse.getDefaultInstance()) return this;
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
       }
@@ -7374,11 +7374,11 @@ public final class MetaDataProtos {
           com.google.protobuf.CodedInputStream input,
           com.google.protobuf.ExtensionRegistryLite extensionRegistry)
           throws java.io.IOException {
-        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parsedMessage = null;
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse parsedMessage = null;
         try {
           parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
         } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-          parsedMessage = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse) e.getUnfinishedMessage();
+          parsedMessage = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse) e.getUnfinishedMessage();
           throw e;
         } finally {
           if (parsedMessage != null) {
@@ -7388,15 +7388,15 @@ public final class MetaDataProtos {
         return this;
       }
 
-      // @@protoc_insertion_point(builder_scope:ClearCacheForTableResponse)
+      // @@protoc_insertion_point(builder_scope:IncrementTableTimeStampResponse)
     }
 
     static {
-      defaultInstance = new ClearCacheForTableResponse(true);
+      defaultInstance = new IncrementTableTimeStampResponse(true);
       defaultInstance.initFields();
     }
 
-    // @@protoc_insertion_point(class_scope:ClearCacheForTableResponse)
+    // @@protoc_insertion_point(class_scope:IncrementTableTimeStampResponse)
   }
 
   /**
@@ -7472,12 +7472,12 @@ public final class MetaDataProtos {
           com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse> done);
 
       /**
-       * <code>rpc clearCacheForTable(.ClearCacheForTableRequest) returns (.ClearCacheForTableResponse);</code>
+       * <code>rpc incrementTableTimeStamp(.IncrementTableTimeStampRequest) returns (.IncrementTableTimeStampResponse);</code>
        */
-      public abstract void clearCacheForTable(
+      public abstract void incrementTableTimeStamp(
           com.google.protobuf.RpcController controller,
-          org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest request,
-          com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse> done);
+          org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest request,
+          com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse> done);
 
     }
 
@@ -7549,11 +7549,11 @@ public final class MetaDataProtos {
         }
 
         @java.lang.Override
-        public  void clearCacheForTable(
+        public  void incrementTableTimeStamp(
             com.google.protobuf.RpcController controller,
-            org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest request,
-            com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse> done) {
-          impl.clearCacheForTable(controller, request, done);
+            org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest request,
+            com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse> done) {
+          impl.incrementTableTimeStamp(controller, request, done);
         }
 
       };
@@ -7595,7 +7595,7 @@ public final class MetaDataProtos {
             case 7:
               return impl.getVersion(controller, (org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest)request);
             case 8:
-              return impl.clearCacheForTable(controller, (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest)request);
+              return impl.incrementTableTimeStamp(controller, (org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest)request);
             default:
               throw new java.lang.AssertionError("Can't get here.");
           }
@@ -7627,7 +7627,7 @@ public final class MetaDataProtos {
             case 7:
               return org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest.getDefaultInstance();
             case 8:
-              return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.getDefaultInstance();
+              return org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest.getDefaultInstance();
             default:
               throw new java.lang.AssertionError("Can't get here.");
           }
@@ -7659,7 +7659,7 @@ public final class MetaDataProtos {
             case 7:
               return org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse.getDefaultInstance();
             case 8:
-              return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance();
+              return org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse.getDefaultInstance();
             default:
               throw new java.lang.AssertionError("Can't get here.");
           }
@@ -7733,12 +7733,12 @@ public final class MetaDataProtos {
         com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse> done);
 
     /**
-     * <code>rpc clearCacheForTable(.ClearCacheForTableRequest) returns (.ClearCacheForTableResponse);</code>
+     * <code>rpc incrementTableTimeStamp(.IncrementTableTimeStampRequest) returns (.IncrementTableTimeStampResponse);</code>
      */
-    public abstract void clearCacheForTable(
+    public abstract void incrementTableTimeStamp(
         com.google.protobuf.RpcController controller,
-        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest request,
-        com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse> done);
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest request,
+        com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse> done);
 
     public static final
         com.google.protobuf.Descriptors.ServiceDescriptor
@@ -7803,8 +7803,8 @@ public final class MetaDataProtos {
               done));
           return;
         case 8:
-          this.clearCacheForTable(controller, (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest)request,
-            com.google.protobuf.RpcUtil.<org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse>specializeCallback(
+          this.incrementTableTimeStamp(controller, (org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest)request,
+            com.google.protobuf.RpcUtil.<org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse>specializeCallback(
               done));
           return;
         default:
@@ -7838,7 +7838,7 @@ public final class MetaDataProtos {
         case 7:
           return org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest.getDefaultInstance();
         case 8:
-          return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.getDefaultInstance();
+          return org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest.getDefaultInstance();
         default:
           throw new java.lang.AssertionError("Can't get here.");
       }
@@ -7870,7 +7870,7 @@ public final class MetaDataProtos {
         case 7:
           return org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse.getDefaultInstance();
         case 8:
-          return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance();
+          return org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse.getDefaultInstance();
         default:
           throw new java.lang.AssertionError("Can't get here.");
       }
@@ -8012,19 +8012,19 @@ public final class MetaDataProtos {
             org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse.getDefaultInstance()));
       }
 
-      public  void clearCacheForTable(
+      public  void incrementTableTimeStamp(
           com.google.protobuf.RpcController controller,
-          org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest request,
-          com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse> done) {
+          org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest request,
+          com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse> done) {
         channel.callMethod(
           getDescriptor().getMethods().get(8),
           controller,
           request,
-          org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance(),
+          org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse.getDefaultInstance(),
           com.google.protobuf.RpcUtil.generalizeCallback(
             done,
-            org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.class,
-            org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance()));
+            org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse.class,
+            org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse.getDefaultInstance()));
       }
     }
 
@@ -8074,9 +8074,9 @@ public final class MetaDataProtos {
           org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest request)
           throws com.google.protobuf.ServiceException;
 
-      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse clearCacheForTable(
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse incrementTableTimeStamp(
           com.google.protobuf.RpcController controller,
-          org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest request)
+          org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest request)
           throws com.google.protobuf.ServiceException;
     }
 
@@ -8183,15 +8183,15 @@ public final class MetaDataProtos {
       }
 
 
-      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse clearCacheForTable(
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse incrementTableTimeStamp(
           com.google.protobuf.RpcController controller,
-          org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest request)
+          org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest request)
           throws com.google.protobuf.ServiceException {
-        return (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse) channel.callBlockingMethod(
+        return (org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse) channel.callBlockingMethod(
           getDescriptor().getMethods().get(8),
           controller,
           request,
-          org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance());
+          org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse.getDefaultInstance());
       }
 
     }
@@ -8255,15 +8255,15 @@ public final class MetaDataProtos {
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_GetVersionResponse_fieldAccessorTable;
   private static com.google.protobuf.Descriptors.Descriptor
-    internal_static_ClearCacheForTableRequest_descriptor;
+    internal_static_IncrementTableTimeStampRequest_descriptor;
   private static
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
-      internal_static_ClearCacheForTableRequest_fieldAccessorTable;
+      internal_static_IncrementTableTimeStampRequest_fieldAccessorTable;
   private static com.google.protobuf.Descriptors.Descriptor
-    internal_static_ClearCacheForTableResponse_descriptor;
+    internal_static_IncrementTableTimeStampResponse_descriptor;
   private static
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
-      internal_static_ClearCacheForTableResponse_fieldAccessorTable;
+      internal_static_IncrementTableTimeStampResponse_fieldAccessorTable;
 
   public static com.google.protobuf.Descriptors.FileDescriptor
       getDescriptor() {
@@ -8291,32 +8291,33 @@ public final class MetaDataProtos {
       "st\022\036\n\026tableMetadataMutations\030\001 \003(\014\"\023\n\021Cl" +
       "earCacheRequest\"\024\n\022ClearCacheResponse\"\023\n" +
       "\021GetVersionRequest\"%\n\022GetVersionResponse" +
-      "\022\017\n\007version\030\001 \002(\003\"m\n\031ClearCacheForTableR" +
-      "equest\022\020\n\010tenantId\030\001 \002(\014\022\022\n\nschemaName\030\002",
-      " \002(\014\022\021\n\ttableName\030\003 \002(\014\022\027\n\017clientTimesta" +
-      "mp\030\004 \002(\003\"\034\n\032ClearCacheForTableResponse*\212" +
-      "\002\n\014MutationCode\022\030\n\024TABLE_ALREADY_EXISTS\020" +
-      "\000\022\023\n\017TABLE_NOT_FOUND\020\001\022\024\n\020COLUMN_NOT_FOU" +
-      "ND\020\002\022\031\n\025COLUMN_ALREADY_EXISTS\020\003\022\035\n\031CONCU" +
-      "RRENT_TABLE_MUTATION\020\004\022\027\n\023TABLE_NOT_IN_R" +
-      "EGION\020\005\022\025\n\021NEWER_TABLE_FOUND\020\006\022\034\n\030UNALLO" +
-      "WED_TABLE_MUTATION\020\007\022\021\n\rNO_PK_COLUMNS\020\010\022" +
-      "\032\n\026PARENT_TABLE_NOT_FOUND\020\t2\222\004\n\017MetaData" +
-      "Service\022/\n\010getTable\022\020.GetTableRequest\032\021.",
-      "MetaDataResponse\0225\n\013createTable\022\023.Create" +
-      "TableRequest\032\021.MetaDataResponse\0221\n\tdropT" +
-      "able\022\021.DropTableRequest\032\021.MetaDataRespon" +
-      "se\0221\n\taddColumn\022\021.AddColumnRequest\032\021.Met" +
-      "aDataResponse\0223\n\ndropColumn\022\022.DropColumn" +
-      "Request\032\021.MetaDataResponse\022?\n\020updateInde" +
-      "xState\022\030.UpdateIndexStateRequest\032\021.MetaD" +
-      "ataResponse\0225\n\nclearCache\022\022.ClearCacheRe" +
-      "quest\032\023.ClearCacheResponse\0225\n\ngetVersion" +
-      "\022\022.GetVersionRequest\032\023.GetVersionRespons",
-      "e\022M\n\022clearCacheForTable\022\032.ClearCacheForT" +
-      "ableRequest\032\033.ClearCacheForTableResponse" +
-      "BB\n(org.apache.phoenix.coprocessor.gener" +
-      "atedB\016MetaDataProtosH\001\210\001\001\240\001\001"
+      "\022\017\n\007version\030\001 \002(\003\"r\n\036IncrementTableTimeS" +
+      "tampRequest\022\020\n\010tenantId\030\001 \002(\014\022\022\n\nschemaN",
+      "ame\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022\027\n\017clientTi" +
+      "mestamp\030\004 \002(\003\"!\n\037IncrementTableTimeStamp" +
+      "Response*\212\002\n\014MutationCode\022\030\n\024TABLE_ALREA" +
+      "DY_EXISTS\020\000\022\023\n\017TABLE_NOT_FOUND\020\001\022\024\n\020COLU" +
+      "MN_NOT_FOUND\020\002\022\031\n\025COLUMN_ALREADY_EXISTS\020" +
+      "\003\022\035\n\031CONCURRENT_TABLE_MUTATION\020\004\022\027\n\023TABL" +
+      "E_NOT_IN_REGION\020\005\022\025\n\021NEWER_TABLE_FOUND\020\006" +
+      "\022\034\n\030UNALLOWED_TABLE_MUTATION\020\007\022\021\n\rNO_PK_" +
+      "COLUMNS\020\010\022\032\n\026PARENT_TABLE_NOT_FOUND\020\t2\241\004" +
+      "\n\017MetaDataService\022/\n\010getTable\022\020.GetTable",
+      "Request\032\021.MetaDataResponse\0225\n\013createTabl" +
+      "e\022\023.CreateTableRequest\032\021.MetaDataRespons" +
+      "e\0221\n\tdropTable\022\021.DropTableRequest\032\021.Meta" +
+      "DataResponse\0221\n\taddColumn\022\021.AddColumnReq" +
+      "uest\032\021.MetaDataResponse\0223\n\ndropColumn\022\022." +
+      "DropColumnRequest\032\021.MetaDataResponse\022?\n\020" +
+      "updateIndexState\022\030.UpdateIndexStateReque" +
+      "st\032\021.MetaDataResponse\0225\n\nclearCache\022\022.Cl" +
+      "earCacheRequest\032\023.ClearCacheResponse\0225\n\n" +
+      "getVersion\022\022.GetVersionRequest\032\023.GetVers",
+      "ionResponse\022\\\n\027incrementTableTimeStamp\022\037" +
+      ".IncrementTableTimeStampRequest\032 .Increm" +
+      "entTableTimeStampResponseBB\n(org.apache." +
+      "phoenix.coprocessor.generatedB\016MetaDataP" +
+      "rotosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -8389,17 +8390,17 @@ public final class MetaDataProtos {
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_GetVersionResponse_descriptor,
               new java.lang.String[] { "Version", });
-          internal_static_ClearCacheForTableRequest_descriptor =
+          internal_static_IncrementTableTimeStampRequest_descriptor =
             getDescriptor().getMessageTypes().get(11);
-          internal_static_ClearCacheForTableRequest_fieldAccessorTable = new
+          internal_static_IncrementTableTimeStampRequest_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
-              internal_static_ClearCacheForTableRequest_descriptor,
+              internal_static_IncrementTableTimeStampRequest_descriptor,
               new java.lang.String[] { "TenantId", "SchemaName", "TableName", "ClientTimestamp", });
-          internal_static_ClearCacheForTableResponse_descriptor =
+          internal_static_IncrementTableTimeStampResponse_descriptor =
             getDescriptor().getMessageTypes().get(12);
-          internal_static_ClearCacheForTableResponse_fieldAccessorTable = new
+          internal_static_IncrementTableTimeStampResponse_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
-              internal_static_ClearCacheForTableResponse_descriptor,
+              internal_static_IncrementTableTimeStampResponse_descriptor,
               new java.lang.String[] { });
           return null;
         }
