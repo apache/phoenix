@@ -76,8 +76,6 @@ import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.CreateTableRequest;
@@ -86,6 +84,8 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.DropTableRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetTableRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
@@ -1844,7 +1844,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     @Override
-    public void clearCacheForTable(final byte[] tenantId, final byte[] schemaName, final byte[] tableName,
+    public void incrementTableTimeStamp(final byte[] tenantId, final byte[] schemaName, final byte[] tableName,
             final long clientTS) throws SQLException {
         // clear the meta data cache for the table here
         try {
@@ -1852,17 +1852,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             try {
                 htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW,
-                        new Batch.Call<MetaDataService, ClearCacheForTableResponse>() {
+                        new Batch.Call<MetaDataService, IncrementTableTimeStampResponse>() {
                             @Override
-                            public ClearCacheForTableResponse call(MetaDataService instance) throws IOException {
+                            public IncrementTableTimeStampResponse call(MetaDataService instance) throws IOException {
                                 ServerRpcController controller = new ServerRpcController();
-                                BlockingRpcCallback<ClearCacheForTableResponse> rpcCallback = new BlockingRpcCallback<ClearCacheForTableResponse>();
-                                ClearCacheForTableRequest.Builder builder = ClearCacheForTableRequest.newBuilder();
+                                BlockingRpcCallback<IncrementTableTimeStampResponse> rpcCallback = new BlockingRpcCallback<IncrementTableTimeStampResponse>();
+                                IncrementTableTimeStampRequest.Builder builder = IncrementTableTimeStampRequest.newBuilder();
                                 builder.setTenantId(HBaseZeroCopyByteString.wrap(tenantId));
                                 builder.setTableName(HBaseZeroCopyByteString.wrap(tableName));
                                 builder.setSchemaName(HBaseZeroCopyByteString.wrap(schemaName));
                                 builder.setClientTimestamp(clientTS);
-                                instance.clearCacheForTable(controller, builder.build(), rpcCallback);
+                                instance.incrementTableTimeStamp(controller, builder.build(), rpcCallback);
                                 if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
                                 return rpcCallback.get();
                             }
@@ -2055,5 +2055,4 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private void throwConnectionClosedException() {
         throw new IllegalStateException("Connection to the cluster is closed");
     }
-    
 }

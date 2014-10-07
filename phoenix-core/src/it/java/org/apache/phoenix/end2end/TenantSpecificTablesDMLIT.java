@@ -53,6 +53,7 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             conn.close();
             conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
             analyzeTable(conn, TENANT_TABLE_NAME);
+            conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
             ResultSet rs = conn.createStatement().executeQuery("select tenant_col from " + TENANT_TABLE_NAME + " where id = 1");
             assertTrue("Expected 1 row in result set", rs.next());
             assertEquals("Cheap Sunglasses", rs.getString(1));
@@ -75,6 +76,8 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             conn1.commit();
             conn1 = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
             analyzeTable(conn1, TENANT_TABLE_NAME);
+            conn1 = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
+            
             conn2.setAutoCommit(true);
             conn2.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " values ('them','" + TENANT_TYPE_ID + "',1,'Long Hair')");
             conn2.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " values ('us','" + TENANT_TYPE_ID + "',2,'Black Hat')");
@@ -88,7 +91,8 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             assertFalse("Expected 1 row in result set", rs.next());
             conn2 = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL2);
             analyzeTable(conn2, TENANT_TABLE_NAME);
-            rs = conn2.createStatement().executeQuery("select count(*) from " + TENANT_TABLE_NAME );
+            conn2 = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL2);
+
             rs = conn2.createStatement().executeQuery("select * from " + TENANT_TABLE_NAME + " where id = 2");
             assertTrue("Expected 1 row in result set", rs.next());
             assertEquals(2, rs.getInt(3));
@@ -143,6 +147,7 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             assertTrue("Expected 1 row in result set", rs.next());
             assertEquals(2, rs.getInt(3));
             assertEquals("Viva Las Vegas", rs.getString(4));
+            
             List<KeyRange> splits = getAllSplits(conn1, TENANT_TABLE_NAME);
             assertEquals(3, splits.size());
         }
@@ -179,6 +184,7 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             
             conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
             analyzeTable(conn, TENANT_TABLE_NAME);
+            conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
             ResultSet rs = conn.createStatement().executeQuery("select tenant_col from " + TENANT_TABLE_NAME + " join foo on k=id");
             assertTrue("Expected 1 row in result set", rs.next());
             assertEquals("Cheap Sunglasses", rs.getString(1));
@@ -250,6 +256,7 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             
             conn = nextConnection(getUrl());
             analyzeTable(conn, PARENT_TABLE_NAME);
+            conn = nextConnection(getUrl());
             rs = conn.createStatement().executeQuery("select count(*) from " + PARENT_TABLE_NAME);
             rs.next();
             assertEquals(2, rs.getInt(1));
@@ -311,6 +318,7 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             
             conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
             analyzeTable(conn, PARENT_TABLE_NAME);
+            conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
             conn.createStatement().execute("delete from " + TENANT_TABLE_NAME);
             conn.commit();
             conn.close();
@@ -346,6 +354,7 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             
             conn = nextConnection(getUrl());
             analyzeTable(conn, PARENT_TABLE_NAME_NO_TENANT_TYPE_ID);
+            conn = nextConnection(getUrl());
             ResultSet rs = conn.createStatement().executeQuery("select count(*) from " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID);
             rs.next();
             assertEquals(3, rs.getInt(1));
@@ -371,8 +380,9 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             conn.close();
             
             conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
-            conn.setAutoCommit(true);
             analyzeTable(conn, TENANT_TABLE_NAME);
+            conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
+            conn.setAutoCommit(true);
             int count = conn.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + "(id, user) select id+100, user from " + TENANT_TABLE_NAME);
             assertEquals("Expected 1 row to have been inserted", 1, count);
             conn.close();
@@ -406,8 +416,9 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             conn.close();
             
             conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
-            conn.setAutoCommit(true);
             analyzeTable(conn, TENANT_TABLE_NAME);
+            conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
+            conn.setAutoCommit(true);
             int count = conn.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + "(id, user) select id+100, user from ANOTHER_TENANT_TABLE where id=2");
             assertEquals("Expected 1 row to have been inserted", 1, count);
             conn.close();
@@ -455,6 +466,7 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
             conn.close();
             conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
             analyzeTable(conn, PARENT_TABLE_NAME);
+            conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
             rs = conn.createStatement().executeQuery("select user from " + PARENT_TABLE_NAME);
             assertTrue(rs.next());
             assertEquals(rs.getString(1),"Billy Gibbons");
