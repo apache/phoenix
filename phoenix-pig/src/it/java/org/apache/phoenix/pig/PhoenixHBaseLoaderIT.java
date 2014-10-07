@@ -72,6 +72,7 @@ public class PhoenixHBaseLoaderIT {
     private static final Log LOG = LogFactory.getLog(PhoenixHBaseLoaderIT.class);
     private static final String SCHEMA_NAME = "T";
     private static final String TABLE_NAME = "A";
+    private static final String INDEX_NAME = "I";
     private static final String TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, TABLE_NAME);
     private static HBaseTestingUtility hbaseTestUtil;
     private static String zkQuorum;
@@ -563,6 +564,42 @@ public class PhoenixHBaseLoaderIT {
         }
     
     }
+	 @Test
+	 public void testDataFromIndexTable() throws Exception {
+        try {
+            //create the table
+            String ddl = "CREATE TABLE " + TABLE_NAME
+                    + " (ID INTEGER NOT NULL, NAME VARCHAR NOT NULL, EMPLID INTEGER CONSTRAINT pk PRIMARY KEY (ID, NAME)) IMMUTABLE_ROWS=true";
+                   
+            conn.createStatement().execute(ddl);
+           
+            //create a index table
+            String indexDdl = " CREATE INDEX " + INDEX_NAME + " ON " + TABLE_NAME + " (EMPLID) INCLUDE (NAME) ";
+            conn.createStatement().execute(indexDdl);
+           
+            //upsert the data.
+            final String dml = "UPSERT INTO " + TABLE_NAME + " VALUES(?,?,?)";
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            int rows = 20;
+            for(int i = 0 ; i < rows; i++) {
+                stmt.setInt(1, i);
+                stmt.setString(2, "a"+i);
+                stmt.setInt(3, i * 5);
+                stmt.execute();
+            }
+            conn.commit();
+            pigServer.registerQuery("A = load 'hbase://query/SELECT NAME , EMPLID FROM A WHERE EMPLID = 25 ' using " + PhoenixHBaseLoader.class.getName() + "('"+zkQuorum + "')  ;");
+            Iterator<Tuple> iterator = pigServer.openIterator("A");
+            while (iterator.hasNext()) {
+                Tuple tuple = iterator.next();
+                assertEquals("a5", tuple.get(0));
+                assertEquals(25, tuple.get(1));
+            }
+        } finally {
+          dropTable(TABLE_NAME);
+          dropTable(INDEX_NAME);
+        }
+    }
     
     @After
     public void tearDown() throws Exception {
@@ -573,7 +610,7 @@ public class PhoenixHBaseLoaderIT {
 
     private void dropTable(String tableFullName) throws SQLException {
       Preconditions.checkNotNull(conn);
-      conn.createStatement().execute(String.format("DROP TABLE %s",tableFullName));
+      conn.createStatement().execute(String.format("DROP TABLE IF EXISTS %s",tableFullName));
     }
 
     @AfterClass
