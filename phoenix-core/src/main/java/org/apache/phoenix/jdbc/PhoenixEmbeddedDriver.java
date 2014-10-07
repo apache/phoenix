@@ -41,6 +41,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 
 
@@ -58,6 +59,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
      * The protocol for Phoenix Network Client 
      */ 
     private final static String DNC_JDBC_PROTOCOL_SUFFIX = "//";
+    private final static String DRIVER_NAME = "PhoenixEmbeddedDriver";
     private static final String TERMINATOR = "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
     private static final String DELIMITERS = TERMINATOR + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
     private static final String TEST_URL_AT_END =  "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
@@ -68,22 +70,17 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
     public final static String MINOR_VERSION_PROP = "DriverMinorVersion";
     public final static String DRIVER_NAME_PROP = "DriverName";
     
-    private final ReadOnlyProps defaultProps;
+    public static final ReadOnlyProps DEFFAULT_PROPS = new ReadOnlyProps(
+            ImmutableMap.of(
+                    MAJOR_VERSION_PROP, Integer.toString(MetaDataProtocol.PHOENIX_MAJOR_VERSION),
+                    MINOR_VERSION_PROP, Integer.toString(MetaDataProtocol.PHOENIX_MINOR_VERSION),
+                    DRIVER_NAME_PROP, DRIVER_NAME));
     
     PhoenixEmbeddedDriver() {
-        Map<String, String> defaultPropsMap = Maps.newHashMapWithExpectedSize(3);
-        defaultPropsMap.put(MAJOR_VERSION_PROP, Integer.toString(getMajorVersion()));
-        defaultPropsMap.put(MINOR_VERSION_PROP, Integer.toString(getMinorVersion()));
-        defaultPropsMap.put(DRIVER_NAME_PROP, getDriverName());
-        defaultProps = new ReadOnlyProps(defaultPropsMap);
     }
     
     protected ReadOnlyProps getDefaultProps() {
-        return defaultProps;
-    }
-    
-    private String getDriverName() {
-        return this.getClass().getName();
+        return DEFFAULT_PROPS;
     }
     
     abstract public QueryServices getQueryServices();
@@ -125,7 +122,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
         }
 
         Properties augmentedInfo = PropertiesUtil.deepCopy(info);
-        augmentedInfo.putAll(defaultProps.asMap());
+        augmentedInfo.putAll(getDefaultProps().asMap());
         ConnectionQueryServices connectionServices = getConnectionQueryServices(url, augmentedInfo);
         PhoenixConnection connection = connectionServices.connect(url, augmentedInfo);
         return connection;

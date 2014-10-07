@@ -116,14 +116,17 @@ public class MutableIndexFailureIT extends BaseTest {
 
     @After
     public void tearDown() throws Exception {
-        if(scheduleTimer != null){
-            scheduleTimer.cancel();
-            scheduleTimer = null;
-        }
         try {
             destroyDriver(driver);
         } finally {
-            util.shutdownMiniCluster();
+            try {
+                if(scheduleTimer != null){
+                    scheduleTimer.cancel();
+                    scheduleTimer = null;
+                }
+            } finally {
+                util.shutdownMiniCluster();
+            }
         }
     }
 
