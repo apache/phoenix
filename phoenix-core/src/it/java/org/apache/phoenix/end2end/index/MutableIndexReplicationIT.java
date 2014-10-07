@@ -52,7 +52,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.zookeeper.MiniZooKeeperCluster;
 import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -112,7 +111,7 @@ public class MutableIndexReplicationIT extends BaseTest {
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
         try {
-            destroyDriver();
+            destroyDriver(driver);
         } finally {
             try {
                 utility2.shutdownMiniCluster();
@@ -127,6 +126,7 @@ public class MutableIndexReplicationIT extends BaseTest {
         // lookups
 //        conf1.set(HConstants.ZOOKEEPER_ZNODE_PARENT, "/1");
         // smaller log roll size to trigger more events
+        setUpConfigForMiniCluster(conf1);
         conf1.setFloat("hbase.regionserver.logroll.multiplier", 0.0003f);
         conf1.setInt("replication.source.size.capacity", 10240);
         conf1.setLong("replication.source.sleepforretries", 100);
@@ -139,9 +139,6 @@ public class MutableIndexReplicationIT extends BaseTest {
         conf1.setLong(HConstants.THREAD_WAKE_FREQUENCY, 100);
         conf1.setInt("replication.stats.thread.period.seconds", 5);
         conf1.setBoolean("hbase.tests.use.shortcircuit.reads", false);
-
-        // add the phoenix-specific configs
-        BaseTest.setUpConfigForMiniCluster(conf1);
 
         utility1 = new HBaseTestingUtility(conf1);
         utility1.startMiniZKCluster();
@@ -182,15 +179,7 @@ public class MutableIndexReplicationIT extends BaseTest {
         // Must update config before starting server
         URL = getLocalClusterUrl(utility1);
         LOG.info("Connecting driver to "+URL);
-        setUpTestDriver(URL, new ReadOnlyProps(props.entrySet().iterator()));
-    }
-
-    protected static void setUpTestDriver(String url, ReadOnlyProps props) throws Exception {
-        if (PhoenixEmbeddedDriver.isTestUrl(url)) {
-            if (driver == null) {
-                driver = initAndRegisterDriver(url, props);
-            }
-        }
+        driver = initAndRegisterDriver(URL, new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     @Test

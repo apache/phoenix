@@ -90,6 +90,7 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.Date;
+import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -102,8 +103,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import javax.annotation.Nonnull;
 
@@ -120,6 +119,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTableType;
@@ -131,7 +131,8 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -153,7 +154,7 @@ import com.google.common.collect.Sets;
  */
 public abstract class BaseTest {
     private static final Map<String,String> tableDDLMap;
-    private static Logger logger = Logger.getLogger("BaseTest.class");
+    private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
 
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
@@ -554,7 +555,7 @@ public abstract class BaseTest {
                     try {
                         utility.shutdownMiniCluster();
                     } catch (Exception e) {
-                        logger.log(Level.WARNING, "Exception caught when shutting down mini cluster: " + e.getMessage());
+                        logger.warn("Exception caught when shutting down mini cluster", e);
                     }
                 }
             });
@@ -641,25 +642,32 @@ public abstract class BaseTest {
      * @return an initialized and registered {@link PhoenixTestDriver} 
      */
     protected static PhoenixTestDriver initAndRegisterDriver(String url, ReadOnlyProps props) throws Exception {
-        PhoenixTestDriver driver = new PhoenixTestDriver(props);
-        DriverManager.registerDriver(driver);
-        Assert.assertTrue(DriverManager.getDriver(url) == driver);
-        Connection conn = driver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        PhoenixTestDriver newDriver = new PhoenixTestDriver(props);
+        DriverManager.registerDriver(newDriver);
+        Driver oldDriver = DriverManager.getDriver(url); 
+        if (oldDriver != newDriver) {
+            destroyDriver(oldDriver);
+        }
+        Connection conn = newDriver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.close();
-        return driver;
+        return newDriver;
     }
     
     //Close and unregister the driver.
-    protected static boolean destroyDriver(PhoenixTestDriver driver) {
+    protected static boolean destroyDriver(Driver driver) {
         if (driver != null) {
+            assert(driver instanceof PhoenixEmbeddedDriver);
+            PhoenixEmbeddedDriver pdriver = (PhoenixEmbeddedDriver)driver;
             try {
                 try {
-                    driver.close();
+                    pdriver.close();
                     return true;
                 } finally {
                     DriverManager.deregisterDriver(driver);
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                logger.warn("Unable to close registered driver: " + driver, e);
+            }
         }
         return false;
     }
