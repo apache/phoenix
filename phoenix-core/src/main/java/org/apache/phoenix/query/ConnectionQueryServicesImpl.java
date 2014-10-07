@@ -1807,7 +1807,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public void clearCacheForTable(final byte[] tenantId, final byte[] schemaName, final byte[] tableName,
+    public void incrementTableTimeStamp(final byte[] tenantId, final byte[] schemaName, final byte[] tableName,
             final long clientTS) throws SQLException {
         // clear the meta data cache for the table here
         try {
@@ -1819,7 +1819,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         new Batch.Call<MetaDataProtocol, MetaDataMutationResult>() {
                     @Override
                     public MetaDataMutationResult call(MetaDataProtocol instance) throws IOException {
-                        instance.clearCacheForTable(tenantId, schemaName, tableName, clientTS);
+                        instance.incrementTableTimeStamp(tenantId, schemaName, tableName, clientTS);
                         // TODO : Should this really return a result?Return null
                         return new MetaDataMutationResult();
                     }

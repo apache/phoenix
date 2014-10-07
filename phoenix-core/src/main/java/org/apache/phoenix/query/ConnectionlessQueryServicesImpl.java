@@ -183,7 +183,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
     
     @Override
-    public void clearCacheForTable(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTS)
+    public void incrementTableTimeStamp(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTS)
             throws SQLException {}
     // TODO: share this with ConnectionQueryServicesImpl
     @Override

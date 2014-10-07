@@ -42,8 +42,8 @@ import com.google.common.collect.Lists;
 /**
  * Simple utility class for managing multiple key parts of the statistic
  */
-public class StatisticsUtils {
-    private StatisticsUtils() {
+public class StatisticsUtil {
+    private StatisticsUtil() {
         // private ctor for utility classes
     }
 

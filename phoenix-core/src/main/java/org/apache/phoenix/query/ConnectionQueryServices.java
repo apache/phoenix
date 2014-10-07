@@ -103,5 +103,5 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public boolean supportsFeature(Feature feature);
     
     public String getUserName();
-    public void clearCacheForTable(final byte[] tenantId, final byte[] schemaName, final byte[] tableName, long clientTS) throws SQLException;
+    public void incrementTableTimeStamp(final byte[] tenantId, final byte[] schemaName, final byte[] tableName, long clientTS) throws SQLException;
 }

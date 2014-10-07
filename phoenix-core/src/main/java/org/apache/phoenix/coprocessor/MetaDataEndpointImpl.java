@@ -106,7 +106,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stat.PTableStats;
-import org.apache.phoenix.schema.stat.StatisticsUtils;
+import org.apache.phoenix.schema.stat.StatisticsUtil;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -462,7 +462,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         if (tenantId == null) {
             HTableInterface statsHTable = getEnvironment().getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
             try {
-                StatisticsUtils.readStatistics(statsHTable, physicalTableName.getBytes(), clientTimeStamp);
+                stats = StatisticsUtil.readStatistics(statsHTable, physicalTableName.getBytes(), clientTimeStamp);
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 logger.warn(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " not online yet?");
             } finally {
@@ -1118,7 +1118,38 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         }
     }
 
+    private PTable incrementTableTimestamp(byte[] key, long clientTimeStamp) throws IOException, SQLException {
+        RegionCoprocessorEnvironment env = getEnvironment();
+        HRegion region = env.getRegion();
+        Integer lid = region.getLock(null, key, true);
+        if (lid == null) {
+            throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
+        }
+        try {
+            PTable table = doGetTable(key, clientTimeStamp, lid);
+            if (table != null) {
+                long tableTimeStamp = table.getTimeStamp() + 1;
+                List<Mutation> mutations = Lists.newArrayListWithExpectedSize(1);
+                Put p = new Put(key);
+                p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, tableTimeStamp, ByteUtil.EMPTY_BYTE_ARRAY);
+                mutations.add(p);
+                region.mutateRowsWithLocks(mutations, Collections.<byte[]> emptySet());
+                
+                Cache<ImmutableBytesPtr, PTable> metaDataCache = GlobalCache.getInstance(getEnvironment()).getMetaDataCache();
+                ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
+                metaDataCache.invalidate(cacheKey);
+            }
+            return table;
+        } finally {
+            region.releaseRowLock(lid);
+        }
+    }
+    
     private PTable doGetTable(byte[] key, long clientTimeStamp) throws IOException, SQLException {
+        return doGetTable(key, clientTimeStamp, null);
+    }
+    
+    private PTable doGetTable(byte[] key, long clientTimeStamp, Integer lid) throws IOException, SQLException {
         ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
         Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.getEnvironment()).getMetaDataCache();
         PTable table = metaDataCache.getIfPresent(cacheKey);
@@ -1143,9 +1174,12 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
          * This will just prevent a table from getting rebuilt
          * too often.
          */
-        Integer lid = region.getLock(null, key, true);
-        if (lid == null) {
-            throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
+        final boolean wasLocked = (lid != null);
+        if (!wasLocked) {
+            lid = region.getLock(null, key, true);
+            if (lid == null) {
+                throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
+            }
         }
         try {
             // Try cache again in case we were waiting on a lock
@@ -1168,7 +1202,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             // Otherwise, query for an older version of the table - it won't be cached 
             return buildTable(key, cacheKey, region, clientTimeStamp);
         } finally {
-            if (lid != null) region.releaseRowLock(lid);
+            if (!wasLocked) region.releaseRowLock(lid);
         }
     }
 
@@ -1374,31 +1408,13 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
     }
     
     @Override
-    public void clearCacheForTable(byte[] tenantId, byte[] schema, byte[] tableName, final long clientTS)
+    public void incrementTableTimeStamp(byte[] tenantId, byte[] schemaName, byte[] tableName, final long clientTimeStamp)
             throws IOException {
-        byte[] tableKey = SchemaUtil.getTableKey(tenantId, schema, tableName);
-        ImmutableBytesPtr key = new ImmutableBytesPtr(tableKey);
         try {
-            PTable table = doGetTable(tableKey, clientTS);
-            if (table != null) {
-                Cache<ImmutableBytesPtr, PTable> metaDataCache = GlobalCache.getInstance(getEnvironment()).getMetaDataCache();
-                // Add +1 to the ts
-                // TODO : refactor doGetTable() to do this - optionally increment the timestamp
-                // TODO : clear metadata if it is spread across multiple region servers
-                long ts = table.getTimeStamp() + 1;
-                // Here we could add an empty puti
-                HRegion region = getEnvironment().getRegion();
-                List<Mutation> mutations = new ArrayList<Mutation>();
-                Put p = new Put(tableKey);
-                p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, ts, ByteUtil.EMPTY_BYTE_ARRAY);
-                mutations.add(p);
-                region.mutateRowsWithLocks(mutations, Collections.<byte[]> emptySet());
-                metaDataCache.invalidate(key);
-            }
+            byte[] tableKey = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+            incrementTableTimestamp(tableKey, clientTimeStamp);
         } catch (Throwable t) {
-            // We could still invalidate it
-            logger.error("clearCacheForTable failed to update the latest ts ", t);
-            throw new IOException(t);
+            ServerUtil.throwIOException(SchemaUtil.getTableName(schemaName, tableName), t);
         }
     }
     

@@ -482,20 +482,17 @@ public class MetaDataClient {
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTS = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
-        connection.getQueryServices().clearCacheForTable(tenantIdBytes,
-                Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())),
-                Bytes.toBytes(SchemaUtil.getTableNameFromFullName(physicalName.getString())), clientTS);
-        String query = "SELECT CURRENT_DATE(),"+ LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
+        String query = "SELECT CURRENT_DATE() - " + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
                 + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
-                + " IS NULL AND " + REGION_NAME + " IS NULL";
+                + " IS NULL AND " + REGION_NAME + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
         ResultSet rs = connection.createStatement().executeQuery(query);
         long msSinceLastUpdate = Long.MAX_VALUE;
-        if (rs.next() && rs.getDate(2) != null) {
-            msSinceLastUpdate = rs.getDate(1).getTime() - rs.getDate(2).getTime();
+        if (rs.next()) {
+            msSinceLastUpdate = rs.getLong(1);
         }
         if (msSinceLastUpdate >= msMinBetweenUpdates) {
             // Here create the select query.
-            String countQuery = "SELECT /*+ NO_CACHE */ count(*) FROM " + table.getName().getString();
+            String countQuery = "SELECT /*+ NO_CACHE NO_INDEX */ count(*) FROM " + table.getName().getString();
             PhoenixStatement statement = (PhoenixStatement) connection.createStatement();
             QueryPlan plan = statement.compileQuery(countQuery);
             Scan scan = plan.getContext().getScan();
@@ -510,8 +507,9 @@ public class MetaDataClient {
             tempPtr.set(kv.getValue());
             // A single Cell will be returned with the count(*) - we decode that here
             long rowCount = PDataType.LONG.getCodec().decodeLong(tempPtr, SortOrder.getDefault());
-            // We need to update the stats table
-            connection.getQueryServices().clearCacheForTable(tenantIdBytes,
+            // We need to update the stats table so that client will pull the new one with
+            // the updated stats.
+            connection.getQueryServices().incrementTableTimeStamp(tenantIdBytes,
                     Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())),
                     Bytes.toBytes(SchemaUtil.getTableNameFromFullName(physicalName.getString())), clientTS);
             return new  MutationState(0, connection, rowCount);
