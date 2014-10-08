@@ -48,7 +48,7 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         Array array;
         conn = upsertValues(props, "t");
         // CAll the update statistics query here. If already major compaction has run this will not get executed.
-        stmt = conn.prepareStatement("ANALYZE T");
+        stmt = conn.prepareStatement("UPDATE STATISTICS T");
         stmt.execute();
         stmt = upsertStmt(conn, "t");
         stmt.setString(1, "z");
@@ -62,7 +62,7 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn.close();
         conn = DriverManager.getConnection(getUrl(), props);
         // This analyze would not work
-        stmt = conn.prepareStatement("ANALYZE T");
+        stmt = conn.prepareStatement("UPDATE STATISTICS T");
         stmt.execute();
         rs = conn.createStatement().executeQuery("SELECT k FROM T");
         assertTrue(rs.next());
@@ -89,9 +89,9 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn = upsertValues(props, "x");
         conn = upsertValues(props, "z");
         // CAll the update statistics query here
-        stmt = conn.prepareStatement("ANALYZE X");
+        stmt = conn.prepareStatement("UPDATE STATISTICS X");
         stmt.execute();
-        stmt = conn.prepareStatement("ANALYZE Z");
+        stmt = conn.prepareStatement("UPDATE STATISTICS Z");
         stmt.execute();
         stmt = upsertStmt(conn, "x");
         stmt.setString(1, "z");
@@ -114,7 +114,7 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn.close();
         conn = DriverManager.getConnection(getUrl(), props);
         // This analyze would not work
-        stmt = conn.prepareStatement("ANALYZE Z");
+        stmt = conn.prepareStatement("UPDATE STATISTICS Z");
         stmt.execute();
         rs = conn.createStatement().executeQuery("SELECT k FROM Z");
         assertTrue(rs.next());

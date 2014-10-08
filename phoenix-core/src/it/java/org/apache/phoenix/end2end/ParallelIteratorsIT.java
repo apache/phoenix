@@ -20,6 +20,8 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
+import static org.apache.phoenix.util.TestUtil.analyzeTableColumns;
+import static org.apache.phoenix.util.TestUtil.analyzeTableIndex;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.apache.phoenix.util.TestUtil.getSplits;
 import static org.junit.Assert.assertEquals;
@@ -43,6 +45,7 @@ import com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
 
+    private static final String STABLE_INDEX = "STABLE_INDEX";
     protected static final byte[] KMIN  = new byte[] {'!'};
     protected static final byte[] KMIN2  = new byte[] {'.'};
     protected static final byte[] K1  = new byte[] {'a'};
@@ -72,7 +75,7 @@ public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES);
         initTableValues(conn);
         
-        PreparedStatement stmt = conn.prepareStatement("ANALYZE STABLE");
+        PreparedStatement stmt = conn.prepareStatement("UPDATE STATISTICS STABLE");
         stmt.execute();
         
         List<KeyRange> keyRanges;
@@ -108,19 +111,48 @@ public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES);
         byte[][] splits = new byte[][] { K3, K9, KR };
         ensureTableCreated(getUrl(), STABLE_NAME, splits);
-
+        // create index
+        conn.createStatement().execute("CREATE INDEX " + STABLE_INDEX + " ON " + STABLE_NAME + "( \"value\")");
+        // before upserting
         List<KeyRange> keyRanges = getAllSplits(conn);
         assertEquals(4, keyRanges.size());
         upsert(conn, new byte[][] { KMIN, K4, K11 });
-        analyzeTable(conn);
+        // Analyze table alone
+        analyzeTableColumns(conn);
         keyRanges = getAllSplits(conn);
         assertEquals(7, keyRanges.size());
+        // Get all splits on the index table before calling analyze on the index table
+        List<KeyRange> indexSplits = getAllSplits(conn, STABLE_INDEX);
+        assertEquals(1, indexSplits.size());
+        // Analyze the index table alone
+        analyzeTableIndex(conn, STABLE_NAME);
+        // check the splits of the main table 
+        keyRanges = getAllSplits(conn);
+        assertEquals(7, keyRanges.size());
+        // check the splits on the index table
+        indexSplits = getAllSplits(conn, STABLE_INDEX);
+        assertEquals(4, indexSplits.size());
         upsert(conn, new byte[][] { KMIN2, K5, K12 });
+        // Update the stats for both the table and the index table
         analyzeTable(conn);
         keyRanges = getAllSplits(conn);
         assertEquals(10, keyRanges.size());
+        // the above analyze should have udpated the index splits also
+        indexSplits = getAllSplits(conn, STABLE_INDEX);
+        assertEquals(7, indexSplits.size());
         upsert(conn, new byte[][] { K1, K6, KP });
-        analyzeTable(conn);
+        // Update only the table
+        analyzeTableColumns(conn);
+        keyRanges = getAllSplits(conn);
+        assertEquals(13, keyRanges.size());
+        // No change to the index splits
+        indexSplits = getAllSplits(conn, STABLE_INDEX);
+        assertEquals(7, indexSplits.size());
+        analyzeTableIndex(conn, STABLE_NAME);
+        indexSplits = getAllSplits(conn, STABLE_INDEX);
+        // the above analyze should have udpated the index splits only
+        assertEquals(10, indexSplits.size());
+        // No change in main table splits
         keyRanges = getAllSplits(conn);
         assertEquals(13, keyRanges.size());
         conn.close();

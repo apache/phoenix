@@ -26,8 +26,6 @@ import org.apache.hadoop.hbase.util.Bytes;
  */
 public class PTableStatsImpl implements PTableStats {
 
-    public static final PTableStats NO_STATS = new PTableStatsImpl();
-
     private TreeMap<byte[], List<byte[]>> guidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
 
     public PTableStatsImpl() {
