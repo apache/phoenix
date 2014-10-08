@@ -79,7 +79,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         if (normWhere == where)
             return select;
         
-        return NODE_FACTORY.select(Collections.singletonList(rewriter.tableNode), select.getHint(), select.isDistinct(), select.getSelect(), normWhere, select.getGroupBy(), select.getHaving(), select.getOrderBy(), select.getLimit(), select.getBindCount(), select.isAggregate(), select.hasSequence());
+        return NODE_FACTORY.select(select, Collections.singletonList(rewriter.tableNode), normWhere);
     }
     
     protected SubqueryRewriter(SelectStatement select, ColumnResolver resolver, PhoenixConnection connection) {
@@ -133,9 +133,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         SelectStatement subquery = subqueryNode.getSelectNode();
         String rhsTableAlias = ParseNodeFactory.createTempAlias();
         List<AliasedNode> selectNodes = fixAliasedNodes(subquery.getSelect());
-        subquery = NODE_FACTORY.select(subquery.getFrom(), subquery.getHint(), true, 
-                selectNodes, subquery.getWhere(), subquery.getGroupBy(), subquery.getHaving(), subquery.getOrderBy(), 
-                subquery.getLimit(), subquery.getBindCount(), subquery.isAggregate(), subquery.hasSequence());
+        subquery = NODE_FACTORY.select(subquery, true, selectNodes);
         ParseNode onNode = getJoinConditionNode(l.get(0), selectNodes, rhsTableAlias);
         TableNode rhsTable = NODE_FACTORY.derivedTable(rhsTableAlias, subquery);
         JoinType joinType = topNode == node ? (node.isNegate() ? JoinType.Anti : JoinType.Semi) : JoinType.Left;
@@ -168,13 +166,71 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         selectNodes.add(NODE_FACTORY.aliasedNode(ParseNodeFactory.createTempAlias(), LiteralParseNode.ONE));
         selectNodes.addAll(additionalSelectNodes);
         
-        subquery = NODE_FACTORY.select(subquery.getFrom(), subquery.getHint(), true, 
-                selectNodes, where, subquery.getGroupBy(), subquery.getHaving(), subquery.getOrderBy(), 
-                subquery.getLimit(), subquery.getBindCount(), subquery.isAggregate(), subquery.hasSequence());
+        subquery = NODE_FACTORY.select(subquery, true, selectNodes, where);
         ParseNode onNode = conditionExtractor.getJoinCondition();
         TableNode rhsTable = NODE_FACTORY.derivedTable(rhsTableAlias, subquery);
         JoinType joinType = topNode == node ? (node.isNegate() ? JoinType.Anti : JoinType.Semi) : JoinType.Left;
         ParseNode ret = topNode == node ? null : NODE_FACTORY.isNull(NODE_FACTORY.column(NODE_FACTORY.table(null, rhsTableAlias), selectNodes.get(0).getAlias(), null), !node.isNegate());
+        tableNode = NODE_FACTORY.join(joinType, tableNode, rhsTable, onNode);
+        
+        if (topNode == node) {
+            topNode = null;
+        }
+        
+        return ret;
+    }
+
+    @Override
+    public ParseNode visitLeave(ComparisonParseNode node, List<ParseNode> l) throws SQLException {
+        ParseNode secondChild = l.get(1);
+        if (!(secondChild instanceof SubqueryParseNode)) {
+            return super.visitLeave(node, l);
+        }
+        
+        SubqueryParseNode subqueryNode = (SubqueryParseNode) secondChild;
+        SelectStatement subquery = subqueryNode.getSelectNode();
+        String rhsTableAlias = ParseNodeFactory.createTempAlias();
+        JoinConditionExtractor conditionExtractor = new JoinConditionExtractor(subquery, resolver, connection, rhsTableAlias);
+        ParseNode where = subquery.getWhere() == null ? null : subquery.getWhere().accept(conditionExtractor);
+        if (where == subquery.getWhere()) { // non-correlated comparison subquery, add LIMIT 2, expectSingleRow = true
+            subquery = NODE_FACTORY.select(subquery, NODE_FACTORY.limit(NODE_FACTORY.literal(2)));
+            subqueryNode = NODE_FACTORY.subquery(subquery, true);
+            l = Lists.newArrayList(l.get(0), subqueryNode);
+            node = NODE_FACTORY.comparison(node.getFilterOp(), l.get(0), l.get(1));
+            return super.visitLeave(node, l);
+        }
+        
+        if (!subquery.isAggregate() || !subquery.getGroupBy().isEmpty()) {
+            //TODO add runtime singleton check or add a "singleton" aggregate funtion
+            throw new SQLFeatureNotSupportedException("Do not support non-aggregate or groupby subquery in comparison.");
+        }
+        
+        ParseNode rhsNode = null; 
+        List<AliasedNode> aliasedNodes = subquery.getSelect();
+        if (aliasedNodes.size() == 1) {
+            rhsNode = aliasedNodes.get(0).getNode();
+        } else {
+            List<ParseNode> nodes = Lists.<ParseNode> newArrayListWithExpectedSize(aliasedNodes.size());
+            for (AliasedNode aliasedNode : aliasedNodes) {
+                nodes.add(aliasedNode.getNode());
+            }
+            rhsNode = NODE_FACTORY.rowValueConstructor(nodes);
+        }
+        
+        List<AliasedNode> additionalSelectNodes = conditionExtractor.getAdditionalSelectNodes();
+        List<AliasedNode> selectNodes = Lists.newArrayListWithExpectedSize(additionalSelectNodes.size() + 1);        
+        selectNodes.add(NODE_FACTORY.aliasedNode(ParseNodeFactory.createTempAlias(), rhsNode));
+        selectNodes.addAll(additionalSelectNodes);
+        List<ParseNode> groupbyNodes = Lists.newArrayListWithExpectedSize(additionalSelectNodes.size());
+        for (AliasedNode aliasedNode : additionalSelectNodes) {
+            groupbyNodes.add(aliasedNode.getNode());
+        }
+        
+        subquery = NODE_FACTORY.select(subquery, selectNodes, where, groupbyNodes, true);
+        ParseNode onNode = conditionExtractor.getJoinCondition();
+        TableNode rhsTable = NODE_FACTORY.derivedTable(rhsTableAlias, subquery);
+        JoinType joinType = topNode == node ? JoinType.Inner : JoinType.Left;
+        ParseNode ret = NODE_FACTORY.comparison(node.getFilterOp(), l.get(0), NODE_FACTORY.column(NODE_FACTORY.table(null, rhsTableAlias), selectNodes.get(0).getAlias(), null));
         tableNode = NODE_FACTORY.join(joinType, tableNode, rhsTable, onNode);
         
         if (topNode == node) {

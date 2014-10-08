@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.JOIN_COITEM_TABLE_DISPLAY_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_COITEM_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_DISPLAY_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_DISPLAY_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
@@ -31,12 +32,14 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
@@ -154,6 +157,21 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER AGGREGATE INTO DISTINCT ROWS BY [item_id]\n" +
                 "        CLIENT MERGE SORT",
+                
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + "\n" +
+                "    SKIP-SCAN-JOIN TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER AGGREGATE INTO DISTINCT ROWS BY \\[O.customer_id\\]\n" +
+                "        CLIENT MERGE SORT\n" +
+                "            PARALLEL INNER-JOIN TABLE 0\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            PARALLEL LEFT-JOIN TABLE 1\\(DELAYED EVALUATION\\)\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[item_id\\]\n" +
+                "                CLIENT MERGE SORT\n" +
+                "            DYNAMIC SERVER FILTER BY item_id BETWEEN MIN/MAX OF \\(O.item_id\\)\n" +
+                "            AFTER-JOIN SERVER FILTER BY \\(I.NAME = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)\n" +
+                "    DYNAMIC SERVER FILTER BY customer_id IN \\(\\$\\d+.\\$\\d+\\)"
                 }});
         testCases.add(new String[][] {
                 {
@@ -207,6 +225,20 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER AGGREGATE INTO DISTINCT ROWS BY [item_id]\n" +
                 "        CLIENT MERGE SORT",
+                
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_customer\n" +
+                "    PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY\n" +
+                "            SERVER AGGREGATE INTO DISTINCT ROWS BY \\[O.customer_id\\]\n" +
+                "        CLIENT MERGE SORT\n" +
+                "            PARALLEL INNER-JOIN TABLE 0\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            PARALLEL LEFT-JOIN TABLE 1\\(DELAYED EVALUATION\\)\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[item_id\\]\n" +
+                "                CLIENT MERGE SORT\n" +
+                "            AFTER-JOIN SERVER FILTER BY \\(I.0:NAME = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)"
                 }});
         testCases.add(new String[][] {
                 {
@@ -266,6 +298,23 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER AGGREGATE INTO DISTINCT ROWS BY [item_id]\n" +
                 "        CLIENT MERGE SORT",
+                
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " \\[-32768\\]\n" +
+                "CLIENT MERGE SORT\n" +
+                "    PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " \\[-32768\\]\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY\n" +
+                "            SERVER AGGREGATE INTO DISTINCT ROWS BY \\[O.customer_id\\]\n" +
+                "        CLIENT MERGE SORT\n" +
+                "            PARALLEL INNER-JOIN TABLE 0\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "            PARALLEL LEFT-JOIN TABLE 1\\(DELAYED EVALUATION\\)\n" +
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[item_id\\]\n" +
+                "                CLIENT MERGE SORT\n" +
+                "            DYNAMIC SERVER FILTER BY item_id BETWEEN MIN/MAX OF \\(O.item_id\\)\n" +
+                "            AFTER-JOIN SERVER FILTER BY \\(I.0:NAME = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)\n" +
+                "    DYNAMIC SERVER FILTER BY customer_id IN \\(\\$\\d+.\\$\\d+\\)"
                 }});
         return testCases;
     }
@@ -650,6 +699,14 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
             assertEquals(rs.getString(4), "T1");
 
             assertFalse(rs.next());
+            
+            query = "SELECT \"item_id\", name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " WHERE \"item_id\" < (SELECT \"item_id\" FROM " + JOIN_ORDER_TABLE_FULL_NAME + ")";
+            statement = conn.prepareStatement(query);
+            try {
+                rs = statement.executeQuery();
+                fail("Should have got Exception.");
+            } catch (SQLException e) {
+            }
         } finally {
             conn.close();
         }
@@ -801,6 +858,47 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             String plan = QueryUtil.getExplainPlan(rs);
             assertTrue("\"" + plan + "\" does not match \"" + plans[2] + "\"", Pattern.matches(plans[2], plan));
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testComparisonSubquery() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            String query = "SELECT \"order_id\", name FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity = (SELECT max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\")";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertEquals(rs.getString(2), "T1");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertEquals(rs.getString(2), "T2");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertEquals(rs.getString(2), "T6");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertEquals(rs.getString(2), "T3");
+
+            assertFalse(rs.next());
+
+            query = "SELECT name from " + JOIN_CUSTOMER_TABLE_FULL_NAME + " WHERE \"customer_id\" IN (SELECT \"customer_id\" FROM " + JOIN_ITEM_TABLE_FULL_NAME + " i JOIN " + JOIN_ORDER_TABLE_FULL_NAME + " o ON o.\"item_id\" = i.\"item_id\" WHERE i.name = 'T2' OR quantity > (SELECT avg(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\"))";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "C2");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "C4");
+
+            assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            String plan = QueryUtil.getExplainPlan(rs);
+            assertTrue("\"" + plan + "\" does not match \"" + plans[4] + "\"", Pattern.matches(plans[4], plan));
         } finally {
             conn.close();
         }
