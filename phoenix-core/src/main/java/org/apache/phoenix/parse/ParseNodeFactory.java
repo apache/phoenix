@@ -610,6 +610,30 @@ public class ParseNodeFactory {
                 statement.hasSequence());
     }
 
+    public SelectStatement select(SelectStatement statement, List<? extends TableNode> tables, ParseNode where) {
+        return select(tables, statement.getHint(), statement.isDistinct(), statement.getSelect(), where, statement.getGroupBy(),
+                statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(),
+                statement.hasSequence());
+    }
+
+    public SelectStatement select(SelectStatement statement, boolean isDistinct, List<AliasedNode> select) {
+        return select(statement.getFrom(), statement.getHint(), isDistinct, select, statement.getWhere(), statement.getGroupBy(),
+                statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(),
+                statement.hasSequence());
+    }
+
+    public SelectStatement select(SelectStatement statement, boolean isDistinct, List<AliasedNode> select, ParseNode where) {
+        return select(statement.getFrom(), statement.getHint(), isDistinct, select, where, statement.getGroupBy(),
+                statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(),
+                statement.hasSequence());
+    }
+
+    public SelectStatement select(SelectStatement statement, List<AliasedNode> select, ParseNode where, List<ParseNode> groupBy, boolean isAggregate) {
+        return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), select, where, groupBy,
+                statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), isAggregate,
+                statement.hasSequence());
+    }
+
     public SelectStatement select(SelectStatement statement, HintNode hint) {
         return hint == null || hint.isEmpty() ? statement : select(statement.getFrom(), hint, statement.isDistinct(), statement.getSelect(),
                 statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(),
