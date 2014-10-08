@@ -48,22 +48,21 @@ import com.google.common.base.Preconditions;
  * @since 0.1
  */
 public class LiteralExpression extends BaseTerminalExpression {
-    public static final LiteralExpression NULL_EXPRESSION = new LiteralExpression(null, Determinism.ALWAYS);
-    private static final LiteralExpression ND_NULL_EXPRESSION = new LiteralExpression(null, Determinism.PER_ROW);
-    private static final LiteralExpression[] TYPED_NULL_EXPRESSIONS = new LiteralExpression[PDataType.values().length * 2];
+	private static final LiteralExpression[] NULL_EXPRESSIONS = new LiteralExpression[Determinism.values().length];
+    private static final LiteralExpression[] TYPED_NULL_EXPRESSIONS = new LiteralExpression[PDataType.values().length * Determinism.values().length];
+    private static final LiteralExpression[] BOOLEAN_EXPRESSIONS = new LiteralExpression[2 * Determinism.values().length];
+    
     static {
-        for (int i = 0; i < PDataType.values().length; i++) {
-            TYPED_NULL_EXPRESSIONS[i] = new LiteralExpression(PDataType.values()[i], Determinism.ALWAYS);
-        }
-        for (int i = 0; i < PDataType.values().length; i++) {
-            TYPED_NULL_EXPRESSIONS[i+PDataType.values().length] = new LiteralExpression(PDataType.values()[i], Determinism.PER_ROW);
-        }
+    	for (Determinism determinism : Determinism.values()) {
+    		NULL_EXPRESSIONS[determinism.ordinal()] = new LiteralExpression(null, determinism);
+	        for (int i = 0; i < PDataType.values().length; i++) {
+	            TYPED_NULL_EXPRESSIONS[i+PDataType.values().length*determinism.ordinal()] = new LiteralExpression(PDataType.values()[i], determinism);
+	        }        
+	        BOOLEAN_EXPRESSIONS[determinism.ordinal()] = new LiteralExpression(Boolean.FALSE, PDataType.BOOLEAN, PDataType.BOOLEAN.toBytes(Boolean.FALSE), determinism);
+	        BOOLEAN_EXPRESSIONS[Determinism.values().length+determinism.ordinal()] = new LiteralExpression(Boolean.TRUE, PDataType.BOOLEAN, PDataType.BOOLEAN.toBytes(Boolean.TRUE), determinism);
+    	}
     }
-    private static final LiteralExpression FALSE_EXPRESSION = new LiteralExpression(Boolean.FALSE, PDataType.BOOLEAN, PDataType.BOOLEAN.toBytes(Boolean.FALSE), Determinism.ALWAYS);
-    private static final LiteralExpression TRUE_EXPRESSION = new LiteralExpression(Boolean.TRUE, PDataType.BOOLEAN, PDataType.BOOLEAN.toBytes(Boolean.TRUE), Determinism.ALWAYS);
-    private static final LiteralExpression ND_FALSE_EXPRESSION = new LiteralExpression(Boolean.FALSE, PDataType.BOOLEAN, PDataType.BOOLEAN.toBytes(Boolean.FALSE), Determinism.PER_ROW);
-    private static final LiteralExpression ND_TRUE_EXPRESSION = new LiteralExpression(Boolean.TRUE, PDataType.BOOLEAN, PDataType.BOOLEAN.toBytes(Boolean.TRUE), Determinism.PER_ROW);
-
+    
     private Object value;
     private PDataType type;
     private Determinism determinism;
@@ -71,14 +70,31 @@ public class LiteralExpression extends BaseTerminalExpression {
     private Integer maxLength;
     private Integer scale;
     private SortOrder sortOrder;
-
+    
+    private static LiteralExpression getNullLiteralExpression(Determinism determinism) {
+    	return NULL_EXPRESSIONS[determinism.ordinal()] ;
+    }
+    
+    private static LiteralExpression getTypedNullLiteralExpression(PDataType type, Determinism determinism){
+    	return TYPED_NULL_EXPRESSIONS[type.ordinal()+PDataType.values().length*determinism.ordinal()];
+    }
+    
+    private static LiteralExpression getBooleanLiteralExpression(Boolean bool, Determinism determinism){
+    	return BOOLEAN_EXPRESSIONS[ (bool==Boolean.FALSE ?  0 : Determinism.values().length) + determinism.ordinal()];
+    }
 
     public static boolean isFalse(Expression child) {
-        return child == FALSE_EXPRESSION || child == ND_FALSE_EXPRESSION;
+    	if (child!=null) {
+    		return child == BOOLEAN_EXPRESSIONS[child.getDeterminism().ordinal()];
+    	}
+    	return false;
     }
     
     public static boolean isTrue(Expression child) {
-        return child == TRUE_EXPRESSION || child == ND_TRUE_EXPRESSION;
+    	if (child!=null) {
+    		return child == BOOLEAN_EXPRESSIONS[Determinism.values().length+child.getDeterminism().ordinal()];
+    	}
+    	return false;
     }
     
     public static LiteralExpression newConstant(Object value) {
@@ -87,19 +103,16 @@ public class LiteralExpression extends BaseTerminalExpression {
     
     // TODO: cache?
     public static LiteralExpression newConstant(Object value, Determinism determinism) {
-        if (Boolean.FALSE.equals(value)) {
-            return determinism == Determinism.ALWAYS ? FALSE_EXPRESSION : ND_FALSE_EXPRESSION;
+        if (value instanceof Boolean) {
+            return getBooleanLiteralExpression((Boolean)value, determinism);
         }
-        if (Boolean.TRUE.equals(value)) {
-            return determinism == Determinism.ALWAYS ? TRUE_EXPRESSION : ND_TRUE_EXPRESSION;
-        }
-        if (value == null) {
-            return determinism == Determinism.ALWAYS ? NULL_EXPRESSION : ND_NULL_EXPRESSION;
+        else if (value == null) {
+            return getNullLiteralExpression(determinism);
         }
         PDataType type = PDataType.fromLiteral(value);
         byte[] b = type.toBytes(value);
         if (type.isNull(b)) {
-            return TYPED_NULL_EXPRESSIONS[type.ordinal() + ( determinism == Determinism.ALWAYS ? 0 : TYPED_NULL_EXPRESSIONS.length/2)];
+            return getTypedNullLiteralExpression(type, determinism);
         }
         if (type == PDataType.VARCHAR) {
             String s = (String) value;
@@ -138,16 +151,10 @@ public class LiteralExpression extends BaseTerminalExpression {
     public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale, SortOrder sortOrder, Determinism determinism)
             throws SQLException {
         if (value == null) {
-            if (type == null) {
-                return NULL_EXPRESSION;
-            }
-            return TYPED_NULL_EXPRESSIONS[type.ordinal()];
+            return  (type == null) ?  getNullLiteralExpression(determinism) : getTypedNullLiteralExpression(type, determinism);
         }
-        if (Boolean.FALSE.equals(value)) {
-            return determinism == Determinism.ALWAYS ? FALSE_EXPRESSION : ND_FALSE_EXPRESSION;
-        }
-        if (Boolean.TRUE.equals(value)) {
-            return determinism == Determinism.ALWAYS ? TRUE_EXPRESSION : ND_TRUE_EXPRESSION;
+        else if (value instanceof Boolean) {
+            return getBooleanLiteralExpression((Boolean)value, determinism);
         }
         PDataType actualType = PDataType.fromLiteral(value);
         // For array we should check individual element in it?
@@ -168,7 +175,7 @@ public class LiteralExpression extends BaseTerminalExpression {
                 maxLength = ((PhoenixArray)value).getMaxLength();
             }
             if (b.length == 0) {
-                return TYPED_NULL_EXPRESSIONS[type.ordinal()];
+                return getTypedNullLiteralExpression(type, determinism);
             }
             if (maxLength == null) {
                 maxLength = type == null || !type.isFixedWidth() ? null : type.getMaxLength(value);
