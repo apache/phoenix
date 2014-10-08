@@ -106,6 +106,6 @@ public class StatisticsUtil {
         } finally {
             scanner.close();
         }
-        return PTableStatsImpl.NO_STATS;
+        return PTableStats.EMPTY_STATS;
     }
 }

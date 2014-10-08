@@ -461,7 +461,7 @@ public class TestUtil {
                     " WHERE " + ((lowerRange != null ? (pkCol + " >= ? " + (upperRange != null ? " AND " : "")) : "") 
                               + (upperRange != null ? (pkCol + " < ?") : "" )));
         String whereClause = whereClauseSuffix == null ? whereClauseStart : whereClauseStart.length() == 0 ? (" WHERE " + whereClauseSuffix) : (" AND " + whereClauseSuffix);
-        String query = "SELECT COUNT(*) FROM " + tableName + whereClause;
+        String query = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName + whereClause;
         PhoenixPreparedStatement pstmt = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
         if (lowerRange != null) {
             pstmt.setBytes(1, lowerRange);
@@ -483,12 +483,22 @@ public class TestUtil {
     }
 
     public static void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
-        String query = "ANALYZE " + tableName;
+        String query = "UPDATE STATISTICS " + tableName;
+        conn.createStatement().execute(query);
+    }
+    
+    public static void analyzeTableIndex(Connection conn, String tableName) throws IOException, SQLException {
+        String query = "UPDATE STATISTICS " + tableName+ " INDEX";
+        conn.createStatement().execute(query);
+    }
+    
+    public static void analyzeTableColumns(Connection conn) throws IOException, SQLException {
+        String query = "UPDATE STATISTICS " + STABLE_NAME+ " COLUMNS";
         conn.createStatement().execute(query);
     }
     
     public static void analyzeTable(Connection conn) throws IOException, SQLException {
-        String query = "ANALYZE " + STABLE_NAME;
+        String query = "UPDATE STATISTICS " + STABLE_NAME;
         conn.createStatement().execute(query);
     }
     

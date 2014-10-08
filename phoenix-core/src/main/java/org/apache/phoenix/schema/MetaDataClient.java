@@ -471,12 +471,31 @@ public class MetaDataClient {
         return connection.getQueryServices().updateData(plan);
     }
 
-    public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt) throws SQLException {
+    public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt)
+            throws SQLException {
         // Check before updating the stats if we have reached the configured time to reupdate the stats once again
-        long msMinBetweenUpdates = connection.getQueryServices().getProps()
-                .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_MIN_STATS_UPDATE_FREQ_MS);
+        final long msMinBetweenUpdates = connection
+                .getQueryServices()
+                .getProps()
+                .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
+                        QueryServicesOptions.DEFAULT_MIN_STATS_UPDATE_FREQ_MS);
         ColumnResolver resolver = FromCompiler.getResolver(updateStatisticsStmt, connection);
         PTable table = resolver.getTables().get(0).getTable();
+        List<PTable> indexes = table.getIndexes();
+        List<PTable> tables = Lists.newArrayListWithExpectedSize(1 + indexes.size());
+        if (updateStatisticsStmt.updateColumns()) {
+            tables.add(table);
+        }
+        if (updateStatisticsStmt.updateIndex()) {
+            tables.addAll(indexes);
+        }
+        for(PTable pTable : tables) {
+            updateStatisticsInternal(msMinBetweenUpdates, pTable);
+        }
+        return new MutationState(1, connection);
+    }
+
+    private MutationState updateStatisticsInternal(long msMinBetweenUpdates, PTable table) throws SQLException {
         PName physicalName = table.getPhysicalName();
         byte[] tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         Long scn = connection.getSCN();
@@ -1176,6 +1195,7 @@ public class MetaDataClient {
             
             // Bootstrapping for our SYSTEM.TABLE that creates itself before it exists 
             if (SchemaUtil.isMetaTable(schemaName,tableName)) {
+                // TODO: what about stats for system catalog?
                 PTable table = PTableImpl.makePTable(tenantId,PNameFactory.newName(schemaName), PNameFactory.newName(tableName), tableType,
                         null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM,
                         PNameFactory.newName(QueryConstants.SYSTEM_TABLE_PK_NAME), null, columns, null, Collections.<PTable>emptyList(), 

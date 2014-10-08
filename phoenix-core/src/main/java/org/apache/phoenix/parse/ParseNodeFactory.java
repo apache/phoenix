@@ -46,6 +46,7 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.schema.stat.StatisticsCollectionScope;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ListMultimap;
@@ -347,8 +348,8 @@ public class ParseNodeFactory {
         return new DivideParseNode(children);
     }
 
-    public UpdateStatisticsStatement updateStatistics(NamedTableNode table) {
-      return new UpdateStatisticsStatement(table);
+    public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope) {
+      return new UpdateStatisticsStatement(table, scope);
     }
 
 

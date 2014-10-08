@@ -17,10 +17,16 @@
  */
 package org.apache.phoenix.schema.stat;
 
+import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.TreeMap;
+
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.Writable;
+
+import com.google.common.collect.Maps;
 
 
 /**
@@ -30,16 +36,28 @@ import java.util.TreeMap;
  * The table is defined on the client side, but it is populated on the server side. The client
  * should not populate any data to the statistics object.
  */
-public interface PTableStats {
+public interface PTableStats extends Writable {
+
+    public static final PTableStats EMPTY_STATS = new PTableStats() {
+        private final TreeMap<byte[], List<byte[]>> EMPTY_TREE_MAP = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+        @Override
+        public TreeMap<byte[], List<byte[]>> getGuidePosts() {
+            return EMPTY_TREE_MAP;
+        }
+
+        @Override
+        public void write(DataOutput output) throws IOException {
+        }
+
+        @Override
+        public void readFields(DataInput arg0) throws IOException {
+        }
+    };
 
     /**
-     * Given the region info, returns an array of bytes that is the current estimate of key
-     * distribution inside that region. The keys should split that region into equal chunks.
-     * 
-     * @param region
-     * @return array of keys
+     * TODO: Change from TreeMap to Map
+     * Returns a tree map of the guide posts collected against a column family
+     * @return
      */
     TreeMap<byte[], List<byte[]>> getGuidePosts();
-
-    void write(DataOutput output) throws IOException;
 }

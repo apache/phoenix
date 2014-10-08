@@ -104,7 +104,9 @@ tokens
     MAXVALUE='maxvalue';
     CYCLE='cycle';
     CASCADE='cascade';
-    ANALYZE='analyze';
+    UPDATE='update';
+    STATISTICS='statistics';    
+    COLUMNS='columns';
 }
 
 
@@ -148,6 +150,9 @@ import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
+
+import org.apache.phoenix.schema.stat.StatisticsCollectionScope;
+
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 }
@@ -495,8 +500,8 @@ alter_table_node returns [AlterTableStatement ret]
     ;
 
 update_statistics_node returns [UpdateStatisticsStatement ret]
-	:   ANALYZE t=from_table_name
-		{ret = factory.updateStatistics(factory.namedTable(null, t));}
+	:   UPDATE STATISTICS t=from_table_name (s=INDEX | s=ALL | s=COLUMNS)?
+		{ret = factory.updateStatistics(factory.namedTable(null, t), s == null ? StatisticsCollectionScope.getDefault() : StatisticsCollectionScope.valueOf(SchemaUtil.normalizeIdentifier(s.getText())));}
 	;
 
 prop_name returns [String ret]

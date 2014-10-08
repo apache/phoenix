@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.stat;
 
+import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -26,17 +27,14 @@ import java.util.TreeMap;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 
+import com.google.common.collect.Lists;
+
 
 /**
  * Implementation for PTableStats.
  */
 public class PTableStatsImpl implements PTableStats {
-
-    // The map for guide posts should be immutable. We only take the current snapshot from outside
-    // method call and store it.
-    
-    public static final PTableStats NO_STATS = new PTableStatsImpl();
-    private TreeMap<byte[], List<byte[]>> guidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
+    private final TreeMap<byte[], List<byte[]>> guidePosts;
 
     public PTableStatsImpl() {
         this(new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR));
@@ -65,6 +63,20 @@ public class PTableStatsImpl implements PTableStats {
             for (int i = 0; i < value.size(); i++) {
                 Bytes.writeByteArray(output, value.get(i));
             }
+        }
+    }
+
+    @Override
+    public void readFields(DataInput input) throws IOException {
+        int size = WritableUtils.readVInt(input);
+        for (int i = 0; i < size; i++) {
+            byte[] key = Bytes.readByteArray(input);
+            int valueSize = WritableUtils.readVInt(input);
+            List<byte[]> value = Lists.newArrayListWithExpectedSize(valueSize);
+            for (int j = 0; j < valueSize; j++) {
+                value.add(j, Bytes.readByteArray(input));
+            }
+            guidePosts.put(key, value);
         }
     }
 }
