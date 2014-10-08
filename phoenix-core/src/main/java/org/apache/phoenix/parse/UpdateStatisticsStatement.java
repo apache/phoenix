@@ -17,10 +17,31 @@
  */
 package org.apache.phoenix.parse;
 
-public class UpdateStatisticsStatement extends SingleTableStatement {
+import static org.apache.phoenix.schema.stat.StatisticsCollectionScope.ALL;
+import static org.apache.phoenix.schema.stat.StatisticsCollectionScope.COLUMNS;
+import static org.apache.phoenix.schema.stat.StatisticsCollectionScope.INDEX;
 
-    public UpdateStatisticsStatement(NamedTableNode table) {
+import org.apache.phoenix.schema.stat.StatisticsCollectionScope;
+
+import com.sun.istack.NotNull;
+
+
+public class UpdateStatisticsStatement extends SingleTableStatement {
+    private final StatisticsCollectionScope scope;
+    public UpdateStatisticsStatement(NamedTableNode table, @NotNull StatisticsCollectionScope scope) {
         super(table, 0);
+        this.scope = scope;
     }
 
+    public boolean updateColumns() {
+        return scope == COLUMNS || scope == ALL;
+    }
+
+    public boolean updateIndex() {
+        return scope == INDEX || scope == ALL;
+    }
+
+    public boolean updateAll() {
+        return scope == ALL;
+    };
 }

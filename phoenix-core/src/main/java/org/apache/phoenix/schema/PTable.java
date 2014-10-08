@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.schema.stat.PTableStats;
 
 
 /**
@@ -316,5 +317,5 @@ public interface PTable {
     
     int getEstimatedSize();
     IndexType getIndexType();
-    
+    PTableStats getTableStats();
 }

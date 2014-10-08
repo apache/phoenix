@@ -112,6 +112,6 @@ public class StatisticsUtil {
             }
             return new PTableStatsImpl(guidePostsPerCf);
         }
-        return PTableStatsImpl.NO_STATS;
+        return PTableStats.EMPTY_STATS;
     }
 }

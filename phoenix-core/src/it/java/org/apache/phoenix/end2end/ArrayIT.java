@@ -171,7 +171,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 	}
 
     private void analyzeTable(Connection conn, String tableWithArray) throws SQLException {
-        String analyse = "ANALYZE  "+tableWithArray;
+        String analyse = "UPDATE STATISTICS  "+tableWithArray;
 		PreparedStatement statement = conn.prepareStatement(analyse);
         statement.execute();
     }

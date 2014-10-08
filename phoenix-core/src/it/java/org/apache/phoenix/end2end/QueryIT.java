@@ -855,7 +855,7 @@ public class QueryIT extends BaseQueryIT {
     }
 
     private void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
-        String query = "ANALYZE " + tableName;
+        String query = "UPDATE STATISTICS " + tableName;
         conn.createStatement().execute(query);
     }
 }

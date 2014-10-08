@@ -20,13 +20,26 @@ package org.apache.phoenix.schema.stat;
 import java.util.List;
 import java.util.TreeMap;
 
+import org.apache.hadoop.hbase.util.Bytes;
+
+import com.google.common.collect.Maps;
+
 
 /*
  * The table is defined on the client side, but it is populated on the server side. The client should not populate any data to the
  * statistics object.
  */
 public interface PTableStats {
+    public static final PTableStats EMPTY_STATS = new PTableStats() {
+        private final TreeMap<byte[], List<byte[]>> EMPTY_TREE_MAP = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+        @Override
+        public TreeMap<byte[], List<byte[]>> getGuidePosts() {
+            return EMPTY_TREE_MAP;
+        }
+    };
+
     /**
+     * TODO: Change from TreeMap to Map
      * Returns a tree map of the guide posts collected against a column family
      * @return
      */
