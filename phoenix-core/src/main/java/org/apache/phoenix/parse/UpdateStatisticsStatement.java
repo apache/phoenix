@@ -17,11 +17,11 @@
  */
 package org.apache.phoenix.parse;
 
-import static org.apache.phoenix.schema.stat.StatisticsCollectionScope.ALL;
-import static org.apache.phoenix.schema.stat.StatisticsCollectionScope.COLUMNS;
-import static org.apache.phoenix.schema.stat.StatisticsCollectionScope.INDEX;
+import static org.apache.phoenix.schema.stats.StatisticsCollectionScope.ALL;
+import static org.apache.phoenix.schema.stats.StatisticsCollectionScope.COLUMNS;
+import static org.apache.phoenix.schema.stats.StatisticsCollectionScope.INDEX;
 
-import org.apache.phoenix.schema.stat.StatisticsCollectionScope;
+import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 
 import com.sun.istack.NotNull;
 
