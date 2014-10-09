@@ -21,12 +21,12 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
-import java.util.TreeMap;
+import java.util.SortedMap;
 
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.io.WritableUtils;
 
-import com.google.common.collect.Maps;
+import com.google.common.collect.ImmutableSortedMap;
 
 
 /**
@@ -39,18 +39,19 @@ import com.google.common.collect.Maps;
 public interface PTableStats extends Writable {
 
     public static final PTableStats EMPTY_STATS = new PTableStats() {
-        private final TreeMap<byte[], List<byte[]>> EMPTY_TREE_MAP = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
         @Override
-        public TreeMap<byte[], List<byte[]>> getGuidePosts() {
-            return EMPTY_TREE_MAP;
+        public SortedMap<byte[], List<byte[]>> getGuidePosts() {
+            return ImmutableSortedMap.of();
         }
 
         @Override
         public void write(DataOutput output) throws IOException {
+            WritableUtils.writeVInt(output, 0);
         }
 
         @Override
         public void readFields(DataInput arg0) throws IOException {
+            throw new UnsupportedOperationException();
         }
     };
 
@@ -59,5 +60,5 @@ public interface PTableStats extends Writable {
      * Returns a tree map of the guide posts collected against a column family
      * @return
      */
-    TreeMap<byte[], List<byte[]>> getGuidePosts();
+    SortedMap<byte[], List<byte[]>> getGuidePosts();
 }

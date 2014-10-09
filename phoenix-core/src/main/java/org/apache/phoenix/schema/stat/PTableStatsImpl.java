@@ -22,6 +22,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.SortedMap;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.util.Bytes;
@@ -34,27 +35,23 @@ import com.google.common.collect.Lists;
  * Implementation for PTableStats.
  */
 public class PTableStatsImpl implements PTableStats {
-    private final TreeMap<byte[], List<byte[]>> guidePosts;
+    private final SortedMap<byte[], List<byte[]>> guidePosts;
 
     public PTableStatsImpl() {
         this(new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR));
     }
 
-    public PTableStatsImpl(TreeMap<byte[], List<byte[]>> guidePosts) {
+    public PTableStatsImpl(SortedMap<byte[], List<byte[]>> guidePosts) {
         this.guidePosts = guidePosts;
     }
     
     @Override
-    public TreeMap<byte[], List<byte[]>> getGuidePosts() {
+    public SortedMap<byte[], List<byte[]>> getGuidePosts() {
         return guidePosts;
     }
 
     @Override
     public void write(DataOutput output) throws IOException {
-        if (guidePosts == null) {
-            WritableUtils.writeVInt(output, 0);
-            return;
-        }
         WritableUtils.writeVInt(output, guidePosts.size());
         for (Entry<byte[], List<byte[]>> entry : guidePosts.entrySet()) {
             Bytes.writeByteArray(output, entry.getKey());
