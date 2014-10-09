@@ -151,7 +151,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 
-import org.apache.phoenix.schema.stat.StatisticsCollectionScope;
+import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;

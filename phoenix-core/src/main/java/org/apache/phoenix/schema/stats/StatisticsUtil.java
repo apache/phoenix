@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema.stat;
+package org.apache.phoenix.schema.stats;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 
 import java.io.IOException;

@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema.stat;
+package org.apache.phoenix.schema.stats;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -37,28 +37,12 @@ import org.apache.phoenix.util.TimeKeeper;
 /**
  * Wrapper to access the statistics table SYSTEM.STATS using the HTable.
  */
-public class StatisticsTable implements Closeable {
-    /**
-<<<<<<< HEAD
-     * @param env
-     *            Environment wherein the coprocessor is attempting to update the stats table.
-=======
-     * @param tableName TODO
-     * @param clientTimeStamp TODO
-     * @param Configuration
-     *            Configruation to update the stats table.
->>>>>>> 5668817... PHOENIX-1321 Cleanup setting of timestamps when collecting and using stats
-     * @param primaryTableName
-     *            name of the primary table on which we should collect stats
-     * @return the {@link StatisticsTable} for the given primary table.
-     * @throws IOException
-     *             if the table cannot be created due to an underlying HTable creation error
-     */
-    public static StatisticsTable getStatisticsTable(HTableInterface hTable, String tableName, long clientTimeStamp) throws IOException {
+public class StatisticsWriter implements Closeable {
+    public static StatisticsWriter getStatisticsTable(HTableInterface hTable, String tableName, long clientTimeStamp) throws IOException {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
             clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
         }
-        StatisticsTable statsTable = new StatisticsTable(hTable, tableName, clientTimeStamp);
+        StatisticsWriter statsTable = new StatisticsWriter(hTable, tableName, clientTimeStamp);
         statsTable.commitLastStatsUpdatedTime();
         return statsTable;
     }
@@ -67,7 +51,7 @@ public class StatisticsTable implements Closeable {
     private final byte[] tableName;
     private final long clientTimeStamp;
 
-    private StatisticsTable(HTableInterface statsTable, String tableName, long clientTimeStamp) {
+    private StatisticsWriter(HTableInterface statsTable, String tableName, long clientTimeStamp) {
         this.statisticsTable = statsTable;
         this.tableName = PDataType.VARCHAR.toBytes(tableName);
         this.clientTimeStamp = clientTimeStamp;

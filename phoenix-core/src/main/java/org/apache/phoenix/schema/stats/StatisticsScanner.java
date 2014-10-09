@@ -6,7 +6,7 @@
  * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
  * the specific language governing permissions and limitations under the License.
  */
-package org.apache.phoenix.schema.stat;
+package org.apache.phoenix.schema.stats;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -26,12 +26,12 @@ import org.apache.hadoop.hbase.util.Bytes;
 public class StatisticsScanner implements InternalScanner {
     private static final Log LOG = LogFactory.getLog(StatisticsScanner.class);
     private InternalScanner delegate;
-    private StatisticsTable stats;
+    private StatisticsWriter stats;
     private HRegion region;
     private StatisticsCollector tracker;
     private byte[] family;
 
-    public StatisticsScanner(StatisticsCollector tracker, StatisticsTable stats, HRegion region,
+    public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, HRegion region,
             InternalScanner delegate, byte[] family) {
         // should there be only one tracker?
         this.tracker = tracker;

@@ -46,7 +46,7 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.schema.stat.StatisticsCollectionScope;
+import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ListMultimap;

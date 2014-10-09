@@ -6,7 +6,7 @@
  * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
  * the specific language governing permissions and limitations under the License.
  */
-package org.apache.phoenix.schema.stat;
+package org.apache.phoenix.schema.stats;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -55,7 +55,8 @@ public class StatisticsCollector {
     private long guidepostDepth;
     private Map<String, Pair<Integer,List<byte[]>>> guidePostsMap = Maps.newHashMap();
     private Map<ImmutableBytesPtr, Boolean> familyMap = Maps.newHashMap();
-    protected StatisticsTable statsTable;
+    protected StatisticsWriter statsTable;
+    // Ensures that either analyze or compaction happens at any point of time.
     private static final Log LOG = LogFactory.getLog(StatisticsCollector.class);
 
     public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp) throws IOException {
@@ -66,7 +67,7 @@ public class StatisticsCollector {
         // triggered
 
         HTableInterface statsHTable = env.getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
-        this.statsTable = StatisticsTable.getStatisticsTable(statsHTable, tableName, clientTimeStamp);
+        this.statsTable = StatisticsWriter.getStatisticsTable(statsHTable, tableName, clientTimeStamp);
     }
     
     public void close() throws IOException {
