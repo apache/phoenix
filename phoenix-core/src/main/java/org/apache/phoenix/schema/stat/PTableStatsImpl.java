@@ -16,7 +16,9 @@
  * limitations under the License.
  */
 package org.apache.phoenix.schema.stat;
- import java.util.List;
+
+import java.util.List;
+import java.util.SortedMap;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.util.Bytes;
@@ -25,20 +27,18 @@ import org.apache.hadoop.hbase.util.Bytes;
  * Implementation for PTableStats.
  */
 public class PTableStatsImpl implements PTableStats {
-
-    private TreeMap<byte[], List<byte[]>> guidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
+    private final SortedMap<byte[], List<byte[]>> guidePosts;
 
     public PTableStatsImpl() {
         this(new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR));
     }
 
-    public PTableStatsImpl(TreeMap<byte[], List<byte[]>> guidePosts) {
+    public PTableStatsImpl(SortedMap<byte[], List<byte[]>> guidePosts) {
         this.guidePosts = guidePosts;
     }
 
     @Override
-    public TreeMap<byte[], List<byte[]>> getGuidePosts() {
+    public SortedMap<byte[], List<byte[]>> getGuidePosts() {
         return guidePosts;
     }
-
 }

@@ -49,17 +49,16 @@ public class PColumnFamilyImpl implements PColumnFamily {
     public PColumnFamilyImpl(PName name, List<PColumn> columns, List<byte[]> guidePosts) {
         Preconditions.checkNotNull(name);
         // Include guidePosts also in estimating the size
-        int guidePostsSize = 0;
+        long estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 5 + SizedUtil.INT_SIZE + name.getEstimatedSize() +
+                SizedUtil.sizeOfMap(columns.size()) * 2 + SizedUtil.sizeOfArrayList(columns.size());
         if(guidePosts != null) {
-            guidePostsSize = guidePosts.size();
+            int guidePostsSize = guidePosts.size();
+            estimatedSize += SizedUtil.sizeOfArrayList(guidePostsSize);
             for(byte[] gps : guidePosts) {
-                guidePostsSize += gps.length;
+                estimatedSize += gps.length;
             }
-            Collections.sort(guidePosts, Bytes.BYTES_COMPARATOR);
             this.guidePosts = guidePosts;
         }
-        long estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 5 + SizedUtil.INT_SIZE + name.getEstimatedSize() +
-                SizedUtil.sizeOfMap(columns.size()) * 2 + SizedUtil.sizeOfArrayList(columns.size()) + SizedUtil.sizeOfArrayList(guidePostsSize);
         this.name = name;
         this.columns = ImmutableList.copyOf(columns);
         ImmutableMap.Builder<String, PColumn> columnByStringBuilder = ImmutableMap.builder();

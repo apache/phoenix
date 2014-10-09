@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedMap;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.Cell;
@@ -356,33 +357,22 @@ public class PTableImpl implements PTable {
         Iterator<Map.Entry<PName,List<PColumn>>> iterator = familyMap.entrySet().iterator();
         PColumnFamily[] families = new PColumnFamily[familyMap.size()];
         if (families.length == 0) {
-            if(stats != null) {
-                byte[] defaultFamilyNameBytes = null;
-                if(defaultFamilyName == null) {
-                    defaultFamilyNameBytes = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
-                } else {
-                    defaultFamilyNameBytes = defaultFamilyName.getBytes();
-                }
-                if (stats.getGuidePosts().get(defaultFamilyNameBytes) != null) {
-                    guidePosts = stats.getGuidePosts().get(defaultFamilyNameBytes);
-                    if (guidePosts != null) {
-                        estimatedSize += SizedUtil.sizeOfArrayList(guidePosts.size());
-                        for (byte[] gps : guidePosts) {
-                            estimatedSize += gps.length;
-                        }
-                    }
+            byte[] defaultFamilyNameBytes = (defaultFamilyName == null) ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : defaultFamilyName.getBytes();
+            List<byte[]> guidePosts = stats.getGuidePosts().get(defaultFamilyNameBytes);
+            if (guidePosts != null) {
+                this.guidePosts = guidePosts;
+                estimatedSize += SizedUtil.sizeOfArrayList(guidePosts.size());
+                for (byte[] gps : guidePosts) {
+                    estimatedSize += gps.length;
                 }
             }
         }
         ImmutableMap.Builder<String, PColumnFamily> familyByString = ImmutableMap.builder();
         ImmutableSortedMap.Builder<byte[], PColumnFamily> familyByBytes = ImmutableSortedMap
                 .orderedBy(Bytes.BYTES_COMPARATOR);
-        List<byte[]> famGuidePosts = null;
         for (int i = 0; i < families.length; i++) {
             Map.Entry<PName,List<PColumn>> entry = iterator.next();
-            if (stats != null) {
-                famGuidePosts = stats.getGuidePosts().get(entry.getKey().getBytes());
-            }
+            List<byte[]> famGuidePosts = stats.getGuidePosts().get(entry.getKey().getBytes());
             PColumnFamily family = new PColumnFamilyImpl(entry.getKey(), entry.getValue(), famGuidePosts);
             families[i] = family;
             familyByString.put(family.getName().getString(), family);
@@ -895,7 +885,7 @@ public class PTableImpl implements PTable {
       }
       
       boolean isImmutableRows = table.getIsImmutableRows();
-      TreeMap<byte[], List<byte[]>> tableGuidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
+      SortedMap<byte[], List<byte[]>> tableGuidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
       for (PTableProtos.PTableStats pTableStatsProto : table.getGuidePostsList()) {
           List<byte[]> value = Lists.newArrayListWithExpectedSize(pTableStatsProto.getValuesCount());
             for (int j = 0; j < pTableStatsProto.getValuesCount(); j++) {
