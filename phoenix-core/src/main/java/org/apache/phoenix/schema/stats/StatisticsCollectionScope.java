@@ -17,7 +17,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema.stat;
+package org.apache.phoenix.schema.stats;
 
 public enum StatisticsCollectionScope {
     COLUMNS, INDEX, ALL;

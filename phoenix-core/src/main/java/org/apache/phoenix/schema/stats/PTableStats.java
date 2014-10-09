@@ -15,30 +15,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema.stat;
+package org.apache.phoenix.schema.stats;
 
 import java.util.List;
 import java.util.SortedMap;
-import java.util.TreeMap;
 
-import org.apache.hadoop.hbase.util.Bytes;
- 
- /**
- * Implementation for PTableStats.
+import com.google.common.collect.ImmutableSortedMap;
+
+
+/*
+ * The table is defined on the client side, but it is populated on the server side. The client should not populate any data to the
+ * statistics object.
  */
-public class PTableStatsImpl implements PTableStats {
-    private final SortedMap<byte[], List<byte[]>> guidePosts;
+public interface PTableStats {
+    public static final PTableStats EMPTY_STATS = new PTableStats() {
+        @Override
+        public SortedMap<byte[], List<byte[]>> getGuidePosts() {
+            return ImmutableSortedMap.of();
+        }
+    };
 
-    public PTableStatsImpl() {
-        this(new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR));
-    }
-
-    public PTableStatsImpl(SortedMap<byte[], List<byte[]>> guidePosts) {
-        this.guidePosts = guidePosts;
-    }
-
-    @Override
-    public SortedMap<byte[], List<byte[]>> getGuidePosts() {
-        return guidePosts;
-    }
+    /**
+     * TODO: Change from TreeMap to Map
+     * Returns a tree map of the guide posts collected against a column family
+     * @return
+     */
+    SortedMap<byte[], List<byte[]>> getGuidePosts();
 }
