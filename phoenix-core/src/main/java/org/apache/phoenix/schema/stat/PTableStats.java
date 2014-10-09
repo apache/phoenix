@@ -18,11 +18,9 @@
 package org.apache.phoenix.schema.stat;
 
 import java.util.List;
-import java.util.TreeMap;
+import java.util.SortedMap;
 
-import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.Maps;
+import com.google.common.collect.ImmutableSortedMap;
 
 
 /*
@@ -31,10 +29,9 @@ import com.google.common.collect.Maps;
  */
 public interface PTableStats {
     public static final PTableStats EMPTY_STATS = new PTableStats() {
-        private final TreeMap<byte[], List<byte[]>> EMPTY_TREE_MAP = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
         @Override
-        public TreeMap<byte[], List<byte[]>> getGuidePosts() {
-            return EMPTY_TREE_MAP;
+        public SortedMap<byte[], List<byte[]>> getGuidePosts() {
+            return ImmutableSortedMap.of();
         }
     };
 
@@ -43,6 +40,5 @@ public interface PTableStats {
      * Returns a tree map of the guide posts collected against a column family
      * @return
      */
-    TreeMap<byte[], List<byte[]>> getGuidePosts();
-
+    SortedMap<byte[], List<byte[]>> getGuidePosts();
 }
