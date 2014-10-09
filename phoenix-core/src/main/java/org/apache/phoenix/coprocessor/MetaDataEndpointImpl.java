@@ -458,7 +458,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         }
         PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getTableName(
                 schemaName.getString(), tableName.getString())) : physicalTables.get(0);
-        PTableStats stats = null;
+        PTableStats stats = PTableStats.EMPTY_STATS;
         if (tenantId == null) {
             HTableInterface statsHTable = getEnvironment().getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
             try {

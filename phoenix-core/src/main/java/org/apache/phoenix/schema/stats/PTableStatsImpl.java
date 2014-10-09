@@ -29,10 +29,11 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 
 import com.google.common.collect.Lists;
+import com.sun.istack.NotNull;
 
 
 /**
- * Implementation for PTableStats.
+ * Implementation for PTableStats
  */
 public class PTableStatsImpl implements PTableStats {
     private final SortedMap<byte[], List<byte[]>> guidePosts;
@@ -41,7 +42,7 @@ public class PTableStatsImpl implements PTableStats {
         this(new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR));
     }
 
-    public PTableStatsImpl(SortedMap<byte[], List<byte[]>> guidePosts) {
+    public PTableStatsImpl(@NotNull SortedMap<byte[], List<byte[]>> guidePosts) {
         this.guidePosts = guidePosts;
     }
     

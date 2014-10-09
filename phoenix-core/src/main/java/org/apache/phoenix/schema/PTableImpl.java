@@ -62,7 +62,7 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-
+import com.sun.istack.NotNull;
 
 /**
  * 
@@ -222,7 +222,7 @@ public class PTableImpl implements PTable {
             PIndexState state, long timeStamp, long sequenceNumber, PName pkName, Integer bucketNum,
             List<PColumn> columns, PName dataTableName, List<PTable> indexes, boolean isImmutableRows,
             List<PName> physicalNames, PName defaultFamilyName, String viewExpression, boolean disableWAL,
-            boolean multiTenant, ViewType viewType, Short viewIndexId, PTableStats stats)
+            boolean multiTenant, ViewType viewType, Short viewIndexId, @NotNull PTableStats stats)
             throws SQLException {
         return new PTableImpl(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, pkName,
                 bucketNum, columns, dataTableName, indexes, isImmutableRows, physicalNames, defaultFamilyName,
