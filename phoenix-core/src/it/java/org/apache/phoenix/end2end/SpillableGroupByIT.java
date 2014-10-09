@@ -42,8 +42,13 @@ import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
+/*
+ * Run in own cluster since it updates QueryServices.MAX_MEMORY_SIZE_ATTRIB
+ * and we wouldn't want that to be set for other tests sharing the same
+ * cluster.
+ */
 @Category(HBaseManagedTimeTest.class)
-public class SpillableGroupByIT extends BaseHBaseManagedTimeIT {
+public class SpillableGroupByIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     private static final int NUM_ROWS_INSERTED = 1000;
     
@@ -55,7 +60,6 @@ public class SpillableGroupByIT extends BaseHBaseManagedTimeIT {
     private int id;
 
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // Set a very small cache size to force plenty of spilling
