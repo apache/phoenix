@@ -601,7 +601,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
         PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getTableName(
                 schemaName.getString(), tableName.getString())) : physicalTables.get(0);
-        PTableStats stats = null;
+        PTableStats stats = PTableStats.EMPTY_STATS;
         if (tenantId == null) {
             HTableInterface statsHTable = null;
             try {
