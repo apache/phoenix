@@ -22,6 +22,8 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.util.Bytes;
+
+import com.sun.istack.NotNull;
  
  /**
  * Implementation for PTableStats.
@@ -33,7 +35,7 @@ public class PTableStatsImpl implements PTableStats {
         this(new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR));
     }
 
-    public PTableStatsImpl(SortedMap<byte[], List<byte[]>> guidePosts) {
+    public PTableStatsImpl(@NotNull SortedMap<byte[], List<byte[]>> guidePosts) {
         this.guidePosts = guidePosts;
     }
 
