@@ -1578,20 +1578,15 @@ public final class PTableProtos {
   public interface PTableStatsOrBuilder
       extends com.google.protobuf.MessageOrBuilder {
 
-    // required string key = 1;
+    // required bytes key = 1;
     /**
-     * <code>required string key = 1;</code>
+     * <code>required bytes key = 1;</code>
      */
     boolean hasKey();
     /**
-     * <code>required string key = 1;</code>
+     * <code>required bytes key = 1;</code>
      */
-    java.lang.String getKey();
-    /**
-     * <code>required string key = 1;</code>
-     */
-    com.google.protobuf.ByteString
-        getKeyBytes();
+    com.google.protobuf.ByteString getKey();
 
     // repeated bytes values = 2;
     /**
@@ -1714,47 +1709,20 @@ public final class PTableProtos {
     }
 
     private int bitField0_;
-    // required string key = 1;
+    // required bytes key = 1;
     public static final int KEY_FIELD_NUMBER = 1;
-    private java.lang.Object key_;
+    private com.google.protobuf.ByteString key_;
     /**
-     * <code>required string key = 1;</code>
+     * <code>required bytes key = 1;</code>
      */
     public boolean hasKey() {
       return ((bitField0_ & 0x00000001) == 0x00000001);
     }
     /**
-     * <code>required string key = 1;</code>
+     * <code>required bytes key = 1;</code>
      */
-    public java.lang.String getKey() {
-      java.lang.Object ref = key_;
-      if (ref instanceof java.lang.String) {
-        return (java.lang.String) ref;
-      } else {
-        com.google.protobuf.ByteString bs = 
-            (com.google.protobuf.ByteString) ref;
-        java.lang.String s = bs.toStringUtf8();
-        if (bs.isValidUtf8()) {
-          key_ = s;
-        }
-        return s;
-      }
-    }
-    /**
-     * <code>required string key = 1;</code>
-     */
-    public com.google.protobuf.ByteString
-        getKeyBytes() {
-      java.lang.Object ref = key_;
-      if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
-            com.google.protobuf.ByteString.copyFromUtf8(
-                (java.lang.String) ref);
-        key_ = b;
-        return b;
-      } else {
-        return (com.google.protobuf.ByteString) ref;
-      }
+    public com.google.protobuf.ByteString getKey() {
+      return key_;
     }
 
     // repeated bytes values = 2;
@@ -1781,7 +1749,7 @@ public final class PTableProtos {
     }
 
     private void initFields() {
-      key_ = "";
+      key_ = com.google.protobuf.ByteString.EMPTY;
       values_ = java.util.Collections.emptyList();
     }
     private byte memoizedIsInitialized = -1;
@@ -1801,7 +1769,7 @@ public final class PTableProtos {
                         throws java.io.IOException {
       getSerializedSize();
       if (((bitField0_ & 0x00000001) == 0x00000001)) {
-        output.writeBytes(1, getKeyBytes());
+        output.writeBytes(1, key_);
       }
       for (int i = 0; i < values_.size(); i++) {
         output.writeBytes(2, values_.get(i));
@@ -1817,7 +1785,7 @@ public final class PTableProtos {
       size = 0;
       if (((bitField0_ & 0x00000001) == 0x00000001)) {
         size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(1, getKeyBytes());
+          .computeBytesSize(1, key_);
       }
       {
         int dataSize = 0;
@@ -1988,7 +1956,7 @@ public final class PTableProtos {
 
       public Builder clear() {
         super.clear();
-        key_ = "";
+        key_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x00000001);
         values_ = java.util.Collections.emptyList();
         bitField0_ = (bitField0_ & ~0x00000002);
@@ -2046,9 +2014,7 @@ public final class PTableProtos {
       public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats other) {
         if (other == org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.getDefaultInstance()) return this;
         if (other.hasKey()) {
-          bitField0_ |= 0x00000001;
-          key_ = other.key_;
-          onChanged();
+          setKey(other.getKey());
         }
         if (!other.values_.isEmpty()) {
           if (values_.isEmpty()) {
@@ -2091,49 +2057,24 @@ public final class PTableProtos {
       }
       private int bitField0_;
 
-      // required string key = 1;
-      private java.lang.Object key_ = "";
+      // required bytes key = 1;
+      private com.google.protobuf.ByteString key_ = com.google.protobuf.ByteString.EMPTY;
       /**
-       * <code>required string key = 1;</code>
+       * <code>required bytes key = 1;</code>
        */
       public boolean hasKey() {
         return ((bitField0_ & 0x00000001) == 0x00000001);
       }
       /**
-       * <code>required string key = 1;</code>
+       * <code>required bytes key = 1;</code>
        */
-      public java.lang.String getKey() {
-        java.lang.Object ref = key_;
-        if (!(ref instanceof java.lang.String)) {
-          java.lang.String s = ((com.google.protobuf.ByteString) ref)
-              .toStringUtf8();
-          key_ = s;
-          return s;
-        } else {
-          return (java.lang.String) ref;
-        }
+      public com.google.protobuf.ByteString getKey() {
+        return key_;
       }
       /**
-       * <code>required string key = 1;</code>
+       * <code>required bytes key = 1;</code>
        */
-      public com.google.protobuf.ByteString
-          getKeyBytes() {
-        java.lang.Object ref = key_;
-        if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
-              com.google.protobuf.ByteString.copyFromUtf8(
-                  (java.lang.String) ref);
-          key_ = b;
-          return b;
-        } else {
-          return (com.google.protobuf.ByteString) ref;
-        }
-      }
-      /**
-       * <code>required string key = 1;</code>
-       */
-      public Builder setKey(
-          java.lang.String value) {
+      public Builder setKey(com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
@@ -2143,24 +2084,11 @@ public final class PTableProtos {
         return this;
       }
       /**
-       * <code>required string key = 1;</code>
+       * <code>required bytes key = 1;</code>
        */
       public Builder clearKey() {
         bitField0_ = (bitField0_ & ~0x00000001);
         key_ = getDefaultInstance().getKey();
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>required string key = 1;</code>
-       */
-      public Builder setKeyBytes(
-          com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  bitField0_ |= 0x00000001;
-        key_ = value;
         onChanged();
         return this;
       }
@@ -5721,7 +5649,7 @@ public final class PTableProtos {
       "le\030\005 \001(\005\022\020\n\010nullable\030\006 \002(\010\022\020\n\010position\030\007" +
       " \002(\005\022\021\n\tsortOrder\030\010 \002(\005\022\021\n\tarraySize\030\t \001" +
       "(\005\022\024\n\014viewConstant\030\n \001(\014\022\026\n\016viewReferenc" +
-      "ed\030\013 \001(\010\"*\n\013PTableStats\022\013\n\003key\030\001 \002(\t\022\016\n\006" +
+      "ed\030\013 \001(\010\"*\n\013PTableStats\022\013\n\003key\030\001 \002(\014\022\016\n\006" +
       "values\030\002 \003(\014\"\212\004\n\006PTable\022\027\n\017schemaNameByt" +
       "es\030\001 \002(\014\022\026\n\016tableNameBytes\030\002 \002(\014\022\036\n\ttabl" +
       "eType\030\003 \002(\0162\013.PTableType\022\022\n\nindexState\030\004",

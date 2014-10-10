@@ -47,7 +47,7 @@ message PColumn {
 }
 
 message PTableStats {
-  required string key = 1;
+  required bytes key = 1;
   repeated bytes values = 2;
 }
 

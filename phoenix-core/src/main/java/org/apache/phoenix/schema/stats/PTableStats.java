@@ -33,6 +33,11 @@ public interface PTableStats {
         public SortedMap<byte[], List<byte[]>> getGuidePosts() {
             return ImmutableSortedMap.of();
         }
+
+        @Override
+        public int getEstimatedSize() {
+            return 0;
+        }
     };
 
     /**
@@ -41,4 +46,6 @@ public interface PTableStats {
      * @return
      */
     SortedMap<byte[], List<byte[]>> getGuidePosts();
+
+    int getEstimatedSize();
 }
