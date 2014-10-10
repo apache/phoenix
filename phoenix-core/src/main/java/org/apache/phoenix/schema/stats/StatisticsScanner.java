@@ -21,7 +21,6 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.util.TimeKeeper;
 
 /**
  * The scanner that does the scanning to collect the stats during major compaction.{@link StatisticsCollector}
@@ -81,7 +80,6 @@ public class StatisticsScanner implements InternalScanner {
             // update the statistics table
             // Just verify if this if fine
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
-            long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Deleting the stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");

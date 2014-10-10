@@ -23,6 +23,7 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.util.SizedUtil;
 
 import com.sun.istack.NotNull;
  
@@ -31,6 +32,7 @@ import com.sun.istack.NotNull;
  */
 public class PTableStatsImpl implements PTableStats {
     private final SortedMap<byte[], List<byte[]>> guidePosts;
+    private final int estimatedSize;
 
     public PTableStatsImpl() {
         this(new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR));
@@ -38,6 +40,17 @@ public class PTableStatsImpl implements PTableStats {
 
     public PTableStatsImpl(@NotNull SortedMap<byte[], List<byte[]>> guidePosts) {
         this.guidePosts = guidePosts;
+        int estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.INT_SIZE + SizedUtil.sizeOfTreeMap(guidePosts.size());
+        for (Map.Entry<byte[], List<byte[]>> entry : guidePosts.entrySet()) {
+            byte[] cf = entry.getKey();
+            estimatedSize += SizedUtil.ARRAY_SIZE + cf.length;
+            List<byte[]> keys = entry.getValue();
+            estimatedSize += SizedUtil.sizeOfArrayList(keys.size());
+            for (byte[] key : keys) {
+                estimatedSize += SizedUtil.ARRAY_SIZE + key.length;
+            }
+        }
+        this.estimatedSize = estimatedSize;
     }
 
     @Override
@@ -64,6 +77,11 @@ public class PTableStatsImpl implements PTableStats {
         }
         buf.append("]");
         return buf.toString();
+    }
+
+    @Override
+    public int getEstimatedSize() {
+        return estimatedSize;
     }
     
 }

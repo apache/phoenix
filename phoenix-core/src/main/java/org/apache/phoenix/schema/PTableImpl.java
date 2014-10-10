@@ -115,7 +115,6 @@ public class PTableImpl implements PTable {
     private Short viewIndexId;
     private int estimatedSize;
     private IndexType indexType;
-    private List<byte[]> guidePosts = Collections.emptyList();
     private PTableStats tableStats = PTableStats.EMPTY_STATS;
     
     public PTableImpl() {
@@ -357,24 +356,13 @@ public class PTableImpl implements PTable {
         estimatedSize += rowKeySchema.getEstimatedSize();
         Iterator<Map.Entry<PName,List<PColumn>>> iterator = familyMap.entrySet().iterator();
         PColumnFamily[] families = new PColumnFamily[familyMap.size()];
-        if (families.length == 0) {
-            byte[] defaultFamilyNameBytes = (defaultFamilyName == null) ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : defaultFamilyName.getBytes();
-            List<byte[]> guidePosts = stats.getGuidePosts().get(defaultFamilyNameBytes);
-            if (guidePosts != null) {
-                this.guidePosts = guidePosts;
-                estimatedSize += SizedUtil.sizeOfArrayList(guidePosts.size());
-                for (byte[] gps : guidePosts) {
-                    estimatedSize += gps.length;
-                }
-            }
-        }
+        estimatedSize += this.tableStats.getEstimatedSize();
         ImmutableMap.Builder<String, PColumnFamily> familyByString = ImmutableMap.builder();
         ImmutableSortedMap.Builder<byte[], PColumnFamily> familyByBytes = ImmutableSortedMap
                 .orderedBy(Bytes.BYTES_COMPARATOR);
         for (int i = 0; i < families.length; i++) {
             Map.Entry<PName,List<PColumn>> entry = iterator.next();
-            List<byte[]> famGuidePosts = stats.getGuidePosts().get(entry.getKey().getBytes());
-            PColumnFamily family = new PColumnFamilyImpl(entry.getKey(), entry.getValue(), famGuidePosts);
+            PColumnFamily family = new PColumnFamilyImpl(entry.getKey(), entry.getValue());
             families[i] = family;
             familyByString.put(family.getName().getString(), family);
             familyByBytes.put(family.getName().getBytes(), family);
@@ -726,11 +714,6 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public List<byte[]> getGuidePosts() {
-        return guidePosts;
-    }
-
-    @Override
     public PColumn getPKColumn(String name) throws ColumnNotFoundException {
         List<PColumn> columns = columnsByName.get(name);
         int size = columns.size();
@@ -892,8 +875,10 @@ public class PTableImpl implements PTable {
             for (int j = 0; j < pTableStatsProto.getValuesCount(); j++) {
                 value.add(pTableStatsProto.getValues(j).toByteArray());
             }
-            tableGuidePosts.put(pTableStatsProto.getKeyBytes().toByteArray(), value);
+            tableGuidePosts.put(pTableStatsProto.getKey().toByteArray(), value);
       }
+      PTableStats stats = new PTableStatsImpl(tableGuidePosts);
+
       PName dataTableName = null;
       if (table.hasDataTableNameBytes()) {
         dataTableName = PNameFactory.newName(table.getDataTableNameBytes().toByteArray());
@@ -920,7 +905,6 @@ public class PTableImpl implements PTable {
         }
       }
       
-      PTableStats stats = new PTableStatsImpl(tableGuidePosts);
       try {
         PTableImpl result = new PTableImpl();
         result.init(tenantId, schemaName, tableName, tableType, indexState, timeStamp, sequenceNumber, pkName,
@@ -978,28 +962,13 @@ public class PTableImpl implements PTable {
       }
       builder.setIsImmutableRows(table.isImmutableRows());
 
-        // build stats for the table
-      if (table.getColumnFamilies().isEmpty() && !table.getGuidePosts().isEmpty()) {
-         List<byte[]> stats = table.getGuidePosts();
-          if (stats != null) {
-             PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();
-             statsBuilder.setKey(Bytes.toString(SchemaUtil.getEmptyColumnFamily(table)));
-             for (byte[] stat : stats) {
-                 statsBuilder.addValues(HBaseZeroCopyByteString.wrap(stat));
-             }
-             builder.addGuidePosts(statsBuilder.build());
+      for (Map.Entry<byte[], List<byte[]>> entry : table.getTableStats().getGuidePosts().entrySet()) {
+         PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();
+         statsBuilder.setKey(HBaseZeroCopyByteString.wrap(entry.getKey()));
+         for (byte[] stat : entry.getValue()) {
+             statsBuilder.addValues(HBaseZeroCopyByteString.wrap(stat));
          }
-      } else {
-            for (PColumnFamily fam : table.getColumnFamilies()) {
-                PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();
-                if (fam.getGuidePosts() != null) {
-                    statsBuilder.setKey(fam.getName().getString());
-                    for (byte[] stat : fam.getGuidePosts()) {
-                        statsBuilder.addValues(HBaseZeroCopyByteString.wrap(stat));
-                    }
-                    builder.addGuidePosts(statsBuilder.build());
-                }
-            }
+         builder.addGuidePosts(statsBuilder.build());
        }
 
       if (table.getParentName() != null) {

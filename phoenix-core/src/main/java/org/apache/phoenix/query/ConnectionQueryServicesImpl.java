@@ -1901,6 +1901,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sqlE = new SQLException(e);
             } finally {
                 try {
+                    if (tenantId.length == 0) tableStatsCache.invalidate(SchemaUtil.getTableName(schemaName, tableName));
                     htable.close();
                 } catch (IOException e) {
                     if (sqlE == null) {

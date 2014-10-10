@@ -252,13 +252,6 @@ public interface PTable {
      */
     int newKey(ImmutableBytesWritable key, byte[][] values);
 
-    /**
-     * Return the statistics table associated with this PTable. A list of 
-     * guide posts are return 
-     * @return the statistics table.
-     */
-    List<byte[]> getGuidePosts();
-
     RowKeySchema getRowKeySchema();
 
     /**

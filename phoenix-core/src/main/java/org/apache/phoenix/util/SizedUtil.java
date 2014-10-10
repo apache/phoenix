@@ -38,6 +38,7 @@ public class SizedUtil {
     public static final int INT_SIZE = 4;
     public static final int LONG_SIZE = 8;
     
+    public static final int TREE_MAP_SIZE = OBJECT_SIZE + INT_SIZE * 2 + POINTER_SIZE * 2;
     public static final int MAP_ENTRY_SIZE = OBJECT_SIZE + 3 * POINTER_SIZE + INT_SIZE;
     public static final int IMMUTABLE_BYTES_WRITABLE_SIZE = OBJECT_SIZE + INT_SIZE * 2 + ARRAY_SIZE;
     public static final int IMMUTABLE_BYTES_PTR_SIZE = IMMUTABLE_BYTES_WRITABLE_SIZE + INT_SIZE;// Extra is an int field which caches hashcode.
@@ -50,6 +51,10 @@ public class SizedUtil {
         OBJECT_SIZE /* BigInteger */ + 5 * INT_SIZE + ARRAY_SIZE /*mag[]*/ + 2 * INT_SIZE /* est mag[2] */;
 
     private SizedUtil() {
+    }
+    
+    public static int sizeOfTreeMap(int size) {
+        return TREE_MAP_SIZE + (OBJECT_SIZE + INT_SIZE + POINTER_SIZE * 5) * size;
     }
     
     public static int sizeOfArrayList(int capacity) {
