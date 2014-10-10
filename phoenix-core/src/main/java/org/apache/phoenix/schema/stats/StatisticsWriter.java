@@ -48,6 +48,7 @@ public class StatisticsWriter implements Closeable {
     /**
      * @param tableName TODO
      * @param clientTimeStamp TODO
+     * @param guidepostDepth 
      * @param Configuration
      *            Configruation to update the stats table.
      * @param primaryTableName
@@ -104,9 +105,14 @@ public class StatisticsWriter implements Closeable {
         byte[] prefix = StatisticsUtil.getRowKey(tableName, PDataType.VARCHAR.toBytes(fam),
                 PDataType.VARCHAR.toBytes(regionName));
         Put put = new Put(prefix);
-        if (tracker.getGuidePosts(fam) != null) {
+        GuidePostsInfo gp = tracker.getGuidePosts(fam);
+        if (gp != null) {
+            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_COUNT_BYTES,
+                    clientTimeStamp, PDataType.LONG.toBytes((gp.getGuidePosts().size())));
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES,
-                    clientTimeStamp, (tracker.getGuidePosts(fam)));
+                    clientTimeStamp, PDataType.VARBINARY.toBytes(gp.toBytes()));
+            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
+                    clientTimeStamp, PDataType.LONG.toBytes(gp.getByteCount()));
         }
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.MIN_KEY_BYTES,
                 clientTimeStamp, PDataType.VARBINARY.toBytes(tracker.getMinKey(fam)));

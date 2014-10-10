@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.schema.stats;
 
-import java.util.List;
 import java.util.SortedMap;
 
 import com.google.common.collect.ImmutableSortedMap;
@@ -30,7 +29,7 @@ import com.google.common.collect.ImmutableSortedMap;
 public interface PTableStats {
     public static final PTableStats EMPTY_STATS = new PTableStats() {
         @Override
-        public SortedMap<byte[], List<byte[]>> getGuidePosts() {
+        public SortedMap<byte[], GuidePostsInfo> getGuidePosts() {
             return ImmutableSortedMap.of();
         }
 
@@ -45,7 +44,7 @@ public interface PTableStats {
      * Returns a tree map of the guide posts collected against a column family
      * @return
      */
-    SortedMap<byte[], List<byte[]>> getGuidePosts();
+    SortedMap<byte[], GuidePostsInfo> getGuidePosts();
 
     int getEstimatedSize();
 }

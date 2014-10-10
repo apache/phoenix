@@ -35,6 +35,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DECIMAL_DIGITS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_COUNT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP;
@@ -235,7 +237,9 @@ public interface QueryConstants {
             PHYSICAL_NAME  + " VARCHAR NOT NULL," +
             COLUMN_FAMILY + " VARCHAR," +
             REGION_NAME + " VARCHAR," +
-            GUIDE_POSTS  + " VARBINARY[]," +
+            GUIDE_POSTS_COUNT + " BIGINT," +
+            GUIDE_POSTS  + " VARBINARY," +
+            GUIDE_POSTS_WIDTH + " BIGINT," +
             MIN_KEY + " VARBINARY," + 
             MAX_KEY + " VARBINARY," +
             LAST_STATS_UPDATE_TIME+ " DATE, "+

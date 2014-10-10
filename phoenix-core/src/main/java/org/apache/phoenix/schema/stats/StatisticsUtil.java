@@ -20,8 +20,6 @@ import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.Cell;
@@ -36,12 +34,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
-
-import com.google.common.collect.Lists;
 /**
  * Simple utility class for managing multiple key parts of the statistic
  */
@@ -71,45 +65,32 @@ public class StatisticsUtil {
         return Arrays.copyOfRange(kv.getRowArray(), kv.getRowOffset(), kv.getRowOffset() + kv.getRowLength());
     }
 
-    public static PTableStats readStatistics(HTableInterface statsHTable, byte[] tableNameBytes, long clientTimeStamp) throws IOException {
+    public static PTableStats readStatistics(HTableInterface statsHTable, byte[] tableNameBytes, long clientTimeStamp)
+            throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         Scan s = MetaDataUtil.newTableRowsScan(tableNameBytes, MetaDataProtocol.MIN_TABLE_TIMESTAMP, clientTimeStamp);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
         ResultScanner scanner = statsHTable.getScanner(s);
         Result result = null;
-        TreeMap<byte[], List<byte[]>> guidePostsPerCf = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
+        TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
         while ((result = scanner.next()) != null) {
             CellScanner cellScanner = result.cellScanner();
             while (cellScanner.advance()) {
                 Cell current = cellScanner.current();
                 int tableNameLength = tableNameBytes.length + 1;
                 int cfOffset = current.getRowOffset() + tableNameLength;
-                int cfLength = getVarCharLength(current.getRowArray(), cfOffset, current.getRowLength() - tableNameLength);
+                int cfLength = getVarCharLength(current.getRowArray(), cfOffset, current.getRowLength()
+                        - tableNameLength);
                 ptr.set(current.getRowArray(), cfOffset, cfLength);
                 byte[] cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                PhoenixArray array = (PhoenixArray)PDataType.VARBINARY_ARRAY.toObject(current.getValueArray(), current.getValueOffset(), current
-                        .getValueLength());
-                if (array != null && array.getDimensions() != 0) {
-                    List<byte[]> guidePosts = Lists.newArrayListWithExpectedSize(array.getDimensions());                        
-                    for (int j = 0; j < array.getDimensions(); j++) {
-                        byte[] gp = array.toBytes(j);
-                        if (gp.length != 0) {
-                            guidePosts.add(gp);
-                        }
-                    }
-                    List<byte[]> gps = guidePostsPerCf.put(cfName, guidePosts);
-                    if (gps != null) { // Add guidepost already there from other regions
-                        guidePosts.addAll(gps);
-                    }
+                GuidePostsInfo newInfo = GuidePostsInfo.fromBytes(current.getValueArray(), current.getValueOffset(), current.getValueLength());
+                GuidePostsInfo oldInfo = guidePostsPerCf.put(cfName, newInfo);
+                if (oldInfo != null) {
+                    newInfo.combine(oldInfo);
                 }
             }
         }
         if (!guidePostsPerCf.isEmpty()) {
-            // Sort guideposts, as the order above will depend on the order we traverse
-            // each region's worth of guideposts above.
-            for (List<byte[]> gps : guidePostsPerCf.values()) {
-                Collections.sort(gps, Bytes.BYTES_COMPARATOR);
-            }
             return new PTableStatsImpl(guidePostsPerCf);
         }
         return PTableStats.EMPTY_STATS;

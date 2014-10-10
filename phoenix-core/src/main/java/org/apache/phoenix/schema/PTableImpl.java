@@ -47,6 +47,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.schema.stats.PTableStatsImpl;
 import org.apache.phoenix.util.ByteUtil;
@@ -379,7 +380,8 @@ public class PTableImpl implements PTable {
         }
         
         this.parentTableName = parentTableName;
-        this.parentName = parentTableName == null ? null : PNameFactory.newName(SchemaUtil.getTableName(schemaName.getString(), parentTableName.getString()));
+        this.parentName = parentTableName == null ? null : PNameFactory.newName(SchemaUtil.getTableName(
+                schemaName.getString(), parentTableName.getString()));
         estimatedSize += PNameFactory.getEstimatedSize(this.parentName);
         
         this.physicalNames = physicalNames == null ? ImmutableList.<PName>of() : ImmutableList.copyOf(physicalNames);
@@ -712,7 +714,7 @@ public class PTableImpl implements PTable {
     public long getTimeStamp() {
         return timeStamp;
     }
-
+    
     @Override
     public PColumn getPKColumn(String name) throws ColumnNotFoundException {
         List<PColumn> columns = columnsByName.get(name);
@@ -869,13 +871,14 @@ public class PTableImpl implements PTable {
       }
       
       boolean isImmutableRows = table.getIsImmutableRows();
-      SortedMap<byte[], List<byte[]>> tableGuidePosts = new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR);
+      SortedMap<byte[], GuidePostsInfo> tableGuidePosts = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
       for (PTableProtos.PTableStats pTableStatsProto : table.getGuidePostsList()) {
           List<byte[]> value = Lists.newArrayListWithExpectedSize(pTableStatsProto.getValuesCount());
             for (int j = 0; j < pTableStatsProto.getValuesCount(); j++) {
                 value.add(pTableStatsProto.getValues(j).toByteArray());
             }
-            tableGuidePosts.put(pTableStatsProto.getKey().toByteArray(), value);
+            GuidePostsInfo info = new GuidePostsInfo(pTableStatsProto.getGuidePostsByteCount(), value);
+            tableGuidePosts.put(pTableStatsProto.getKey().toByteArray(), info);
       }
       PTableStats stats = new PTableStatsImpl(tableGuidePosts);
 
@@ -962,12 +965,13 @@ public class PTableImpl implements PTable {
       }
       builder.setIsImmutableRows(table.isImmutableRows());
 
-      for (Map.Entry<byte[], List<byte[]>> entry : table.getTableStats().getGuidePosts().entrySet()) {
+      for (Map.Entry<byte[], GuidePostsInfo> entry : table.getTableStats().getGuidePosts().entrySet()) {
          PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();
          statsBuilder.setKey(HBaseZeroCopyByteString.wrap(entry.getKey()));
-         for (byte[] stat : entry.getValue()) {
+         for (byte[] stat : entry.getValue().getGuidePosts()) {
              statsBuilder.addValues(HBaseZeroCopyByteString.wrap(stat));
          }
+         statsBuilder.setGuidePostsByteCount(entry.getValue().getByteCount());
          builder.addGuidePosts(statsBuilder.build());
        }
 
