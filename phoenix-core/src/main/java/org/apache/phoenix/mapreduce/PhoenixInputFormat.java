@@ -17,10 +17,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.pig.hadoop;
+package org.apache.phoenix.mapreduce;
 
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
@@ -30,14 +34,17 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.pig.PhoenixPigConfiguration;
+import org.apache.phoenix.mapreduce.util.ConnectionUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.KeyRange;
 
 import com.google.common.base.Preconditions;
@@ -47,13 +54,10 @@ import com.google.common.collect.Lists;
  * The InputFormat class for generating the splits and creating the record readers.
  * 
  */
-public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixRecord> {
+public final class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWritable,T> {
 
     private static final Log LOG = LogFactory.getLog(PhoenixInputFormat.class);
-    private PhoenixPigConfiguration phoenixConfiguration;
-    private Connection connection;
-    private QueryPlan  queryPlan;
-    
+       
     /**
      * instantiated by framework
      */
@@ -61,23 +65,22 @@ public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixR
     }
 
     @Override
-    public RecordReader<NullWritable, PhoenixRecord> createRecordReader(InputSplit split, TaskAttemptContext context)
-            throws IOException, InterruptedException {       
-        setConf(context.getConfiguration());
-        final QueryPlan queryPlan = getQueryPlan(context);
-        try {
-            return new PhoenixRecordReader(phoenixConfiguration,queryPlan);    
-        }catch(SQLException sqle) {
-            throw new IOException(sqle);
-        }
+    public RecordReader<NullWritable,T> createRecordReader(InputSplit split, TaskAttemptContext context)
+            throws IOException, InterruptedException {
+    	
+    	final Configuration configuration = context.getConfiguration();
+        final QueryPlan queryPlan = getQueryPlan(context,configuration);
+        @SuppressWarnings("unchecked")
+		final Class<T> inputClass = (Class<T>) PhoenixConfigurationUtil.getInputClass(configuration);
+        return new PhoenixRecordReader<T>(inputClass , configuration, queryPlan);
     }
     
    
 
     @Override
     public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {  
-        setConf(context.getConfiguration());
-        final QueryPlan queryPlan = getQueryPlan(context);
+        final Configuration configuration = context.getConfiguration();
+        final QueryPlan queryPlan = getQueryPlan(context,configuration);
         final List<KeyRange> allSplits = queryPlan.getSplits();
         final List<InputSplit> splits = generateSplits(queryPlan,allSplits);
         return splits;
@@ -93,25 +96,6 @@ public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixR
         return psplits;
     }
     
-    public void setConf(Configuration configuration) {
-        this.phoenixConfiguration = new PhoenixPigConfiguration(configuration);
-    }
-
-    public PhoenixPigConfiguration getConf() {
-        return this.phoenixConfiguration;
-    }
-    
-    private Connection getConnection() {
-        try {
-            if (this.connection == null) {
-                this.connection = phoenixConfiguration.getConnection();
-           }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-        return connection;
-    }
-    
     /**
      * Returns the query plan associated with the select query.
      * @param context
@@ -119,24 +103,36 @@ public final class PhoenixInputFormat extends InputFormat<NullWritable, PhoenixR
      * @throws IOException
      * @throws SQLException
      */
-    private QueryPlan getQueryPlan(final JobContext context) throws IOException {
+    private QueryPlan getQueryPlan(final JobContext context,final Configuration configuration) throws IOException {
         Preconditions.checkNotNull(context);
-        if(queryPlan == null) {
-            try{
-                final Connection connection = getConnection();
-                final String selectStatement = getConf().getSelectStatement();
-                Preconditions.checkNotNull(selectStatement);
-                final Statement statement = connection.createStatement();
-                final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
-                // Optimize the query plan so that we potentially use secondary indexes
-                this.queryPlan = pstmt.optimizeQuery(selectStatement);
-                // Initialize the query plan so it sets up the parallel scans
-                queryPlan.iterator();
-            } catch(Exception exception) {
-                LOG.error(String.format("Failed to get the query plan with error [%s]",exception.getMessage()));
-                throw new RuntimeException(exception);
-            }
+        try{
+            final Connection connection = ConnectionUtil.getConnection(configuration);
+            final String selectStatement = PhoenixConfigurationUtil.getSelectStatement(configuration);
+            Preconditions.checkNotNull(selectStatement);
+            final Statement statement = connection.createStatement();
+            final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
+            // Optimize the query plan so that we potentially use secondary indexes
+            final QueryPlan queryPlan = pstmt.optimizeQuery(selectStatement);
+            // Initialize the query plan so it sets up the parallel scans
+            queryPlan.iterator();
+            return queryPlan;
+        } catch(Exception exception) {
+            LOG.error(String.format("Failed to get the query plan with error [%s]",exception.getMessage()));
+            throw new RuntimeException(exception);
         }
-        return queryPlan;
+   }
+    
+    /**
+     * A NO-OP writable class
+     */
+    public static class NullDBWritable implements DBWritable, Writable {
+      @Override
+      public void readFields(DataInput in) throws IOException { }
+      @Override
+      public void readFields(ResultSet rs) throws SQLException { }
+      @Override
+      public void write(DataOutput out) throws IOException { }
+      @Override
+      public void write(PreparedStatement ps) throws SQLException { }
     }
 }

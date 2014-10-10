@@ -20,6 +20,8 @@ package org.apache.phoenix.pig;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.sql.SQLException;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.cli.CommandLine;
@@ -28,13 +30,17 @@ import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.OutputFormat;
 import org.apache.hadoop.mapreduce.RecordWriter;
-import org.apache.phoenix.pig.hadoop.PhoenixOutputFormat;
-import org.apache.phoenix.pig.hadoop.PhoenixRecord;
+import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.pig.writable.PhoenixPigDBWritable;
+import org.apache.phoenix.util.ColumnInfo;
 import org.apache.pig.ResourceSchema;
 import org.apache.pig.ResourceSchema.ResourceFieldSchema;
 import org.apache.pig.StoreFuncInterface;
@@ -75,8 +81,9 @@ import org.apache.pig.impl.util.UDFContext;
 @SuppressWarnings("rawtypes")
 public class PhoenixHBaseStorage implements StoreFuncInterface {
 
-	private PhoenixPigConfiguration config;
-	private RecordWriter<NullWritable, PhoenixRecord> writer;
+	private Configuration config;
+	private RecordWriter<NullWritable, PhoenixPigDBWritable> writer;
+	private List<ColumnInfo> columnInfo = null;
 	private String contextSignature = null;
 	private ResourceSchema schema;	
 	private long batchSize;
@@ -107,7 +114,6 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
 			formatter.printHelp("[-batchSize]", validOptions);
 			throw e;
 		}
-
 		batchSize = Long.parseLong(configuredOptions.getOptionValue("batchSize"));
 	}
 
@@ -134,15 +140,17 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
             if (!"hbase".equals(locationURI.getScheme())) {
                 throw new IOException(String.format("Location must use the hbase protocol, hbase://tableName[/columnList]. Supplied location=%s",location));
             }
+            config = job.getConfiguration();
+            config.set(HConstants.ZOOKEEPER_QUORUM, server);
             String tableName = locationURI.getAuthority();
             // strip off the leading path token '/'
             String columns = null;
             if(!locationURI.getPath().isEmpty()) {
                 columns = locationURI.getPath().substring(1);
+                PhoenixConfigurationUtil.setUpsertColumnNames(config, columns);
             }
-            config = new PhoenixPigConfiguration(job.getConfiguration());
-            config.configure(server, tableName, batchSize, columns);
-            
+            PhoenixConfigurationUtil.setOutputTableName(config,tableName);
+            PhoenixConfigurationUtil.setBatchSize(config,batchSize);
             String serializedSchema = getUDFProperties().getProperty(contextSignature + SCHEMA);
             if (serializedSchema != null) {
                 schema = (ResourceSchema) ObjectSerializer.deserialize(serializedSchema);
@@ -155,21 +163,23 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
 	@SuppressWarnings("unchecked")
     @Override
 	public void prepareToWrite(RecordWriter writer) throws IOException {
-		this.writer =writer;
+		this.writer = writer;
+		try {
+            this.columnInfo = PhoenixConfigurationUtil.getUpsertColumnMetadataList(this.config);
+        } catch(SQLException sqle) {
+            throw new IOException(sqle);
+        }
 	}
 
 	@Override
 	public void putNext(Tuple t) throws IOException {
         ResourceFieldSchema[] fieldSchemas = (schema == null) ? null : schema.getFields();      
-        
-        PhoenixRecord record = new PhoenixRecord(fieldSchemas);
-        
+        PhoenixPigDBWritable record = PhoenixPigDBWritable.newInstance(fieldSchemas,this.columnInfo);
         for(int i=0; i<t.size(); i++) {
         	record.add(t.get(i));
         }
-        
-		try {
-			writer.write(null, record);
+        try {
+			this.writer.write(null, record);
 		} catch (InterruptedException e) {
 			throw new RuntimeException(e);
 		}

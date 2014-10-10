@@ -27,7 +27,7 @@ import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.phoenix.pig.hadoop.PhoenixRecord;
+import org.apache.phoenix.pig.writable.PhoenixPigDBWritable;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.pig.PigException;
 import org.apache.pig.ResourceSchema.ResourceFieldSchema;
@@ -234,13 +234,13 @@ public final class TypeUtil {
     }
     
     /**
-     * Transforms the PhoenixRecord to Pig {@link Tuple}.
+     * Transforms the PhoenixPigDBWritable to Pig {@link Tuple}.
      * @param record
      * @param projectedColumns
      * @return
      * @throws IOException
      */
-    public static Tuple transformToTuple(final PhoenixRecord record, final ResourceFieldSchema[] projectedColumns) throws IOException {
+    public static Tuple transformToTuple(final PhoenixPigDBWritable record, final ResourceFieldSchema[] projectedColumns) throws IOException {
         
         List<Object> columnValues = record.getValues();
         if(columnValues == null || columnValues.size() == 0 || projectedColumns == null || projectedColumns.length != columnValues.size()) {
