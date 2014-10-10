@@ -68,6 +68,7 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -419,5 +420,18 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public String getUserName() {
         return userName;
+    }
+
+    @Override
+    public PTableStats getTableStats(String physicalName) {
+        return PTableStats.EMPTY_STATS;
+    }
+
+    @Override
+    public void addTableStats(String physicalName, PTableStats tableStats) {
+    }
+
+    @Override
+    public void clearCache() throws SQLException {
     }
 }
