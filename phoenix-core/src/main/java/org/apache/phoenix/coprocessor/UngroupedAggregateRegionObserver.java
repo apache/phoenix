@@ -148,6 +148,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             // individual tenant specific tables.
             scan.setStartRow(HConstants.EMPTY_START_ROW);
             scan.setStopRow(HConstants.EMPTY_END_ROW);
+            scan.setFilter(null);
         }
         return s;
     }

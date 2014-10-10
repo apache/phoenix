@@ -41,6 +41,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
+import org.apache.phoenix.schema.stats.PTableStats;
 
 
 public class DelegateConnectionQueryServices extends DelegateQueryServices implements ConnectionQueryServices {
@@ -231,5 +232,20 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public void incrementTableTimeStamp(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTS)
             throws SQLException {
         getDelegate().incrementTableTimeStamp(tenantId, schemaName, tableName, clientTS);
+    }
+
+    @Override
+    public PTableStats getTableStats(String physicalName) {
+        return getDelegate().getTableStats(physicalName);
+    }
+
+    @Override
+    public void addTableStats(String physicalName, PTableStats tableStats) {
+        getDelegate().addTableStats(physicalName, tableStats);
+    }
+
+    @Override
+    public void clearCache() throws SQLException {
+        getDelegate().clearCache();
     }
 }

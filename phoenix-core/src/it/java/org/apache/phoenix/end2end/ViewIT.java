@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.analyzeTable;
+import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -26,14 +28,16 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(HBaseManagedTimeTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class ViewIT extends BaseViewIT {
     
     @Test
@@ -54,6 +58,11 @@ public class ViewIT extends BaseViewIT {
             conn.createStatement().execute("UPSERT INTO t VALUES(" + i + ")");
         }
         conn.commit();
+        
+        analyzeTable(conn, "v");
+        
+        List<KeyRange> splits = getAllSplits(conn, "v");
+        assertEquals(4, splits.size());
         
         int count = 0;
         ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM v");

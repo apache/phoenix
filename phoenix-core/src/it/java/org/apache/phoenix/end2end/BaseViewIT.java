@@ -27,6 +27,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.Map;
 
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -34,18 +35,16 @@ import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(HBaseManagedTimeTest.class)
-public class BaseViewIT extends BaseHBaseManagedTimeIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        // Don't split intra region so we can more easily know that the n-way parallelization is for the explain plan
-        // Must update config before starting server
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Integer.toString(20));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
-
+    
     protected void testUpdatableViewWithIndex(Integer saltBuckets, boolean localIndex) throws Exception {
         testUpdatableView(saltBuckets);
         testUpdatableViewIndex(saltBuckets, localIndex);
@@ -110,6 +109,11 @@ public class BaseViewIT extends BaseHBaseManagedTimeIT {
             conn.createStatement().execute("CREATE INDEX i1 on v(k3) include (s)");
         }
         conn.createStatement().execute("UPSERT INTO v(k2,S,k3) VALUES(120,'foo',50.0)");
+
+//        analyzeTable(conn, "v");        
+//        List<KeyRange> splits = getAllSplits(conn, "i1");
+//        assertEquals(4, splits.size());
+        
         String query = "SELECT k1, k2, k3, s FROM v WHERE k3 = 51.0";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -134,6 +138,10 @@ public class BaseViewIT extends BaseHBaseManagedTimeIT {
         } else {
             conn.createStatement().execute("CREATE INDEX i2 on v(s)");
         }
+        
+//        splits = getAllSplits(conn, "i2");
+//        assertEquals(4, splits.size());
+        
         query = "SELECT k1, k2, s FROM v WHERE s = 'foo'";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());

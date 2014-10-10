@@ -44,7 +44,6 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.job.JobManager.JobCallable;
@@ -54,16 +53,15 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.LogUtil;
@@ -92,7 +90,8 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
 	private static final Logger logger = LoggerFactory.getLogger(ParallelIterators.class);
     private final List<List<Scan>> scans;
     private final List<KeyRange> splits;
-    private final PTable physicalTable;
+    private final PTableStats tableStats;
+    private final byte[] physicalTableName;
     private final QueryPlan plan;
     private final ParallelIteratorFactory iteratorFactory;
     
@@ -110,35 +109,38 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         }
     };
 
+    private PTable getTable() {
+        return plan.getTableRef().getTable();
+    }
+    
+    private boolean useStats() {
+        Scan scan = context.getScan();
+        boolean isPointLookup = context.getScanRanges().isPointLookup();
+        /*
+         *  Don't use guide posts if:
+         *  1) We're doing a point lookup, as HBase is fast enough at those
+         *     to not need them to be further parallelized. TODO: pref test to verify
+         *  2) We're collecting stats, as in this case we need to scan entire
+         *     regions worth of data to track where to put the guide posts.
+         */
+        if (isPointLookup || ScanUtil.isAnalyzeTable(scan)) {
+            return false;
+        }
+        return true;
+    }
+    
     public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory)
             throws SQLException {
         super(plan.getContext(), plan.getTableRef(), plan.getGroupBy());
         this.plan = plan;
         StatementContext context = plan.getContext();
         TableRef tableRef = plan.getTableRef();
+        PTable table = tableRef.getTable();
         FilterableStatement statement = plan.getStatement();
         RowProjector projector = plan.getProjector();
-        MetaDataClient client = new MetaDataClient(context.getConnection());
-        PTable physicalTable = tableRef.getTable();
-        String physicalName = tableRef.getTable().getPhysicalName().getString();
-        if ((physicalTable.getViewIndexId() == null) && (!physicalName.equals(physicalTable.getName().getString()))) { // tableRef is not for the physical table
-            String physicalSchemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
-            String physicalTableName = SchemaUtil.getTableNameFromFullName(physicalName);
-            // TODO: this will be an extra RPC to ensure we have the latest guideposts, but is almost always
-            // unnecessary. We should instead track when the last time an update cache was done for this
-            // for physical table and not do it again until some interval has passed (it's ok to use stale stats).
-            MetaDataMutationResult result = client.updateCache(null, /* use global tenant id to get physical table */
-                    physicalSchemaName, physicalTableName);
-            physicalTable = result.getTable();
-            if(physicalTable == null) {
-                client = new MetaDataClient(context.getConnection());
-                physicalTable = client.getConnection().getMetaDataCache()
-                        .getTable(new PTableKey(null, physicalTableName));
-            }
-        }
-        this.physicalTable = physicalTable;
+        physicalTableName = table.getPhysicalName().getBytes();
+        tableStats = useStats() ? new MetaDataClient(context.getConnection()).getTableStats(table) : PTableStats.EMPTY_STATS;
         Scan scan = context.getScan();
-        PTable table = tableRef.getTable();
         if (projector.isProjectEmptyKeyValue()) {
             Map<byte [], NavigableSet<byte []>> familyMap = scan.getFamilyMap();
             // If nothing projected into scan and we only have one column family, just allow everything
@@ -301,11 +303,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         return guideIndex;
     }
     
-    private List<byte[]> getGuidePosts(PTable table) {
-        Scan scan = context.getScan();
-        boolean isPointLookup = context.getScanRanges().isPointLookup();
-        byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(table);
-        List<byte[]> gps = Collections.emptyList();
+    private List<byte[]> getGuidePosts() {
         /*
          *  Don't use guide posts if:
          *  1) We're doing a point lookup, as HBase is fast enough at those
@@ -313,24 +311,31 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
          *  2) We're collecting stats, as in this case we need to scan entire
          *     regions worth of data to track where to put the guide posts.
          */
-        if (!isPointLookup && !ScanUtil.isAnalyzeTable(scan)) {
-            if (table.getColumnFamilies().isEmpty()) {
-                // For sure we can get the defaultCF from the table
-                return table.getGuidePosts();
-            }
-            try {
-                if (scan.getFamilyMap().size() > 0 && !scan.getFamilyMap().containsKey(defaultCF)) {
-                    // If default CF is not used in scan, use first CF referenced in scan
-                    return table.getColumnFamily(scan.getFamilyMap().keySet().iterator().next()).getGuidePosts();
-                }
+        if (!useStats()) {
+            return Collections.emptyList();
+        }
+        
+        List<byte[]> gps = null;
+        PTable table = getTable();
+        Map<byte[],List<byte[]>> guidePostMap = tableStats.getGuidePosts();
+        byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(getTable());
+        if (table.getColumnFamilies().isEmpty()) {
+            // For sure we can get the defaultCF from the table
+            gps = guidePostMap.get(defaultCF);
+        } else {
+            Scan scan = context.getScan();
+            if (scan.getFamilyMap().size() > 0 && !scan.getFamilyMap().containsKey(defaultCF)) {
+                // If default CF is not used in scan, use first CF referenced in scan
+                gps = guidePostMap.get(scan.getFamilyMap().keySet().iterator().next());
+            } else {
                 // Otherwise, favor use of default CF.
-                return table.getColumnFamily(defaultCF).getGuidePosts();
-            } catch (ColumnFamilyNotFoundException cfne) {
-                // Alter table does this
+                gps = guidePostMap.get(defaultCF);
             }
         }
+        if (gps == null) {
+            return Collections.emptyList();
+        }
         return gps;
-        
     }
     
     private static String toString(List<byte[]> gps) {
@@ -351,14 +356,15 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         if (scan == null) {
             return scans;
         }
+        PTable table = getTable();
         if (!scans.isEmpty()) {
             boolean startNewScanList = false;
             if (!plan.isRowKeyOrdered()) {
                 startNewScanList = true;
             } else if (crossedRegionBoundary) {
-                if (physicalTable.getIndexType() == IndexType.LOCAL) {
+                if (table.getIndexType() == IndexType.LOCAL) {
                     startNewScanList = true;
-                } else if (physicalTable.getBucketNum() != null) {
+                } else if (table.getBucketNum() != null) {
                     byte[] previousStartKey = scans.get(scans.size()-1).getStartRow();
                     byte[] currentStartKey = scan.getStartRow();
                     byte[] prefix = ScanUtil.getPrefix(previousStartKey, SaltingUtil.NUM_SALTING_BYTES);
@@ -382,12 +388,13 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
      */
     private List<List<Scan>> getParallelScans(final Scan scan) throws SQLException {
         List<HRegionLocation> regionLocations = context.getConnection().getQueryServices()
-                .getAllTableRegions(physicalTable.getPhysicalName().getBytes());
+                .getAllTableRegions(physicalTableName);
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         ScanRanges scanRanges = context.getScanRanges();
-        boolean isSalted = physicalTable.getBucketNum() != null;
-        boolean isLocalIndex = physicalTable.getIndexType() == IndexType.LOCAL;
-        List<byte[]> gps = getGuidePosts(physicalTable);
+        PTable table = getTable();
+        boolean isSalted = table.getBucketNum() != null;
+        boolean isLocalIndex = table.getIndexType() == IndexType.LOCAL;
+        List<byte[]> gps = getGuidePosts();
         if (logger.isDebugEnabled()) {
             logger.debug("Guideposts: " + toString(gps));
         }
@@ -489,7 +496,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                         } catch (StaleRegionBoundaryCacheException e2) { // Catch only to try to recover from region boundary cache being out of date
                             List<List<Pair<Scan,Future<PeekingResultIterator>>>> newFutures = Lists.newArrayListWithExpectedSize(2);
                             if (!clearedCache) { // Clear cache once so that we rejigger job based on new boundaries
-                                services.clearTableRegionCache(physicalTable.getName().getBytes());
+                                services.clearTableRegionCache(physicalTableName);
                                 clearedCache = true;
                             }
                             // Resubmit just this portion of work again

@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema.stats;
 
 import java.util.List;
+import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
@@ -43,4 +44,26 @@ public class PTableStatsImpl implements PTableStats {
     public SortedMap<byte[], List<byte[]>> getGuidePosts() {
         return guidePosts;
     }
+    
+    @Override
+    public String toString() {
+        StringBuilder buf = new StringBuilder();
+        buf.append("PTableStats [");
+        for (Map.Entry<byte[], List<byte[]>> entry : guidePosts.entrySet()) {
+            buf.append(Bytes.toStringBinary(entry.getKey()));
+            buf.append(":(");
+            List<byte[]> keys = entry.getValue();
+            if (!keys.isEmpty()) {
+                for (byte[] key : keys) {
+                    buf.append(Bytes.toStringBinary(key));
+                    buf.append(",");
+                }
+                buf.setLength(buf.length()-1);
+            }
+            buf.append(")");
+        }
+        buf.append("]");
+        return buf.toString();
+    }
+    
 }
