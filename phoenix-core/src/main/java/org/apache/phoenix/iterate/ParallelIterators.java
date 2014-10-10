@@ -61,6 +61,7 @@ import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
@@ -317,19 +318,26 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         
         List<byte[]> gps = null;
         PTable table = getTable();
-        Map<byte[],List<byte[]>> guidePostMap = tableStats.getGuidePosts();
+        Map<byte[],GuidePostsInfo> guidePostMap = tableStats.getGuidePosts();
         byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(getTable());
         if (table.getColumnFamilies().isEmpty()) {
             // For sure we can get the defaultCF from the table
-            gps = guidePostMap.get(defaultCF);
+            if (guidePostMap.get(defaultCF) != null) {
+                gps = guidePostMap.get(defaultCF).getGuidePosts();
+            }
         } else {
             Scan scan = context.getScan();
             if (scan.getFamilyMap().size() > 0 && !scan.getFamilyMap().containsKey(defaultCF)) {
                 // If default CF is not used in scan, use first CF referenced in scan
-                gps = guidePostMap.get(scan.getFamilyMap().keySet().iterator().next());
+                GuidePostsInfo guidePostsInfo = guidePostMap.get(scan.getFamilyMap().keySet().iterator().next());
+                if (guidePostsInfo != null) {
+                    gps = guidePostsInfo.getGuidePosts();
+                }
             } else {
                 // Otherwise, favor use of default CF.
-                gps = guidePostMap.get(defaultCF);
+                if (guidePostMap.get(defaultCF) != null) {
+                    gps = guidePostMap.get(defaultCF).getGuidePosts();
+                }
             }
         }
         if (gps == null) {
