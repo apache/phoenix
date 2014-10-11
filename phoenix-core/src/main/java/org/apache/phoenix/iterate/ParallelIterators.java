@@ -157,7 +157,6 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         
         this.iteratorFactory = iteratorFactory;
         this.scans = getParallelScans(context.getScan());
-        List<List<Scan>> scans = getParallelScans(context.getScan());
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);
         for (List<Scan> scanList : scans) {
             for (Scan aScan : scanList) {
@@ -358,24 +357,22 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
             return scans;
         }
         PTable table = getTable();
-        if (!scans.isEmpty()) {
-            boolean startNewScanList = false;
-            if (!plan.isRowKeyOrdered()) {
-                startNewScanList = true;
-            } else if (crossedRegionBoundary) {
-                if (table.getBucketNum() != null) {
-                    byte[] previousStartKey = scans.get(scans.size()-1).getStartRow();
-                    byte[] currentStartKey = scan.getStartRow();
-                    byte[] prefix = ScanUtil.getPrefix(previousStartKey, SaltingUtil.NUM_SALTING_BYTES);
-                    startNewScanList = ScanUtil.crossesPrefixBoundary(currentStartKey, prefix, SaltingUtil.NUM_SALTING_BYTES);
-                }
-            }
-            if (startNewScanList) {
-                parallelScans.add(scans);
-                scans = Lists.newArrayListWithExpectedSize(1);
+        boolean startNewScanList = false;
+        if (!plan.isRowKeyOrdered()) {
+            startNewScanList = true;
+        } else if (crossedRegionBoundary) {
+            if (table.getBucketNum() != null) {
+                startNewScanList = scans.isEmpty() ||
+                        ScanUtil.crossesPrefixBoundary(scan.getStartRow(),
+                                ScanUtil.getPrefix(scans.get(scans.size()-1).getStartRow(), SaltingUtil.NUM_SALTING_BYTES), 
+                                SaltingUtil.NUM_SALTING_BYTES);
             }
         }
         scans.add(scan);
+        if (startNewScanList) {
+            parallelScans.add(scans);
+            scans = Lists.newArrayListWithExpectedSize(1);
+        }
         return scans;
     }
     /**

@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.analyzeTable;
+import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -25,8 +27,10 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.util.List;
 import java.util.Map;
 
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -103,6 +107,13 @@ public class BaseViewIT extends BaseHBaseManagedTimeIT {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE INDEX i1 on v(k3) include (s)");
+        conn.createStatement().execute("UPSERT INTO v(k2,S,k3) VALUES(120,'foo',50.0)");
+
+        analyzeTable(conn, "v");        
+        List<KeyRange> splits = getAllSplits(conn, "i1");
+        // More guideposts with salted, since it's already pre-split at salt buckets
+        assertEquals(saltBuckets == null ? 6 : 8, splits.size());
+        
         String query = "SELECT k1, k2, k3, s FROM v WHERE k3 = 51.0";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -119,6 +130,16 @@ public class BaseViewIT extends BaseHBaseManagedTimeIT {
             QueryUtil.getExplainPlan(rs));
 
         conn.createStatement().execute("CREATE INDEX i2 on v(s)");
+
+        // new index hasn't been analyzed yet
+        splits = getAllSplits(conn, "i2");
+        assertEquals(saltBuckets == null ? 1 : 3, splits.size());
+        
+        // analyze table should analyze all view data
+        //analyzeTable(conn, "t");        
+        //splits = getAllSplits(conn, "i2");
+        //assertEquals(saltBuckets == null ? 6 : 8, splits.size());
+
         query = "SELECT k1, k2, s FROM v WHERE s = 'foo'";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
