@@ -129,6 +129,8 @@ public class PhoenixRuntime {
         ExecutionCommand execCmd = ExecutionCommand.parseArgs(args);
         String jdbcUrl = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + execCmd.getConnectionString();
 
+        int exitStatus = 0;
+
         PhoenixConnection conn = null;
         try {
             Properties props = new Properties();
@@ -157,6 +159,7 @@ public class PhoenixRuntime {
             }
         } catch (Throwable t) {
             t.printStackTrace();
+            exitStatus = 1;
         } finally {
             if (conn != null) {
                 try {
@@ -165,7 +168,7 @@ public class PhoenixRuntime {
                     //going to shut jvm down anyway. So might as well feast on it.
                 }
             }
-            System.exit(0);
+            System.exit(exitStatus);
         }
     }
 
@@ -414,7 +417,7 @@ public class PhoenixRuntime {
                     output.write(QueryConstants.SEPARATOR_BYTE);
                 }
                 type = pkColumns.get(i).getDataType();
-                
+
                 //for fixed width data types like CHAR and BINARY, we need to pad values to be of max length.
                 Object paddedObj = type.pad(values[i - offset], pkColumns.get(i).getMaxLength());
                 byte[] value = type.toBytes(paddedObj);
