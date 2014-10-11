@@ -64,16 +64,18 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -88,22 +90,27 @@ public class DeleteCompiler {
     }
     
     private static MutationState deleteRows(PhoenixStatement statement, TableRef tableRef, ResultIterator iterator, RowProjector projector) throws SQLException {
+        PTable table = tableRef.getTable();
         PhoenixConnection connection = statement.getConnection();
-        byte[] tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
+        PName tenantId = connection.getTenantId();
+        byte[] tenantIdBytes = null;
+        if (tenantId != null) {
+            tenantId = ScanUtil.padTenantIdIfNecessary(table.getRowKeySchema(), table.getBucketNum() != null, tenantId);
+            tenantIdBytes = tenantId.getBytes();
+        }
         final boolean isAutoCommit = connection.getAutoCommit();
         ConnectionQueryServices services = connection.getQueryServices();
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
         final int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
         Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutations = Maps.newHashMapWithExpectedSize(batchSize);
         try {
-            PTable table = tableRef.getTable();
             List<PColumn> pkColumns = table.getPKColumns();
-            boolean isMultiTenant = table.isMultiTenant() && tenantId != null;
+            boolean isMultiTenant = table.isMultiTenant() && tenantIdBytes != null;
             boolean isSharedViewIndex = table.getViewIndexId() != null;
             int offset = (table.getBucketNum() == null ? 0 : 1);
             byte[][] values = new byte[pkColumns.size()][];
             if (isMultiTenant) {
-                values[offset++] = tenantId;
+                values[offset++] = tenantIdBytes;
             }
             if (isSharedViewIndex) {
                 values[offset++] = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
