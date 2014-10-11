@@ -46,7 +46,10 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.ValueSchema.Field;
 
 import com.google.common.collect.Lists;
 
@@ -622,5 +625,21 @@ public class ScanUtil {
             } while (nBytesToCheck > ZERO_BYTE_ARRAY.length);
         }
         return Bytes.compareTo(key, 0, nBytesToCheck, ZERO_BYTE_ARRAY, 0, nBytesToCheck) != 0;
+    }
+    
+    public static PName padTenantIdIfNecessary(RowKeySchema schema, boolean isSalted, PName tenantId) {
+        int pkPos = isSalted ? 1 : 0;
+        String tenantIdStr = tenantId.getString();
+        Field field = schema.getField(pkPos);
+        PDataType dataType = field.getDataType();
+        boolean isFixedWidth = dataType.isFixedWidth();
+        Integer maxLength = field.getMaxLength();
+        if (isFixedWidth && maxLength != null) {
+            if (tenantIdStr.length() < maxLength) {
+                tenantIdStr = (String)dataType.pad(tenantIdStr, maxLength);
+                return PNameFactory.newName(tenantIdStr);
+            }
+        }
+        return tenantId;
     }
 }
