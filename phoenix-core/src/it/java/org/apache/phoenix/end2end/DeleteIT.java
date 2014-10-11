@@ -260,7 +260,6 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
         testDeleteAllFromTableWithIndex(true, false);
     }
     
-    //@Ignore // TODO: JT to look at: SkipScanFilter:151 assert for skip_hint > current_key is failing 
     @Test
     public void testDeleteAllFromTableWithIndexNoAutoCommitNoSalting() throws SQLException {
         testDeleteAllFromTableWithIndex(false,false);

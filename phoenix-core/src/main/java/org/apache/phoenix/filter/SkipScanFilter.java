@@ -152,8 +152,8 @@ public class SkipScanFilter extends FilterBase implements Writable {
         // Tests failing with this assert include: 
         // DeleteIT.testDeleteAllFromTableWithIndexNoAutoCommitNoSalting()
         // MutableIndexIT.testCoveredColumnUpdatesWithLocalIndex()
-//        assert previousCellHint == null || KeyValue.COMPARATOR.compare(nextCellHint, previousCellHint) > 0
-//                : "next hint must come after previous hint (prev=" + previousCellHint + ", next=" + nextCellHint + ", kv=" + kv + ")";
+        assert previousCellHint == null || KeyValue.COMPARATOR.compare(nextCellHint, previousCellHint) > 0
+                : "next hint must come after previous hint (prev=" + previousCellHint + ", next=" + nextCellHint + ", kv=" + kv + ")";
     }
     
     @Override

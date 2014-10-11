@@ -241,7 +241,6 @@ public class MutableIndexIT extends BaseMutableIndexIT {
     }
 
     @Test
-    //@Ignore // TODO: ask Rajeshbabu to look at: SkipScanFilter:151 assert for skip_hint > current_key is failing 
     public void testCoveredColumnUpdatesWithLocalIndex() throws Exception {
         testCoveredColumnUpdates(true);
     }
