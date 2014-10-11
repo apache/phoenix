@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.analyzeTable;
+import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -25,8 +27,10 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.util.List;
 import java.util.Map;
 
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -110,9 +114,10 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
         }
         conn.createStatement().execute("UPSERT INTO v(k2,S,k3) VALUES(120,'foo',50.0)");
 
-//        analyzeTable(conn, "v");        
-//        List<KeyRange> splits = getAllSplits(conn, "i1");
-//        assertEquals(4, splits.size());
+        analyzeTable(conn, "v");        
+        List<KeyRange> splits = getAllSplits(conn, "i1");
+        // More guideposts with salted, since it's already pre-split at salt buckets
+        assertEquals(saltBuckets == null ? 6 : 8, splits.size());
         
         String query = "SELECT k1, k2, k3, s FROM v WHERE k3 = 51.0";
         rs = conn.createStatement().executeQuery(query);
@@ -123,14 +128,15 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertEquals("bar", rs.getString(4));
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        String queryPlan = QueryUtil.getExplainPlan(rs);
         if (localIndex) {
             assertEquals("CLIENT PARALLEL 3-WAY RANGE SCAN OVER _LOCAL_IDX_T [-32768,51]\nCLIENT MERGE SORT",
-                QueryUtil.getExplainPlan(rs));
+                queryPlan);
         } else {
             assertEquals(saltBuckets == null
                     ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + Short.MIN_VALUE + ",51]"
                             : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER _IDX_T [0," + Short.MIN_VALUE + ",51]\nCLIENT MERGE SORT",
-                            QueryUtil.getExplainPlan(rs));
+                            queryPlan);
         }
 
         if (localIndex) {
@@ -139,8 +145,15 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.createStatement().execute("CREATE INDEX i2 on v(s)");
         }
         
+        // new index hasn't been analyzed yet
+        splits = getAllSplits(conn, "i2");
+        assertEquals(saltBuckets == null ? 1 : 3, splits.size());
+        
+        // analyze table should analyze all view data
+//        analyzeTable(conn, "t");        
 //        splits = getAllSplits(conn, "i2");
-//        assertEquals(4, splits.size());
+//        assertEquals(saltBuckets == null ? 6 : 8, splits.size());
+
         
         query = "SELECT k1, k2, s FROM v WHERE s = 'foo'";
         rs = conn.createStatement().executeQuery(query);
