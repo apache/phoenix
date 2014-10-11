@@ -68,8 +68,13 @@ public class PostDDLCompiler {
     private final StatementContext context; // bogus context
 
     public PostDDLCompiler(PhoenixConnection connection) {
+        this(connection, new Scan());
+    }
+
+    public PostDDLCompiler(PhoenixConnection connection, Scan scan) {
         this.connection = connection;
-        this.context = new StatementContext(new PhoenixStatement(connection));
+        this.context = new StatementContext(new PhoenixStatement(connection), scan);
+        scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
     }
 
     public MutationPlan compile(final List<TableRef> tableRefs, final byte[] emptyCF, final byte[] projectCF, final List<PColumn> deleteList,
@@ -101,19 +106,16 @@ public class PostDDLCompiler {
                 try {
                     connection.setAutoCommit(true);
                     SQLException sqlE = null;
-                    if (deleteList == null && emptyCF == null) {
-                        return new MutationState(0, connection);
-                    }
                     /*
                      * Handles:
                      * 1) deletion of all rows for a DROP TABLE and subsequently deletion of all rows for a DROP INDEX;
                      * 2) deletion of all column values for a ALTER TABLE DROP COLUMN
                      * 3) updating the necessary rows to have an empty KV
+                     * 4) updating table stats
                      */
                     long totalMutationCount = 0;
                     for (final TableRef tableRef : tableRefs) {
-                        Scan scan = new Scan();
-                        scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
+                        Scan scan = ScanUtil.newScan(context.getScan());
                         SelectStatement select = SelectStatement.COUNT_ONE;
                         // We need to use this tableRef
                         ColumnResolver resolver = new ColumnResolver() {
