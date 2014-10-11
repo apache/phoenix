@@ -352,10 +352,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         return buf.toString();
     }
     
-    private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan, boolean crossedRegionBoundary) {
-        if (scan == null) {
-            return scans;
-        }
+    private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan, byte[] startKey, boolean crossedRegionBoundary) {
         PTable table = getTable();
         boolean startNewScanList = false;
         if (!plan.isRowKeyOrdered()) {
@@ -363,13 +360,15 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         } else if (crossedRegionBoundary) {
             if (table.getBucketNum() != null) {
                 startNewScanList = scans.isEmpty() ||
-                        ScanUtil.crossesPrefixBoundary(scan.getStartRow(),
+                        ScanUtil.crossesPrefixBoundary(startKey,
                                 ScanUtil.getPrefix(scans.get(scans.size()-1).getStartRow(), SaltingUtil.NUM_SALTING_BYTES), 
                                 SaltingUtil.NUM_SALTING_BYTES);
             }
         }
-        scans.add(scan);
-        if (startNewScanList) {
+        if (scan != null) {
+            scans.add(scan);
+        }
+        if (startNewScanList && !scans.isEmpty()) {
             parallelScans.add(scans);
             scans = Lists.newArrayListWithExpectedSize(1);
         }
@@ -425,12 +424,12 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
             while (guideIndex < gpsSize
                     && (Bytes.compareTo(currentGuidePost = gps.get(guideIndex), endKey) <= 0 || endKey.length == 0)) {
                 Scan newScan = scanRanges.intersectScan(scan, currentKey, currentGuidePost, keyOffset, false);
-                scans = addNewScan(parallelScans, scans, newScan, false);
+                scans = addNewScan(parallelScans, scans, newScan, currentGuidePost, false);
                 currentKey = currentGuidePost;
                 guideIndex++;
             }
             Scan newScan = scanRanges.intersectScan(scan, currentKey, endKey, keyOffset, true);
-            scans = addNewScan(parallelScans, scans, newScan, true);
+            scans = addNewScan(parallelScans, scans, newScan, endKey, true);
             currentKey = endKey;
             regionIndex++;
         }
