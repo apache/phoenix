@@ -65,10 +65,10 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import com.google.common.collect.Lists;
 
 /**
- * 
+ *
  * Collection of non JDBC compliant utility methods
  *
- * 
+ *
  * @since 0.1
  */
 public class PhoenixRuntime {
@@ -86,19 +86,19 @@ public class PhoenixRuntime {
     public final static String JDBC_PROTOCOL = "jdbc:phoenix";
     public final static char JDBC_PROTOCOL_TERMINATOR = ';';
     public final static char JDBC_PROTOCOL_SEPARATOR = ':';
-    
+
     @Deprecated
     public final static String EMBEDDED_JDBC_PROTOCOL = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-    
+
     /**
      * Use this connection property to control the number of rows that are
      * batched together on an UPSERT INTO table1... SELECT ... FROM table2.
      * It's only used when autoCommit is true and your source table is
-     * different than your target table or your SELECT statement has a 
+     * different than your target table or your SELECT statement has a
      * GROUP BY clause.
      */
     public final static String UPSERT_BATCH_SIZE_ATTRIB = "UpsertBatchSize";
-    
+
     /**
      * Use this connection property to help with fairness of resource allocation
      * for the client and server. The value of the attribute determines the
@@ -107,7 +107,7 @@ public class PhoenixRuntime {
      * configuration properties
      */
     public static final String TENANT_ID_ATTRIB = "TenantId";
-    
+
     /**
      * Use this connection property prefix for annotations that you want to show up in traces and log lines emitted by Phoenix.
      * This is useful for annotating connections with information available on the client (e.g. user or session identifier) and
@@ -121,7 +121,7 @@ public class PhoenixRuntime {
      * upserting data into them, and getting the uncommitted state through {@link #getUncommittedData(Connection)}
      */
     public final static String CONNECTIONLESS = "none";
-    
+
     private static final String HEADER_IN_LINE = "in-line";
     private static final String SQL_FILE_EXT = ".sql";
     private static final String CSV_FILE_EXT = ".csv";
@@ -138,6 +138,8 @@ public class PhoenixRuntime {
 
         ExecutionCommand execCmd = ExecutionCommand.parseArgs(args);
         String jdbcUrl = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + execCmd.getConnectionString();
+
+        int exitStatus = 0;
 
         PhoenixConnection conn = null;
         try {
@@ -167,6 +169,7 @@ public class PhoenixRuntime {
             }
         } catch (Throwable t) {
             t.printStackTrace();
+            exitStatus = 1;
         } finally {
             if (conn != null) {
                 try {
@@ -175,7 +178,7 @@ public class PhoenixRuntime {
                     //going to shut jvm down anyway. So might as well feast on it.
                 }
             }
-            System.exit(0);
+            System.exit(exitStatus);
         }
     }
 
@@ -183,7 +186,7 @@ public class PhoenixRuntime {
 
     private PhoenixRuntime() {
     }
-    
+
     /**
      * Runs a series of semicolon-terminated SQL statements using the connection provided, returning
      * the number of SQL statements executed. Note that if the connection has specified an SCN through
@@ -202,13 +205,13 @@ public class PhoenixRuntime {
         pconn.setAutoCommit(true);
         return pconn.executeStatements(reader, binds, System.out);
     }
-    
+
     /**
      * Get the list of uncommitted KeyValues for the connection. Currently used to write an
      * Phoenix-compliant HFile from a map/reduce job.
      * @param conn an open JDBC connection
      * @return the list of HBase mutations for uncommitted data
-     * @throws SQLException 
+     * @throws SQLException
      */
     @Deprecated
     public static List<KeyValue> getUncommittedData(Connection conn) throws SQLException {
@@ -218,24 +221,24 @@ public class PhoenixRuntime {
         }
         return Collections.emptyList();
     }
-    
+
     /**
      * Get the list of uncommitted KeyValues for the connection. Currently used to write an
      * Phoenix-compliant HFile from a map/reduce job.
      * @param conn an open JDBC connection
      * @return the list of HBase mutations for uncommitted data
-     * @throws SQLException 
+     * @throws SQLException
      */
     public static Iterator<Pair<byte[],List<KeyValue>>> getUncommittedDataIterator(Connection conn) throws SQLException {
         return getUncommittedDataIterator(conn, false);
     }
-    
+
     /**
      * Get the list of uncommitted KeyValues for the connection. Currently used to write an
      * Phoenix-compliant HFile from a map/reduce job.
      * @param conn an open JDBC connection
      * @return the list of HBase mutations for uncommitted data
-     * @throws SQLException 
+     * @throws SQLException
      */
     public static Iterator<Pair<byte[],List<KeyValue>>> getUncommittedDataIterator(Connection conn, boolean includeMutableIndexes) throws SQLException {
         final PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
@@ -266,10 +269,10 @@ public class PhoenixRuntime {
             public void remove() {
                 throw new UnsupportedOperationException();
             }
-            
+
         };
     }
-    
+
     public static PTable getTable(Connection conn, String name) throws SQLException {
         PTable table = null;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
@@ -286,7 +289,7 @@ public class PhoenixRuntime {
         }
         return table;
     }
-    
+
     /**
      * Get list of ColumnInfos that contain Column Name and its associated
      * PDataType for an import. The supplied list of columns can be null -- if it is non-null,
@@ -307,7 +310,7 @@ public class PhoenixRuntime {
         if (columns == null) {
             // use all columns in the table
             for(PColumn pColumn : table.getColumns()) {
-               int sqlType = pColumn.getDataType().getResultSetSqlType();        
+               int sqlType = pColumn.getDataType().getResultSetSqlType();
                columnInfoList.add(new ColumnInfo(pColumn.toString(), sqlType));
             }
         } else {
@@ -341,14 +344,14 @@ public class PhoenixRuntime {
                     else exceptionMessage.append(",");
                     exceptionMessage.append(pColumn.toString());
                 }
-                throw new SQLException(exceptionMessage.toString()); 
+                throw new SQLException(exceptionMessage.toString());
       }
        return columnInfoList;
     }
 
     /**
      * Returns the column info for the given column for the given table.
-     * 
+     *
      * @param table
      * @param columnName User-specified column name. May be family-qualified or bare.
      * @return columnInfo associated with the column in the table
@@ -361,7 +364,7 @@ public class PhoenixRuntime {
         if (columnName==null) {
             throw new SQLException("columnName must not be null.");
         }
-        columnName = columnName.trim().toUpperCase(); 
+        columnName = columnName.trim().toUpperCase();
         PColumn pColumn = null;
         if (columnName.contains(QueryConstants.NAME_SEPARATOR)) {
             String[] tokens = columnName.split(QueryConstants.NAME_SEPARATOR_REGEX);
@@ -377,7 +380,7 @@ public class PhoenixRuntime {
         }
         return getColumnInfo(pColumn);
     }
-    
+
     /**
      * Constructs a column info for the supplied pColumn
      * @param pColumn
@@ -392,12 +395,12 @@ public class PhoenixRuntime {
         ColumnInfo columnInfo = new ColumnInfo(pColumn.toString(),sqlType);
         return columnInfo;
     }
-    
+
     /**
      * Encode the primary key values from the table as a byte array. The values must
      * be in the same order as the primary key constraint. If the connection and
      * table are both tenant-specific, the tenant ID column must not be present in
-     * the values. 
+     * the values.
      * @param conn an open connection
      * @param fullTableName the full table name
      * @param values the values of the primary key columns ordered in the same order
@@ -418,13 +421,13 @@ public class PhoenixRuntime {
         }
         PDataType type = null;
         TrustedByteArrayOutputStream output = new TrustedByteArrayOutputStream(table.getRowKeySchema().getEstimatedValueLength());
-        try { 
+        try {
             for (int i = offset; i < pkColumns.size(); i++) {
                 if (type != null && !type.isFixedWidth()) {
                     output.write(QueryConstants.SEPARATOR_BYTE);
                 }
                 type = pkColumns.get(i).getDataType();
-                
+
                 //for fixed width data types like CHAR and BINARY, we need to pad values to be of max length.
                 Object paddedObj = type.pad(values[i - offset], pkColumns.get(i).getMaxLength());
                 byte[] value = type.toBytes(paddedObj);
@@ -439,7 +442,7 @@ public class PhoenixRuntime {
             }
         }
     }
-    
+
     /**
      * Decode a byte array value back into the Object values of the
      * primary key constraint. If the connection and table are both
