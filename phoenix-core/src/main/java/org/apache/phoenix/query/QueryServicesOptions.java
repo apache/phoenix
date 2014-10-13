@@ -130,6 +130,7 @@ public class QueryServicesOptions {
     
     public static final long DEFAULT_STATS_HISTOGRAM_DEPTH_BYTE = 1024 * 1024 * 30;
     public static final int DEFAULT_STATS_UPDATE_FREQ_MS = 15 * 60000; // 15min
+    public static final int DEFAULT_GUIDE_POSTS_PER_REGION = 20;
     public static final int DEFAULT_MIN_STATS_UPDATE_FREQ_MS = DEFAULT_STATS_UPDATE_FREQ_MS/2;
     
     private final Configuration config;
@@ -184,7 +185,6 @@ public class QueryServicesOptions {
             .setIfUnset(GROUPBY_SPILL_FILES_ATTRIB, DEFAULT_GROUPBY_SPILL_FILES)
             .setIfUnset(SEQUENCE_CACHE_SIZE_ATTRIB, DEFAULT_SEQUENCE_CACHE_SIZE)
             .setIfUnset(SCAN_RESULT_CHUNK_SIZE, DEFAULT_SCAN_RESULT_CHUNK_SIZE)
-            .setIfUnset(STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, DEFAULT_STATS_HISTOGRAM_DEPTH_BYTE);
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

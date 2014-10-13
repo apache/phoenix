@@ -59,15 +59,19 @@ public class StatisticsCollector {
     // Ensures that either analyze or compaction happens at any point of time.
     private static final Log LOG = LogFactory.getLog(StatisticsCollector.class);
 
-    public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp) throws IOException {
+    public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp)
+            throws IOException {
+        Configuration config = env.getConfiguration();
+        HTableInterface statsHTable = env.getTable((PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES));
         guidepostDepth =
-            env.getConfiguration().getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
-                QueryServicesOptions.DEFAULT_STATS_HISTOGRAM_DEPTH_BYTE);
+                config.getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                                        statsHTable.getTableDescriptor().getMaxFileSize() / 
+                                         config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, 
+                                                 QueryServicesOptions.DEFAULT_GUIDE_POSTS_PER_REGION));
         // Get the stats table associated with the current table on which the CP is
         // triggered
 
-        HTableInterface statsHTable = env.getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
-        this.statsTable = StatisticsWriter.getStatisticsTable(statsHTable, tableName, clientTimeStamp);
+        this.statsTable = StatisticsWriter.newWriter(statsHTable, tableName, clientTimeStamp);
     }
     
     public void close() throws IOException {

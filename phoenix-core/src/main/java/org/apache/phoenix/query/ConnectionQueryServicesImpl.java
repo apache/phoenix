@@ -36,6 +36,7 @@ import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -103,6 +104,7 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -116,6 +118,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Throwables;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -124,13 +128,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
     private static final int INITIAL_CHILD_SERVICES_CAPACITY = 100;
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
+    // Max number of cached table stats for view or shared index physical tables
+    private static final int MAX_TABLE_STATS_CACHE_ENTRIES = 512;
     protected final Configuration config;
     // Copy of config.getProps(), but read-only to prevent synchronization that we
     // don't need.
     private final ReadOnlyProps props;
     private final String userName;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
-
+    private final Cache<String, PTableStats> tableStatsCache;
     // Cache the latest meta data here for future connections
     // writes guarded by "latestMetaDataLock"
     private volatile PMetaData latestMetaData;
@@ -189,6 +195,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // find the HBase version and use that to determine the KeyValueBuilder that should be used
         String hbaseVersion = VersionInfo.getVersion();
         this.kvBuilder = KeyValueBuilder.get(hbaseVersion);
+        long halfStatsUpdateFreq = config.getLong(
+                QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS) / 2;
+        tableStatsCache = CacheBuilder.newBuilder()
+                .maximumSize(MAX_TABLE_STATS_CACHE_ENTRIES)
+                .expireAfterWrite(halfStatsUpdateFreq, TimeUnit.MILLISECONDS)
+                .build();
     }
 
     private void openConnection() throws SQLException {
@@ -281,6 +294,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                 } finally {
                     try {
+                        tableStatsCache.invalidateAll();
                         super.close();
                     } catch (SQLException e) {
                         if (sqlE == null) {
@@ -1035,6 +1049,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (dropMetadata) {
                 dropTables(result.getTableNamesToDelete());
             }
+            invalidateTables(result.getTableNamesToDelete());            
             if (tableType == PTableType.TABLE) {
                 byte[] physicalTableName = SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
                 long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
@@ -1045,6 +1060,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             break;
         }
           return result;
+    }
+
+    private void invalidateTables(final List<byte[]> tableNamesToDelete) {
+        if (tableNamesToDelete != null) {
+            for (byte[] tableName : tableNamesToDelete) {
+                tableStatsCache.invalidate(Bytes.toString(tableName));
+            }
+        }
     }
 
     private void dropTables(final List<byte[]> tableNamesToDelete) throws SQLException {
@@ -1224,6 +1247,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (dropMetadata) {
                 dropTables(result.getTableNamesToDelete());
             }
+            invalidateTables(result.getTableNamesToDelete());
             break;
         default:
             break;
@@ -1388,7 +1412,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * Clears the Phoenix meta data cache on each region server
      * @throws SQLException
      */
-    protected void clearCache() throws SQLException {
+    @Override
+    public void clearCache() throws SQLException {
         try {
             SQLException sqlE = null;
             HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
@@ -1407,6 +1432,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sqlE = new SQLException(e);
             } finally {
                 try {
+                    tableStatsCache.invalidateAll();
                     htable.close();
                 } catch (IOException e) {
                     if (sqlE == null) {
@@ -1829,6 +1855,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sqlE = new SQLException(e);
             } finally {
                 try {
+                    if (tenantId.length == 0)
+                        tableStatsCache.invalidate(SchemaUtil.getTableName(schemaName, tableName));
                     htable.close();
                 } catch (IOException e) {
                     if (sqlE == null) {
@@ -1843,5 +1871,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (Exception e) {
             throw new SQLException(ServerUtil.parseServerException(e));
         }
+    }
+    @Override
+    public PTableStats getTableStats(String physicalName) {
+        return tableStatsCache.getIfPresent(physicalName);
+    }
+    
+    @Override
+    public void addTableStats(String physicalName, PTableStats tableStats) {
+        tableStatsCache.put(physicalName, tableStats);
     }
 }

@@ -18,7 +18,6 @@
 package org.apache.phoenix.schema;
 
 import java.util.Collection;
-import java.util.List;
 
 /**
  * 
@@ -53,5 +52,4 @@ public interface PColumnFamily {
     
     int getEstimatedSize();
     
-    List<byte[]> getGuidePosts();
 }

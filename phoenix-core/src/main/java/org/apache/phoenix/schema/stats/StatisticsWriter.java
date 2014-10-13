@@ -38,7 +38,8 @@ import org.apache.phoenix.util.TimeKeeper;
  * Wrapper to access the statistics table SYSTEM.STATS using the HTable.
  */
 public class StatisticsWriter implements Closeable {
-    public static StatisticsWriter getStatisticsTable(HTableInterface hTable, String tableName, long clientTimeStamp) throws IOException {
+    public static StatisticsWriter newWriter(HTableInterface hTable, String tableName, long clientTimeStamp)
+            throws IOException {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
             clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
         }

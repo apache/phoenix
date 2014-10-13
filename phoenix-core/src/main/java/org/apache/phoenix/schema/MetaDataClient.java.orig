@@ -36,11 +36,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIME
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REGION_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
@@ -59,8 +62,10 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADAT
 import static org.apache.phoenix.schema.PDataType.VARCHAR;
 
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -79,9 +84,12 @@ import java.util.Set;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -90,6 +98,8 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.PostDDLCompiler;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
@@ -98,6 +108,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ColumnDef;
@@ -113,6 +124,7 @@ import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -260,7 +272,16 @@ public class MetaDataClient {
         MetaDataMutationResult result = updateCache(schemaName, tableName, true);
         return result.getMutationTime();
     }
-    
+
+    private MetaDataMutationResult updateCache(String schemaName, String tableName, boolean alwaysHitServer)
+            throws SQLException {
+        return updateCache(connection.getTenantId(), schemaName, tableName, alwaysHitServer);
+    }
+
+    public MetaDataMutationResult updateCache(PName tenantId, String schemaName, String tableName) throws SQLException {
+        return updateCache(tenantId, schemaName, tableName, false);
+    }
+        
     /**
      * Update the cache with the latest as of the connection scn.
      * @param schemaName
@@ -272,11 +293,11 @@ public class MetaDataClient {
         return updateCache(schemaName, tableName, false);
     }
     
-    private MetaDataMutationResult updateCache(String schemaName, String tableName, boolean alwaysHitServer) throws SQLException { // TODO: pass byte[] here
+    private MetaDataMutationResult updateCache(PName tenantId, String schemaName, String tableName, boolean alwaysHitServer) throws SQLException {
         Long scn = connection.getSCN();
         boolean systemTable = SYSTEM_CATALOG_SCHEMA.equals(schemaName);
         // System tables must always have a null tenantId
-        PName tenantId = systemTable ? null : connection.getTenantId();
+        tenantId = systemTable ? null : tenantId;
         long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
         PTable table = null;
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
@@ -448,6 +469,72 @@ public class MetaDataClient {
         byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
         MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), emptyCF, null, null, tableRef.getTimeStamp());
         return connection.getQueryServices().updateData(plan);
+    }
+
+    public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt)
+            throws SQLException {
+        // Check before updating the stats if we have reached the configured time to reupdate the stats once again
+        final long msMinBetweenUpdates = connection
+                .getQueryServices()
+                .getProps()
+                .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
+                        QueryServicesOptions.DEFAULT_MIN_STATS_UPDATE_FREQ_MS);
+        ColumnResolver resolver = FromCompiler.getResolver(updateStatisticsStmt, connection);
+        PTable table = resolver.getTables().get(0).getTable();
+        List<PTable> indexes = table.getIndexes();
+        List<PTable> tables = Lists.newArrayListWithExpectedSize(1 + indexes.size());
+        if (updateStatisticsStmt.updateColumns()) {
+            tables.add(table);
+        }
+        if (updateStatisticsStmt.updateIndex()) {
+            tables.addAll(indexes);
+        }
+        for(PTable pTable : tables) {
+            updateStatisticsInternal(msMinBetweenUpdates, pTable);
+        }
+        return new MutationState(1, connection);
+    }
+
+    private MutationState updateStatisticsInternal(long msMinBetweenUpdates, PTable table) throws SQLException {
+        PName physicalName = table.getPhysicalName();
+        byte[] tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
+        Long scn = connection.getSCN();
+        // Always invalidate the cache
+        long clientTS = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
+        String query = "SELECT CURRENT_DATE() - " + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
+                + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
+                + " IS NULL AND " + REGION_NAME + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
+        ResultSet rs = connection.createStatement().executeQuery(query);
+        long msSinceLastUpdate = Long.MAX_VALUE;
+        if (rs.next()) {
+            msSinceLastUpdate = rs.getLong(1);
+        }
+        if (msSinceLastUpdate >= msMinBetweenUpdates) {
+            // Here create the select query.
+            String countQuery = "SELECT /*+ NO_CACHE NO_INDEX */ count(*) FROM " + table.getName().getString();
+            PhoenixStatement statement = (PhoenixStatement) connection.createStatement();
+            QueryPlan plan = statement.compileQuery(countQuery);
+            Scan scan = plan.getContext().getScan();
+            // Add all CF in the table
+            scan.getFamilyMap().clear();
+            for (PColumnFamily family : table.getColumnFamilies()) {
+                scan.addFamily(family.getName().getBytes());
+            }
+            scan.setAttribute(BaseScannerRegionObserver.ANALYZE_TABLE, PDataType.TRUE_BYTES);
+            KeyValue kv = plan.iterator().next().getValue(0);
+            ImmutableBytesWritable tempPtr = plan.getContext().getTempPtr();
+            tempPtr.set(kv.getValue());
+            // A single Cell will be returned with the count(*) - we decode that here
+            long rowCount = PDataType.LONG.getCodec().decodeLong(tempPtr, SortOrder.getDefault());
+            // We need to update the stats table so that client will pull the new one with
+            // the updated stats.
+            connection.getQueryServices().incrementTableTimeStamp(tenantIdBytes,
+                    Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())),
+                    Bytes.toBytes(SchemaUtil.getTableNameFromFullName(physicalName.getString())), clientTS);
+            return new  MutationState(0, connection, rowCount);
+        } else {
+            return new MutationState(0, connection);
+        }
     }
 
     private MutationState buildIndexAtTimeStamp(PTable index, NamedTableNode dataTableNode) throws SQLException {
@@ -792,7 +879,6 @@ public class MetaDataClient {
             String parentTableName = null;
             PName tenantId = connection.getTenantId();
             String tenantIdStr = tenantId == null ? null : connection.getTenantId().getString();
-            boolean isParentImmutableRows = false;
             boolean multiTenant = false;
             Integer saltBucketNum = null;
             String defaultFamilyName = null;
@@ -814,7 +900,6 @@ public class MetaDataClient {
                 }
                 
                 multiTenant = parent.isMultiTenant();
-                isParentImmutableRows = parent.isImmutableRows();
                 parentTableName = parent.getTableName().getString();
                 // Pass through data table sequence number so we can check it hasn't changed
                 PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM);
@@ -905,9 +990,7 @@ public class MetaDataClient {
 
             boolean disableWAL = false;
             Boolean disableWALProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.DISABLE_WAL);
-            if (disableWALProp == null) {
-                disableWAL = isParentImmutableRows; // By default, disable WAL for immutable indexes
-            } else {
+            if (disableWALProp != null) {
                 disableWAL = disableWALProp;
             }
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
@@ -1112,6 +1195,7 @@ public class MetaDataClient {
             
             // Bootstrapping for our SYSTEM.TABLE that creates itself before it exists 
             if (SchemaUtil.isMetaTable(schemaName,tableName)) {
+                // TODO: what about stats for system catalog?
                 PTable table = PTableImpl.makePTable(tenantId,PNameFactory.newName(schemaName), PNameFactory.newName(tableName), tableType,
                         null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM,
                         PNameFactory.newName(QueryConstants.SYSTEM_TABLE_PK_NAME), null, columns, null, Collections.<PTable>emptyList(), 
@@ -1320,7 +1404,8 @@ public class MetaDataClient {
         return dropTable(schemaName, tableName, parentTableName, PTableType.INDEX, statement.ifExists(), false);
     }
 
-    private MutationState dropTable(String schemaName, String tableName, String parentTableName, PTableType tableType, boolean ifExists, boolean cascade) throws SQLException {
+    private MutationState dropTable(String schemaName, String tableName, String parentTableName, PTableType tableType,
+            boolean ifExists, boolean cascade) throws SQLException {
         connection.rollback();
         boolean wasAutoCommit = connection.getAutoCommit();
         try {
@@ -1378,13 +1463,14 @@ public class MetaDataClient {
                                 tableRefs.add(new TableRef(null, viewIndexTable, ts, false));
                             }
                         }
+                        // Delete everything in the column. You'll still be able to do queries at earlier timestamps
+                        tableRefs.add(new TableRef(null, table, ts, false));
+                        // TODO: Let the standard mutable secondary index maintenance handle this?
+                        for (PTable index: table.getIndexes()) {
+                            tableRefs.add(new TableRef(null, index, ts, false));
+                        }
+                        deleteFromStatsTable(tableRefs, ts);
                         if (!dropMetaData) {
-                            // Delete everything in the column. You'll still be able to do queries at earlier timestamps
-                            tableRefs.add(new TableRef(null, table, ts, false));
-                            // TODO: Let the standard mutable secondary index maintenance handle this?
-                            for (PTable index: table.getIndexes()) {
-                                tableRefs.add(new TableRef(null, index, ts, false));
-                            }
                             MutationPlan plan = new PostDDLCompiler(connection).compile(tableRefs, null, null, Collections.<PColumn>emptyList(), ts);
                             return connection.getQueryServices().updateData(plan);
                         }
@@ -1394,6 +1480,41 @@ public class MetaDataClient {
                  return new MutationState(0,connection);
         } finally {
             connection.setAutoCommit(wasAutoCommit);
+        }
+    }
+    
+    private void deleteFromStatsTable(List<TableRef> tableRefs, long ts) throws SQLException {
+        Properties props = new Properties(connection.getClientInfo());
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(connection.getURL(), props);
+        conn.setAutoCommit(true);
+        boolean success = false;
+        SQLException sqlException = null;
+        try {
+            StringBuilder buf = new StringBuilder("DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME IN (");
+            for (TableRef ref : tableRefs) {
+                buf.append("'" + ref.getTable().getName().getString() + "',");
+            }
+            buf.setCharAt(buf.length() - 1, ')');
+            conn.createStatement().execute(buf.toString());
+            success = true;
+        } catch (SQLException e) {
+            sqlException = e;
+        } finally {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                if (sqlException == null) {
+                    // If we're not in the middle of throwing another exception
+                    // then throw the exception we got on close.
+                    if (success) {
+                        sqlException = e;
+                    }
+                } else {
+                    sqlException.setNextException(e);
+                }
+            }
+            if (sqlException != null) { throw sqlException; }
         }
     }
 

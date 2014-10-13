@@ -86,6 +86,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -130,10 +131,13 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
+import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -292,13 +296,19 @@ public class MetaDataClient {
     public MetaDataMutationResult updateCache(String schemaName, String tableName) throws SQLException {
         return updateCache(schemaName, tableName, false);
     }
-    
+
+    private long getClientTimeStamp() {
+        Long scn = connection.getSCN();
+        long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
+        return clientTimeStamp;
+    }
+
     private MetaDataMutationResult updateCache(PName tenantId, String schemaName, String tableName, boolean alwaysHitServer) throws SQLException {
+        long clientTimeStamp = getClientTimeStamp();
         Long scn = connection.getSCN();
         boolean systemTable = SYSTEM_CATALOG_SCHEMA.equals(schemaName);
         // System tables must always have a null tenantId
         tenantId = systemTable ? null : tenantId;
-        long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
         PTable table = null;
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         long tableTimestamp = HConstants.LATEST_TIMESTAMP;
@@ -474,11 +484,11 @@ public class MetaDataClient {
     public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt)
             throws SQLException {
         // Check before updating the stats if we have reached the configured time to reupdate the stats once again
-        final long msMinBetweenUpdates = connection
-                .getQueryServices()
-                .getProps()
+        ReadOnlyProps props = connection.getQueryServices().getProps();
+        final long msMinBetweenUpdates = props
                 .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
-                        QueryServicesOptions.DEFAULT_MIN_STATS_UPDATE_FREQ_MS);
+                        props.getLong(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, 
+                                QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS) / 2);
         ColumnResolver resolver = FromCompiler.getResolver(updateStatisticsStmt, connection);
         PTable table = resolver.getTables().get(0).getTable();
         List<PTable> indexes = table.getIndexes();
@@ -2193,5 +2203,60 @@ public class MetaDataClient {
             .setColumnName(col.getColumnDefName().getColumnName())
             .build().buildException();
         }
+    }
+    
+    public PTableStats getTableStats(PTable table) throws SQLException {
+        boolean isView = table.getType() == PTableType.VIEW;
+        boolean isSharedIndex = table.getViewIndexId() != null;
+        if (!isView && !isSharedIndex) {
+            return table.getTableStats();
+        }
+        String physicalName = table.getPhysicalName().getString();
+        // If we have a VIEW or a local or view INDEX, check our cache rather
+        // than updating the cache for that table to prevent an extra roundtrip.
+        PTableStats tableStats = connection.getQueryServices().getTableStats(physicalName);
+        if (tableStats != null) {
+            return tableStats;
+        }
+        if (isView) {
+            String physicalSchemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
+            String physicalTableName = SchemaUtil.getTableNameFromFullName(physicalName);
+            MetaDataMutationResult result = updateCache(null, /* use global tenant id to get physical table */
+                    physicalSchemaName, physicalTableName);
+            PTable physicalTable = result.getTable();
+            if(physicalTable == null) {
+                // We should be able to find the physical table, as we found the logical one
+                // Might mean the physical table as just deleted.
+                logger.warn("Unable to retrieve physical table " + physicalName + " for table " + table.getName().getString());
+                throw new TableNotFoundException(table.getSchemaName().getString(),table.getTableName().getString());
+            }
+            tableStats = physicalTable.getTableStats();
+        } else {
+            /*
+             *  Otherwise, we have a shared view. This case is tricky, because we don't have
+             *  table metadata for it, only an HBase table. We do have stats, though, so we'll
+             *  query them directly here and cache them so we don't keep querying for them.
+             */
+            HTableInterface statsHTable = connection.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+            try {
+                long clientTimeStamp = getClientTimeStamp();
+                tableStats = StatisticsUtil.readStatistics(statsHTable, table.getPhysicalName().getBytes(), clientTimeStamp);
+            } catch (IOException e) {
+                logger.warn("Unable to read from stats table", e);
+                // Just cache empty stats. We'll try again after some time anyway.
+                tableStats = PTableStats.EMPTY_STATS;
+            } finally {
+                try {
+                    statsHTable.close();
+                } catch (IOException e) {
+                    // Log, but continue. We have our stats anyway now.
+                    logger.warn("Unable to close stats table", e);
+                }
+            }
+        }
+        // Cache these stats so that we don't keep making a roundrip just to get the stats (as
+        // they don't change very often.
+        connection.getQueryServices().addTableStats(physicalName, tableStats);
+        return tableStats;
     }
 }

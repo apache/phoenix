@@ -111,7 +111,6 @@ public class PTableImpl implements PTable {
     private ViewType viewType;
     private Short viewIndexId;
     private int estimatedSize;
-    private List<byte[]> guidePosts = Collections.emptyList();
     private PTableStats tableStats = PTableStats.EMPTY_STATS;
     
     public PTableImpl() {
@@ -353,24 +352,13 @@ public class PTableImpl implements PTable {
         estimatedSize += rowKeySchema.getEstimatedSize();
         Iterator<Map.Entry<PName,List<PColumn>>> iterator = familyMap.entrySet().iterator();
         PColumnFamily[] families = new PColumnFamily[familyMap.size()];
-        if (families.length == 0) {
-            byte[] defaultFamilyNameBytes = (defaultFamilyName == null) ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : defaultFamilyName.getBytes();
-            List<byte[]> guidePosts = stats.getGuidePosts().get(defaultFamilyNameBytes);
-            if (guidePosts != null) {
-                this.guidePosts = guidePosts;
-                estimatedSize += SizedUtil.sizeOfArrayList(guidePosts.size());
-                for (byte[] gps : guidePosts) {
-                    estimatedSize += gps.length;
-                }
-            }
-        }
+        estimatedSize += this.tableStats.getEstimatedSize();
         ImmutableMap.Builder<String, PColumnFamily> familyByString = ImmutableMap.builder();
         ImmutableSortedMap.Builder<byte[], PColumnFamily> familyByBytes = ImmutableSortedMap
                 .orderedBy(Bytes.BYTES_COMPARATOR);
         for (int i = 0; i < families.length; i++) {
             Map.Entry<PName,List<PColumn>> entry = iterator.next();
-            List<byte[]> famGuidePosts = stats.getGuidePosts().get(entry.getKey().getBytes());
-            PColumnFamily family = new PColumnFamilyImpl(entry.getKey(), entry.getValue(), famGuidePosts);
+            PColumnFamily family = new PColumnFamilyImpl(entry.getKey(), entry.getValue());
             families[i] = family;
             familyByString.put(family.getName().getString(), family);
             familyByBytes.put(family.getName().getBytes(), family);
@@ -716,11 +704,6 @@ public class PTableImpl implements PTable {
     @Override
     public long getTimeStamp() {
         return timeStamp;
-    }
-
-    @Override
-    public List<byte[]> getGuidePosts() {
-        return guidePosts;
     }
 
     @Override

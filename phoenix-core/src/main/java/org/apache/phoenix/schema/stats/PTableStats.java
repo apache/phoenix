@@ -53,6 +53,11 @@ public interface PTableStats extends Writable {
         public void readFields(DataInput arg0) throws IOException {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public int getEstimatedSize() {
+            return 0;
+        }
     };
 
     /**
@@ -61,4 +66,6 @@ public interface PTableStats extends Writable {
      * @return
      */
     SortedMap<byte[], List<byte[]>> getGuidePosts();
+
+    int getEstimatedSize();
 }
