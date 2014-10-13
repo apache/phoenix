@@ -10,17 +10,20 @@ package org.apache.phoenix.schema.stats;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
@@ -34,8 +37,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PhoenixArray;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TimeKeeper;
 
 import com.google.common.collect.Lists;
@@ -53,7 +55,8 @@ public class StatisticsCollector {
     private Map<String, byte[]> minMap = Maps.newHashMap();
     private Map<String, byte[]> maxMap = Maps.newHashMap();
     private long guidepostDepth;
-    private Map<String, Pair<Integer,List<byte[]>>> guidePostsMap = Maps.newHashMap();
+    private Map<String, Pair<Long,GuidePostsInfo>> guidePostsMap = Maps.newHashMap();
+    // Tracks the bytecount per family if it has reached the guidePostsDepth
     private Map<ImmutableBytesPtr, Boolean> familyMap = Maps.newHashMap();
     protected StatisticsWriter statsTable;
     // Ensures that either analyze or compaction happens at any point of time.
@@ -63,11 +66,15 @@ public class StatisticsCollector {
             throws IOException {
         Configuration config = env.getConfiguration();
         HTableInterface statsHTable = env.getTable((PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES));
-        guidepostDepth =
-                config.getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
-                                        statsHTable.getTableDescriptor().getMaxFileSize() / 
-                                         config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, 
-                                                 QueryServicesOptions.DEFAULT_GUIDE_POSTS_PER_REGION));
+        long maxFileSize = statsHTable.getTableDescriptor().getMaxFileSize();
+        if (maxFileSize <= 0) { // HBase brain dead API doesn't give you the "real" max file size if it's not set...
+            maxFileSize = HConstants.DEFAULT_MAX_FILE_SIZE;
+        }
+        guidepostDepth = config.getLong(
+                QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                maxFileSize
+                        / config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
+                                QueryServicesOptions.DEFAULT_GUIDE_POSTS_PER_REGION));
         // Get the stats table associated with the current table on which the CP is
         // triggered
 
@@ -262,7 +269,8 @@ public class StatisticsCollector {
         familyMap.put(new ImmutableBytesPtr(cf), true);
 
         String fam = Bytes.toString(cf);
-        byte[] row = new ImmutableBytesPtr(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength()).copyBytesIfNecessary();
+        byte[] row = ByteUtil.copyKeyBytesIfNecessary(
+                                 new ImmutableBytesWritable(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength()));
         if (!minMap.containsKey(fam) && !maxMap.containsKey(fam)) {
             minMap.put(fam, row);
             // Ideally the max key also should be added in this case
@@ -278,19 +286,17 @@ public class StatisticsCollector {
             }
         }
         // TODO : This can be moved to an interface so that we could collect guide posts in different ways
-        Pair<Integer,List<byte[]>> gps = guidePostsMap.get(fam);
+        Pair<Long,GuidePostsInfo> gps = guidePostsMap.get(fam);
         if (gps == null) {
-            gps = new Pair<Integer,List<byte[]>>(0, Lists.<byte[]>newArrayList());
+            gps = new Pair<Long,GuidePostsInfo>(0L,new GuidePostsInfo(0, Collections.<byte[]>emptyList()));
             guidePostsMap.put(fam, gps);
         }
-        int byteCount = gps.getFirst() + kv.getLength();
+        int kvLength = kv.getLength();
+        long byteCount = gps.getFirst() + kvLength;
         gps.setFirst(byteCount);
         if (byteCount >= guidepostDepth) {
-            // Prevent dups
-            List<byte[]> gpsKeys = gps.getSecond();
-            if (gpsKeys.isEmpty() || Bytes.compareTo(row, gpsKeys.get(gpsKeys.size()-1)) > 0) {
-                gpsKeys.add(row);
-                gps.setFirst(0); // Only reset count when adding guidepost
+            if (gps.getSecond().addGuidePost(row, byteCount)) {
+                gps.setFirst(0L);
             }
         }
     }
@@ -305,22 +311,10 @@ public class StatisticsCollector {
         return null;
     }
 
-    public byte[] getGuidePosts(String fam) {
-        if (!guidePostsMap.isEmpty()) {
-            Pair<Integer,List<byte[]>> gps = guidePostsMap.get(fam);
-            if (gps != null) {
-                List<byte[]> guidePosts = gps.getSecond();
-                if (!guidePosts.isEmpty()) {
-                    byte[][] array = new byte[guidePosts.size()][];
-                    int i = 0;
-                    for (byte[] element : guidePosts) {
-                        array[i] = element;
-                        i++;
-                    }
-                    PhoenixArray phoenixArray = new PhoenixArray(PDataType.VARBINARY, array);
-                    return PDataType.VARBINARY_ARRAY.toBytes(phoenixArray);
-                }
-            }
+    public GuidePostsInfo getGuidePosts(String fam) {
+        Pair<Long,GuidePostsInfo> pair = guidePostsMap.get(fam);
+        if (pair != null) {
+            return pair.getSecond();
         }
         return null;
     }

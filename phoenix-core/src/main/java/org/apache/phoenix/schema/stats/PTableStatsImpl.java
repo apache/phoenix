@@ -38,20 +38,20 @@ import com.sun.istack.NotNull;
  * Implementation for PTableStats
  */
 public class PTableStatsImpl implements PTableStats {
-    private final SortedMap<byte[], List<byte[]>> guidePosts;
+    private final SortedMap<byte[], GuidePostsInfo> guidePosts;
     private final int estimatedSize;
 
     public PTableStatsImpl() {
-        this(new TreeMap<byte[], List<byte[]>>(Bytes.BYTES_COMPARATOR));
+        this(new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR));
     }
 
-    public PTableStatsImpl(@NotNull SortedMap<byte[], List<byte[]>> guidePosts) {
+    public PTableStatsImpl(@NotNull SortedMap<byte[], GuidePostsInfo> guidePosts) {
         this.guidePosts = guidePosts;
         int estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.INT_SIZE + SizedUtil.sizeOfTreeMap(guidePosts.size());
-        for (Map.Entry<byte[], List<byte[]>> entry : guidePosts.entrySet()) {
+        for (Map.Entry<byte[], GuidePostsInfo> entry : guidePosts.entrySet()) {
             byte[] cf = entry.getKey();
             estimatedSize += SizedUtil.ARRAY_SIZE + cf.length;
-            List<byte[]> keys = entry.getValue();
+            List<byte[]> keys = entry.getValue().getGuidePosts();
             estimatedSize += SizedUtil.sizeOfArrayList(keys.size());
             for (byte[] key : keys) {
                 estimatedSize += SizedUtil.ARRAY_SIZE + key.length;
@@ -61,16 +61,17 @@ public class PTableStatsImpl implements PTableStats {
     }
     
     @Override
-    public SortedMap<byte[], List<byte[]>> getGuidePosts() {
+    public SortedMap<byte[], GuidePostsInfo> getGuidePosts() {
         return guidePosts;
     }
 
     @Override
     public void write(DataOutput output) throws IOException {
         WritableUtils.writeVInt(output, guidePosts.size());
-        for (Entry<byte[], List<byte[]>> entry : guidePosts.entrySet()) {
+        for (Entry<byte[], GuidePostsInfo> entry : guidePosts.entrySet()) {
             Bytes.writeByteArray(output, entry.getKey());
-            List<byte[]> value = entry.getValue();
+            List<byte[]> value = entry.getValue().getGuidePosts();
+            output.writeLong(entry.getValue().getByteCount());
             WritableUtils.writeVInt(output, value.size());
             for (int i = 0; i < value.size(); i++) {
                 Bytes.writeByteArray(output, value.get(i));
@@ -83,12 +84,13 @@ public class PTableStatsImpl implements PTableStats {
         int size = WritableUtils.readVInt(input);
         for (int i = 0; i < size; i++) {
             byte[] key = Bytes.readByteArray(input);
+            long byteCount = input.readLong();
             int valueSize = WritableUtils.readVInt(input);
             List<byte[]> value = Lists.newArrayListWithExpectedSize(valueSize);
             for (int j = 0; j < valueSize; j++) {
                 value.add(j, Bytes.readByteArray(input));
             }
-            guidePosts.put(key, value);
+            guidePosts.put(key, new GuidePostsInfo(byteCount, value));
         }
     }
     
@@ -96,10 +98,10 @@ public class PTableStatsImpl implements PTableStats {
     public String toString() {
         StringBuilder buf = new StringBuilder();
         buf.append("PTableStats [");
-        for (Map.Entry<byte[], List<byte[]>> entry : guidePosts.entrySet()) {
+        for (Map.Entry<byte[], GuidePostsInfo> entry : guidePosts.entrySet()) {
             buf.append(Bytes.toStringBinary(entry.getKey()));
             buf.append(":(");
-            List<byte[]> keys = entry.getValue();
+            List<byte[]> keys = entry.getValue().getGuidePosts();
             if (!keys.isEmpty()) {
                 for (byte[] key : keys) {
                     buf.append(Bytes.toStringBinary(key));
@@ -117,5 +119,4 @@ public class PTableStatsImpl implements PTableStats {
     public int getEstimatedSize() {
         return estimatedSize;
     }
-    
 }

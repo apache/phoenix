@@ -40,7 +40,7 @@ public interface PTableStats extends Writable {
 
     public static final PTableStats EMPTY_STATS = new PTableStats() {
         @Override
-        public SortedMap<byte[], List<byte[]>> getGuidePosts() {
+        public SortedMap<byte[], GuidePostsInfo> getGuidePosts() {
             return ImmutableSortedMap.of();
         }
 
@@ -65,7 +65,7 @@ public interface PTableStats extends Writable {
      * Returns a tree map of the guide posts collected against a column family
      * @return
      */
-    SortedMap<byte[], List<byte[]>> getGuidePosts();
+    SortedMap<byte[], GuidePostsInfo> getGuidePosts();
 
     int getEstimatedSize();
 }

@@ -60,6 +60,7 @@ import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -115,27 +116,8 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         PTable table = tableRef.getTable();
         FilterableStatement statement = plan.getStatement();
         RowProjector projector = plan.getProjector();
-        MetaDataClient client = new MetaDataClient(context.getConnection());
         physicalTableName = table.getPhysicalName().getBytes();
         tableStats = useStats() ? new MetaDataClient(context.getConnection()).getTableStats(table) : PTableStats.EMPTY_STATS;
-/*        PTable physicalTable = tableRef.getTable();
-        String physicalName = tableRef.getTable().getPhysicalName().getString();
-        if ((physicalTable.getViewIndexId() == null) && (!physicalName.equals(physicalTable.getName().getString()))) { // tableRef is not for the physical table
-            String physicalSchemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
-            String physicalTableName = SchemaUtil.getTableNameFromFullName(physicalName);
-            // TODO: this will be an extra RPC to ensure we have the latest guideposts, but is almost always
-            // unnecessary. We should instead track when the last time an update cache was done for this
-            // for physical table and not do it again until some interval has passed (it's ok to use stale stats).
-            MetaDataMutationResult result = client.updateCache(null,  use global tenant id to get physical table 
-                    physicalSchemaName, physicalTableName);
-            physicalTable = result.getTable();
-            if(physicalTable == null) {
-                client = new MetaDataClient(context.getConnection());
-                physicalTable = client.getConnection().getMetaDataCache()
-                        .getTable(new PTableKey(null, physicalTableName));
-            }
-        }
-        this.physicalTable = physicalTable;*/
         Scan scan = context.getScan();
         if (projector.isProjectEmptyKeyValue()) {
             Map<byte [], NavigableSet<byte []>> familyMap = scan.getFamilyMap();
@@ -329,19 +311,26 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         
         List<byte[]> gps = null;
         PTable table = getTable();
-        Map<byte[],List<byte[]>> guidePostMap = tableStats.getGuidePosts();
+        Map<byte[],GuidePostsInfo> guidePostMap = tableStats.getGuidePosts();
         byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(getTable());
         if (table.getColumnFamilies().isEmpty()) {
             // For sure we can get the defaultCF from the table
-            gps = guidePostMap.get(defaultCF);
+            if (guidePostMap.get(defaultCF) != null) {
+                gps = guidePostMap.get(defaultCF).getGuidePosts();
+            }
         } else {
             Scan scan = context.getScan();
             if (scan.getFamilyMap().size() > 0 && !scan.getFamilyMap().containsKey(defaultCF)) {
                 // If default CF is not used in scan, use first CF referenced in scan
-                gps = guidePostMap.get(scan.getFamilyMap().keySet().iterator().next());
+                GuidePostsInfo guidePostsInfo = guidePostMap.get(scan.getFamilyMap().keySet().iterator().next());
+                if (guidePostsInfo != null) {
+                    gps = guidePostsInfo.getGuidePosts();
+                }
             } else {
                 // Otherwise, favor use of default CF.
-                gps = guidePostMap.get(defaultCF);
+                if (guidePostMap.get(defaultCF) != null) {
+                    gps = guidePostMap.get(defaultCF).getGuidePosts();
+                }
             }
         }
         if (gps == null) {

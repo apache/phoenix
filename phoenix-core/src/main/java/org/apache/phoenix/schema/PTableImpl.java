@@ -45,6 +45,7 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.schema.stats.PTableStatsImpl;
 import org.apache.phoenix.util.ByteUtil;
@@ -375,7 +376,8 @@ public class PTableImpl implements PTable {
         }
         
         this.parentTableName = parentTableName;
-        this.parentName = parentTableName == null ? null : PNameFactory.newName(SchemaUtil.getTableName(schemaName.getString(), parentTableName.getString()));
+        this.parentName = parentTableName == null ? null : PNameFactory.newName(SchemaUtil.getTableName(
+                schemaName.getString(), parentTableName.getString()));
         estimatedSize += PNameFactory.getEstimatedSize(this.parentName);
         
         this.physicalNames = physicalNames == null ? ImmutableList.<PName>of() : ImmutableList.copyOf(physicalNames);
@@ -705,7 +707,7 @@ public class PTableImpl implements PTable {
     public long getTimeStamp() {
         return timeStamp;
     }
-
+    
     @Override
     public void readFields(DataInput input) throws IOException {
         byte[] tenantIdBytes = Bytes.readByteArray(input);

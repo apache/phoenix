@@ -282,7 +282,7 @@ public class QueryIT extends BaseQueryIT {
         upsertConn.close();
         
         String query = "SELECT organization_id, a_string AS a FROM atable WHERE organization_id=? and a_integer = 5";
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         statement.setString(1, tenantId);
