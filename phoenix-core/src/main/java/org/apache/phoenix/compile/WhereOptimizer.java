@@ -64,6 +64,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 
@@ -180,6 +181,7 @@ public class WhereOptimizer {
         
         // Add tenant data isolation for tenant-specific tables
         if (isMultiTenant) {
+            tenantId = ScanUtil.padTenantIdIfNecessary(schema, isSalted, tenantId);
             byte[] tenantIdBytes = tenantId.getBytes();
             KeyRange tenantIdKeyRange = KeyRange.getKeyRange(tenantIdBytes);
             cnf.add(singletonList(tenantIdKeyRange));

@@ -168,7 +168,7 @@ public class ProjectionCompiler {
         PhoenixConnection conn = context.getConnection();
         PName tenantId = conn.getTenantId();
         String tableName = index.getParentName().getString();
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), tableName));
+        PTable table = conn.getMetaDataCache().getTable(new PTableKey(tenantId, tableName));
         int tableOffset = table.getBucketNum() == null ? 0 : 1;
         int minTablePKOffset = getMinPKOffset(table, tenantId);
         int minIndexPKOffset = getMinPKOffset(index, tenantId);
