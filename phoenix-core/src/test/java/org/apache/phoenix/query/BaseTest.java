@@ -551,7 +551,7 @@ public abstract class BaseTest {
                 @Override
                 public void run() {
                     try {
-                        utility.shutdownMiniCluster();
+                        if (utility != null) utility.shutdownMiniCluster();
                     } catch (Exception e) {
                         logger.warn("Exception caught when shutting down mini cluster", e);
                     }

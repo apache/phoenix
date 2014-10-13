@@ -84,13 +84,11 @@ import java.util.Set;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -99,7 +97,6 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.PostDDLCompiler;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
-import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
@@ -109,7 +106,6 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ColumnDef;
@@ -484,33 +480,55 @@ public class MetaDataClient {
     public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt)
             throws SQLException {
         // Check before updating the stats if we have reached the configured time to reupdate the stats once again
+        ColumnResolver resolver = FromCompiler.getResolver(updateStatisticsStmt, connection);
+        PTable table = resolver.getTables().get(0).getTable();
+        long rowCount = 0;
+        if (updateStatisticsStmt.updateColumns()) {
+            rowCount += updateStatisticsInternal(table.getPhysicalName(), table);
+        }
+        if (updateStatisticsStmt.updateIndex()) {
+            // TODO: If our table is a VIEW with multiple indexes or a TABLE with local indexes,
+            // we may be doing more work that we have to here. We should union the scan ranges
+            // across all indexes in that case so that we don't re-calculate the same stats
+            // multiple times.
+            for (PTable index : table.getIndexes()) {
+                rowCount += updateStatisticsInternal(index.getPhysicalName(), index);
+            }
+            // If analyzing the indexes of a multi-tenant table or a table with view indexes
+            // then analyze all of those indexes too.
+            if (table.getType() != PTableType.VIEW &&
+               (table.isMultiTenant())
+               || (MetaDataUtil.hasViewIndexTable(connection, table.getName()))){
+                
+                String viewIndexTableName = MetaDataUtil.getViewIndexTableName(table.getTableName().getString());
+                String viewIndexSchemaName = MetaDataUtil.getViewIndexSchemaName(table.getSchemaName().getString());
+                final PName viewIndexPhysicalName = PNameFactory.newName(SchemaUtil.getTableName(viewIndexSchemaName, viewIndexTableName));
+                PTable indexLogicalTable = new DelegateTable(table) {
+                    @Override
+                    public PName getPhysicalName() {
+                        return viewIndexPhysicalName;
+                    }
+                    @Override
+                    public PTableStats getTableStats() {
+                        return PTableStats.EMPTY_STATS;
+                    }
+                };
+                rowCount += updateStatisticsInternal(viewIndexPhysicalName, indexLogicalTable);
+            }
+        }
+        return new MutationState((int)rowCount, connection);
+    }
+
+    private long updateStatisticsInternal(PName physicalName, PTable logicalTable) throws SQLException {
         ReadOnlyProps props = connection.getQueryServices().getProps();
         final long msMinBetweenUpdates = props
                 .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
                         props.getLong(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, 
                                 QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS) / 2);
-        ColumnResolver resolver = FromCompiler.getResolver(updateStatisticsStmt, connection);
-        PTable table = resolver.getTables().get(0).getTable();
-        List<PTable> indexes = table.getIndexes();
-        List<PTable> tables = Lists.newArrayListWithExpectedSize(1 + indexes.size());
-        if (updateStatisticsStmt.updateColumns()) {
-            tables.add(table);
-        }
-        if (updateStatisticsStmt.updateIndex()) {
-            tables.addAll(indexes);
-        }
-        for(PTable pTable : tables) {
-            updateStatisticsInternal(msMinBetweenUpdates, pTable);
-        }
-        return new MutationState(1, connection);
-    }
-
-    private MutationState updateStatisticsInternal(long msMinBetweenUpdates, PTable table) throws SQLException {
-        PName physicalName = table.getPhysicalName();
         byte[] tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         Long scn = connection.getSCN();
         // Always invalidate the cache
-        long clientTS = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
+        long clientTimeStamp = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
         String query = "SELECT CURRENT_DATE() - " + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
                 + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
                 + " IS NULL AND " + REGION_NAME + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
@@ -519,32 +537,29 @@ public class MetaDataClient {
         if (rs.next()) {
             msSinceLastUpdate = rs.getLong(1);
         }
-        if (msSinceLastUpdate >= msMinBetweenUpdates) {
-            // Here create the select query.
-            String countQuery = "SELECT /*+ NO_CACHE NO_INDEX */ count(*) FROM " + table.getName().getString();
-            PhoenixStatement statement = (PhoenixStatement) connection.createStatement();
-            QueryPlan plan = statement.compileQuery(countQuery);
-            Scan scan = plan.getContext().getScan();
-            // Add all CF in the table
-            scan.getFamilyMap().clear();
-            for (PColumnFamily family : table.getColumnFamilies()) {
-                scan.addFamily(family.getName().getBytes());
-            }
-            scan.setAttribute(BaseScannerRegionObserver.ANALYZE_TABLE, PDataType.TRUE_BYTES);
-            KeyValue kv = plan.iterator().next().getValue(0);
-            ImmutableBytesWritable tempPtr = plan.getContext().getTempPtr();
-            tempPtr.set(kv.getValue());
-            // A single Cell will be returned with the count(*) - we decode that here
-            long rowCount = PDataType.LONG.getCodec().decodeLong(tempPtr, SortOrder.getDefault());
-            // We need to update the stats table so that client will pull the new one with
-            // the updated stats.
-            connection.getQueryServices().incrementTableTimeStamp(tenantIdBytes,
-                    Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())),
-                    Bytes.toBytes(SchemaUtil.getTableNameFromFullName(physicalName.getString())), clientTS);
-            return new  MutationState(0, connection, rowCount);
-        } else {
-            return new MutationState(0, connection);
+        if (msSinceLastUpdate < msMinBetweenUpdates) { 
+            return 0; 
         }
+
+        /*
+         * Execute a COUNT(*) through PostDDLCompiler as we need to use the logicalTable passed through, since it may not represent a "real"
+         * table in the case of the view indexes of a base table.
+         */
+        PostDDLCompiler compiler = new PostDDLCompiler(connection);
+        TableRef tableRef = new TableRef(null, logicalTable, clientTimeStamp, false);
+        MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, null, null, clientTimeStamp);
+        Scan scan = plan.getContext().getScan();
+        scan.setCacheBlocks(false);
+        scan.setAttribute(BaseScannerRegionObserver.ANALYZE_TABLE, PDataType.TRUE_BYTES);
+        MutationState mutationState = plan.execute();
+        long rowCount = mutationState.getUpdateCount();
+
+        // We need to update the stats table so that client will pull the new one with
+        // the updated stats.
+        connection.getQueryServices().incrementTableTimeStamp(tenantIdBytes,
+                Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())),
+                Bytes.toBytes(SchemaUtil.getTableNameFromFullName(physicalName.getString())), clientTimeStamp);
+        return rowCount;
     }
 
     private MutationState buildIndexAtTimeStamp(PTable index, NamedTableNode dataTableNode) throws SQLException {

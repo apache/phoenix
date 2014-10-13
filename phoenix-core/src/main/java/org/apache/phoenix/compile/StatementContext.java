@@ -75,6 +75,10 @@ public class StatementContext {
     private Map<SelectStatement, Object> subqueryResults;
     
     public StatementContext(PhoenixStatement statement) {
+        this(statement, new Scan());
+    }
+    
+    public StatementContext(PhoenixStatement statement, Scan scan) {
         this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan(), new SequenceManager(statement));
     }
     

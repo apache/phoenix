@@ -124,7 +124,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     }
     
     @Test
-    public void testQueryingUsingTenantSpecific() throws Exception {
+    public void testNonPaddedTenantId() throws Exception {
         String tenantId1 = "org1";
         String tenantId2 = "org2";
         String ddl = "CREATE TABLE T (tenantId char(15) NOT NULL, pk1 varchar NOT NULL, pk2 INTEGER NOT NULL, val1 VARCHAR CONSTRAINT pk primary key (tenantId,pk1,pk2)) MULTI_TENANT = true";
