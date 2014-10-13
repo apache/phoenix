@@ -395,6 +395,7 @@ public class HashJoinPlan implements QueryPlan {
         private final int index;
         private final QueryPlan plan;
         private final List<Expression> hashExpressions;
+        private final boolean singleValueOnly;
         private final Expression keyRangeLhsExpression;
         private final Expression keyRangeRhsExpression;
         private final TupleProjector clientProjector;
@@ -402,12 +403,14 @@ public class HashJoinPlan implements QueryPlan {
         
         public HashSubPlan(int index, QueryPlan subPlan, 
                 List<Expression> hashExpressions,
+                boolean singleValueOnly,
                 Expression keyRangeLhsExpression, 
                 Expression keyRangeRhsExpression, 
                 TupleProjector clientProjector, boolean hasFilters) {
             this.index = index;
             this.plan = subPlan;
             this.hashExpressions = hashExpressions;
+            this.singleValueOnly = singleValueOnly;
             this.keyRangeLhsExpression = keyRangeLhsExpression;
             this.keyRangeRhsExpression = keyRangeRhsExpression;
             this.clientProjector = clientProjector;
@@ -424,7 +427,7 @@ public class HashJoinPlan implements QueryPlan {
             ServerCache cache = null;
             if (hashExpressions != null) {
                 cache = parent.hashClient.addHashCache(ranges, plan.iterator(), 
-                        clientProjector, plan.getEstimatedSize(), hashExpressions, parent.plan.getTableRef(), keyRangeRhsExpression, keyRangeRhsValues);
+                        clientProjector, plan.getEstimatedSize(), hashExpressions, singleValueOnly, parent.plan.getTableRef(), keyRangeRhsExpression, keyRangeRhsValues);
                 long endTime = System.currentTimeMillis();
                 boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);
                 if (!isSet && (endTime - parent.firstJobEndTime.get()) > parent.maxServerCacheTimeToLive) {

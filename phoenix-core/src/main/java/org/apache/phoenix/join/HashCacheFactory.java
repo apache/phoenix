@@ -27,9 +27,10 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.xerial.snappy.Snappy;
-
 import org.apache.phoenix.cache.HashCache;
 import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -67,6 +68,7 @@ public class HashCacheFactory implements ServerCacheFactory {
     private class HashCacheImpl implements HashCache {
         private final Map<ImmutableBytesPtr,List<Tuple>> hashCache;
         private final MemoryChunk memoryChunk;
+        private final boolean singleValueOnly;
         
         private HashCacheImpl(byte[] hashCacheBytes, MemoryChunk memoryChunk) {
             try {
@@ -83,6 +85,7 @@ public class HashCacheFactory implements ServerCacheFactory {
                     expression.readFields(dataInput);
                     onExpressions.add(expression);                        
                 }
+                this.singleValueOnly = dataInput.readBoolean();
                 int exprSize = dataInput.readInt();
                 offset += exprSize;
                 int nRows = dataInput.readInt();
@@ -117,8 +120,14 @@ public class HashCacheFactory implements ServerCacheFactory {
         }
         
         @Override
-        public List<Tuple> get(ImmutableBytesPtr hashKey) {
-            return hashCache.get(hashKey);
+        public List<Tuple> get(ImmutableBytesPtr hashKey) throws IOException {
+            List<Tuple> ret = hashCache.get(hashKey);
+            if (singleValueOnly && ret != null && ret.size() > 1) {
+                SQLException ex = new SQLExceptionInfo.Builder(SQLExceptionCode.SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS).build().buildException();
+                ServerUtil.throwIOException(ex.getMessage(), ex);
+            }
+            
+            return ret;
         }
     }
 }
