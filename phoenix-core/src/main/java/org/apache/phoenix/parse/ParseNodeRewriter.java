@@ -561,7 +561,7 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
             if (lhsNode == normLhsNode && rhsNode == normRhsNode && onNode == normOnNode)
                 return joinNode;
 
-            return NODE_FACTORY.join(joinNode.getType(), normLhsNode, normRhsNode, normOnNode);
+            return NODE_FACTORY.join(joinNode.getType(), normLhsNode, normRhsNode, normOnNode, joinNode.isSingleValueOnly());
         }
 
         @Override

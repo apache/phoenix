@@ -18,10 +18,10 @@
 package org.apache.phoenix.cache;
 
 import java.io.Closeable;
+import java.io.IOException;
 import java.util.List;
 
 import org.apache.http.annotation.Immutable;
-
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -34,5 +34,5 @@ import org.apache.phoenix.schema.tuple.Tuple;
  */
 @Immutable
 public interface HashCache extends Closeable {
-    public List<Tuple> get(ImmutableBytesPtr hashKey);
+    public List<Tuple> get(ImmutableBytesPtr hashKey) throws IOException;
 }

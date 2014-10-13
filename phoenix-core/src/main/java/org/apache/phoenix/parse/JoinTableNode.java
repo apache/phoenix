@@ -43,13 +43,15 @@ public class JoinTableNode extends TableNode {
     private final TableNode lhs;
     private final TableNode rhs;
     private final ParseNode onNode;
+    private final boolean singleValueOnly;
     
-    JoinTableNode(JoinType type, TableNode lhs, TableNode rhs, ParseNode onNode) {
+    JoinTableNode(JoinType type, TableNode lhs, TableNode rhs, ParseNode onNode, boolean singleValueOnly) {
         super(null);
         this.type = type;
         this.lhs = lhs;
         this.rhs = rhs;
         this.onNode = onNode;
+        this.singleValueOnly = singleValueOnly;
     }
     
     public JoinType getType() {
@@ -66,6 +68,10 @@ public class JoinTableNode extends TableNode {
     
     public ParseNode getOnNode() {
         return onNode;
+    }
+    
+    public boolean isSingleValueOnly() {
+        return singleValueOnly;
     }
 
     @Override
