@@ -185,6 +185,7 @@ public class HashJoinRegionScanner implements RegionScanner {
             if (postFilter != null) {
                 for (Iterator<Tuple> iter = resultQueue.iterator(); iter.hasNext();) {
                     Tuple t = iter.next();
+                    postFilter.reset();
                     ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
                     try {
                         if (!postFilter.evaluate(t, tempPtr)) {

@@ -32,6 +32,7 @@ import org.apache.phoenix.expression.function.ConvertTimezoneFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.DecodeFunction;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
+import org.apache.phoenix.expression.function.DistinctValueAggregateFunction;
 import org.apache.phoenix.expression.function.EncodeFunction;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.FirstValueFunction;
@@ -147,6 +148,7 @@ public enum ExpressionType {
     LowerFunction(LowerFunction.class),
     TrimFunction(TrimFunction.class),
     DistinctCountAggregateFunction(DistinctCountAggregateFunction.class),
+    DistinctValueAggregateFunction(DistinctValueAggregateFunction.class),
     PercentileContAggregateFunction(PercentileContAggregateFunction.class),
     PercentRankAggregateFunction(PercentRankAggregateFunction.class),
     StddevPopFunction(StddevPopFunction.class),

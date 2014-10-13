@@ -187,7 +187,7 @@ public class JoinCompiler {
             if (joinSpecs == null) {
                 joinSpecs = new ArrayList<JoinSpec>();
             }
-            joinSpecs.add(new JoinSpec(joinNode.getType(), joinNode.getOnNode(), joinTable, origResolver));
+            joinSpecs.add(new JoinSpec(joinNode.getType(), joinNode.getOnNode(), joinTable, joinNode.isSingleValueOnly(), origResolver));
             
             return new Pair<Table, List<JoinSpec>>(lhs.getFirst(), joinSpecs);
         }
@@ -362,7 +362,8 @@ public class JoinCompiler {
                             && count > 1 
                             && joinSpecs.get(count - 1).getType() != JoinType.Left
                             && joinSpecs.get(count - 1).getType() != JoinType.Semi
-                            && joinSpecs.get(count - 1).getType() != JoinType.Anti))
+                            && joinSpecs.get(count - 1).getType() != JoinType.Anti
+                            && !joinSpecs.get(count - 1).isSingleValueOnly()))
                 return null;
 
             boolean[] vector = new boolean[count];
@@ -437,13 +438,15 @@ public class JoinCompiler {
         private final JoinType type;
         private final List<ComparisonParseNode> onConditions;
         private final JoinTable joinTable;
+        private final boolean singleValueOnly;
         private Set<TableRef> dependencies;
         
         private JoinSpec(JoinType type, ParseNode onNode, JoinTable joinTable, 
-                ColumnResolver resolver) throws SQLException {
+                boolean singleValueOnly, ColumnResolver resolver) throws SQLException {
             this.type = type;
             this.onConditions = new ArrayList<ComparisonParseNode>();
             this.joinTable = joinTable;
+            this.singleValueOnly = singleValueOnly;
             this.dependencies = new HashSet<TableRef>();
             OnNodeVisitor visitor = new OnNodeVisitor(resolver, onConditions, dependencies, joinTable);
             onNode.accept(visitor);
@@ -459,6 +462,10 @@ public class JoinCompiler {
         
         public JoinTable getJoinTable() {
             return joinTable;
+        }
+        
+        public boolean isSingleValueOnly() {
+            return singleValueOnly;
         }
         
         public Set<TableRef> getDependencies() {
@@ -1177,7 +1184,7 @@ public class JoinCompiler {
                     if (lhs == lhsReplace && rhs == rhsReplace)
                         return joinNode;
 
-                    return NODE_FACTORY.join(joinNode.getType(), lhsReplace, rhsReplace, joinNode.getOnNode());
+                    return NODE_FACTORY.join(joinNode.getType(), lhsReplace, rhsReplace, joinNode.getOnNode(), joinNode.isSingleValueOnly());
                 }
 
                 @Override

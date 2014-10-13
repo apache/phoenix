@@ -54,7 +54,7 @@ public class DistinctValueWithCountServerAggregator extends BaseAggregator {
 
     private int compressThreshold;
     private byte[] buffer = null;
-    private Map<ImmutableBytesPtr, Integer> valueVsCount = new HashMap<ImmutableBytesPtr, Integer>();
+    protected Map<ImmutableBytesPtr, Integer> valueVsCount = new HashMap<ImmutableBytesPtr, Integer>();
 
     public DistinctValueWithCountServerAggregator(Configuration conf) {
         super(SortOrder.getDefault());
