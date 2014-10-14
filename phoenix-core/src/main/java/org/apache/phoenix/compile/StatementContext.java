@@ -29,7 +29,6 @@ import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -69,7 +68,6 @@ public class StatementContext {
 
     private TableRef currentTable;
     private List<Pair<byte[], byte[]>> whereConditionColumns;
-    private TupleProjector clientTupleProjector;
     private TimeRange scanTimeRange = null;
     
     private Map<SelectStatement, Object> subqueryResults;
@@ -81,7 +79,7 @@ public class StatementContext {
     public StatementContext(PhoenixStatement statement, Scan scan) {
         this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan(), new SequenceManager(statement));
     }
-    
+
     public StatementContext(PhoenixStatement statement, ColumnResolver resolver, Scan scan, SequenceManager seqManager) {
         this.statement = statement;
         this.resolver = resolver;
@@ -202,14 +200,6 @@ public class StatementContext {
 
     public List<Pair<byte[], byte[]>> getWhereCoditionColumns() {
         return whereConditionColumns;
-    }
-    
-    public TupleProjector getClientTupleProjector() {
-        return clientTupleProjector;
-    }
-    
-    public void setClientTupleProjector(TupleProjector projector) {
-        this.clientTupleProjector = projector;
     }
 
     public void setScanTimeRange(TimeRange value){

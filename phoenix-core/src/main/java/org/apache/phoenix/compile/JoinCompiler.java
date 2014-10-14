@@ -313,6 +313,9 @@ public class JoinCompiler {
             for (ParseNode node : table.getPreFilters()) {
                 node.accept(prefilterRefVisitor);
             }
+            for (ParseNode node : table.getPostFilters()) {
+                node.accept(generalRefVisitor);
+            }
             for (ParseNode node : postFilters) {
                 node.accept(generalRefVisitor);
             }
@@ -331,22 +334,12 @@ public class JoinCompiler {
             }
         }
         
-        public Expression compilePostFilterExpression(StatementContext context) throws SQLException {
-            if (postFilters.isEmpty())
-                return null;
-            
-            ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
-            List<Expression> expressions = new ArrayList<Expression>(postFilters.size());
-            for (ParseNode postFilter : postFilters) {
-                expressionCompiler.reset();
-                Expression expression = postFilter.accept(expressionCompiler);
-                expressions.add(expression);
+        public Expression compilePostFilterExpression(StatementContext context, Table table) throws SQLException {
+            List<ParseNode> filtersCombined = Lists.<ParseNode> newArrayList(postFilters);
+            if (table != null) {
+                filtersCombined.addAll(table.getPostFilters());
             }
-            
-            if (expressions.size() == 1)
-                return expressions.get(0);
-            
-            return AndExpression.create(expressions);
+            return JoinCompiler.compilePostFilterExpression(context, filtersCombined);
         }
         
         /**
@@ -450,6 +443,9 @@ public class JoinCompiler {
             this.dependencies = new HashSet<TableRef>();
             OnNodeVisitor visitor = new OnNodeVisitor(resolver, onConditions, dependencies, joinTable);
             onNode.accept(visitor);
+            if (onConditions.isEmpty()) {
+                visitor.throwUnsupportedJoinConditionException();
+            }
         }
         
         public JoinType getType() {
@@ -609,6 +605,7 @@ public class JoinCompiler {
         private final List<AliasedNode> selectNodes; // all basic nodes related to this table, no aggregation.
         private final List<ParseNode> preFilters;
         private final List<ParseNode> postFilters;
+        private final boolean isPostFilterConvertible;
         
         private Table(TableNode tableNode, List<ColumnDef> dynamicColumns, 
                 List<AliasedNode> selectNodes, TableRef tableRef) {
@@ -619,6 +616,7 @@ public class JoinCompiler {
             this.selectNodes = selectNodes;
             this.preFilters = new ArrayList<ParseNode>();
             this.postFilters = Collections.<ParseNode>emptyList();
+            this.isPostFilterConvertible = false;
         }
         
         private Table(DerivedTableNode tableNode, 
@@ -628,8 +626,9 @@ public class JoinCompiler {
             this.subselect = SubselectRewriter.flatten(tableNode.getSelect(), statement.getConnection());
             this.tableRef = tableRef;
             this.selectNodes = selectNodes;
-            this.preFilters = Collections.<ParseNode>emptyList();
+            this.preFilters = new ArrayList<ParseNode>();
             this.postFilters = new ArrayList<ParseNode>();
+            this.isPostFilterConvertible = SubselectRewriter.isPostFilterConvertible(subselect);
         }
         
         public TableNode getTableNode() {
@@ -661,21 +660,24 @@ public class JoinCompiler {
         }
         
         public void addFilter(ParseNode filter) {
-            if (!isSubselect()) {
+            if (!isSubselect() || isPostFilterConvertible) {
                 preFilters.add(filter);
-                return;
+            } else {
+                postFilters.add(filter);
             }
-            
-            postFilters.add(filter);
         }
         
         public ParseNode getPreFiltersCombined() {
             return combine(preFilters);
         }
         
+        public Expression compilePostFilterExpression(StatementContext context) throws SQLException {
+            return JoinCompiler.compilePostFilterExpression(context, postFilters);
+        }
+        
         public SelectStatement getAsSubquery() throws SQLException {
             if (isSubselect())
-                return SubselectRewriter.applyPostFilters(subselect, postFilters, tableNode.getAlias());
+                return SubselectRewriter.applyPostFilters(subselect, preFilters, tableNode.getAlias());
             
             List<TableNode> from = Collections.<TableNode>singletonList(tableNode);
             return NODE_FACTORY.select(from, select.getHint(), false, selectNodes, getPreFiltersCombined(), null, null, null, null, 0, false, select.hasSequence());
@@ -970,7 +972,7 @@ public class JoinCompiler {
          * 2) a boolean condition referencing to the self table only.
          * Otherwise, it can be ambiguous.
          */
-        private void throwUnsupportedJoinConditionException() 
+        public void throwUnsupportedJoinConditionException() 
                 throws SQLFeatureNotSupportedException {
             throw new SQLFeatureNotSupportedException("Does not support non-standard or non-equi join conditions.");
         }           
@@ -1091,6 +1093,24 @@ public class JoinCompiler {
             visitor.reset();
         }
         return ret;
+    }
+    
+    private static Expression compilePostFilterExpression(StatementContext context, List<ParseNode> postFilters) throws SQLException {
+        if (postFilters.isEmpty())
+            return null;
+        
+        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
+        List<Expression> expressions = new ArrayList<Expression>(postFilters.size());
+        for (ParseNode postFilter : postFilters) {
+            expressionCompiler.reset();
+            Expression expression = postFilter.accept(expressionCompiler);
+            expressions.add(expression);
+        }
+        
+        if (expressions.size() == 1)
+            return expressions.get(0);
+        
+        return AndExpression.create(expressions);
     }
     
     public static SelectStatement optimize(PhoenixStatement statement, SelectStatement select, final ColumnResolver resolver) throws SQLException {
