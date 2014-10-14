@@ -1005,6 +1005,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 desc = admin.getTableDescriptor(physicalIndexName);
                 if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES)))) {
+                    this.tableStatsCache.invalidate(Bytes.toString(physicalIndexName));
                     final ReadOnlyProps props = this.getProps();
                     final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     if (dropMetadata) {
@@ -1039,6 +1040,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 desc = admin.getTableDescriptor(physicalIndexName);
                 if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+                    this.tableStatsCache.invalidate(Bytes.toString(physicalIndexName));
                     final ReadOnlyProps props = this.getProps();
                     final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     if (dropMetadata) {

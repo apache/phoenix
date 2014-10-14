@@ -44,7 +44,7 @@ public abstract class BaseTenantSpecificTablesIT extends BaseOwnClusterClientMan
             "                tenant_id VARCHAR(5) NOT NULL,\n" + 
             "                tenant_type_id VARCHAR(3) NOT NULL, \n" + 
             "                id INTEGER NOT NULL\n" + 
-            "                CONSTRAINT pk PRIMARY KEY (tenant_id, tenant_type_id, id)) MULTI_TENANT=true";
+            "                CONSTRAINT pk PRIMARY KEY (tenant_id, tenant_type_id, id)) MULTI_TENANT=true, IMMUTABLE_ROWS=true";
     
     protected static final String TENANT_TABLE_NAME = "TENANT_TABLE";
     protected static final String TENANT_TABLE_DDL = "CREATE VIEW " + TENANT_TABLE_NAME + " ( \n" + 
@@ -56,7 +56,7 @@ public abstract class BaseTenantSpecificTablesIT extends BaseOwnClusterClientMan
             "                user VARCHAR ,\n" + 
             "                tenant_id VARCHAR(5) NOT NULL,\n" + 
             "                id INTEGER NOT NULL,\n" + 
-            "                CONSTRAINT pk PRIMARY KEY (tenant_id, id)) MULTI_TENANT=true";
+            "                CONSTRAINT pk PRIMARY KEY (tenant_id, id)) MULTI_TENANT=true, IMMUTABLE_ROWS=true";
     
     protected static final String TENANT_TABLE_NAME_NO_TENANT_TYPE_ID = "TENANT_TABLE_NO_TENANT_TYPE_ID";
     protected static final String TENANT_TABLE_DDL_NO_TENANT_TYPE_ID = "CREATE VIEW " + TENANT_TABLE_NAME_NO_TENANT_TYPE_ID + " ( \n" + 

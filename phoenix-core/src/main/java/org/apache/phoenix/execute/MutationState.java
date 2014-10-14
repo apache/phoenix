@@ -19,6 +19,7 @@ package org.apache.phoenix.execute;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -44,9 +45,9 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
@@ -78,7 +79,7 @@ public class MutationState implements SQLCloseable {
     private final long maxSize;
     private final ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
     private final Map<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> mutations = Maps.newHashMapWithExpectedSize(3); // TODO: Sizing?
-    private final long sizeOffset;
+    private long sizeOffset;
     private int numRows = 0;
 
     public MutationState(int maxSize, PhoenixConnection connection) {
@@ -131,10 +132,14 @@ public class MutationState implements SQLCloseable {
         if (this == newMutation) { // Doesn't make sense
             return;
         }
+        this.sizeOffset += newMutation.sizeOffset;
         // Merge newMutation with this one, keeping state from newMutation for any overlaps
         for (Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> entry : newMutation.mutations.entrySet()) {
             // Replace existing entries for the table with new entries
-            Map<ImmutableBytesPtr,Map<PColumn,byte[]>> existingRows = this.mutations.put(entry.getKey(), entry.getValue());
+            TableRef tableRef = entry.getKey();
+            PTable table = tableRef.getTable();
+            boolean isIndex = table.getType() == PTableType.INDEX;
+            Map<ImmutableBytesPtr,Map<PColumn,byte[]>> existingRows = this.mutations.put(tableRef, entry.getValue());
             if (existingRows != null) { // Rows for that table already exist
                 // Loop through new rows and replace existing with new
                 for (Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry : entry.getValue().entrySet()) {
@@ -155,38 +160,52 @@ public class MutationState implements SQLCloseable {
                             }
                         }
                     } else {
-                        numRows++;
+                        if (!isIndex) { // Don't count index rows in row count
+                            numRows++;
+                        }
                     }
                 }
                 // Put the existing one back now that it's merged
                 this.mutations.put(entry.getKey(), existingRows);
             } else {
-                numRows += entry.getValue().size();
+                if (!isIndex) {
+                    numRows += entry.getValue().size();
+                }
             }
         }
         throwIfTooBig();
     }
     
     private Iterator<Pair<byte[],List<Mutation>>> addRowMutations(final TableRef tableRef, final Map<ImmutableBytesPtr, Map<PColumn, byte[]>> values, long timestamp, boolean includeMutableIndexes) {
+        final Iterator<PTable> indexes = // Only maintain tables with immutable rows through this client-side mechanism
+                (tableRef.getTable().isImmutableRows() || includeMutableIndexes) ? 
+                        IndexMaintainer.nonDisabledIndexIterator(tableRef.getTable().getIndexes().iterator()) : 
+                        Iterators.<PTable>emptyIterator();
         final List<Mutation> mutations = Lists.newArrayListWithExpectedSize(values.size());
+        final List<Mutation> mutationsPertainingToIndex = indexes.hasNext() ? Lists.<Mutation>newArrayListWithExpectedSize(values.size()) : null;
         Iterator<Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>>> iterator = values.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry = iterator.next();
             ImmutableBytesPtr key = rowEntry.getKey();
             PRow row = tableRef.getTable().newRow(connection.getKeyValueBuilder(), timestamp, key);
+            List<Mutation> rowMutations, rowMutationsPertainingToIndex;
             if (rowEntry.getValue() == PRow.DELETE_MARKER) { // means delete
                 row.delete();
+                rowMutations = row.toRowMutations();
+                // Row deletes for index tables are processed by running a re-written query
+                // against the index table (as this allows for flexibility in being able to
+                // delete rows).
+                rowMutationsPertainingToIndex = Collections.emptyList();
             } else {
                 for (Map.Entry<PColumn,byte[]> valueEntry : rowEntry.getValue().entrySet()) {
                     row.setValue(valueEntry.getKey(), valueEntry.getValue());
                 }
+                rowMutations = row.toRowMutations();
+                rowMutationsPertainingToIndex = rowMutations;
             }
-            mutations.addAll(row.toRowMutations());
+            mutations.addAll(rowMutations);
+            if (mutationsPertainingToIndex != null) mutationsPertainingToIndex.addAll(rowMutationsPertainingToIndex);
         }
-        final Iterator<PTable> indexes = // Only maintain tables with immutable rows through this client-side mechanism
-                (tableRef.getTable().isImmutableRows() || includeMutableIndexes) ? 
-                        IndexMaintainer.nonDisabledIndexIterator(tableRef.getTable().getIndexes().iterator()) : 
-                        Iterators.<PTable>emptyIterator();
         return new Iterator<Pair<byte[],List<Mutation>>>() {
             boolean isFirst = true;
 
@@ -205,7 +224,7 @@ public class MutationState implements SQLCloseable {
                 List<Mutation> indexMutations;
                 try {
                     indexMutations =
-                            IndexUtil.generateIndexData(tableRef.getTable(), index, mutations,
+                            IndexUtil.generateIndexData(tableRef.getTable(), index, mutationsPertainingToIndex,
                                 tempPtr, connection.getKeyValueBuilder());
                 } catch (SQLException e) {
                     throw new IllegalDataException(e);
@@ -454,7 +473,9 @@ public class MutationState implements SQLCloseable {
                 } while (shouldRetry && retryCount++ < 1);
                 isDataTable = false;
             }
-            numRows -= entry.getValue().size();
+            if (tableRef.getTable().getType() != PTableType.INDEX) {
+                numRows -= entry.getValue().size();
+            }
             iterator.remove(); // Remove batches as we process them
         }
         trace.close();
