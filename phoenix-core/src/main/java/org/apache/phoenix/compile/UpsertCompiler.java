@@ -177,9 +177,11 @@ public class UpsertCompiler {
         private RowProjector projector;
         private int[] columnIndexes;
         private int[] pkSlotIndexes;
+        private final TableRef tableRef;
 
         private UpsertingParallelIteratorFactory (PhoenixConnection connection, TableRef tableRef) {
-            super(connection, tableRef);
+            super(connection);
+            this.tableRef = tableRef;
         }
 
         @Override

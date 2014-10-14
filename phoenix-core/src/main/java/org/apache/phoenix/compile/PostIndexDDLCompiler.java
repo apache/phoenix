@@ -24,6 +24,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
@@ -55,25 +56,33 @@ public class PostIndexDDLCompiler {
         //   that would allow the user to easily monitor the process of index creation.
         StringBuilder indexColumns = new StringBuilder();
         StringBuilder dataColumns = new StringBuilder();
-        List<PColumn> dataTableColumns = dataTableRef.getTable().getColumns();
+        List<PColumn> dataPKColumns = dataTableRef.getTable().getPKColumns();
         PTable dataTable = dataTableRef.getTable();
-        int nColumns = dataTable.getColumns().size();
+        int nPKColumns = dataPKColumns.size();
         boolean isSalted = dataTable.getBucketNum() != null;
         boolean isMultiTenant = connection.getTenantId() != null && dataTable.isMultiTenant();
-        boolean isSharedViewIndex = dataTable.getViewIndexId() != null;
-        int posOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
-        for (int i = posOffset; i < nColumns; i++) {
-            PColumn col = dataTableColumns.get(i);
-            String indexColName = IndexUtil.getIndexColumnName(col);
-            try {
-                indexTable.getColumn(indexColName);
-                if (col.getFamilyName() != null) {
-                    dataColumns.append('"').append(col.getFamilyName()).append("\".");
-                }
+        int posOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0);
+        for (int i = posOffset; i < nPKColumns; i++) {
+            PColumn col = dataPKColumns.get(i);
+            if (col.getViewConstant() == null) {
+                String indexColName = IndexUtil.getIndexColumnName(col);
                 dataColumns.append('"').append(col.getName()).append("\",");
                 indexColumns.append('"').append(indexColName).append("\",");
-            } catch (ColumnNotFoundException e) {
-                // Catch and ignore - means that this data column is not in the index
+            }
+        }
+        for (PColumnFamily family : dataTableRef.getTable().getColumnFamilies()) {
+            for (PColumn col : family.getColumns()) {
+                if (col.getViewConstant() == null) {
+                    String indexColName = IndexUtil.getIndexColumnName(col);
+                    try {
+                        indexTable.getColumn(indexColName);
+                        dataColumns.append('"').append(col.getFamilyName()).append("\".");
+                        dataColumns.append('"').append(col.getName()).append("\",");
+                        indexColumns.append('"').append(indexColName).append("\",");
+                    } catch (ColumnNotFoundException e) {
+                        // Catch and ignore - means that this data column is not in the index
+                    }
+                }
             }
         }
         dataColumns.setLength(dataColumns.length()-1);

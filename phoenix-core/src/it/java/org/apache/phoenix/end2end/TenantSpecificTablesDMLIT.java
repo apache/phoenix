@@ -265,6 +265,49 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
     }
     
     @Test
+    public void testDeleteWhenImmutableIndex() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        try {
+            conn.setAutoCommit(true);
+            conn.createStatement().executeUpdate("delete from " + PARENT_TABLE_NAME);
+            conn.close();
+            
+            conn = nextConnection(getUrl());
+            conn.setAutoCommit(true);
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('AC/DC', 'abc', 1, 'Bon Scott')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', '" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', 'def', 1, 'Billy Gibbons')");
+            conn.close();
+            
+            conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
+            conn.createStatement().executeUpdate("create index idx1 on " + TENANT_TABLE_NAME + "(user)");
+            conn.close();
+            
+            conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
+            conn.setAutoCommit(true);
+            int count = conn.createStatement().executeUpdate("delete from " + TENANT_TABLE_NAME + " where user='Billy Gibbons'");
+            assertEquals("Expected 1 row have been deleted", 1, count);
+            conn.close();
+            
+            conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
+            conn.setAutoCommit(true);
+            ResultSet rs = conn.createStatement().executeQuery("select * from " + TENANT_TABLE_NAME);
+            assertFalse("Expected no rows in result set", rs.next());
+            conn.close();
+            
+            conn = nextConnection(getUrl());
+            analyzeTable(conn, PARENT_TABLE_NAME);
+            conn = nextConnection(getUrl());
+            rs = conn.createStatement().executeQuery("select count(*) from " + PARENT_TABLE_NAME);
+            rs.next();
+            assertEquals(2, rs.getInt(1));
+        }
+        finally {
+            conn.close();
+        }
+    }
+    
+    @Test
     public void testDeleteOnlyDeletesTenantDataWithNoTenantTypeId() throws Exception {
         Connection conn = nextConnection(getUrl());
         try {

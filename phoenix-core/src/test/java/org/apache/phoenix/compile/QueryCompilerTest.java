@@ -1166,10 +1166,20 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertImmutableRows(conn, "T", true);
             conn.createStatement().execute(indexDDL);
             assertImmutableRows(conn, "T", true);
-            conn.createStatement().execute("DELETE FROM t");
+            conn.createStatement().execute("DELETE FROM t WHERE v2 = 'foo'");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NO_DELETE_IF_IMMUTABLE_INDEX.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
+        }
+        // Test with one index having the referenced key value column, but one not having it.
+        // Still should fail
+        try {
+            indexDDL = "CREATE INDEX i2 ON t (v2)";
+            conn.createStatement().execute(indexDDL);
+            conn.createStatement().execute("DELETE FROM t WHERE v2 = 'foo'");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
         }
     }
     

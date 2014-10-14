@@ -97,7 +97,7 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
         conn.createStatement().execute("CREATE VIEW v2(v3 VARCHAR) AS SELECT * FROM v WHERE k1 > 'a'");
         conn.createStatement().execute("CREATE INDEX i2 ON v2(v3) include(v2)");
         
-        // Confirm that a read-only view on an updatable view still optimizes out the read-olnly parts of the updatable view
+        // Confirm that a read-only view on an updatable view still optimizes out the read-only parts of the updatable view
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM v2 WHERE v3 > 'a' and k2 = 'a' ORDER BY v3,k2");
         assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T ['me',-32767,'a'] - ['me',-32767,*]",
                 QueryUtil.getExplainPlan(rs));
