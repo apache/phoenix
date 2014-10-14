@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -82,6 +83,17 @@ public class ViewIndexIT extends BaseIndexIT {
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
                 + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME);
-        assertFalse("View index sequences should be deleted.", rs.next());
+        StringBuilder buf = new StringBuilder();
+        while (rs.next()) {
+            String schemaName = rs.getString(1);
+            String tableName = rs.getString(2);
+            String fullName = schemaName == null ? "" : schemaName;
+            if (tableName != null && tableName.length() > 0) {
+                fullName += "." + tableName;
+            }
+            buf.append(fullName);
+            buf.append(' ');
+        }
+        assertTrue("View index sequences should be deleted, but found " + buf.toString(), buf.length() == 0);
     }
 }

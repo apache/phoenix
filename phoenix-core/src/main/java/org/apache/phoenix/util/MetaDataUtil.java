@@ -278,7 +278,15 @@ public class MetaDataUtil {
     }
 
     public static boolean hasViewIndexTable(PhoenixConnection connection, PName name) throws SQLException {
-        byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(name.getBytes());
+        return hasViewIndexTable(connection, name.getBytes());
+    }
+    
+    public static boolean hasViewIndexTable(PhoenixConnection connection, String schemaName, String tableName) throws SQLException {
+        return hasViewIndexTable(connection, SchemaUtil.getTableNameAsBytes(schemaName, tableName));
+    }
+    
+    public static boolean hasViewIndexTable(PhoenixConnection connection, byte[] physicalTableName) throws SQLException {
+        byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
         try {
             HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalIndexName);
             return desc != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(IS_VIEW_INDEX_TABLE_PROP_BYTES)));
