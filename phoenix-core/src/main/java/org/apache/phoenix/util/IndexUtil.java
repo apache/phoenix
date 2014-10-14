@@ -170,6 +170,12 @@ public class IndexUtil {
            for (final Mutation dataMutation : dataMutations) {
                 long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
                 ptr.set(dataMutation.getRow());
+                /*
+                 * We only need to generate the additional mutations for a Put for immutable indexes.
+                 * Deletes of rows are handled by running a re-written query against the index table,
+                 * and Deletes of column values should never be necessary, as you should never be
+                 * updating an existing row.
+                 */
                 if (dataMutation instanceof Put) {
                     // TODO: is this more efficient than looking in our mutation map
                     // using the key plus finding the PColumn?
@@ -202,14 +208,6 @@ public class IndexUtil {
                         
                     };
                     indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, null, null));
-                } else {
-                    // We can only generate the correct Delete if we have no KV columns in our index.
-                    // Perhaps it'd be best to ignore Delete mutations all together here, as this
-                    // gets triggered typically for an initial population where Delete markers make
-                    // little sense.
-                    if (maintainer.getIndexedColumns().isEmpty()) {
-                        indexMutations.add(maintainer.buildDeleteMutation(kvBuilder, ptr, ts));
-                    }
                 }
             }
             return indexMutations;

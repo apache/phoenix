@@ -723,6 +723,10 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
         throw new SQLFeatureNotSupportedException();
     }
 
+    public Tuple getCurrentRow() {
+        return currentRow;
+    }
+    
     @Override
     public boolean next() throws SQLException {
         checkOpen();

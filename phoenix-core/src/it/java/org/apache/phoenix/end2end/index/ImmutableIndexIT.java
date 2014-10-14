@@ -304,7 +304,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
             conn.createStatement().execute(dml);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NO_DELETE_IF_IMMUTABLE_INDEX.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
         }
             
         conn.createStatement().execute("DROP TABLE " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE);

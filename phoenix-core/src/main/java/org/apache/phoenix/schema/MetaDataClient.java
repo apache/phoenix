@@ -506,27 +506,32 @@ public class MetaDataClient {
             }
             // If analyzing the indexes of a multi-tenant table or a table with view indexes
             // then analyze all of those indexes too.
-            boolean isLocalIndex = false;
-            boolean isViewIndex = false;
-            if (table.getType() != PTableType.VIEW &&
-               (table.isMultiTenant())
-               || (isViewIndex = MetaDataUtil.hasViewIndexTable(connection, table.getName()))
-               || (isLocalIndex = MetaDataUtil.hasLocalIndexTable(connection, table.getName()))) {
+            if (table.getType() != PTableType.VIEW) {
+                List<PName> names = Lists.newArrayListWithExpectedSize(2);
+                if (table.isMultiTenant() || MetaDataUtil.hasViewIndexTable(connection, table.getName())) {
+                    names.add(PNameFactory.newName(SchemaUtil.getTableName(
+                            MetaDataUtil.getViewIndexSchemaName(table.getSchemaName().getString()),
+                            MetaDataUtil.getViewIndexTableName(table.getTableName().getString()))));
+                }
+                if (MetaDataUtil.hasLocalIndexTable(connection, table.getName())) {
+                    names.add(PNameFactory.newName(SchemaUtil.getTableName(
+                            MetaDataUtil.getLocalIndexSchemaName(table.getSchemaName().getString()),
+                            MetaDataUtil.getLocalIndexTableName(table.getTableName().getString()))));
+                }
                 
-                String viewIndexTableName = isLocalIndex ? MetaDataUtil.getLocalIndexTableName(table.getTableName().getString()) : MetaDataUtil.getViewIndexTableName(table.getTableName().getString());
-                String viewIndexSchemaName = isLocalIndex ? MetaDataUtil.getLocalIndexSchemaName(table.getSchemaName().getString()) : MetaDataUtil.getViewIndexSchemaName(table.getSchemaName().getString());
-                final PName viewIndexPhysicalName = PNameFactory.newName(SchemaUtil.getTableName(viewIndexSchemaName, viewIndexTableName));
-                PTable indexLogicalTable = new DelegateTable(table) {
-                    @Override
-                    public PName getPhysicalName() {
-                        return viewIndexPhysicalName;
-                    }
-                    @Override
-                    public PTableStats getTableStats() {
-                        return PTableStats.EMPTY_STATS;
-                    }
-                };
-                rowCount += updateStatisticsInternal(viewIndexPhysicalName, indexLogicalTable);
+                for (final PName name : names) {
+                    PTable indexLogicalTable = new DelegateTable(table) {
+                        @Override
+                        public PName getPhysicalName() {
+                            return name;
+                        }
+                        @Override
+                        public PTableStats getTableStats() {
+                            return PTableStats.EMPTY_STATS;
+                        }
+                    };
+                    rowCount += updateStatisticsInternal(name, indexLogicalTable);
+                }
             }
         }
         return new MutationState((int)rowCount, connection);
@@ -1593,8 +1598,7 @@ public class MetaDataClient {
                     connection.setAutoCommit(true);
                     PTable table = result.getTable();
                     boolean dropMetaData = result.getTable().getViewIndexId() == null &&
-
-                    connection.getQueryServices().getProps().getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
+                            connection.getQueryServices().getProps().getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     long ts = (scn == null ? result.getMutationTime() : scn);
                     // Create empty table and schema - they're only used to get the name from
                     // PName name, PTableType type, long timeStamp, long sequenceNumber, List<PColumn> columns
