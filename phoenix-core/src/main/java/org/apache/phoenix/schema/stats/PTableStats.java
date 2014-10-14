@@ -20,7 +20,6 @@ package org.apache.phoenix.schema.stats;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.List;
 import java.util.SortedMap;
 
 import org.apache.hadoop.io.Writable;
