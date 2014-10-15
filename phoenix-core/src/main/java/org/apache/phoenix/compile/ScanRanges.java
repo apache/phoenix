@@ -347,8 +347,12 @@ public class ScanRanges {
                 scanStopKey = prefixKey(scanStopKey, scanKeyOffset, prefixBytes, keyOffset);
             }
         }
-        if (scanStopKey.length > 0 && Bytes.compareTo(scanStartKey, scanStopKey) >= 0) {
-            return null;
+        // Don't let the stopRow of the scan go beyond the originalStopKey
+        if (originalStopKey.length > 0 && Bytes.compareTo(scanStopKey, originalStopKey) > 0) {
+            scanStopKey = originalStopKey;
+        }
+        if (scanStopKey.length > 0 && Bytes.compareTo(scanStartKey, scanStopKey) >= 0) { 
+            return null; 
         }
         newScan.setStartRow(scanStartKey);
         newScan.setStopRow(scanStopKey);
