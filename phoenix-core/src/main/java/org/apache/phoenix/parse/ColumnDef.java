@@ -61,6 +61,10 @@ public class ColumnDef {
         	 localType = sqlTypeName == null ? null : PDataType.fromTypeId(PDataType.sqlArrayType(SchemaUtil.normalizeIdentifier(sqlTypeName)));
         	 this.dataType = sqlTypeName == null ? null : PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(sqlTypeName));
              this.arrSize = arrSize; // Can only be non negative based on parsing
+             if (this.dataType == PDataType.VARBINARY) {
+                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_ARRAY_NOT_SUPPORTED)
+                 .setColumnName(columnDefName.getColumnName()).build().buildException();
+             }
          } else {
              this.dataType = sqlTypeName == null ? null : PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(sqlTypeName));
              this.arrSize = null;
