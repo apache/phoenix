@@ -1293,6 +1293,18 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testVarbinaryArrayNotSupported() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t (k VARCHAR PRIMARY KEY, a VARBINARY[10])");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.VARBINARY_ARRAY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
+        }
+        conn.close();
+    }
+
+    @Test
     public void testInvalidNextValueFor() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE SEQUENCE alpha.zeta");
