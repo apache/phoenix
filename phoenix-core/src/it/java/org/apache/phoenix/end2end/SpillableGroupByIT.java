@@ -47,7 +47,7 @@ import com.google.common.collect.Maps;
  * and we wouldn't want that to be set for other tests sharing the same
  * cluster.
  */
-@Category(HBaseManagedTimeTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class SpillableGroupByIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     private static final int NUM_ROWS_INSERTED = 1000;
