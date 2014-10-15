@@ -478,6 +478,8 @@ public class MetaDataClient {
 
     public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt)
             throws SQLException {
+        // Don't mistakenly commit pending rows
+        connection.rollback();
         // Check before updating the stats if we have reached the configured time to reupdate the stats once again
         ColumnResolver resolver = FromCompiler.getResolver(updateStatisticsStmt, connection);
         PTable table = resolver.getTables().get(0).getTable();
