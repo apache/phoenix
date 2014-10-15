@@ -48,7 +48,7 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
         } else {
             byteStream = new TrustedByteArrayOutputStream(estimatedSize);
         }
-            
+
     }
 
     private void init(PDataType baseType) {
@@ -91,7 +91,7 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
                         // Trailing nulls are not taken into account
                         // The last non null element is followed by two seperator bytes
                         // For eg
-                        // a, b, null, null, c, null would be 
+                        // a, b, null, null, c, null would be
                         // 65 0 66 0 0 2 67 0 0 0
                         // a null null null b c null d would be
                         // 65 0 0 3 66 0 67 0 0 1 68 0 0 0
@@ -144,7 +144,7 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
         super.write(output);
         WritableUtils.writeVInt(output, baseType.ordinal());
     }
-    
+
     @Override
     public boolean requiresFinalEvaluation() {
         return true;

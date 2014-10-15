@@ -44,7 +44,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
@@ -63,12 +62,19 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import java.util.ArrayList;
+import java.util.HashMap;
+import org.apache.phoenix.coprocessor.ArrayUpdateObserver;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.function.UpsertFunctionExpression;
+import org.apache.phoenix.parse.UpsertFunctionParseNode;
+import org.apache.phoenix.schema.PDataType;
 
 /**
- * 
+ *
  * Tracks the uncommitted state
  *
- * 
+ *
  * @since 0.1
  */
 public class MutationState implements SQLCloseable {
@@ -80,17 +86,18 @@ public class MutationState implements SQLCloseable {
     private final Map<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> mutations = Maps.newHashMapWithExpectedSize(3); // TODO: Sizing?
     private final long sizeOffset;
     private int numRows = 0;
+    private Map<PColumn, UpsertFunctionParseNode> functionExpressions = new HashMap<PColumn, UpsertFunctionParseNode>();
 
     public MutationState(int maxSize, PhoenixConnection connection) {
         this(maxSize,connection,0);
     }
-    
+
     public MutationState(int maxSize, PhoenixConnection connection, long sizeOffset) {
         this.maxSize = maxSize;
         this.connection = connection;
         this.sizeOffset = sizeOffset;
     }
-    
+
     public MutationState(TableRef table, Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutations, long sizeOffset, long maxSize, PhoenixConnection connection) {
         this.maxSize = maxSize;
         this.connection = connection;
@@ -99,7 +106,12 @@ public class MutationState implements SQLCloseable {
         this.numRows = mutations.size();
         throwIfTooBig();
     }
-    
+
+    public MutationState(TableRef table, Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutations, long sizeOffset, long maxSize, PhoenixConnection connection, Map<PColumn, UpsertFunctionParseNode> functionExpressions) {
+        this(table, mutations, sizeOffset, maxSize, connection);
+        this.functionExpressions = functionExpressions;
+    }
+
     private MutationState(List<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> entries, long sizeOffset, long maxSize, PhoenixConnection connection) {
         this.maxSize = maxSize;
         this.connection = connection;
@@ -110,18 +122,18 @@ public class MutationState implements SQLCloseable {
         }
         throwIfTooBig();
     }
-    
+
     private void throwIfTooBig() {
         if (numRows > maxSize) {
             // TODO: throw SQLException ?
             throw new IllegalArgumentException("MutationState size of " + numRows + " is bigger than max allowed size of " + maxSize);
         }
     }
-    
+
     public long getUpdateCount() {
         return sizeOffset + numRows;
     }
-    
+
     /**
      * Combine a newer mutation with this one, where in the event of overlaps,
      * the newer one will take precedence.
@@ -143,7 +155,7 @@ public class MutationState implements SQLCloseable {
                     if (existingValues != null) {
                         if (existingValues != PRow.DELETE_MARKER) {
                             Map<PColumn,byte[]> newRow = rowEntry.getValue();
-                            // if new row is PRow.DELETE_MARKER, it means delete, and we don't need to merge it with existing row. 
+                            // if new row is PRow.DELETE_MARKER, it means delete, and we don't need to merge it with existing row.
                             if (newRow != PRow.DELETE_MARKER) {
                                 // Replace existing column values with new column values
                                 for (Map.Entry<PColumn,byte[]> valueEntry : newRow.entrySet()) {
@@ -164,10 +176,12 @@ public class MutationState implements SQLCloseable {
                 numRows += entry.getValue().size();
             }
         }
+
+        functionExpressions.putAll(newMutation.getFunctionExpressions());
         throwIfTooBig();
     }
-    
-    private Iterator<Pair<byte[],List<Mutation>>> addRowMutations(final TableRef tableRef, final Map<ImmutableBytesPtr, Map<PColumn, byte[]>> values, long timestamp, boolean includeMutableIndexes) {
+
+    private Iterator<Pair<byte[],List<Mutation>>> addRowMutations(final TableRef tableRef, final Map<ImmutableBytesPtr, Map<PColumn, byte[]>> values, long timestamp, boolean includeMutableIndexes) throws SQLException {
         final List<Mutation> mutations = Lists.newArrayListWithExpectedSize(values.size());
         Iterator<Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>>> iterator = values.entrySet().iterator();
         while (iterator.hasNext()) {
@@ -178,14 +192,33 @@ public class MutationState implements SQLCloseable {
                 row.delete();
             } else {
                 for (Map.Entry<PColumn,byte[]> valueEntry : rowEntry.getValue().entrySet()) {
-                    row.setValue(valueEntry.getKey(), valueEntry.getValue());
+                    PColumn column = valueEntry.getKey();
+                    row.setValue(column, valueEntry.getValue());
+
+                    // add attributes to muttations (flags for observers coprocessors)
+                    if (functionExpressions != null && functionExpressions.containsKey(column)) {
+                        UpsertFunctionParseNode functionParseNode = functionExpressions.get(column);
+                        UpsertFunctionExpression upsertFunctionExpression
+                                = (UpsertFunctionExpression) (functionParseNode.create(new ArrayList<Expression>(), null));
+
+                        setColumnInfoForCoprocessor(row, column, upsertFunctionExpression);
+                        for (Pair<String, byte[]> attribute : upsertFunctionExpression.getAttributes()) {
+                            //merge attributes from multiple statements
+                            //(eg multiple server side functions with same attribute names)
+                            byte[] current = row.getPutAttribute(attribute.getFirst());
+                            if (current != null) {
+                                attribute.setSecond(Bytes.add(current, attribute.getSecond()));
+                            }
+                            row.setPutAttribute(attribute);
+                        }
+                    }
                 }
             }
             mutations.addAll(row.toRowMutations());
         }
         final Iterator<PTable> indexes = // Only maintain tables with immutable rows through this client-side mechanism
-                (tableRef.getTable().isImmutableRows() || includeMutableIndexes) ? 
-                        IndexMaintainer.nonDisabledIndexIterator(tableRef.getTable().getIndexes().iterator()) : 
+                (tableRef.getTable().isImmutableRows() || includeMutableIndexes) ?
+                        IndexMaintainer.nonDisabledIndexIterator(tableRef.getTable().getIndexes().iterator()) :
                         Iterators.<PTable>emptyIterator();
         return new Iterator<Pair<byte[],List<Mutation>>>() {
             boolean isFirst = true;
@@ -217,19 +250,20 @@ public class MutationState implements SQLCloseable {
             public void remove() {
                 throw new UnsupportedOperationException();
             }
-            
+
         };
     }
-    
+
     /**
      * Get the unsorted list of HBase mutations for the tables with uncommitted data.
      * @return list of HBase mutations for uncommitted data.
+     * @throws java.sql.SQLException
      */
-    public Iterator<Pair<byte[],List<Mutation>>> toMutations() {
+    public Iterator<Pair<byte[],List<Mutation>>> toMutations() throws SQLException {
         return toMutations(false);
     }
-    
-    public Iterator<Pair<byte[],List<Mutation>>> toMutations(final boolean includeMutableIndexes) {
+
+    public Iterator<Pair<byte[],List<Mutation>>> toMutations(final boolean includeMutableIndexes) throws SQLException {
         final Iterator<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> iterator = this.mutations.entrySet().iterator();
         if (!iterator.hasNext()) {
             return Iterators.emptyIterator();
@@ -239,11 +273,11 @@ public class MutationState implements SQLCloseable {
         return new Iterator<Pair<byte[],List<Mutation>>>() {
             private Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> current = iterator.next();
             private Iterator<Pair<byte[],List<Mutation>>> innerIterator = init();
-                    
-            private Iterator<Pair<byte[],List<Mutation>>> init() {
+
+            private Iterator<Pair<byte[],List<Mutation>>> init() throws SQLException {
                 return addRowMutations(current.getKey(), current.getValue(), timestamp, includeMutableIndexes);
             }
-            
+
             @Override
             public boolean hasNext() {
                 return innerIterator.hasNext() || iterator.hasNext();
@@ -261,10 +295,10 @@ public class MutationState implements SQLCloseable {
             public void remove() {
                 throw new UnsupportedOperationException();
             }
-            
+
         };
     }
-        
+
     /**
      * Validates that the meta data is valid against the server meta data if we haven't yet done so.
      * Otherwise, for every UPSERT VALUES call, we'd need to hit the server to see if the meta data
@@ -314,7 +348,7 @@ public class MutationState implements SQLCloseable {
         }
         return timeStamps;
     }
-    
+
     private static void logMutationSize(HTableInterface htable, List<Mutation> mutations, PhoenixConnection connection) {
         long byteSize = 0;
         int keyValueCount = 0;
@@ -332,7 +366,7 @@ public class MutationState implements SQLCloseable {
         }
         logger.debug(LogUtil.addCustomAnnotations("Sending " + mutations.size() + " mutations for " + Bytes.toString(htable.getTableName()) + " with " + keyValueCount + " key values of total size " + byteSize + " bytes", connection));
     }
-    
+
     @SuppressWarnings("deprecation")
     public void commit() throws SQLException {
         int i = 0;
@@ -358,7 +392,7 @@ public class MutationState implements SQLCloseable {
                 Pair<byte[],List<Mutation>> pair = mutationsIterator.next();
                 byte[] htableName = pair.getFirst();
                 List<Mutation> mutations = pair.getSecond();
-                
+
                 //create a span per target table
                 //TODO maybe we can be smarter about the table name to string here?
                 Span child = Tracing.child(span,"Writing mutation batch for table: "+Bytes.toString(htableName));
@@ -395,7 +429,7 @@ public class MutationState implements SQLCloseable {
                             }
                         }
                     }
-                    
+
                     SQLException sqlE = null;
                     HTableInterface hTable = connection.getQueryServices().getTable(htableName);
                     try {
@@ -461,13 +495,30 @@ public class MutationState implements SQLCloseable {
         assert(numRows==0);
         assert(this.mutations.isEmpty());
     }
-    
+
     public void rollback(PhoenixConnection connection) throws SQLException {
         this.mutations.clear();
         numRows = 0;
     }
-    
+
     @Override
     public void close() throws SQLException {
+    }
+
+    public Map<PColumn, UpsertFunctionParseNode> getFunctionExpressions() {
+        return functionExpressions;
+    }
+
+    private void setColumnInfoForCoprocessor(PRow row, PColumn column, UpsertFunctionExpression upsertFunctionExpression) {
+        String identifier = Bytes.toString(upsertFunctionExpression.getIdentifier());
+
+        row.setPutAttribute(identifier + ArrayUpdateObserver.FAMILY_ATTRIBUTE_SUFFIX,
+                column.getFamilyName().getBytes());
+        row.setPutAttribute(identifier + ArrayUpdateObserver.QUALIFIER_ATTRIBUTE_SUFFIX,
+                column.getName().getBytes());
+        row.setPutAttribute(identifier + ArrayUpdateObserver.BASE_DATATYPE_ATTRIBUTE_SUFFIX,
+                Bytes.toBytes(column.getDataType().getSqlType() - PDataType.ARRAY_TYPE_BASE));
+        row.setPutAttribute(identifier + ArrayUpdateObserver.SORTORDER_ATTRIBUTE_SUFFIX,
+                Bytes.toBytes(column.getSortOrder().getSystemValue()));
     }
 }

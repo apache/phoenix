@@ -79,6 +79,7 @@ import org.apache.phoenix.expression.function.TruncFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
 
 import com.google.common.collect.Maps;
+import org.apache.phoenix.expression.function.ArrayInsertUniqueFunction;
 
 /**
  *
@@ -183,7 +184,8 @@ public enum ExpressionType {
     InlineArrayElemRefExpression(InlineArrayElemRefExpression.class),
     SQLIndexTypeFunction(SQLIndexTypeFunction.class),
     ModulusExpression(ModulusExpression.class),
-    RegexpSplitFunctiond(RegexpSplitFunction.class);
+    RegexpSplitFunctiond(RegexpSplitFunction.class),
+    ArrayInsertUniqueFunction(ArrayInsertUniqueFunction.class);
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }

@@ -23,15 +23,16 @@ import java.util.Map;
 import org.apache.hadoop.hbase.client.Mutation;
 
 import com.google.common.collect.ImmutableMap;
+import org.apache.hadoop.hbase.util.Pair;
 
 /**
- * 
+ *
  * Provide a client API for updating rows. The updates are processed in
  * the calling order. Calling setValue after calling delete will cause the
  * delete to be canceled.  Conversely, calling delete after calling
  * setValue will cause all prior setValue calls to be canceled.
  *
- * 
+ *
  * @since 0.1
  */
 public interface PRow {
@@ -46,7 +47,7 @@ public interface PRow {
      * constraint
      */
     public List<Mutation> toRowMutations();
-    
+
     /**
      * Set a column value in the row
      * @param col the column for which the value is being set
@@ -55,7 +56,7 @@ public interface PRow {
      * constraint
      */
     public void setValue(PColumn col, Object value);
-    
+
     /**
      * Set a column value in the row
      * @param col the column for which the value is being set
@@ -64,10 +65,22 @@ public interface PRow {
      * constraint
      */
     public void setValue(PColumn col, byte[] value);
-    
+
     /**
      * Delete the row. Note that a delete take precedence over any
      * values that may have been set before or after the delete call.
      */
     public void delete();
+
+    public void setPutAttribute(Pair<String, byte[]> attribute);
+
+    public void setPutAttribute(String name, byte[] value);
+
+    public void setDeleteAttribute(Pair<String, byte[]> attribute);
+
+    public void setDeleteAttribute(String name, byte[] value);
+
+    public byte[] getPutAttribute(String name);
+
+    public byte[] getDeleteAttribute(String name);
 }

@@ -34,14 +34,14 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 
 /**
- * The datatype for PColummns that are Arrays. Any variable length array would follow the below order. 
- * Every element would be seperated by a seperator byte '0'. Null elements are counted and once a first 
+ * The datatype for PColummns that are Arrays. Any variable length array would follow the below order.
+ * Every element would be seperated by a seperator byte '0'. Null elements are counted and once a first
  * non null element appears we write the count of the nulls prefixed with a seperator byte.
- * Trailing nulls are not taken into account. The last non null element is followed by two seperator bytes. 
- * For eg a, b, null, null, c, null -> 65 0 66 0 0 2 67 0 0 0 
+ * Trailing nulls are not taken into account. The last non null element is followed by two seperator bytes.
+ * For eg a, b, null, null, c, null -> 65 0 66 0 0 2 67 0 0 0
  * a null null null b c null d -> 65 0 0 3 66 0 67 0 0 1 68 0 0 0.
  * The reason we use this serialization format is to allow the
- * byte array of arrays of the same type to be directly comparable against each other. 
+ * byte array of arrays of the same type to be directly comparable against each other.
  * This prevents a costly deserialization on compare and allows an array column to be used as the last column in a primary key constraint.
  */
 public class PArrayDataType {
@@ -80,7 +80,7 @@ public class PArrayDataType {
 		// Handles bit inversion also
 		return createArrayBytes(byteStream, oStream, (PhoenixArray)object, noOfElements, baseType, sortOrder);
 	}
-	
+
     public static int serializeNulls(DataOutputStream oStream, int nulls) throws IOException {
         // We need to handle 3 different cases here
         // 1) Arrays with repeating nulls in the middle which is less than 255
@@ -90,7 +90,7 @@ public class PArrayDataType {
         // Array 1 - size : 240, elements = abc, bcd, null, null, bcd,null,null......,null, abc
         // Array 2 - size : 16 : elements = abc, bcd, null, null, bcd, null, null...null, abc
         // In both case the elements and the value array will be the same but the Array 1 is actually smaller because it has more nulls.
-        // Now we should have mechanism to show that we treat arrays with more nulls as lesser.  Hence in the above case as 
+        // Now we should have mechanism to show that we treat arrays with more nulls as lesser.  Hence in the above case as
         // 240 > Bytes.MAX_VALUE, by always inverting the number of nulls we would get a +ve value
         // For Array 2, by inverting we would get a -ve value.  On comparison Array 2 > Array 1.
         // Now for cases where the number of nulls is greater than 255, we would write an those many (byte)1, it is bigger than 255.
@@ -102,14 +102,14 @@ public class PArrayDataType {
                 // Don't write a zero byte, as we need to ensure that the only triple zero
                 // byte occurs at the end of the array (i.e. the terminator byte for the
                 // element plus the double zero byte at the end of the array).
-                oStream.write((byte)1); 
+                oStream.write((byte)1);
             }
             int nRemainingNulls = nulls % 255; // From 0 to 254
             // Write a byte for the remaining null elements
             if (nRemainingNulls > 0) {
                 // Remaining null elements is from 1 to 254.
-                // Subtract one and invert so that more remaining nulls becomes smaller than less 
-                // remaining nulls and min byte value is always greater than 1, the repeating value  
+                // Subtract one and invert so that more remaining nulls becomes smaller than less
+                // remaining nulls and min byte value is always greater than 1, the repeating value
                 // used for arrays with more than 255 repeating null elements.
                 // The reason we invert is that  an array with less null elements has a non
                 // null element sooner than an array with more null elements. Thus, the more
@@ -120,7 +120,7 @@ public class PArrayDataType {
         }
         return 0;
     }
- 
+
     public static void writeEndSeperatorForVarLengthArray(DataOutputStream oStream) throws IOException {
         oStream.write(QueryConstants.SEPARATOR_BYTE);
         oStream.write(QueryConstants.SEPARATOR_BYTE);
@@ -180,11 +180,11 @@ public class PArrayDataType {
         // Non fixed width types must override this
         throw new UnsupportedOperationException();
     }
-    
+
 	public boolean isCoercibleTo(PDataType targetType, Object value) {
 	    return targetType.isCoercibleTo(targetType, value);
 	}
-	
+
 	public boolean isCoercibleTo(PDataType targetType, PDataType expectedTargetType) {
 		if(!targetType.isArrayType()) {
 			return false;
@@ -196,7 +196,7 @@ public class PArrayDataType {
 			return expectedTargetElementType.isCoercibleTo(targetElementType);
 		}
     }
-	
+
 	public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value,
 			PDataType srcType, Integer maxLength, Integer scale,
 			Integer desiredMaxLength, Integer desiredScale) {
@@ -213,7 +213,7 @@ public class PArrayDataType {
 		}
 		return true;
 	}
-	
+
     public void coerceBytes(ImmutableBytesWritable ptr, Object value, PDataType actualType, Integer maxLength,
             Integer scale, Integer desiredMaxLength, Integer desiredScale, PDataType desiredType,
             SortOrder actualModifer, SortOrder expectedModifier) {
@@ -224,8 +224,8 @@ public class PArrayDataType {
         PDataType desiredBaseType = PDataType.fromTypeId(desiredType.getSqlType() - PDataType.ARRAY_TYPE_BASE);
         if ((Objects.equal(maxLength, desiredMaxLength) || maxLength == null || desiredMaxLength == null)
                 && actualType.isBytesComparableWith(desiredType)
-                && baseType.isFixedWidth() == desiredBaseType.isFixedWidth() && actualModifer == expectedModifier) { 
-            return; 
+                && baseType.isFixedWidth() == desiredBaseType.isFixedWidth() && actualModifer == expectedModifier) {
+            return;
         }
         if (value == null || actualType != desiredType) {
             value = toObject(ptr.get(), ptr.getOffset(), ptr.getLength(), baseType, actualModifer, maxLength,
@@ -251,7 +251,7 @@ public class PArrayDataType {
 		throw new IllegalArgumentException("This operation is not suppported");
 	}
 
-	public Object toObject(byte[] bytes, int offset, int length, PDataType baseType, 
+	public Object toObject(byte[] bytes, int offset, int length, PDataType baseType,
 			SortOrder sortOrder, Integer maxLength, Integer scale, PDataType desiredDataType) {
 		return createPhoenixArray(bytes, offset, length, sortOrder,
 				baseType, maxLength, desiredDataType);
@@ -318,7 +318,7 @@ public class PArrayDataType {
             }
         }
     }
-    
+
     public static void positionAtArrayElement(ImmutableBytesWritable ptr, int arrayIndex, PDataType baseDataType,
             Integer byteSize, int offset, int length, int noOfElements, boolean first) {
         byte[] bytes = ptr.get();
@@ -376,7 +376,7 @@ public class PArrayDataType {
             return Bytes.toInt(bytes, offset, Bytes.SIZEOF_INT);
         }
     }
-    
+
     private static int getOffset(ByteBuffer indexBuffer, int arrayIndex, boolean useShort, int indexOffset ) {
         int offset;
         if(useShort) {
@@ -387,15 +387,15 @@ public class PArrayDataType {
         return offset;
     }
 
-	public Object toObject(Object object, PDataType actualType) {
+	public static Object toObject(Object object, PDataType actualType) {
 		return object;
 	}
 
-	public Object toObject(Object object, PDataType actualType, SortOrder sortOrder) {
+	public static Object toObject(Object object, PDataType actualType, SortOrder sortOrder) {
 		// How to use the sortOrder ? Just reverse the elements
 		return toObject(object, actualType);
 	}
-	
+
 	/**
 	 * creates array bytes
 	 * @param byteStream
@@ -403,8 +403,8 @@ public class PArrayDataType {
 	 * @param array
 	 * @param noOfElements
 	 * @param baseType
-	 * @param sortOrder 
-	 * @param maxLength 
+	 * @param sortOrder
+	 * @param maxLength
 	 * @param capacity
 	 * @return
 	 */
@@ -514,7 +514,7 @@ public class PArrayDataType {
     // Trailing nulls are not taken into account
     // The last non null element is followed by two seperator bytes
     // For eg
-    // a, b, null, null, c, null would be 
+    // a, b, null, null, c, null would be
     // 65 0 66 0 0 2 67 0 0 0
     // a null null null b c null d would be
     // 65 0 0 3 66 0 67 0 0 1 68 0 0 0
@@ -612,11 +612,11 @@ public class PArrayDataType {
             return PArrayDataType.instantiatePhoenixArray(desiredDataType, elements);
         }
     }
-	
+
     public static PhoenixArray instantiatePhoenixArray(PDataType actualType, Object[] elements) {
         return PDataType.instantiatePhoenixArray(actualType, elements);
     }
-	
+
 	public int compareTo(Object lhs, Object rhs) {
 		PhoenixArray lhsArr = (PhoenixArray) lhs;
 		PhoenixArray rhsArr = (PhoenixArray) rhs;
@@ -642,9 +642,9 @@ public class PArrayDataType {
         } else {
             return size * ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
         }
-        
+
     }
-    
+
     public Object getSampleValue(PDataType baseType, Integer arrayLength, Integer elemLength) {
         Preconditions.checkArgument(arrayLength == null || arrayLength >= 0);
         if (arrayLength == null) {

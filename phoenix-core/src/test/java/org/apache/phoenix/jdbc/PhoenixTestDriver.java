@@ -34,23 +34,23 @@ import org.apache.phoenix.util.ReadOnlyProps;
 
 
 /**
- * 
+ *
  * JDBC Driver implementation of Phoenix for testing.
  * To use this driver, specify test=true in url.
- * 
- * 
+ *
+ *
  * @since 0.1
  */
 @ThreadSafe
 public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
-    
+
     @GuardedBy("this")
     private ConnectionQueryServices connectionQueryServices;
     private final ReadOnlyProps overrideProps;
-    
+
     @GuardedBy("this")
     private final QueryServices queryServices;
-    
+
     @GuardedBy("this")
     private boolean closed = false;
 
@@ -76,13 +76,13 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         // Accept the url only if test=true attribute set
         return super.acceptsURL(url) && isTestUrl(url);
     }
-    
+
     @Override
     public synchronized Connection connect(String url, Properties info) throws SQLException {
         checkClosed();
         return super.connect(url, info);
     }
-    
+
     @Override // public for testing
     public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties info) throws SQLException {
         checkClosed();
@@ -91,18 +91,18 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         if (connInfo.isConnectionless()) {
             connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices, connInfo);
         } else {
-            connectionQueryServices = new ConnectionQueryServicesTestImpl(queryServices, connInfo);
+            connectionQueryServices = (ConnectionQueryServices) new ConnectionQueryServicesTestImpl(queryServices, connInfo);
         }
         connectionQueryServices.init(url, info);
         return connectionQueryServices;
     }
-    
+
     private synchronized void checkClosed() {
         if (closed) {
             throw new IllegalStateException("The Phoenix jdbc test driver has been closed.");
         }
     }
-    
+
     @Override
     public synchronized void close() throws SQLException {
         if (closed) {
