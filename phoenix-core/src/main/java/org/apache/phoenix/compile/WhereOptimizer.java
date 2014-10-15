@@ -105,7 +105,8 @@ public class WhereOptimizer {
             Expression whereClause, Set<Expression> extractNodes) {
         PName tenantId = context.getConnection().getTenantId();
         PTable table = context.getCurrentTable().getTable();
-        if (whereClause == null && (tenantId == null || !table.isMultiTenant())) {
+        boolean isEverything = (tenantId == null || !table.isMultiTenant()) && table.getViewIndexId() == null;
+        if (whereClause == null && isEverything) {
             context.setScanRanges(ScanRanges.EVERYTHING);
             return whereClause;
         }
@@ -121,7 +122,7 @@ public class WhereOptimizer {
             // becomes consistent.
             keySlots = whereClause.accept(visitor);
     
-            if (keySlots == null && (tenantId == null || !table.isMultiTenant())) {
+            if (keySlots == null && isEverything) {
                 context.setScanRanges(ScanRanges.EVERYTHING);
                 return whereClause;
             }

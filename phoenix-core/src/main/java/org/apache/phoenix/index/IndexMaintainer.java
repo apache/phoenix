@@ -235,10 +235,20 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         byte[] indexTableName = index.getPhysicalName().getBytes();
         Integer nIndexSaltBuckets = index.getBucketNum();
         boolean indexWALDisabled = index.isWALDisabled();
-        int indexPosOffset = (index.getBucketNum() == null ? 0 : 1) + (this.isMultiTenant ? 1 : 0) + (this.viewIndexId == null ? 0 : 1);
+        int indexPosOffset = (index.getBucketNum() == null ? 0 : 1) + (this.isMultiTenant ? 1 : 0) + (index.getViewIndexId() == null ? 0 : 1);
         int nIndexColumns = index.getColumns().size() - indexPosOffset;
         int nIndexPKColumns = index.getPKColumns().size() - indexPosOffset;
-        this.rowKeyMetaData = newRowKeyMetaData(nIndexPKColumns);
+        int indexedColumnsCount = 0;
+        for (int i  = indexPosOffset; i<index.getPKColumns().size();i++) {
+            PColumn indexColumn = index.getPKColumns().get(i);
+            PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
+            boolean isPKColumn = SchemaUtil.isPKColumn(column);
+            if (!isPKColumn) {
+                indexedColumnsCount++;
+            } 
+        }
+        int indexPkColumnCount = this.dataRowKeySchema.getFieldCount() + indexedColumnsCount - (isDataTableSalted ? 1 : 0) - (isMultiTenant ? 1 : 0);
+        this.rowKeyMetaData = newRowKeyMetaData(indexPkColumnCount);
         BitSet bitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
 
         int dataPosOffset = (isDataTableSalted ? 1 : 0) + (this.isMultiTenant ? 1 : 0);
@@ -281,7 +291,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             // The dataRowKeySchema includes the salt byte field,
             // so we must adjust for that here.
             int dataPosOffset = isDataTableSalted ? 1 : 0 ;
-            int nIndexedColumns = getIndexPkColumnCount();
+            BitSet viewConstantColumnBitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
+            int nIndexedColumns = getIndexPkColumnCount() - getNumViewConstants();            
+            //int nIndexedColumns = getIndexPkColumnCount();
             int[][] dataRowKeyLocator = new int[2][nIndexedColumns];
             // Skip data table salt byte
             int maxRowKeyOffset = rowKeyPtr.getOffset() + rowKeyPtr.getLength();
@@ -298,7 +310,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 output.write(viewIndexId);
             }
             
-            BitSet viewConstantColumnBitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
+            //BitSet viewConstantColumnBitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
             // Write index row key
             for (int i = dataPosOffset; i < dataRowKeySchema.getFieldCount(); i++) {
                 Boolean hasValue=dataRowKeySchema.next(ptr, i, maxRowKeyOffset);
@@ -381,6 +393,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 throw new RuntimeException(e); // Impossible
             }
         }
+    }
+
+    private int getNumViewConstants() {
+        BitSet bitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
+        int num = 0;
+        for (int i = 0; i < dataRowKeySchema.getFieldCount(); i++) {
+            if (bitSet.get(i)) num++;
+        }
+        return num;
     }
 
     @SuppressWarnings("deprecation")
@@ -668,11 +689,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int nIndexPkColumns = getIndexPkColumnCount();
         dataPkPosition = new int[nIndexPkColumns];
         Arrays.fill(dataPkPosition, -1);
+        int numViewConstantColumns = 0;
         BitSet viewConstantColumnBitSet = rowKeyMetaData.getViewConstantColumnBitSet();
         for (int i = dataPkOffset; i < dataRowKeySchema.getFieldCount(); i++) {
             if (!viewConstantColumnBitSet.get(i)) {
                 int dataPkPosition = rowKeyMetaData.getIndexPkPosition(i-dataPkOffset);
                 this.dataPkPosition[dataPkPosition] = i;
+            } else {
+                numViewConstantColumns++;
             }
         }
         
@@ -680,7 +704,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // We only get rid of nulls for variable length types, so we have to be careful to consider the type of the
         // index table, not the data type of the data table
         int indexedColumnTypesPos = indexedColumnTypes.size()-1;
-        int indexPkPos = nIndexPkColumns-1;
+        //int indexPkPos = nIndexPkColumns-1;
+        int indexPkPos = nIndexPkColumns - numViewConstantColumns - 1;
         while (indexPkPos >= 0) {
             int dataPkPos = dataPkPosition[indexPkPos];
             boolean isDataNullable;
@@ -703,7 +728,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
 
     private int getIndexPkColumnCount() {
-        return dataRowKeySchema.getFieldCount() + indexedColumns.size() - (isDataTableSalted ? 1 : 0) - (isMultiTenant ? 1 : 0) - (viewIndexId == null ? 0 : 1);
+        return dataRowKeySchema.getFieldCount() + indexedColumns.size() - (isDataTableSalted ? 1 : 0) - (isMultiTenant ? 1 : 0);
+        //return dataRowKeySchema.getFieldCount() + indexedColumns.size() - (isDataTableSalted ? 1 : 0) - (isMultiTenant ? 1 : 0) - (viewIndexId == null ? 0 : 1);
     }
     
     private RowKeyMetaData newRowKeyMetaData() {

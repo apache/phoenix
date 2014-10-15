@@ -132,14 +132,13 @@ public class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn.createStatement().execute("CREATE INDEX i2 on v(s)");
 
         // new index hasn't been analyzed yet
-//        splits = getAllSplits(conn, "i2");
-//        assertEquals(saltBuckets == null ? 1 : 3, splits.size());
+        splits = getAllSplits(conn, "i2");
+        assertEquals(saltBuckets == null ? 1 : 3, splits.size());
         
         // analyze table should analyze all view data
         analyzeTable(conn, "t");        
         splits = getAllSplits(conn, "i2");
-//        assertEquals(saltBuckets == null ? 6 : 8, splits.size());
-        assertEquals(saltBuckets == null ? 11 : 13, splits.size());
+        assertEquals(saltBuckets == null ? 6 : 8, splits.size());
 
         query = "SELECT k1, k2, s FROM v WHERE s = 'foo'";
         rs = conn.createStatement().executeQuery(query);
