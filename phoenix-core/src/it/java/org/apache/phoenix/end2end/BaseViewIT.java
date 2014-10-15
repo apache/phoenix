@@ -113,6 +113,7 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.createStatement().execute("CREATE INDEX i1 on v(k3) include (s)");
         }
         conn.createStatement().execute("UPSERT INTO v(k2,S,k3) VALUES(120,'foo',50.0)");
+        conn.commit();
 
         analyzeTable(conn, "v");        
         List<KeyRange> splits = getAllSplits(conn, "i1");
