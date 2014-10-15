@@ -148,7 +148,9 @@ public enum SQLExceptionCode {
      */
      READ_ONLY_CONNECTION(518,"25502","Mutations are not permitted for a read-only connection."),
  
-    /** 
+     VARBINARY_ARRAY_NOT_SUPPORTED(519, "42896", "VARBINARY ARRAY is not supported"),
+
+     /** 
      * HBase and Phoenix specific implementation defined sub-classes.
      * Column family related exceptions.
      * 
