@@ -58,9 +58,9 @@ public abstract class MetaDataProtocol extends MetaDataService {
             VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER);
     
     public static final long MIN_TABLE_TIMESTAMP = 0;
-    // Each time a column is added to the SYSTEM.CATALOG, this should be increased.
-    // Adding INDEX_TYPE column for local indexing
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_TABLE_TIMESTAMP + 3;
+
+    // Incremented from 3 to 4 to salt the sequence table in 3.2/4.2
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_TABLE_TIMESTAMP + 4;
     public static final int DEFAULT_MAX_META_DATA_VERSIONS = 1000;
 
     // TODO: pare this down to minimum, as we don't need duplicates for both table and column errors, nor should we need

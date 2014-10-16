@@ -134,6 +134,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1519,13 +1520,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 // Ignore, as this will happen if the SYSTEM.CATALOG already exists at this fixed timestamp.
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                             } catch (TableAlreadyExistsException ignore) {
-                                // This will occur if we have an older SYSTEM.CATALOG and we need to update it to include
-                                // any new columns we've added.
-                                metaConnection = addColumnsIfNotExists(metaConnection, 
-                                  PhoenixDatabaseMetaData.SYSTEM_CATALOG, 
-                                  MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, 
-                                  PhoenixDatabaseMetaData.INDEX_TYPE + " " + PDataType.UNSIGNED_TINYINT.getSqlTypeName() + 
-                                  ", " + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " " + PDataType.LONG.getSqlTypeName());
                             }
                             try {
                                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
@@ -1536,13 +1530,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             } catch (TableAlreadyExistsException ignore) {
                                 // This will occur if we have an older SYSTEM.SEQUENCE, so we need to update it to include
                                 // any new columns we've added.
-                                String newColumns = PhoenixDatabaseMetaData.MIN_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", "
-                                        + PhoenixDatabaseMetaData.MAX_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", " + PhoenixDatabaseMetaData.CYCLE_FLAG + " "
-                                        + PDataType.BOOLEAN.getSqlTypeName() + ", " + PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG + " "
-                                        + PDataType.BOOLEAN.getSqlTypeName();
-                                metaConnection = addColumnsIfNotExists(metaConnection,
-                                        PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME,
-                                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, newColumns);
+                                if (UpgradeUtil.addSaltByteToSequenceTable(metaConnection)) {
+                                    metaConnection.removeTable(null,
+                                            PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+                                            PhoenixDatabaseMetaData.TYPE_SEQUENCE,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
+                                    clearCache();
+                                }
                             }
                             try {
                                 metaConnection.createStatement().executeUpdate(
