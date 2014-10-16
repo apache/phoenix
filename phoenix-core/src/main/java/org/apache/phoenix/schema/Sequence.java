@@ -50,7 +50,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
 
 import com.google.common.collect.Lists;
@@ -217,7 +216,7 @@ public class Sequence {
     }
 
     private Append newReturn(SequenceValue value) {
-        byte[] key = SchemaUtil.getSequenceKey(this.key.getTenantId(), this.key.getSchemaName(), this.key.getSequenceName());
+        byte[] key = this.key.getKey();
         Append append = new Append(key);
         byte[] opBuf = new byte[] {(byte)MetaOp.RETURN_SEQUENCE.ordinal()};
         append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, opBuf);
@@ -275,7 +274,7 @@ public class Sequence {
 
     @SuppressWarnings("deprecation")
     public Increment newIncrement(long timestamp, Sequence.ValueOp action) {
-        Increment inc = new Increment(SchemaUtil.getSequenceKey(key.getTenantId(), key.getSchemaName(), key.getSequenceName()));
+        Increment inc = new Increment(key.getKey());
         // It doesn't matter what we set the amount too - we always use the values we get
         // from the Get we do to prevent any race conditions. All columns that get added
         // are returned with their current value
@@ -457,7 +456,7 @@ public class Sequence {
     }
 
     public Append createSequence(long startWith, long incrementBy, long cacheSize, long timestamp, long minValue, long maxValue, boolean cycle) {
-        byte[] key = SchemaUtil.getSequenceKey(this.key.getTenantId(), this.key.getSchemaName(), this.key.getSequenceName());
+        byte[] key = this.key.getKey();
         Append append = new Append(key);
         append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, new byte[] {(byte)MetaOp.CREATE_SEQUENCE.ordinal()});
         if (timestamp != HConstants.LATEST_TIMESTAMP) {
@@ -496,7 +495,7 @@ public class Sequence {
     }
 
     public Append dropSequence(long timestamp) {
-        byte[] key = SchemaUtil.getSequenceKey(this.key.getTenantId(), this.key.getSchemaName(), this.key.getSequenceName());
+        byte[] key =  this.key.getKey();
         Append append = new Append(key);
         append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, new byte[] {(byte)MetaOp.DROP_SEQUENCE.ordinal()});
         if (timestamp != HConstants.LATEST_TIMESTAMP) {
