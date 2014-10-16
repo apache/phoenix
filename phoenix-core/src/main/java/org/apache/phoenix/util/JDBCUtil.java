@@ -64,6 +64,22 @@ public class JDBCUtil {
         return propValue;
     }
 
+    public static String removeProperty(String url, String propName) {
+        String urlPropName = ";" + propName + "=";
+        int begIndex = url.indexOf(urlPropName);
+        if (begIndex >= 0) {
+            int endIndex = url.indexOf(';', begIndex + urlPropName.length());
+            if (endIndex < 0) {
+                endIndex = url.length();
+            }
+            String prefix = url.substring(0, begIndex);
+            String suffix = url.substring(endIndex, url.length());
+            return prefix + suffix;
+        } else {
+            return url;
+        }
+    }
+
     public static Long getCurrentSCN(String url, Properties info) throws SQLException {
         String scnStr = findProperty(url, info, PhoenixRuntime.CURRENT_SCN_ATTRIB);
         return (scnStr == null ? null : Long.parseLong(scnStr));

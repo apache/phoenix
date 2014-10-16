@@ -66,6 +66,7 @@ import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -208,7 +209,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 Properties scnProps = PropertiesUtil.deepCopy(props);
                 scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
                 scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
-                metaConnection = new PhoenixConnection(this, url, scnProps, newEmptyMetaData());
+                String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
+                metaConnection = new PhoenixConnection(this, globalUrl, scnProps, newEmptyMetaData());
                 try {
                     metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
                 } catch (TableAlreadyExistsException ignore) {
