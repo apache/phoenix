@@ -126,6 +126,7 @@ import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
+import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -1502,8 +1503,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     PhoenixRuntime.CURRENT_SCN_ATTRIB,
                                     Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
                             scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
+                            String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
                             metaConnection = new PhoenixConnection(
-                                    ConnectionQueryServicesImpl.this, url, scnProps, newEmptyMetaData());
+                                    ConnectionQueryServicesImpl.this, globalUrl, scnProps, newEmptyMetaData());
                             try {
                                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
