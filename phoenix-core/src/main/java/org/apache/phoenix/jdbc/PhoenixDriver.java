@@ -149,7 +149,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 if (normalizedConnInfo.isConnectionless()) {
                     connectionQueryServices = new ConnectionlessQueryServicesImpl(services, normalizedConnInfo);
                 } else {
-                    connectionQueryServices = new ConnectionQueryServicesImpl(services, normalizedConnInfo);
+                    connectionQueryServices = new ConnectionQueryServicesImpl(services, normalizedConnInfo, info);
                 }
                 ConnectionQueryServices prevValue = connectionQueryServicesMap.putIfAbsent(normalizedConnInfo, connectionQueryServices);
                 if (prevValue != null) {
