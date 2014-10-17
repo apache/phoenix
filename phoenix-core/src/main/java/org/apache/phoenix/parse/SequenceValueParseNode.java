@@ -22,7 +22,19 @@ import java.sql.SQLException;
 
 
 public class SequenceValueParseNode extends TerminalParseNode {
-    public enum Op {NEXT_VALUE, CURRENT_VALUE};
+    public enum Op {
+        NEXT_VALUE("NEXT"), 
+        CURRENT_VALUE("CURRENT");
+    
+        private final String name;
+        Op(String name) {
+            this.name = name;
+        }
+        public String getName() {
+            return name;
+    };
+    
+    }
 	private final TableName tableName;
 	private final Op op;
 

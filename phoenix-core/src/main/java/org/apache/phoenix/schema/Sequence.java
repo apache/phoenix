@@ -57,7 +57,7 @@ import com.google.common.math.LongMath;
 public class Sequence {
     public static final int SUCCESS = 0;
     
-    public enum ValueOp {VALIDATE_SEQUENCE, RESERVE_SEQUENCE};
+    public enum ValueOp {VALIDATE_SEQUENCE, RESERVE_SEQUENCE, INCREMENT_SEQUENCE};
     public enum MetaOp {CREATE_SEQUENCE, DROP_SEQUENCE, RETURN_SEQUENCE};
     
     // create empty Sequence key values used while created a sequence row
@@ -139,10 +139,10 @@ public class Sequence {
         return value.isDeleted ? null : value;
     }
     
-    private long increment(SequenceValue value, int factor) throws SQLException {       
-        boolean increasingSeq = value.incrementBy > 0;
+    private long increment(SequenceValue value, ValueOp op) throws SQLException {       
+        boolean increasingSeq = value.incrementBy > 0 && op != ValueOp.VALIDATE_SEQUENCE;
         // check if the the sequence has already reached the min/max limit
-        if (value.limitReached) {           
+        if (value.limitReached && op != ValueOp.VALIDATE_SEQUENCE) {           
             if (value.cycle) {
                 value.limitReached=false;
                 throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
@@ -156,12 +156,11 @@ public class Sequence {
         }
         
         long returnValue = value.currentValue;
-        if (factor != 0) {
+        if (op == ValueOp.INCREMENT_SEQUENCE) {
             boolean overflowOrUnderflow=false;
             // advance currentValue while checking for overflow
             try {
-                long incrementValue = LongMath.checkedMultiply(value.incrementBy, factor);
-                value.currentValue = LongMath.checkedAdd(value.currentValue, incrementValue);
+                value.currentValue = LongMath.checkedAdd(value.currentValue, value.incrementBy);
             } catch (ArithmeticException e) {
                 overflowOrUnderflow = true;
             }
@@ -176,18 +175,18 @@ public class Sequence {
         return returnValue;
     }
 
-    public long incrementValue(long timestamp, int factor, ValueOp action) throws SQLException {
+    public long incrementValue(long timestamp, ValueOp op) throws SQLException {
         SequenceValue value = findSequenceValue(timestamp);
         if (value == null) {
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }
         if (value.currentValue == value.nextValue) {
-            if (action == ValueOp.VALIDATE_SEQUENCE) {
+            if (op == ValueOp.VALIDATE_SEQUENCE) {
                 return value.currentValue;
             }
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }    
-        return increment(value, factor);
+        return increment(value, op);
     }
 
     public List<Append> newReturns() {
@@ -245,7 +244,7 @@ public class Sequence {
         return key;
     }
 
-    public long incrementValue(Result result, int factor) throws SQLException {
+    public long incrementValue(Result result, ValueOp op) throws SQLException {
         // In this case, we don't definitely know the timestamp of the deleted sequence,
         // but we know anything older is likely deleted. Worse case, we remove a sequence
         // from the cache that we shouldn't have which will cause a gap in sequence values.
@@ -266,9 +265,9 @@ public class Sequence {
                 .build().buildException();
         }
         // If we found the sequence, we update our cache with the new value
-        SequenceValue value = new SequenceValue(result);
+        SequenceValue value = new SequenceValue(result, op);
         insertSequenceValue(value);
-        return increment(value, factor);
+        return increment(value, op);
     }
 
     public Increment newIncrement(long timestamp, Sequence.ValueOp action) {
@@ -418,7 +417,7 @@ public class Sequence {
             return this.incrementBy == 0;
         }
         
-        public SequenceValue(Result r) {
+        public SequenceValue(Result r, ValueOp op) {
             KeyValue currentValueKV = getCurrentValueKV(r);
             KeyValue incrementByKV = getIncrementByKV(r);
             KeyValue cacheSizeKV = getCacheSizeKV(r);
@@ -433,7 +432,10 @@ public class Sequence {
             this.maxValue = PDataType.LONG.getCodec().decodeLong(maxValueKV.getBuffer(), maxValueKV.getValueOffset(), SortOrder.getDefault());
             this.cycle = (Boolean)PDataType.BOOLEAN.toObject(cycleKV.getBuffer(), cycleKV.getValueOffset(), cycleKV.getValueLength());
             this.limitReached = false;
-            currentValue = nextValue - incrementBy * cacheSize;
+            currentValue = nextValue;
+            if (op != ValueOp.VALIDATE_SEQUENCE) {
+                currentValue -= incrementBy * cacheSize;
+            }
         }
     }
 

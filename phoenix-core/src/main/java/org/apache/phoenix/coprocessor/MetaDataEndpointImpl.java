@@ -571,17 +571,14 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                 ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
                 // Get as of latest timestamp so we can detect if we have a newer table that already exists
                 // without making an additional query
-                if (logger.isDebugEnabled()) logger.debug("Loading " + SchemaUtil.getTableName(schemaName, lockTableName) + " as of timestamp " + clientTimeStamp);
                 PTable table = loadTable(env, key, cacheKey, clientTimeStamp, HConstants.LATEST_TIMESTAMP);
                 if (table != null) {
-                    if (logger.isDebugEnabled()) logger.debug("Found " + table.getName().getString() + " with timestamp of " + table.getTimeStamp());
                     if (table.getTimeStamp() < clientTimeStamp) {
                         // If the table is older than the client time stamp and it's deleted, continue
                         if (!isTableDeleted(table)) {
                             return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, EnvironmentEdgeManager.currentTimeMillis(), table);
                         }
                     } else {
-                        if (logger.isDebugEnabled()) logger.debug("Returning NEWER_TABLE_FOUND result for " + table.getName().getString());
                         return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND, EnvironmentEdgeManager.currentTimeMillis(), table);
                     }
                 }
