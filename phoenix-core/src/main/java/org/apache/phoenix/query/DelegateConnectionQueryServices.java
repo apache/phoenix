@@ -248,4 +248,9 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public void clearCache() throws SQLException {
         getDelegate().clearCache();
     }
+
+    @Override
+    public int getSequenceSaltBuckets() {
+        return getDelegate().getSequenceSaltBuckets();
+    }
 }

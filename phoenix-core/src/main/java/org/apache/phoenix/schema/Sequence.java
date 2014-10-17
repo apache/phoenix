@@ -529,4 +529,11 @@ public class Sequence {
             .setTableName(key.getSequenceName())
             .build().buildException();
     }
+
+    public static String getCreateTableStatement(int nSaltBuckets) {
+        if (nSaltBuckets <= 0) {
+            return QueryConstants.CREATE_SEQUENCE_METADATA;
+        }
+        return QueryConstants.CREATE_SEQUENCE_METADATA + "," + PhoenixDatabaseMetaData.SALT_BUCKETS + "=" + nSaltBuckets;
+    }
 }
