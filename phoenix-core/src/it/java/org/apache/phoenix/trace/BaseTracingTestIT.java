@@ -30,6 +30,7 @@ import java.util.Properties;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.metrics.PhoenixAbstractMetric;
@@ -42,11 +43,13 @@ import org.apache.phoenix.trace.util.Tracing.Frequency;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
+import org.junit.experimental.categories.Category;
 
 /**
  * Base test for tracing tests - helps manage getting tracing/non-tracing
  * connections, as well as any supporting utils.
  */
+@Category(HBaseManagedTimeTest.class)
 public class BaseTracingTestIT extends BaseHBaseManagedTimeIT {
     private static final Log LOG = LogFactory.getLog(BaseTracingTestIT.class);
 

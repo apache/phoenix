@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Base64;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -40,40 +41,41 @@ import com.google.common.collect.Lists;
 @Category(HBaseManagedTimeTest.class)
 public class QueryMoreIT extends BaseHBaseManagedTimeIT {
     
-    //Data table - multi-tenant = true, salted = true 
+    private String dataTableName;
+    //queryAgainstTenantSpecificView = true, dataTableSalted = true 
     @Test
     public void testQueryMore1() throws Exception {
         testQueryMore(true, true);
     }
     
-    //Data table - multi-tenant = false, salted = true 
+    //queryAgainstTenantSpecificView = false, dataTableSalted = true 
     @Test
     public void testQueryMore2() throws Exception {
         testQueryMore(false, true);
     }
     
-    //Data table - multi-tenant = false, salted = false
+    //queryAgainstTenantSpecificView = false, dataTableSalted = false
     @Test
     public void testQueryMore3() throws Exception {
         testQueryMore(false, false);
     }
     
-    //Data table - multi-tenant = true, salted = false 
+    //queryAgainstTenantSpecificView = true, dataTableSalted = false 
     @Test
     public void testQueryMore4() throws Exception {
         testQueryMore(true, false);
     }
     
-    private void testQueryMore(boolean dataTableMultiTenant, boolean dataTableSalted) throws Exception {
+    private void testQueryMore(boolean queryAgainstTenantSpecificView, boolean dataTableSalted) throws Exception {
         String[] tenantIds = new String[] {"00Dxxxxxtenant1", "00Dxxxxxtenant2", "00Dxxxxxtenant3"};
         int numRowsPerTenant = 10;
         String cursorTableName = "CURSOR_TABLE";
-        String dataTableName = "BASE_HISTORY_TABLE" + (dataTableMultiTenant ? "_MULTI" : "") + (dataTableSalted ? "_SALTED" : "");
+        this.dataTableName = "BASE_HISTORY_TABLE" + (dataTableSalted ? "_SALTED" : "");
         String cursorTableDDL = "CREATE TABLE IF NOT EXISTS " + 
                 cursorTableName +  " (\n" +  
                 "TENANT_ID VARCHAR(15) NOT NULL\n," +  
                 "QUERY_ID VARCHAR(15) NOT NULL,\n" +
-                "CURSOR_ORDER BIGINT NOT NULL\n" + 
+                "CURSOR_ORDER BIGINT NOT NULL \n" + 
                 "CONSTRAINT CURSOR_TABLE_PK PRIMARY KEY (TENANT_ID, QUERY_ID, CURSOR_ORDER)) "+
                 "SALT_BUCKETS = 4, TTL=86400";
         String baseDataTableDDL = "CREATE TABLE IF NOT EXISTS " +
@@ -86,7 +88,7 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
                 "OLDVAL_STRING VARCHAR,\n" + 
                 "NEWVAL_STRING VARCHAR\n" + 
                 "CONSTRAINT PK PRIMARY KEY(TENANT_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID)) " + 
-                "VERSIONS = 1, MULTI_TENANT = true, SALT_BUCKETS = 4";
+                "VERSIONS = 1, MULTI_TENANT = true" + (dataTableSalted ? ", SALT_BUCKETS = 4" : "");
         
         //create cursor and data tables.
         Connection conn = DriverManager.getConnection(getUrl());
@@ -94,14 +96,36 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         conn.createStatement().execute(baseDataTableDDL);
         conn.close();
         
-        //upsert rows in the data table.
+        //upsert rows in the data table for all the tenantIds
         Map<String, List<String>> historyIdsPerTenant = createHistoryTableRows(dataTableName, tenantIds, numRowsPerTenant);
         
+        // assert query more for tenantId -> tenantIds[0]
         String tenantId = tenantIds[0];
         String cursorQueryId = "00TcursrqueryId";
-        String tenantViewName = dataTableMultiTenant ? ("HISTORY_TABLE" + "_" + tenantId) : null;
-        assertEquals(numRowsPerTenant, upsertSelectRecordsInCursorTableForTenant(dataTableName, dataTableMultiTenant, tenantId, tenantViewName, cursorQueryId));
+        String tableOrViewName = queryAgainstTenantSpecificView ? ("\"HISTORY_TABLE" + "_" + tenantId + "\"") : dataTableName;
         
+        assertEquals(numRowsPerTenant, upsertSelectRecordsInCursorTableForTenant(tableOrViewName, queryAgainstTenantSpecificView, tenantId, cursorQueryId));
+        
+        /*// assert that the data inserted in cursor table matches the data in the data table for tenantId.
+        String selectDataTable = "SELECT TENANT_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID FROM BASE_HISTORY_TABLE WHERE TENANT_ID = ? ";
+        String selectCursorTable = "SELECT TENANT_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID FROM  CURSOR_TABLE (PARENT_ID CHAR(15), CREATED_DATE DATE, ENTITY_HISTORY_ID CHAR(15)) WHERE TENANT_ID = ? ";
+        
+        PreparedStatement stmtData = DriverManager.getConnection(getUrl()).prepareStatement(selectDataTable);
+        stmtData.setString(1, tenantId);
+        ResultSet rsData = stmtData.executeQuery();
+        
+        PreparedStatement stmtCursor = DriverManager.getConnection(getUrl()).prepareStatement(selectCursorTable);
+        stmtCursor.setString(1, tenantId);
+        ResultSet rsCursor = stmtCursor.executeQuery();
+        
+        while(rsData.next() && rsCursor.next()) {
+            assertEquals(rsData.getString("TENANT_ID"), rsCursor.getString("TENANT_ID"));
+            assertEquals(rsData.getString("PARENT_ID"), rsCursor.getString("PARENT_ID"));
+            assertEquals(rsData.getDate("CREATED_DATE"), rsCursor.getDate("CREATED_DATE"));
+            assertEquals(rsData.getString("ENTITY_HISTORY_ID"), rsCursor.getString("ENTITY_HISTORY_ID"));
+        }
+        
+        */
         Connection conn2 = DriverManager.getConnection(getUrl());
         ResultSet rs = conn2.createStatement().executeQuery("SELECT count(*) from " + cursorTableName);
         rs.next();
@@ -110,20 +134,28 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         
         int startOrder = 0;
         int endOrder = 5;
-        int numRecordsThatShouldBeRetrieved = 5;
+        int numRecordsThatShouldBeRetrieved = numRowsPerTenant/2; // we will test for two rounds of query more.
         
-        //get first batch of cursor ids out of the cursor table.
-        String[] cursorIds = getRecordsOutofCursorTable(dataTableName, tenantId, cursorQueryId, startOrder, endOrder, numRecordsThatShouldBeRetrieved);
+        // get first batch of cursor ids out of the cursor table.
+        String[] cursorIds = getRecordsOutofCursorTable(tableOrViewName, queryAgainstTenantSpecificView, tenantId, cursorQueryId, startOrder, endOrder);
         assertEquals(numRecordsThatShouldBeRetrieved, cursorIds.length);
-        
-        //now query against the tenant view and fetch first batch of records.
-        List<String> historyIds = doQueryMore(dataTableName, dataTableMultiTenant, tenantId, tenantViewName, cursorIds);
+        // now query and fetch first batch of records.
+        List<String> historyIds = doQueryMore(queryAgainstTenantSpecificView, tenantId, tableOrViewName, cursorIds);
+        // assert that history ids match for this tenant
         assertEquals(historyIdsPerTenant.get(tenantId).subList(startOrder, endOrder), historyIds);
         
-        cursorIds = getRecordsOutofCursorTable(dataTableName, tenantId, cursorQueryId, startOrder + 5, endOrder + 5, numRecordsThatShouldBeRetrieved);
+        // get the next batch of cursor ids out of the cursor table.
+        cursorIds = getRecordsOutofCursorTable(tableOrViewName, queryAgainstTenantSpecificView, tenantId, cursorQueryId, startOrder + numRecordsThatShouldBeRetrieved, endOrder + numRecordsThatShouldBeRetrieved);
         assertEquals(numRecordsThatShouldBeRetrieved, cursorIds.length);
-        historyIds = doQueryMore(dataTableName, dataTableMultiTenant, tenantId, tenantViewName, cursorIds);
-        assertEquals(historyIdsPerTenant.get(tenantId).subList(startOrder + 5, endOrder+ 5), historyIds);
+        // now query and fetch the next batch of records.
+        historyIds = doQueryMore(queryAgainstTenantSpecificView, tenantId, tableOrViewName, cursorIds);
+        // assert that the history ids match for this tenant
+        assertEquals(historyIdsPerTenant.get(tenantId).subList(startOrder + numRecordsThatShouldBeRetrieved, endOrder+ numRecordsThatShouldBeRetrieved), historyIds);
+        
+         // get the next batch of cursor ids out of the cursor table.
+        cursorIds = getRecordsOutofCursorTable(tableOrViewName, queryAgainstTenantSpecificView, tenantId, cursorQueryId, startOrder + 2 * numRecordsThatShouldBeRetrieved, endOrder + 2 * numRecordsThatShouldBeRetrieved);
+        // assert that there are no more cursorids left for this tenant.
+        assertEquals(0, cursorIds.length);
     }
     
     private Map<String, List<String>> createHistoryTableRows(String dataTableName, String[] tenantIds, int numRowsPerTenant) throws Exception {
@@ -133,7 +165,7 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         try {
             PreparedStatement stmt = conn.prepareStatement(upsertDML);
             for (int j = 0; j < tenantIds.length; j++) {
-                List<String> parentIds = new ArrayList<String>();
+                List<String> historyIds = new ArrayList<String>();
                 for (int i = 0; i < numRowsPerTenant; i++) {
                     stmt.setString(1, tenantIds[j]);
                     String parentId = "parentId" + i;
@@ -145,9 +177,9 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
                     stmt.setString(6, "oldval");
                     stmt.setString(7, "newval");
                     stmt.executeUpdate();
-                    parentIds.add(historyId);
+                    historyIds.add(historyId);
                 }
-                historyIdsForTenant.put(tenantIds[j], parentIds);
+                historyIdsForTenant.put(tenantIds[j], historyIds);
             }
             conn.commit();
             return historyIdsForTenant;
@@ -156,29 +188,29 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         }
     }
     
-    private int upsertSelectRecordsInCursorTableForTenant(String baseTableName, boolean dataTableMultiTenant, String tenantId, String tenantViewName, String cursorQueryId) throws Exception {
+    private int upsertSelectRecordsInCursorTableForTenant(String tableOrViewName, boolean queryAgainstTenantView, String tenantId, String cursorQueryId) throws Exception {
         String sequenceName = "\"" + tenantId + "_SEQ\"";
-        Connection conn = dataTableMultiTenant ? getTenantSpecificConnection(tenantId) : DriverManager.getConnection(getUrl());
+        Connection conn = queryAgainstTenantView ? getTenantSpecificConnection(tenantId) : DriverManager.getConnection(getUrl());
         
         // Create a sequence. This sequence is used to fill cursor_order column for each row inserted in the cursor table.
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " CACHE " + Long.MAX_VALUE);
         conn.setAutoCommit(true);
-        if (dataTableMultiTenant) {
-            createTenantSpecificViewIfNecessary(baseTableName, tenantViewName, conn);
+        if (queryAgainstTenantView) {
+            createTenantSpecificViewIfNecessary(tableOrViewName, conn);
         }
         try {
-            String tableName = dataTableMultiTenant ? tenantViewName : baseTableName;
-            String tenantIdFilter = dataTableMultiTenant ? "" : " WHERE TENANT_ID = ? ";
+            String tenantIdFilter = queryAgainstTenantView ? "" : " WHERE TENANT_ID = ? ";
             
             // Using dynamic columns, we can use the same cursor table for storing primary keys for all the tables.  
             String upsertSelectDML = "UPSERT INTO CURSOR_TABLE " +
                                      "(TENANT_ID, QUERY_ID, CURSOR_ORDER, PARENT_ID CHAR(15), CREATED_DATE DATE, ENTITY_HISTORY_ID CHAR(15)) " + 
                                      "SELECT ?, ?, NEXT VALUE FOR " + sequenceName + ", PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID " +
-                                     " FROM " + tableName + tenantIdFilter;
+                                     " FROM " + tableOrViewName + tenantIdFilter;
+            
             PreparedStatement stmt = conn.prepareStatement(upsertSelectDML);
             stmt.setString(1, tenantId);
             stmt.setString(2, cursorQueryId);
-            if (!dataTableMultiTenant)  {
+            if (!queryAgainstTenantView)  {
                 stmt.setString(3, tenantId);
             }
             int numRecords = stmt.executeUpdate();
@@ -198,18 +230,19 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         return DriverManager.getConnection(getUrl(), props);
     }
     
-    private String createTenantSpecificViewIfNecessary(String baseTableName, String tenantViewName, Connection tenantConn) throws Exception {
-        tenantConn.createStatement().execute("CREATE VIEW IF NOT EXISTS " + tenantViewName + " AS SELECT * FROM " + baseTableName);
+    private String createTenantSpecificViewIfNecessary(String tenantViewName, Connection tenantConn) throws Exception {
+        tenantConn.createStatement().execute("CREATE VIEW IF NOT EXISTS " + tenantViewName + " AS SELECT * FROM " + dataTableName);
         return tenantViewName;
     }
     
-    private String[] getRecordsOutofCursorTable(String dataTableName, String tenantId, String cursorQueryId, int startOrder, int endOrder, int numRecordsThatShouldBeRetrieved) throws Exception {
+    private String[] getRecordsOutofCursorTable(String tableOrViewName, boolean queryAgainstTenantSpecificView, String tenantId, String cursorQueryId, int startOrder, int endOrder) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        List<String> pkIds = Lists.newArrayListWithCapacity(numRecordsThatShouldBeRetrieved);
-
-        String selectCursorSql = "SELECT TENANT_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID " +
+        List<String> pkIds = new ArrayList<String>();
+        String cols = queryAgainstTenantSpecificView ? "PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID" : "TENANT_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID";
+        String dynCols = queryAgainstTenantSpecificView ? "(PARENT_ID CHAR(15), CREATED_DATE DATE, ENTITY_HISTORY_ID CHAR(15))" : "(TENANT_ID CHAR(15), PARENT_ID CHAR(15), CREATED_DATE DATE, ENTITY_HISTORY_ID CHAR(15))";
+        String selectCursorSql = "SELECT " + cols + " " +
                 "FROM CURSOR_TABLE \n" +
-                "(TENANT_ID CHAR(15), PARENT_ID CHAR(15), CREATED_DATE DATE, ENTITY_HISTORY_ID CHAR(15)) \n" + 
+                 dynCols +   " \n" + 
                 "WHERE TENANT_ID = ? AND \n" +  
                 "QUERY_ID = ? AND \n" + 
                 "CURSOR_ORDER > ? AND \n" + 
@@ -222,33 +255,34 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         stmt.setInt(4, endOrder);
 
         ResultSet rs = stmt.executeQuery();
+        @SuppressWarnings("unchecked")
+        List<Pair<String, String>> columns = queryAgainstTenantSpecificView ? Lists.newArrayList(new Pair<String, String>(null, "PARENT_ID"), new Pair<String, String>(null, "CREATED_DATE"), new Pair<String, String>(null, "ENTITY_HISTORY_ID")) : Lists.newArrayList(new Pair<String, String>(null, "TENANT_ID"), new Pair<String, String>(null, "PARENT_ID"), new Pair<String, String>(null, "CREATED_DATE"), new Pair<String, String>(null, "ENTITY_HISTORY_ID"));
         while(rs.next()) {
-            Object[] values = new Object[4];
-            for (int i = 0; i < 4; i++) {
+            Object[] values = new Object[columns.size()];
+            for (int i = 0; i < columns.size(); i++) {
                 values[i] = rs.getObject(i + 1);
             }
-            pkIds.add(Base64.encodeBytes(PhoenixRuntime.encodePK(conn, dataTableName, values)));
+            conn = getTenantSpecificConnection(tenantId);
+            pkIds.add(Base64.encodeBytes(PhoenixRuntime.encodeValues(conn, tableOrViewName, values, columns)));
         }
         return pkIds.toArray(new String[pkIds.size()]);
     }
     
-    private List<String> doQueryMore(String dataTableName, boolean dataTableMultiTenant, String tenantId, String tenantViewName, String[] cursorIds) throws Exception {
-        Connection tenantConn = dataTableMultiTenant ? getTenantSpecificConnection(tenantId) : DriverManager.getConnection(getUrl());
-        String tableName = dataTableMultiTenant ? tenantViewName : dataTableName;
+    private List<String> doQueryMore(boolean queryAgainstTenantView, String tenantId, String tenantViewName, String[] cursorIds) throws Exception {
+        Connection conn = queryAgainstTenantView ? getTenantSpecificConnection(tenantId) : DriverManager.getConnection(getUrl());
+        String tableName = queryAgainstTenantView ? tenantViewName : dataTableName;
+        @SuppressWarnings("unchecked")
+        List<Pair<String, String>> columns = queryAgainstTenantView ? Lists.newArrayList(new Pair<String, String>(null, "PARENT_ID"), new Pair<String, String>(null, "CREATED_DATE"), new Pair<String, String>(null, "ENTITY_HISTORY_ID")) : Lists.newArrayList(new Pair<String, String>(null, "TENANT_ID"), new Pair<String, String>(null, "PARENT_ID"), new Pair<String, String>(null, "CREATED_DATE"), new Pair<String, String>(null, "ENTITY_HISTORY_ID"));
         StringBuilder sb = new StringBuilder();
-        String where = dataTableMultiTenant ? " WHERE (PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID) IN " : " WHERE (TENANT_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID) IN ";
+        String where = queryAgainstTenantView ? " WHERE (PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID) IN " : " WHERE (TENANT_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID) IN ";
         sb.append("SELECT ENTITY_HISTORY_ID FROM " + tableName +  where);
-        int numPkCols = dataTableMultiTenant ? 3 : 4;
+        int numPkCols = columns.size();
         String query = addRvcInBinds(sb, cursorIds.length, numPkCols);
-        PreparedStatement stmt = tenantConn.prepareStatement(query);
+        PreparedStatement stmt = conn.prepareStatement(query);
         int bindCounter = 1;
         for (int i = 0; i < cursorIds.length; i++) {
-            Connection globalConn = DriverManager.getConnection(getUrl());
-            Object[] pkParts = PhoenixRuntime.decodePK(globalConn, dataTableName, Base64.decode(cursorIds[i]));
-            globalConn.close();
-            //start at index 1 to  ignore organizationId.
-            int offset = dataTableMultiTenant ? 1 : 0;
-            for (int j = offset; j < pkParts.length; j++) {
+            Object[] pkParts = PhoenixRuntime.decodeValues(conn, tableName, Base64.decode(cursorIds[i]), columns);
+            for (int j = 0; j < pkParts.length; j++) {
                 stmt.setObject(bindCounter++, pkParts[j]);
             }
         }
@@ -281,5 +315,4 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         sb.append(")");
         return sb.toString();
     }
-    
 }
