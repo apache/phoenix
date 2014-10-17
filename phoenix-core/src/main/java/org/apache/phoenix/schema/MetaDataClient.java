@@ -1348,7 +1348,9 @@ public class MetaDataClient {
             case PARENT_TABLE_NOT_FOUND:
                 throw new TableNotFoundException(schemaName, parent.getName().getString());
             case NEWER_TABLE_FOUND:
-                throw new NewerTableAlreadyExistsException(schemaName, tableName);
+                // Add table to ConnectionQueryServices so it's cached, but don't add
+                // it to this connection as we can't see it.
+                throw new NewerTableAlreadyExistsException(schemaName, tableName, result.getTable());
             case UNALLOWED_TABLE_MUTATION:
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_TABLE)
                     .setSchemaName(schemaName).setTableName(tableName).build().buildException();
@@ -1468,7 +1470,7 @@ public class MetaDataClient {
                     }
                     break;
                 case NEWER_TABLE_FOUND:
-                    throw new NewerTableAlreadyExistsException(schemaName, tableName);
+                    throw new NewerTableAlreadyExistsException(schemaName, tableName, result.getTable());
                 case UNALLOWED_TABLE_MUTATION:
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_TABLE)
                         .setSchemaName(schemaName).setTableName(tableName).build().buildException();
@@ -1579,10 +1581,7 @@ public class MetaDataClient {
             }
             throw new ConcurrentTableMutationException(schemaName, tableName);
         case NEWER_TABLE_FOUND:
-            if (result.getTable() != null) {
-                connection.addTable(result.getTable());
-            }
-            throw new NewerTableAlreadyExistsException(schemaName, tableName);
+            throw new NewerTableAlreadyExistsException(schemaName, tableName, result.getTable());
         case NO_PK_COLUMNS:
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)
                 .setSchemaName(schemaName).setTableName(tableName).build().buildException();
