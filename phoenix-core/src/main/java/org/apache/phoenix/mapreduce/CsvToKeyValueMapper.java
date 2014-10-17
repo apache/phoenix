@@ -25,6 +25,17 @@ import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import java.io.IOException;
+import java.io.StringReader;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map.Entry;
+import java.util.Properties;
+
+import javax.annotation.Nullable;
+
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -104,11 +115,19 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
         Configuration conf = context.getConfiguration();
         String jdbcUrl = getJdbcUrl(conf);
 
+        // pass client configuration into driver
+        Properties clientInfos = new Properties();
+        Iterator<Entry<String, String>> iterator = conf.iterator();
+        while(iterator.hasNext()) {
+            Entry<String,String> entry = iterator.next();
+            clientInfos.setProperty(entry.getKey(), entry.getValue());
+        }
+        
         // This statement also ensures that the driver class is loaded
         LOG.info("Connection with driver {} with url {}", PhoenixDriver.class.getName(), jdbcUrl);
 
         try {
-            conn = (PhoenixConnection) DriverManager.getConnection(jdbcUrl);
+            conn = (PhoenixConnection) DriverManager.getConnection(jdbcUrl, clientInfos);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
