@@ -410,6 +410,9 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         PName pkName = pkNameKv != null ? newPName(pkNameKv.getBuffer(), pkNameKv.getValueOffset(), pkNameKv.getValueLength()) : null;
         KeyValue saltBucketNumKv = tableKeyValues[SALT_BUCKETS_INDEX];
         Integer saltBucketNum = saltBucketNumKv != null ? (Integer)PDataType.INTEGER.getCodec().decodeInt(saltBucketNumKv.getBuffer(), saltBucketNumKv.getValueOffset(), SortOrder.getDefault()) : null;
+        if (saltBucketNum != null && saltBucketNum.intValue() == 0) {
+            saltBucketNum = null; // Zero salt buckets means not salted
+        }
         KeyValue dataTableNameKv = tableKeyValues[DATA_TABLE_NAME_INDEX];
         PName dataTableName = dataTableNameKv != null ? newPName(dataTableNameKv.getBuffer(), dataTableNameKv.getValueOffset(), dataTableNameKv.getValueLength()) : null;
         KeyValue indexStateKv = tableKeyValues[INDEX_STATE_INDEX];

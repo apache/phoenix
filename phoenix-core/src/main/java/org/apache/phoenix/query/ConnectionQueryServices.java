@@ -110,4 +110,5 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public void addTableStats(String physicalName, PTableStats tableStats);
     
     public void clearCache() throws SQLException;
+    public int getSequenceSaltBuckets();
 }

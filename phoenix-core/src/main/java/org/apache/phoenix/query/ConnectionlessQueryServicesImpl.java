@@ -218,7 +218,9 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                 }
                 try {
-                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
+                    int nSaltBuckets = getSequenceSaltBuckets();
+                    String createTableStatement = Sequence.getCreateTableStatement(nSaltBuckets);
+                   metaConnection.createStatement().executeUpdate(createTableStatement);
                 } catch (NewerTableAlreadyExistsException ignore) {
                     // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
@@ -310,7 +312,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public long createSequence(String tenantId, String schemaName, String sequenceName,
             long startWith, long incrementBy, long cacheSize, long minValue, long maxValue,
             boolean cycle, long timestamp) throws SQLException {
-        SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName);
+        SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName, getSequenceSaltBuckets());
         if (sequenceMap.get(key) != null) {
             throw new SequenceAlreadyExistsException(schemaName, sequenceName);
         }
@@ -320,7 +322,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public long dropSequence(String tenantId, String schemaName, String sequenceName, long timestamp) throws SQLException {
-        SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName);
+        SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName, getSequenceSaltBuckets());
         if (sequenceMap.remove(key) == null) {
             throw new SequenceNotFoundException(schemaName, sequenceName);
         }
@@ -428,5 +430,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public void clearCache() throws SQLException {
+    }
+
+    @Override
+    public int getSequenceSaltBuckets() {
+        return getProps().getInt(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
+                QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
     }
 }
