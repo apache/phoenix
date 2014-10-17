@@ -460,13 +460,14 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                 schemaName.getString(), tableName.getString())) : physicalTables.get(0);
         PTableStats stats = PTableStats.EMPTY_STATS;
         if (tenantId == null) {
-            HTableInterface statsHTable = getEnvironment().getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+            HTableInterface statsHTable = null;
             try {
+                statsHTable = getEnvironment().getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
                 stats = StatisticsUtil.readStatistics(statsHTable, physicalTableName.getBytes(), clientTimeStamp);
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 logger.warn(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " not online yet?");
             } finally {
-                statsHTable.close();
+                if (statsHTable != null) statsHTable.close();
             }
         }
         return PTableImpl
@@ -508,12 +509,12 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         return table.getName() == null;
     }
 
-    private PTable loadTable(RegionCoprocessorEnvironment env, byte[] key, ImmutableBytesPtr cacheKey, long clientTimeStamp) throws IOException, SQLException {
+    private PTable loadTable(RegionCoprocessorEnvironment env, byte[] key, ImmutableBytesPtr cacheKey, long clientTimeStamp, long asOfTimeStamp) throws IOException, SQLException {
         HRegion region = env.getRegion();
         Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.getEnvironment()).getMetaDataCache();
         PTable table = metaDataCache.getIfPresent(cacheKey);
         // We always cache the latest version - fault in if not in cache
-        if (table != null || (table = buildTable(key, cacheKey, region, clientTimeStamp)) != null) {
+        if (table != null || (table = buildTable(key, cacheKey, region, asOfTimeStamp)) != null) {
             return table;
         }
         // if not found then check if newer table already exists and add delete marker for timestamp found
@@ -557,7 +558,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                 ImmutableBytesPtr parentCacheKey = null;
                 if (parentKey != null) {
                     parentCacheKey = new ImmutableBytesPtr(parentKey);
-                    parentTable = loadTable(env, parentKey, parentCacheKey, clientTimeStamp);
+                    parentTable = loadTable(env, parentKey, parentCacheKey, clientTimeStamp, clientTimeStamp);
                     if (parentTable == null || isTableDeleted(parentTable)) {
                         return new MetaDataMutationResult(MutationCode.PARENT_TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), parentTable);
                     }
@@ -570,14 +571,17 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                 ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
                 // Get as of latest timestamp so we can detect if we have a newer table that already exists
                 // without making an additional query
-                PTable table = loadTable(env, key, cacheKey, clientTimeStamp);
+                if (logger.isDebugEnabled()) logger.debug("Loading " + SchemaUtil.getTableName(schemaName, lockTableName) + " as of timestamp " + clientTimeStamp);
+                PTable table = loadTable(env, key, cacheKey, clientTimeStamp, HConstants.LATEST_TIMESTAMP);
                 if (table != null) {
+                    if (logger.isDebugEnabled()) logger.debug("Found " + table.getName().getString() + " with timestamp of " + table.getTimeStamp());
                     if (table.getTimeStamp() < clientTimeStamp) {
                         // If the table is older than the client time stamp and it's deleted, continue
                         if (!isTableDeleted(table)) {
                             return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, EnvironmentEdgeManager.currentTimeMillis(), table);
                         }
                     } else {
+                        if (logger.isDebugEnabled()) logger.debug("Returning NEWER_TABLE_FOUND result for " + table.getName().getString());
                         return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND, EnvironmentEdgeManager.currentTimeMillis(), table);
                     }
                 }
