@@ -1531,8 +1531,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             } catch (NewerTableAlreadyExistsException e) {
                                 // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
-                                PTable sequenceTable = ConnectionQueryServicesImpl.this.latestMetaData.getTable(new PTableKey(null, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME));
-                                Integer sequenceSaltBuckets = sequenceTable.getBucketNum();
+                                Integer sequenceSaltBuckets = e.getTable().getBucketNum();
                                 nSequenceSaltBuckets = sequenceSaltBuckets == null ? 0 : sequenceSaltBuckets;
                             } catch (TableAlreadyExistsException e) {
                                 // This will occur if we have an older SYSTEM.SEQUENCE, so we need to update it to include
