@@ -47,6 +47,7 @@ import static org.apache.phoenix.query.QueryServices.RPC_TIMEOUT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SPOOL_DIRECTORY;
 import static org.apache.phoenix.query.QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB;
@@ -60,6 +61,7 @@ import java.util.Map.Entry;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -148,6 +150,11 @@ public class QueryServicesOptions {
     public static final int DEFAULT_GUIDE_POSTS_PER_REGION = 20;
 
     public static final boolean DEFAULT_USE_REVERSE_SCAN = true;
+    
+    /**
+     * Use only first time SYSTEM.SEQUENCE table is created.
+     */
+    public static final int DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS = SaltingUtil.MAX_BUCKET_NUM;
 
     private final Configuration config;
 
@@ -443,4 +450,10 @@ public class QueryServicesOptions {
     public QueryServicesOptions setMinStatsUpdateFrequencyMs(int frequencyMs) {
         return set(MIN_STATS_UPDATE_FREQ_MS_ATTRIB, frequencyMs);
     }    
+    
+    public QueryServicesOptions setSequenceSaltBuckets(int saltBuckets) {
+        config.setInt(SEQUENCE_SALT_BUCKETS_ATTRIB, saltBuckets);
+        return this;
+    }
+    
 }

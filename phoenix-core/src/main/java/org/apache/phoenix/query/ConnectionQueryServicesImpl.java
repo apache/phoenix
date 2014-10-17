@@ -176,6 +176,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     private HConnection connection;
     private volatile boolean initialized;
+    private volatile int nSequenceSaltBuckets;
     
     // writes guarded by "this"
     private volatile boolean closed;
@@ -1521,22 +1522,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                             } catch (TableAlreadyExistsException ignore) {
                             }
+                            int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
+                                    QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
                             try {
-                                metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
-                            } catch (NewerTableAlreadyExistsException ignore) {
+                                String createSequenceTable = Sequence.getCreateTableStatement(nSaltBuckets);
+                                metaConnection.createStatement().executeUpdate(createSequenceTable);
+                                nSequenceSaltBuckets = nSaltBuckets;
+                            } catch (NewerTableAlreadyExistsException e) {
                                 // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
-
-                            } catch (TableAlreadyExistsException ignore) {
+                                PTable sequenceTable = ConnectionQueryServicesImpl.this.latestMetaData.getTable(new PTableKey(null, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME));
+                                Integer sequenceSaltBuckets = sequenceTable.getBucketNum();
+                                nSequenceSaltBuckets = sequenceSaltBuckets == null ? 0 : sequenceSaltBuckets;
+                            } catch (TableAlreadyExistsException e) {
                                 // This will occur if we have an older SYSTEM.SEQUENCE, so we need to update it to include
                                 // any new columns we've added.
-                                if (UpgradeUtil.addSaltByteToSequenceTable(metaConnection)) {
+                                if (UpgradeUtil.addSaltByteToSequenceTable(metaConnection, nSaltBuckets)) {
                                     metaConnection.removeTable(null,
                                             PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
                                             PhoenixDatabaseMetaData.TYPE_SEQUENCE,
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
                                     clearCache();
                                 }
+                                nSequenceSaltBuckets = nSaltBuckets;
                             }
                             try {
                                 metaConnection.createStatement().executeUpdate(
@@ -1700,7 +1708,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public long createSequence(String tenantId, String schemaName, String sequenceName,
             long startWith, long incrementBy, long cacheSize, long minValue, long maxValue,
             boolean cycle, long timestamp) throws SQLException {
-        SequenceKey sequenceKey = new SequenceKey(tenantId, schemaName, sequenceName);
+        SequenceKey sequenceKey = new SequenceKey(tenantId, schemaName, sequenceName, nSequenceSaltBuckets);
         Sequence newSequences = new Sequence(sequenceKey);
         Sequence sequence = sequenceMap.putIfAbsent(sequenceKey, newSequences);
         if (sequence == null) {
@@ -1711,7 +1719,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Now that we have the lock we need, create the sequence
             Append append = sequence.createSequence(startWith, incrementBy, cacheSize, timestamp, minValue, maxValue, cycle);
             HTableInterface htable =
-                    this.getTable(PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES);
+                    this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
             try {
                 Result result = htable.append(append);
                 return sequence.createSequence(result, minValue, maxValue, cycle);
@@ -1727,7 +1735,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public long dropSequence(String tenantId, String schemaName, String sequenceName, long timestamp) throws SQLException {
-        SequenceKey sequenceKey = new SequenceKey(tenantId, schemaName, sequenceName);
+        SequenceKey sequenceKey = new SequenceKey(tenantId, schemaName, sequenceName, nSequenceSaltBuckets);
         Sequence newSequences = new Sequence(sequenceKey);
         Sequence sequence = sequenceMap.putIfAbsent(sequenceKey, newSequences);
         if (sequence == null) {
@@ -1737,7 +1745,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             sequence.getLock().lock();
             // Now that we have the lock we need, create the sequence
             Append append = sequence.dropSequence(timestamp);
-            HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES);
+            HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
             try {
                 Result result = htable.append(append);
                 return sequence.dropSequence(result);
@@ -1836,7 +1844,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (toIncrementList.isEmpty()) {
                 return;
             }
-            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES);
+            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
             Object[] resultObjects = null;
             SQLException sqlE = null;
             try {
@@ -1955,7 +1963,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (toReturnList.isEmpty()) {
                 return;
             }
-            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES);
+            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
             Object[] resultObjects = null;
             SQLException sqlE = null;
             try {
@@ -2006,7 +2014,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (mutations.isEmpty()) {
             return;
         }
-        HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES);
+        HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
         SQLException sqlE = null;
         try {
             hTable.batch(mutations);
@@ -2097,5 +2105,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public void addTableStats(String physicalName, PTableStats tableStats) {
         tableStatsCache.put(physicalName, tableStats);
+    }
+    @Override
+    public int getSequenceSaltBuckets() {
+        return nSequenceSaltBuckets;
     }
 }

@@ -291,14 +291,14 @@ public class MetaDataUtil {
         return SchemaUtil.getTableName(schemaName, tableName);
     }
 
-    public static SequenceKey getViewIndexSequenceKey(String tenantId, PName physicalName) {
+    public static SequenceKey getViewIndexSequenceKey(String tenantId, PName physicalName, int nSaltBuckets) {
         // Create global sequence of the form: <prefixed base table name><tenant id>
         // rather than tenant-specific sequence, as it makes it much easier
         // to cleanup when the physical table is dropped, as we can delete
         // all global sequences leading with <prefix> + physical name.
         String schemaName = VIEW_INDEX_SEQUENCE_PREFIX + physicalName.getString();
         String tableName = tenantId == null ? "" : tenantId;
-        return new SequenceKey(null, schemaName, tableName);
+        return new SequenceKey(null, schemaName, tableName, nSaltBuckets);
     }
 
     public static PDataType getViewIndexIdDataType() {
@@ -346,8 +346,9 @@ public class MetaDataUtil {
     }
 
     public static void deleteViewIndexSequences(PhoenixConnection connection, PName name) throws SQLException {
-        SequenceKey key = getViewIndexSequenceKey(null, name);
-        connection.createStatement().executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME + 
+        int nSequenceSaltBuckets = connection.getQueryServices().getSequenceSaltBuckets();
+        SequenceKey key = getViewIndexSequenceKey(null, name, nSequenceSaltBuckets);
+        connection.createStatement().executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED + 
                 " WHERE " + PhoenixDatabaseMetaData.TENANT_ID + " IS NULL AND " + 
                 PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + key.getSchemaName() + "'");
         

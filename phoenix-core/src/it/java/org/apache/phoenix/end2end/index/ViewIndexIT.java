@@ -82,7 +82,7 @@ public class ViewIndexIT extends BaseIndexIT {
         ResultSet rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
-                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME);
+                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED);
         assertFalse("View index sequences should be deleted.", rs.next());
     }
 }

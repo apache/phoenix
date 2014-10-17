@@ -122,7 +122,8 @@ public class SequenceManager {
         PName tenantName = statement.getConnection().getTenantId();
         String tenantId = tenantName == null ? null : tenantName.getString();
         TableName tableName = node.getTableName();
-        SequenceKey key = new SequenceKey(tenantId, tableName.getSchemaName(), tableName.getTableName());
+        int nSaltBuckets = statement.getConnection().getQueryServices().getSequenceSaltBuckets();
+        SequenceKey key = new SequenceKey(tenantId, tableName.getSchemaName(), tableName.getTableName(), nSaltBuckets);
         SequenceValueExpression expression = sequenceMap.get(key);
         if (expression == null) {
             int index = sequenceMap.size();

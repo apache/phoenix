@@ -28,12 +28,14 @@ public class SequenceKey implements Comparable<SequenceKey> {
     private final String sequenceName;
     private final byte[] key;
     
-    public SequenceKey(String tenantId, String schemaName, String sequenceName) {
+    public SequenceKey(String tenantId, String schemaName, String sequenceName, int nBuckets) {
         this.tenantId = tenantId;
         this.schemaName = schemaName;
         this.sequenceName = sequenceName;
-        this.key = ByteUtil.concat(QueryConstants.SEPARATOR_BYTE_ARRAY, tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId), QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(sequenceName));
-        key[0] = SaltingUtil.getSaltingByte(key, SaltingUtil.NUM_SALTING_BYTES, key.length - SaltingUtil.NUM_SALTING_BYTES, SaltingUtil.MAX_BUCKET_NUM);
+        this.key = ByteUtil.concat(nBuckets <= 0 ? ByteUtil.EMPTY_BYTE_ARRAY : QueryConstants.SEPARATOR_BYTE_ARRAY, tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId), QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(sequenceName));
+        if (nBuckets > 0) {
+            key[0] = SaltingUtil.getSaltingByte(key, SaltingUtil.NUM_SALTING_BYTES, key.length - SaltingUtil.NUM_SALTING_BYTES, SaltingUtil.MAX_BUCKET_NUM);
+        }
     }
 
     public byte[] getKey() {

@@ -886,7 +886,8 @@ public class MetaDataClient {
                     PName tenantId = connection.getTenantId();
                     String tenantIdStr = tenantId == null ? null : connection.getTenantId().getString();
                     PName physicalName = dataTable.getPhysicalName();
-                    SequenceKey key = MetaDataUtil.getViewIndexSequenceKey(tenantIdStr, physicalName);
+                    int nSequenceSaltBuckets = connection.getQueryServices().getSequenceSaltBuckets();
+                    SequenceKey key = MetaDataUtil.getViewIndexSequenceKey(tenantIdStr, physicalName, nSequenceSaltBuckets);
                     // Create at parent timestamp as we know that will be earlier than now
                     // and earlier than any SCN if one is set.
                     createSequence(key.getTenantId(), key.getSchemaName(), key.getSequenceName(),

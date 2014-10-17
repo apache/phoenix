@@ -544,6 +544,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         Integer saltBucketNum =
                 saltBucketNumKv != null ? (Integer) PDataType.INTEGER.getCodec().decodeInt(
                     saltBucketNumKv.getValueArray(), saltBucketNumKv.getValueOffset(), SortOrder.getDefault()) : null;
+        if (saltBucketNum != null && saltBucketNum.intValue() == 0) {
+            saltBucketNum = null; // Zero salt buckets means not salted
+        }
         Cell dataTableNameKv = tableKeyValues[DATA_TABLE_NAME_INDEX];
         PName dataTableName =
                 dataTableNameKv != null ? newPName(dataTableNameKv.getValueArray(),
