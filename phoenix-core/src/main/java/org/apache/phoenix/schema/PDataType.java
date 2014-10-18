@@ -5894,25 +5894,31 @@ public enum PDataType {
 
         @Override
         public long decodeLong(byte[] bytes, int o, SortOrder sortOrder) {
-        	Preconditions.checkNotNull(sortOrder);
-            long v;
-            byte b = bytes[o];
+          Preconditions.checkNotNull(sortOrder);
+          long v = 0L;
+          byte b = bytes[o];
+          try {
             if (sortOrder == SortOrder.ASC) {
-                v = b ^ 0x80; // Flip sign bit back
-                for (int i = 1; i < Bytes.SIZEOF_LONG; i++) {
-                    b = bytes[o + i];
-                    v = (v << 8) + (b & 0xff);
-                }
+              v = b ^ 0x80; // Flip sign bit back
+              for (int i = 1; i < Bytes.SIZEOF_LONG; i++) {
+                b = bytes[o + i];
+                v = (v << 8) + (b & 0xff);
+              }
             } else {
-                b = (byte)(b ^ 0xff);
-                v = b ^ 0x80; // Flip sign bit back
-                for (int i = 1; i < Bytes.SIZEOF_LONG; i++) {
-                    b = bytes[o + i];
-                    b ^= 0xff;
-                    v = (v << 8) + (b & 0xff);
-                }
+              b = (byte) (b ^ 0xff);
+              v = b ^ 0x80; // Flip sign bit back
+              for (int i = 1; i < Bytes.SIZEOF_LONG; i++) {
+                b = bytes[o + i];
+                b ^= 0xff;
+                v = (v << 8) + (b & 0xff);
+              }
             }
-            return v;
+          } catch (RuntimeException e) {
+            if (e instanceof ArrayIndexOutOfBoundsException) {
+              throw new IllegalDataException("cannot coerced to data type LONG");
+            }
+          }
+          return v;
         }
 
 
@@ -6017,17 +6023,23 @@ public enum PDataType {
         @Override
         public int decodeInt(byte[] bytes, int o, SortOrder sortOrder) {
         	Preconditions.checkNotNull(sortOrder);
-            int v;
-            if (sortOrder == SortOrder.ASC) {
+            int v = 0;
+            try {
+              if (sortOrder == SortOrder.ASC) {
                 v = bytes[o] ^ 0x80; // Flip sign bit back
                 for (int i = 1; i < Bytes.SIZEOF_INT; i++) {
-                    v = (v << 8) + (bytes[o + i] & 0xff);
+                  v = (v << 8) + (bytes[o + i] & 0xff);
                 }
-            } else { 
+              } else { 
                 v = bytes[o] ^ 0xff ^ 0x80; // Flip sign bit back
                 for (int i = 1; i < Bytes.SIZEOF_INT; i++) {
-                    v = (v << 8) + ((bytes[o + i] ^ 0xff) & 0xff);
+                  v = (v << 8) + ((bytes[o + i] ^ 0xff) & 0xff);
                 }
+              }
+            } catch (RuntimeException e) {
+              if (e instanceof ArrayIndexOutOfBoundsException) {
+                throw new IllegalDataException("cannot coerced to data type INT");
+              }
             }
             return v;
         }
@@ -6130,18 +6142,24 @@ public enum PDataType {
 
       @Override
       public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
-    	Preconditions.checkNotNull(sortOrder);
-        int v;
-        if (sortOrder == SortOrder.ASC) {
+        Preconditions.checkNotNull(sortOrder);
+        int v = 0;
+        try {
+          if (sortOrder == SortOrder.ASC) {
             v = b[o] ^ 0x80; // Flip sign bit back
             for (int i = 1; i < Bytes.SIZEOF_SHORT; i++) {
-                v = (v << 8) + (b[o + i] & 0xff);
+              v = (v << 8) + (b[o + i] & 0xff);
             }
-        } else {
+          } else {
             v = b[o] ^ 0xff ^ 0x80; // Flip sign bit back
             for (int i = 1; i < Bytes.SIZEOF_SHORT; i++) {
-                v = (v << 8) + ((b[o + i] ^ 0xff) & 0xff);
+              v = (v << 8) + ((b[o + i] ^ 0xff) & 0xff);
             }
+          }
+        } catch (RuntimeException e) {
+          if (e instanceof ArrayIndexOutOfBoundsException) {
+            throw new IllegalDataException("cannot coerced to data type SHORT");
+          }
         }
         return (short)v;
       }
@@ -6317,10 +6335,10 @@ public enum PDataType {
 
       @Override
       public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
-    	Preconditions.checkNotNull(sortOrder);
+        Preconditions.checkNotNull(sortOrder);
         if (sortOrder == SortOrder.DESC) {
           b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_BYTE], 0, Bytes.SIZEOF_BYTE);
-        }
+        }   
         byte v = b[o];
         if (v < 0) {
           throw new IllegalDataException();
@@ -6347,19 +6365,25 @@ public enum PDataType {
         public long decodeLong(byte[] b, int o, SortOrder sortOrder) {
         	Preconditions.checkNotNull(sortOrder);
             long v = 0;
-            if (sortOrder == SortOrder.ASC) {
+            try {
+              if (sortOrder == SortOrder.ASC) {
                 for(int i = o; i < o + Bytes.SIZEOF_LONG; i++) {
                   v <<= 8;
                   v ^= b[i] & 0xFF;
                 }
-            } else {
+              } else {
                 for(int i = o; i < o + Bytes.SIZEOF_LONG; i++) {
-                    v <<= 8;
-                    v ^= (b[i] & 0xFF) ^ 0xFF;
-                  }
+                  v <<= 8;
+                  v ^= (b[i] & 0xFF) ^ 0xFF;
+                }
+              }
+            } catch (RuntimeException e) {
+              if (e instanceof ArrayIndexOutOfBoundsException) {
+                throw new IllegalDataException("cannot coerced to data type LONG");
+              }
             }
             if (v < 0) {
-                throw new IllegalDataException();
+            	throw new IllegalDataException();
             }
             return v;
         }
@@ -6380,15 +6404,15 @@ public enum PDataType {
       
       @Override
       public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
-    	  Preconditions.checkNotNull(sortOrder);
-          if (sortOrder == SortOrder.DESC) {
-              b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_INT], 0, Bytes.SIZEOF_INT);
-          }
-          short v = Bytes.toShort(b, o);
-          if (v < 0) {
-              throw new IllegalDataException();
-          }
-          return v;
+        Preconditions.checkNotNull(sortOrder);
+        if (sortOrder == SortOrder.DESC) {
+          b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_INT], 0, Bytes.SIZEOF_INT);
+        }
+        short v = Bytes.toShort(b, o);
+        if (v < 0) {
+          throw new IllegalDataException();
+        }
+        return v;
       }
 
       @Override
@@ -6408,15 +6432,15 @@ public enum PDataType {
 
         @Override
         public int decodeInt(byte[] b, int o, SortOrder sortOrder) {
-        	Preconditions.checkNotNull(sortOrder);
-            if (sortOrder == SortOrder.DESC) {
-                b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_INT], 0, Bytes.SIZEOF_INT);
-            }
-            int v = Bytes.toInt(b, o);
-            if (v < 0) {
-                throw new IllegalDataException();
-            }
-            return v;
+          Preconditions.checkNotNull(sortOrder);
+          if (sortOrder == SortOrder.DESC) {
+            b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_INT], 0, Bytes.SIZEOF_INT);
+          }
+          int v = Bytes.toInt(b, o);
+          if (v < 0) {
+            throw new IllegalDataException();
+          }
+          return v;
         }
 
         @Override
@@ -6478,16 +6502,22 @@ public enum PDataType {
         
         @Override
         public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
-        	Preconditions.checkNotNull(sortOrder);
+          Preconditions.checkNotNull(sortOrder);
+          try {
             if (sortOrder == SortOrder.DESC) {
-                for (int i = o; i < Bytes.SIZEOF_INT; i++) {
-                    b[i] = (byte) (b[i] ^ 0xff);
-                }
+              for (int i = o; i < Bytes.SIZEOF_INT; i++) {
+                b[i] = (byte) (b[i] ^ 0xff);
+              }
             }
-            int i = Bytes.toInt(b, o);
-            i--;
-            i ^= (~i >> Integer.SIZE - 1) | Integer.MIN_VALUE;
-            return Float.intBitsToFloat(i);
+          } catch(RuntimeException e) {
+            if (e instanceof ArrayIndexOutOfBoundsException) {
+              throw new IllegalDataException("cannot coerced to data type FLOAT");
+            }
+          }
+          int i = Bytes.toInt(b, o);
+          i--;
+          i ^= (~i >> Integer.SIZE - 1) | Integer.MIN_VALUE;
+          return Float.intBitsToFloat(i);
         }
         
         @Override
@@ -6584,16 +6614,22 @@ public enum PDataType {
         
         @Override
         public double decodeDouble(byte[] b, int o, SortOrder sortOrder) {
-        	Preconditions.checkNotNull(sortOrder);
+          Preconditions.checkNotNull(sortOrder);
+          try {
             if (sortOrder == SortOrder.DESC) {
-                for (int i = o; i < Bytes.SIZEOF_LONG; i++) {
-                    b[i] = (byte) (b[i] ^ 0xff);
-                }
+              for (int i = o; i < Bytes.SIZEOF_LONG; i++) {
+                b[i] = (byte) (b[i] ^ 0xff);
+              }
             } 
-            long l = Bytes.toLong(b, o);
-            l--;
-            l ^= (~l >> Long.SIZE - 1) | Long.MIN_VALUE;
-            return Double.longBitsToDouble(l);
+          } catch(RuntimeException e) {
+            if (e instanceof ArrayIndexOutOfBoundsException) {
+              throw new IllegalDataException("cannot coerced to data type DOUBLE");
+            }
+          }
+          long l = Bytes.toLong(b, o);
+          l--;
+          l ^= (~l >> Long.SIZE - 1) | Long.MIN_VALUE;
+          return Double.longBitsToDouble(l);
         }
         
         @Override
@@ -6668,15 +6704,15 @@ public enum PDataType {
         
         @Override
         public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
-        	Preconditions.checkNotNull(sortOrder);
-            if (sortOrder == SortOrder.DESC) {
-                b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_FLOAT], 0, Bytes.SIZEOF_FLOAT);
-            }
-            float v = Bytes.toFloat(b, o);
-            if (v < 0) {
-                throw new IllegalDataException();
-            }
-            return v;
+          Preconditions.checkNotNull(sortOrder);
+          if (sortOrder == SortOrder.DESC) {
+            b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_FLOAT], 0, Bytes.SIZEOF_FLOAT);
+          }
+          float v = Bytes.toFloat(b, o);
+          if (v < 0) {
+            throw new IllegalDataException();
+          }
+          return v;
         }
     }
     
@@ -6697,14 +6733,14 @@ public enum PDataType {
         public double decodeDouble(byte[] b, int o,
                 SortOrder sortOrder) {
         	Preconditions.checkNotNull(sortOrder);
-            if (sortOrder == SortOrder.DESC) {
-                b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_DOUBLE], 0, Bytes.SIZEOF_DOUBLE);
-            }
-            double v = Bytes.toDouble(b, o);
-            if (v < 0) {
-                throw new IllegalDataException();
-            }
-            return v;
+        	if (sortOrder == SortOrder.DESC) {
+        	  b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_DOUBLE], 0, Bytes.SIZEOF_DOUBLE);
+        	}
+        	double v = Bytes.toDouble(b, o);
+        	if (v < 0) {
+        	  throw new IllegalDataException();
+        	}
+        	return v;
         }
     }
 
