@@ -545,7 +545,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             }
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 201 (22000): Illegal data."));
-            assertTrue(e.getCause().getMessage().contains("CHAR types may only contain single byte characters"));
+            assertTrue(e.getMessage().contains("CHAR types may only contain single byte characters"));
         }
     }
 
