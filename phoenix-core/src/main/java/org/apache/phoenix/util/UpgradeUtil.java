@@ -50,7 +50,6 @@ public class UpgradeUtil {
     private UpgradeUtil() {
     }
 
-    @SuppressWarnings("deprecation")
     public static boolean upgradeSequenceTable(PhoenixConnection conn, int nSaltBuckets) throws SQLException {
         logger.info("Upgrading SYSTEM.SEQUENCE table");
 
@@ -183,7 +182,6 @@ public class UpgradeUtil {
         }
     }
     
-    @SuppressWarnings("deprecation")
     private static KeyValue addSaltByte(KeyValue keyValue, int nSaltBuckets) {
         byte[] buf = keyValue.getBuffer();
         int length = keyValue.getRowLength();

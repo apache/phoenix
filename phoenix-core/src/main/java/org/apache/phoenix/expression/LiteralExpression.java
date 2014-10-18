@@ -24,10 +24,7 @@ import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.schema.SortOrder;
@@ -163,27 +160,23 @@ public class LiteralExpression extends BaseTerminalExpression {
             throw TypeMismatchException.newException(type, actualType, value.toString());
         }
         value = type.toObject(value, actualType);
-        try {
-            byte[] b = type.toBytes(value, sortOrder);
-            if (type == PDataType.VARCHAR || type == PDataType.CHAR) {
-                if (type == PDataType.CHAR && maxLength != null  && b.length < maxLength) {
-                    b = StringUtil.padChar(b, maxLength);
-                } else if (value != null) {
-                    maxLength = ((String)value).length();
-                }
-            } else if (type.isArrayType()) {
-                maxLength = ((PhoenixArray)value).getMaxLength();
+        byte[] b = type.toBytes(value, sortOrder);
+        if (type == PDataType.VARCHAR || type == PDataType.CHAR) {
+            if (type == PDataType.CHAR && maxLength != null  && b.length < maxLength) {
+                b = StringUtil.padChar(b, maxLength);
+            } else if (value != null) {
+                maxLength = ((String)value).length();
             }
-            if (b.length == 0) {
-                return getTypedNullLiteralExpression(type, determinism);
-            }
-            if (maxLength == null) {
-                maxLength = type == null || !type.isFixedWidth() ? null : type.getMaxLength(value);
-            }
-            return new LiteralExpression(value, type, b, maxLength, scale, sortOrder, determinism);
-        } catch (IllegalDataException e) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA).setRootCause(e).build().buildException();
+        } else if (type.isArrayType()) {
+            maxLength = ((PhoenixArray)value).getMaxLength();
         }
+        if (b.length == 0) {
+            return getTypedNullLiteralExpression(type, determinism);
+        }
+        if (maxLength == null) {
+            maxLength = type == null || !type.isFixedWidth() ? null : type.getMaxLength(value);
+        }
+        return new LiteralExpression(value, type, b, maxLength, scale, sortOrder, determinism);
     }
 
     public LiteralExpression() {
