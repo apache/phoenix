@@ -493,8 +493,11 @@ public class SkipScanFilter extends FilterBase {
             }
         }
         int[] slotSpan = new int[andLen];
-        for (int i = 0; i < andLen; i++) {
-            slotSpan[i] = in.readInt();
+        try {
+            for (int i = 0; i < andLen; i++) {
+                slotSpan[i] = in.readInt();
+            }
+        } catch (IOException e) { // Ignore as this must be a 3.1 client
         }
         this.init(slots, slotSpan, schema);
     }
