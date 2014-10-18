@@ -283,6 +283,7 @@ public class PhoenixRuntime {
         PTable table = null;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         try {
+            name = SchemaUtil.normalizeIdentifier(name);
             table = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), name));
         } catch (TableNotFoundException e) {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
