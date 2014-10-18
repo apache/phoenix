@@ -29,10 +29,14 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,15 +45,13 @@ import com.google.common.collect.Lists;
 
 public class UpgradeUtil {
     private static final Logger logger = LoggerFactory.getLogger(UpgradeUtil.class);
+    private static final byte[] SEQ_PREFIX_BYTES = ByteUtil.concat(QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("_SEQ_"));
 
     private UpgradeUtil() {
     }
 
-    public static boolean addSaltByteToSequenceTable(PhoenixConnection conn, int nSaltBuckets) throws SQLException {
-        if (nSaltBuckets <= 0) {
-            logger.info("Not upgrading SYSTEM.SEQUENCE table because SALT_BUCKETS is zero");
-            return false;
-        }
+    @SuppressWarnings("deprecation")
+    public static boolean upgradeSequenceTable(PhoenixConnection conn, int nSaltBuckets) throws SQLException {
         logger.info("Upgrading SYSTEM.SEQUENCE table");
 
         byte[] seqTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.TYPE_SEQUENCE);
@@ -89,31 +91,33 @@ public class UpgradeUtil {
                     Result result;
                      while ((result = scanner.next()) != null) {
                         for (KeyValue keyValue : result.raw()) {
-                            KeyValue newKeyValue = addSaltByte(keyValue);
-                            sizeBytes += newKeyValue.getLength();
-                            if (KeyValue.Type.codeToType(newKeyValue.getType()) == KeyValue.Type.Put) {
-                                // Delete old value
-                                byte[] buf = keyValue.getBuffer();
-                                Delete delete = new Delete(keyValue.getRow());
-                                KeyValue deleteKeyValue = new KeyValue(buf, keyValue.getRowOffset(), keyValue.getRowLength(),
-                                        buf, keyValue.getFamilyOffset(), keyValue.getFamilyLength(),
-                                        buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
-                                        keyValue.getTimestamp(), KeyValue.Type.Delete,
-                                        ByteUtil.EMPTY_BYTE_ARRAY,0,0);
-                                delete.addDeleteMarker(deleteKeyValue);
-                                mutations.add(delete);
-                                sizeBytes += deleteKeyValue.getLength();
-                                // Put new value
-                                Put put = new Put(newKeyValue.getRow());
-                                put.add(newKeyValue);
-                                mutations.add(put);
-                            } else if (KeyValue.Type.codeToType(newKeyValue.getType()) == KeyValue.Type.Delete){
-                                // Copy delete marker using new key so that it continues
-                                // to delete the key value preceding it that will be updated
-                                // as well.
-                                Delete delete = new Delete(newKeyValue.getRow());
-                                delete.addDeleteMarker(newKeyValue);
-                                mutations.add(delete);
+                            KeyValue newKeyValue = addSaltByte(keyValue, nSaltBuckets);
+                            if (newKeyValue != null) {
+                                sizeBytes += newKeyValue.getLength();
+                                if (KeyValue.Type.codeToType(newKeyValue.getType()) == KeyValue.Type.Put) {
+                                    // Delete old value
+                                    byte[] buf = keyValue.getBuffer();
+                                    Delete delete = new Delete(keyValue.getRow());
+                                    KeyValue deleteKeyValue = new KeyValue(buf, keyValue.getRowOffset(), keyValue.getRowLength(),
+                                            buf, keyValue.getFamilyOffset(), keyValue.getFamilyLength(),
+                                            buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
+                                            keyValue.getTimestamp(), KeyValue.Type.Delete,
+                                            ByteUtil.EMPTY_BYTE_ARRAY,0,0);
+                                    delete.addDeleteMarker(deleteKeyValue);
+                                    mutations.add(delete);
+                                    sizeBytes += deleteKeyValue.getLength();
+                                    // Put new value
+                                    Put put = new Put(newKeyValue.getRow());
+                                    put.add(newKeyValue);
+                                    mutations.add(put);
+                                } else if (KeyValue.Type.codeToType(newKeyValue.getType()) == KeyValue.Type.Delete){
+                                    // Copy delete marker using new key so that it continues
+                                    // to delete the key value preceding it that will be updated
+                                    // as well.
+                                    Delete delete = new Delete(newKeyValue.getRow());
+                                    delete.addDeleteMarker(newKeyValue);
+                                    mutations.add(delete);
+                                }
                             }
                             if (sizeBytes >= batchSizeBytes) {
                                 logger.info("Committing bactch of SYSTEM.SEQUENCE rows");
@@ -179,13 +183,34 @@ public class UpgradeUtil {
         }
     }
     
-    private static KeyValue addSaltByte(KeyValue keyValue) {
+    @SuppressWarnings("deprecation")
+    private static KeyValue addSaltByte(KeyValue keyValue, int nSaltBuckets) {
+        byte[] buf = keyValue.getBuffer();
         int length = keyValue.getRowLength();
         int offset = keyValue.getRowOffset();
-        byte[] buf = keyValue.getBuffer();
-        byte[] newBuf = new byte[length + 1];
-        System.arraycopy(buf, offset, newBuf, SaltingUtil.NUM_SALTING_BYTES, length);
-        newBuf[0] = SaltingUtil.getSaltingByte(newBuf, SaltingUtil.NUM_SALTING_BYTES, length, SaltingUtil.MAX_BUCKET_NUM);
+        boolean isViewSeq = length > SEQ_PREFIX_BYTES.length && Bytes.compareTo(SEQ_PREFIX_BYTES, 0, SEQ_PREFIX_BYTES.length, buf, offset, SEQ_PREFIX_BYTES.length) == 0;
+        if (!isViewSeq && nSaltBuckets == 0) {
+            return null;
+        }
+        byte[] newBuf;
+        if (isViewSeq) { // We messed up the name for the sequences for view indexes so we'll take this opportunity to fix it
+            if (buf[length-1] == 0) { // Global indexes on views have trailing null byte
+                length--;
+            }
+            byte[][] rowKeyMetaData = new byte[3][];
+            SchemaUtil.getVarChars(buf, offset, length, 0, rowKeyMetaData);
+            byte[] schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
+            byte[] unprefixedSchemaName = new byte[schemaName.length - MetaDataUtil.VIEW_INDEX_SEQUENCE_PREFIX_BYTES.length];
+            System.arraycopy(schemaName, MetaDataUtil.VIEW_INDEX_SEQUENCE_PREFIX_BYTES.length, unprefixedSchemaName, 0, unprefixedSchemaName.length);
+            byte[] tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+            PName physicalName = PNameFactory.newName(unprefixedSchemaName);
+            // Reformulate key based on correct data
+            newBuf = MetaDataUtil.getViewIndexSequenceKey(tableName == null ? null : Bytes.toString(tableName), physicalName, nSaltBuckets).getKey();
+        } else {
+            newBuf = new byte[length + 1];
+            System.arraycopy(buf, offset, newBuf, SaltingUtil.NUM_SALTING_BYTES, length);
+            newBuf[0] = SaltingUtil.getSaltingByte(newBuf, SaltingUtil.NUM_SALTING_BYTES, length, nSaltBuckets);
+        }
         return new KeyValue(newBuf, 0, newBuf.length,
                 buf, keyValue.getFamilyOffset(), keyValue.getFamilyLength(),
                 buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength(),

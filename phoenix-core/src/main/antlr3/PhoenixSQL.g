@@ -949,13 +949,12 @@ SL_COMMENT2: '--';
 
 // Bind names start with a colon and followed by 1 or more letter/digit/underscores
 BIND_NAME
-    : COLON (LETTER|DIGIT|'_')+
+    : COLON (DIGIT)+
     ;
 
-// Valid names can have a single underscore, but not multiple
-// Turn back on literal testing, all names are literals.
+
 NAME
-    :    LETTER (FIELDCHAR)* ('\"' (DBL_QUOTE_CHAR)* '\"')?
+    :    LETTER (FIELDCHAR)*
     |    '\"' (DBL_QUOTE_CHAR)* '\"'
     ;
 
@@ -1173,4 +1172,10 @@ SL_COMMENT
 DOT
     : '.'
     ;
+    
+OTHER      
+    : . { if (true) // to prevent compile error
+              throw new RuntimeException("Unexpected char: '" + $text + "'"); } 
+    ;
+
 
