@@ -19,6 +19,7 @@ package org.apache.phoenix.util;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -34,6 +35,7 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -208,5 +210,23 @@ public class IndexUtil {
             return true;
         }
         return false;
+    }
+    
+    /**
+     * Return a list of {@code PColumn} for the associated data columns given the corresponding index columns. For a tenant
+     * specific view, the connection needs to be tenant specific too. 
+     * @param dataTableName
+     * @param indexColumns
+     * @param conn
+     * @return
+     * @throws TableNotFoundException if table cannot be found in the connection's metdata cache
+     */
+    public static List<PColumn> getDataColumns(String dataTableName, List<PColumn> indexColumns, PhoenixConnection conn) throws SQLException {
+    	PTable dataTable = PhoenixRuntime.getTable(conn, dataTableName);
+        List<PColumn> dataColumns = new ArrayList<PColumn>(indexColumns.size());
+        for (PColumn indexColumn : indexColumns) {
+            dataColumns.add(getDataColumn(dataTable, indexColumn.getName().getString()));
+        }
+        return dataColumns;
     }
 }

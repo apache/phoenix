@@ -43,7 +43,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
-import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -1220,13 +1219,8 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
 			assertTrue(rs.next());
-			Double[] doubleArr = new Double[1];
-			doubleArr[0] = 36.763;
-			Array array = conn.createArrayOf("DOUBLE", doubleArr);
 			PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
-			assertEquals(resultArray, array);
-			Assert.fail("Should have failed");
-		} catch (Exception e) {
+			assertNull(resultArray);
 		} finally {
 			conn.close();
 		}

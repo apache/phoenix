@@ -22,7 +22,6 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.http.annotation.Immutable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
@@ -65,7 +64,7 @@ public class KeyValueSchema extends ValueSchema {
         }
         
         public KeyValueSchemaBuilder addField(PDatum datum) {
-            super.addField(datum, fields.size() <  this.minNullable, SortOrder.getDefault());
+            super.addField(datum, fields.size() >=  this.minNullable, SortOrder.getDefault());
             return this;
         }
     }
@@ -107,7 +106,7 @@ public class KeyValueSchema extends ValueSchema {
             Field field = fields.get(i);
             PDataType type = field.getDataType();
             for (int j = 0; j < field.getCount(); j++) {
-                if (expressions[index].evaluate(tuple, ptr)) { // Skip null values
+                if (expressions[index].evaluate(tuple, ptr) && ptr.getLength() > 0) { // Skip null values
                     if (index >= minNullableIndex) {
                         valueSet.set(index - minNullableIndex);
                     }

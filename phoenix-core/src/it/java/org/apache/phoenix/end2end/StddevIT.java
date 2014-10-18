@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -28,27 +27,20 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.Properties;
 
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-@Category(ClientManagedTimeTest.class)
-public class StddevIT extends BaseClientManagedTimeIT {
+@Category(HBaseManagedTimeTest.class)
+public class StddevIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testSTDDEV_POP() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
 
         String query = "SELECT STDDEV_POP(A_INTEGER) FROM aTable";
 
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
-                                                                                     // timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -64,16 +56,12 @@ public class StddevIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testSTDDEV_SAMP() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
 
         String query = "SELECT STDDEV_SAMP(x_decimal) FROM aTable";
 
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
-                                                                                     // timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -89,16 +77,12 @@ public class StddevIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSTDDEV_POPOnDecimalColType() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
 
         String query = "SELECT STDDEV_POP(x_decimal) FROM aTable";
 
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
-                                                                                     // timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -114,16 +98,12 @@ public class StddevIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSTDDEV_SAMPOnDecimalColType() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
 
         String query = "SELECT STDDEV_SAMP(x_decimal) FROM aTable";
 
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
-                                                                                     // timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();

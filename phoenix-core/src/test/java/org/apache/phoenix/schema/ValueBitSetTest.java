@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -67,6 +68,48 @@ public class ValueBitSetTest {
                 valueSet.set(i);
             }
         }
+    }
+    
+    @Test
+    public void testMinNullableIndex() {
+        final int minNullableIndex = 4; // first 4 fields are not nullable.
+        int numFields = 6;
+        KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(minNullableIndex);
+        for (int i = 0; i < numFields; i++) {
+            final int fieldIndex = i;
+            builder.addField(new PDatum() {
+                @Override
+                public boolean isNullable() {
+                    // not nullable till index reaches minNullableIndex
+                    return fieldIndex < minNullableIndex;
+                }
+
+                @Override
+                public SortOrder getSortOrder() {
+                    return SortOrder.getDefault();
+                }
+
+                @Override
+                public Integer getScale() {
+                    return null;
+                }
+
+                @Override
+                public Integer getMaxLength() {
+                    return null;
+                }
+
+                @Override
+                public PDataType getDataType() {
+                    return PDataType.values()[fieldIndex % PDataType.values().length];
+                }
+            });
+        }
+        KeyValueSchema kvSchema = builder.build();
+        assertFalse(kvSchema.getFields().get(0).isNullable());
+        assertFalse(kvSchema.getFields().get(minNullableIndex - 1).isNullable());
+        assertTrue(kvSchema.getFields().get(minNullableIndex).isNullable());
+        assertTrue(kvSchema.getFields().get(minNullableIndex + 1).isNullable());
     }
     
     @Test
