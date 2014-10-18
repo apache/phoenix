@@ -795,11 +795,7 @@ public abstract class BaseTest {
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME 
                 + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED);
         while (rs.next()) {
-            try {
-                conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getTableName(rs.getString(1), rs.getString(2)));
-            } catch (Exception e) {
-                //FIXME: see https://issues.apache.org/jira/browse/PHOENIX-973
-            }
+            conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(1), rs.getString(2)));
         }
     }
     

@@ -28,10 +28,9 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
-import org.junit.Test;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.SortOrder;
+import org.junit.Test;
 
 
 public class QueryParserTest {
@@ -620,6 +619,19 @@ public class QueryParserTest {
         SQLParser parser = new SQLParser(
                 new StringReader(
                         "upsert into t select /*+ NO_INDEX */ k from t where k in ( 1,2 )"));
+        try {
+            parser.parseStatement();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testTableNameStartsWithUnderscore() throws Exception {
+        SQLParser parser = new SQLParser(
+                new StringReader(
+                        "select* from _t where k in ( 1,2 )"));
         try {
             parser.parseStatement();
             fail();
