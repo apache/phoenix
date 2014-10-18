@@ -615,7 +615,10 @@ public class PhoenixHBaseLoaderIT {
 
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
-        conn.close();
-        hbaseTestUtil.shutdownMiniCluster();
+        try {
+            conn.close();
+        } finally {
+            hbaseTestUtil.shutdownMiniCluster();
+        }
     }
 }

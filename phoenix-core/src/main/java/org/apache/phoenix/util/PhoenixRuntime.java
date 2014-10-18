@@ -17,19 +17,26 @@
  */
 package org.apache.phoenix.util;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.schema.PDataType.ARRAY_TYPE_SUFFIX;
+
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
+
+import javax.annotation.Nullable;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -43,20 +50,28 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.ValueBitSet;
 
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
@@ -275,6 +290,7 @@ public class PhoenixRuntime {
         PTable table = null;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         try {
+            name = SchemaUtil.normalizeIdentifier(name);
             table = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), name));
         } catch (TableNotFoundException e) {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
@@ -379,7 +395,7 @@ public class PhoenixRuntime {
         return getColumnInfo(pColumn);
     }
 
-    /**
+   /**
      * Constructs a column info for the supplied pColumn
      * @param pColumn
      * @return columnInfo
@@ -394,84 +410,7 @@ public class PhoenixRuntime {
         return columnInfo;
     }
 
-    /**
-     * Encode the primary key values from the table as a byte array. The values must
-     * be in the same order as the primary key constraint. If the connection and
-     * table are both tenant-specific, the tenant ID column must not be present in
-     * the values.
-     * @param conn an open connection
-     * @param fullTableName the full table name
-     * @param values the values of the primary key columns ordered in the same order
-     *  as the primary key constraint
-     * @return the encoded byte array
-     * @throws SQLException if the table cannot be found or the incorrect number of
-     *  of values are provided
-     * @see #decodePK(Connection, String, byte[]) to decode the byte[] back to the
-     *  values
-     */
-    public static byte[] encodePK(Connection conn, String fullTableName, Object[] values) throws SQLException {
-        PTable table = getTable(conn, fullTableName);
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        int offset = (table.getBucketNum() == null ? 0 : 1) + (table.isMultiTenant() && pconn.getTenantId() != null ? 1 : 0);
-        List<PColumn> pkColumns = table.getPKColumns();
-        if (pkColumns.size() - offset != values.length) {
-            throw new SQLException("Expected " + (pkColumns.size() - offset) + " but got " + values.length);
-        }
-        PDataType type = null;
-        TrustedByteArrayOutputStream output = new TrustedByteArrayOutputStream(table.getRowKeySchema().getEstimatedValueLength());
-        try {
-            for (int i = offset; i < pkColumns.size(); i++) {
-                if (type != null && !type.isFixedWidth()) {
-                    output.write(QueryConstants.SEPARATOR_BYTE);
-                }
-                type = pkColumns.get(i).getDataType();
-
-                //for fixed width data types like CHAR and BINARY, we need to pad values to be of max length.
-                Object paddedObj = type.pad(values[i - offset], pkColumns.get(i).getMaxLength());
-                byte[] value = type.toBytes(paddedObj);
-                output.write(value);
-            }
-            return output.toByteArray();
-        } finally {
-            try {
-                output.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e); // Impossible
-            }
-        }
-    }
-
-    /**
-     * Decode a byte array value back into the Object values of the
-     * primary key constraint. If the connection and table are both
-     * tenant-specific, the tenant ID column is not expected to have
-     * been encoded and will not appear in the returned values.
-     * @param conn an open connection
-     * @param name the full table name
-     * @param encodedValue the value that was encoded with {@link #encodePK(Connection, String, Object[])}
-     * @return the Object values encoded in the byte array value
-     * @throws SQLException
-     */
-    public static Object[] decodePK(Connection conn, String name, byte[] value) throws SQLException {
-        PTable table = getTable(conn, name);
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        int offset = (table.getBucketNum() == null ? 0 : 1) + (table.isMultiTenant() && pconn.getTenantId() != null ? 1 : 0);
-        int nValues = table.getPKColumns().size() - offset;
-        RowKeySchema schema = table.getRowKeySchema();
-        Object[] values = new Object[nValues];
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        schema.iterator(value, ptr);
-        int i = 0;
-        int fieldIdx = offset;
-        while (i < nValues && schema.next(ptr, fieldIdx, value.length) != null) {
-            values[i] = schema.getField(fieldIdx).getDataType().toObject(ptr);
-            i++;
-            fieldIdx++;
-        }
-        return values;
-    }
-
-    /**
+   /**
      * Represents the parsed commandline parameters definining the command or commands to be
      * executed.
      */
@@ -647,4 +586,262 @@ public class PhoenixRuntime {
             return strict;
         }
     }
+    
+    /**
+     * Returns the opitmized query plan used by phoenix for executing the sql.
+     * @param stmt to return the plan for
+     * @throws SQLException
+     */
+    public static QueryPlan getOptimizedQueryPlan(PreparedStatement stmt) throws SQLException {
+        checkNotNull(stmt);
+        QueryPlan plan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+        return plan;
+    }
+    
+    /**
+     * Whether or not the query plan has any order by expressions.
+     * @param plan
+     * @return
+     */
+    public static boolean hasOrderBy(QueryPlan plan) {
+        checkNotNull(plan);
+        List<OrderByExpression> orderBys = plan.getOrderBy().getOrderByExpressions();
+        return orderBys != null && !orderBys.isEmpty(); 
+    }
+    
+    public static int getLimit(QueryPlan plan) {
+        checkNotNull(plan);
+        return plan.getLimit() == null ? 0 : plan.getLimit();
+    }
+    
+    private static String addQuotes(String str) {
+        return str == null ? str : "\"" + str + "\"";
+    }
+    /**
+     *
+     * @param columns - Initialized empty list to be filled with the pairs of column family name and column name for columns that are used 
+     * as row key for the query plan. Column family names are optional and hence the first part of the pair is nullable.
+     * Column names and family names are enclosed in double quotes to allow for case sensitivity and for presence of 
+     * special characters. Salting column and view index id column are not included. If the connection is tenant specific 
+     * and the table used by the query plan is multi-tenant, then the tenant id column is not included as well.
+     * @param plan - query plan to get info for.
+     * @param conn - connection used to generate the query plan. Caller should take care of closing the connection appropriately.
+     * @param forDataTable - if true, then family names and column names correspond to the data table even if the query plan uses
+     * the secondary index table. If false, and if the query plan uses the secondary index table, then the family names and column 
+     * names correspond to the index table.
+     * @throws SQLException
+     */
+    public static void getPkColsForSql(List<Pair<String, String>> columns, QueryPlan plan, Connection conn, boolean forDataTable) throws SQLException {
+        checkNotNull(columns);
+        checkNotNull(plan);
+        checkNotNull(conn);
+        List<PColumn> pkColumns = getPkColumns(plan.getTableRef().getTable(), conn, forDataTable);
+        String columnName;
+        String familyName;
+        for (PColumn pCol : pkColumns ) {
+            columnName = addQuotes(pCol.getName().getString());
+            familyName = pCol.getFamilyName() != null ? addQuotes(pCol.getFamilyName().getString()) : null;
+            columns.add(new Pair<String, String>(familyName, columnName));
+        }
+    }
+
+    /**
+     * @param columns - Initialized empty list to be filled with the pairs of column family name and column name for columns that are used 
+     * as row key for the query plan. Column family names are optional and hence the first part of the pair is nullable.
+     * Column names and family names are enclosed in double quotes to allow for case sensitivity and for presence of 
+     * special characters. Salting column and view index id column are not included. If the connection is tenant specific 
+     * and the table used by the query plan is multi-tenant, then the tenant id column is not included as well.
+     * @param datatypes - Initialized empty list to be filled with the corresponding data type for the columns in @param columns. 
+     * @param plan - query plan to get info for
+     * @param conn - phoenix connection used to generate the query plan. Caller should take care of closing the connection appropriately.
+     * @param forDataTable - if true, then column names and data types correspond to the data table even if the query plan uses
+     * the secondary index table. If false, and if the query plan uses the secondary index table, then the column names and data 
+     * types correspond to the index table.
+     * @throws SQLException
+     */
+    public static void getPkColsDataTypesForSql(List<Pair<String, String>> columns, List<String> dataTypes, QueryPlan plan, Connection conn, boolean forDataTable) throws SQLException {
+        checkNotNull(columns);
+        checkNotNull(dataTypes);
+        checkNotNull(plan);
+        checkNotNull(conn);
+        List<PColumn> pkColumns = getPkColumns(plan.getTableRef().getTable(), conn, forDataTable);
+        String columnName;
+        String familyName;
+        for (PColumn pCol : pkColumns) {
+            String sqlTypeName = getSqlTypeName(pCol);
+            dataTypes.add(sqlTypeName);
+            columnName = addQuotes(pCol.getName().getString());
+            familyName = pCol.getFamilyName() != null ? addQuotes(pCol.getFamilyName().getString()) : null;
+            columns.add(new Pair<String, String>(familyName, columnName));
+        }
+    }
+    
+    /**
+     * 
+     * @param pCol
+     * @return sql type name that could be used in DDL statements, dynamic column types etc. 
+     */
+    public static String getSqlTypeName(PColumn pCol) {
+        PDataType dataType = pCol.getDataType();
+        Integer maxLength = pCol.getMaxLength();
+        Integer scale = pCol.getScale();
+        return dataType.isArrayType() ? getArraySqlTypeName(maxLength, scale, dataType) : appendMaxLengthAndScale(maxLength, scale, dataType.getSqlTypeName());
+    }
+    
+    public static String getArraySqlTypeName(@Nullable Integer maxLength, @Nullable Integer scale, PDataType arrayType) {
+        String baseTypeSqlName = PDataType.arrayBaseType(arrayType).getSqlTypeName();
+        return appendMaxLengthAndScale(maxLength, scale, baseTypeSqlName) + " " + ARRAY_TYPE_SUFFIX; // for ex - decimal(10,2) ARRAY
+    }
+
+    private static String appendMaxLengthAndScale(@Nullable Integer maxLength, @Nullable Integer scale, String sqlTypeName) {
+        if (maxLength != null) {
+             sqlTypeName = sqlTypeName + "(" + maxLength;
+             if (scale != null) {
+               sqlTypeName = sqlTypeName + "," + scale; // has both max length and scale. For ex- decimal(10,2)
+             }       
+             sqlTypeName = sqlTypeName + ")";
+        }
+        return sqlTypeName;
+    }
+    
+    private static List<PColumn> getPkColumns(PTable ptable, Connection conn, boolean forDataTable) throws SQLException {
+        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+        List<PColumn> pkColumns = ptable.getPKColumns();
+        
+        // Skip the salting column and the view index id column if present.
+        // Skip the tenant id column too if the connection is tenant specific and the table used by the query plan is multi-tenant
+        int offset = (ptable.getBucketNum() == null ? 0 : 1) + (ptable.isMultiTenant() && pConn.getTenantId() != null ? 1 : 0) + (ptable.getViewIndexId() == null ? 0 : 1);
+        
+        // get a sublist of pkColumns by skipping the offset columns.
+        pkColumns = pkColumns.subList(offset, pkColumns.size());
+        
+        if (ptable.getType() == PTableType.INDEX && forDataTable) {
+            // index tables have the same schema name as their parent/data tables.
+            String fullDataTableName = ptable.getParentName().getString();
+            
+            // Get the corresponding columns of the data table.
+            List<PColumn> dataColumns = IndexUtil.getDataColumns(fullDataTableName, pkColumns, pConn);
+            pkColumns = dataColumns;
+        }
+        return pkColumns;
+    }
+    
+    /**
+     * 
+     * @param conn connection that was used for reading/generating value.
+     * @param fullTableName fully qualified table name
+     * @param values values of the columns
+     * @param columns list of pair of column that includes column family as first part and column name as the second part.
+     * Column family is optional and hence nullable. Columns in the list have to be in the same order as the order of occurence
+     * of their values in the object array.
+     * @return values encoded in a byte array 
+     * @throws SQLException
+     * @see {@link #decodeValues(Connection, String, byte[], List)}
+     */
+    public static byte[] encodeValues(Connection conn, String fullTableName, Object[] values, List<Pair<String, String>> columns) throws SQLException {
+        PTable table = getTable(conn, fullTableName);
+        List<PColumn> pColumns = getPColumns(table, columns);
+        List<Expression> expressions = new ArrayList<Expression>(pColumns.size());
+        int i = 0;
+        for (PColumn col : pColumns) {
+            Object value = values[i];
+            // for purposes of encoding, sort order of the columns doesn't matter.
+            Expression expr = LiteralExpression.newConstant(value, col.getDataType(), col.getMaxLength(), col.getScale());
+            expressions.add(expr);
+            i++;
+        }
+        KeyValueSchema kvSchema = buildKeyValueSchema(pColumns);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        ValueBitSet valueSet = ValueBitSet.newInstance(kvSchema);
+        return kvSchema.toBytes(expressions.toArray(new Expression[0]), valueSet, ptr);
+    }
+    
+    
+    /**
+     * 
+     * @param conn connection that was used for reading/generating value.
+     * @param fullTableName fully qualified table name
+     * @param value byte value of the columns concatenated as a single byte array. @see {@link #encodeValues(Connection, String, Object[], List)}
+     * @param columns list of column names for the columns that have their respective values
+     * present in the byte array. The column names should be in the same order as their values are in the byte array.
+     * The column name includes both family name, if present, and column name.
+     * @return decoded values for each column
+     * @throws SQLException
+     * 
+     */
+    public static Object[] decodeValues(Connection conn, String fullTableName, byte[] value, List<Pair<String, String>> columns) throws SQLException {
+        PTable table = getTable(conn, fullTableName);
+        KeyValueSchema kvSchema = buildKeyValueSchema(getPColumns(table, columns));
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable(value);
+        ValueBitSet valueSet = ValueBitSet.newInstance(kvSchema);
+        valueSet.clear();
+        valueSet.or(ptr);
+        int maxOffset = ptr.getOffset() + ptr.getLength();
+        Boolean hasValue;
+        kvSchema.iterator(ptr);
+        int i = 0;
+        List<Object> values = new ArrayList<Object>();
+        while(hasValue = kvSchema.next(ptr, i, maxOffset, valueSet) != null) {
+            if(hasValue) {
+                values.add(kvSchema.getField(i).getDataType().toObject(ptr));
+            }
+            i++;
+        }
+        return values.toArray();
+    }
+    
+    private static KeyValueSchema buildKeyValueSchema(List<PColumn> columns) {
+        KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(getMinNullableIndex(columns));
+        for (PColumn col : columns) {
+            builder.addField(col);
+        }
+        return builder.build();
+    }
+    
+    private static int getMinNullableIndex(List<PColumn> columns) {
+        int minNullableIndex = columns.size();
+        for (int i = 0; i < columns.size(); i++) {
+            if (columns.get(i).isNullable()) {
+                minNullableIndex = i;
+                break;
+            }
+         }
+        return minNullableIndex;
+    }
+    
+   /**
+     * @param table table to get the {@code PColumn} for
+     * @param columns list of pair of column that includes column family as first part and column name as the second part.
+     * Column family is optional and hence nullable. 
+     * @return list of {@code PColumn} for fullyQualifiedColumnNames
+     * @throws SQLException 
+     */
+    private static List<PColumn> getPColumns(PTable table, List<Pair<String, String>> columns) throws SQLException {
+        List<PColumn> pColumns = new ArrayList<PColumn>(columns.size());
+        for (Pair<String, String> column : columns) {
+            pColumns.add(getPColumn(table, column.getFirst(), column.getSecond()));
+        }
+        return pColumns;
+    }
+    
+    private static PColumn getPColumn(PTable table, @Nullable String familyName, String columnName) throws SQLException {
+        if (table==null) {
+            throw new SQLException("Table must not be null.");
+        }
+        if (columnName==null) {
+            throw new SQLException("columnName must not be null.");
+        }
+        // normalize and remove quotes from family and column names before looking up.
+        familyName = SchemaUtil.normalizeIdentifier(familyName);
+        columnName = SchemaUtil.normalizeIdentifier(columnName);
+        PColumn pColumn = null;
+        if (familyName != null) {
+            PColumnFamily family = table.getColumnFamily(familyName);
+            pColumn = family.getColumn(columnName);
+        } else {
+            pColumn = table.getColumn(columnName);
+        }
+        return pColumn;
+    }
+
 }

@@ -3402,7 +3402,7 @@ public enum PDataType {
             return VARBINARY.getSampleValue(maxLength, arrayLength);
         }
     },
-    INTEGER_ARRAY("INTEGER_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.INTEGER.getSqlType(), PhoenixArray.class, null) {
+    INTEGER_ARRAY("INTEGER ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.INTEGER.getSqlType(), PhoenixArray.class, null) {
     	@Override
     	public boolean isArrayType() {
     		return true;
@@ -3491,7 +3491,7 @@ public enum PDataType {
         }
 		
 	},
-    BOOLEAN_ARRAY("BOOLEAN_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.BOOLEAN.getSqlType(), PhoenixArray.class, null) {
+	BOOLEAN_ARRAY("BOOLEAN ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.BOOLEAN.getSqlType(), PhoenixArray.class, null) {
     	@Override
     	public boolean isArrayType() {
     		return true;
@@ -3579,7 +3579,7 @@ public enum PDataType {
         }
 		
 	},
-	VARCHAR_ARRAY("VARCHAR_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.VARCHAR.getSqlType(), PhoenixArray.class, null) {
+	VARCHAR_ARRAY("VARCHAR ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.VARCHAR.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -3673,7 +3673,7 @@ public enum PDataType {
         }
 		
 	},
-	VARBINARY_ARRAY("VARBINARY_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.VARBINARY.getSqlType(), PhoenixArray.class, null) {
+	VARBINARY_ARRAY("VARBINARY ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.VARBINARY.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -3767,7 +3767,7 @@ public enum PDataType {
             return pDataTypeForArray.getSampleValue(PDataType.VARBINARY, arrayLength, maxLength);
         }
 	},
-	BINARY_ARRAY("BINARY_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.BINARY.getSqlType(), PhoenixArray.class, null) {
+	BINARY_ARRAY("BINARY ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.BINARY.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -3861,7 +3861,7 @@ public enum PDataType {
             return pDataTypeForArray.getSampleValue(PDataType.BINARY, arrayLength, maxLength);
         }
     },
-	CHAR_ARRAY("CHAR_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.CHAR.getSqlType(), PhoenixArray.class, null) {
+    CHAR_ARRAY("CHAR ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.CHAR.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -3956,7 +3956,7 @@ public enum PDataType {
         }
 		
 	},
-	LONG_ARRAY("LONG_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.LONG.getSqlType(), PhoenixArray.class, null) {
+	LONG_ARRAY("BIGINT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.LONG.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4043,7 +4043,7 @@ public enum PDataType {
         }
 		
 	},
-	SMALLINT_ARRAY("SMALLINT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.SMALLINT.getSqlType(), PhoenixArray.class, null) {
+	SMALLINT_ARRAY("SMALLINT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.SMALLINT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4130,7 +4130,7 @@ public enum PDataType {
         }
 		
 	},
-	TINYINT_ARRAY("TINYINT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TINYINT.getSqlType(), PhoenixArray.class, null) {
+	TINYINT_ARRAY("TINYINT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TINYINT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4217,7 +4217,7 @@ public enum PDataType {
         }
 		
 	},
-	FLOAT_ARRAY("FLOAT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.FLOAT.getSqlType(), PhoenixArray.class, null) {
+	FLOAT_ARRAY("FLOAT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.FLOAT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4305,7 +4305,7 @@ public enum PDataType {
         }
 		
 	},
-	DOUBLE_ARRAY("DOUBLE_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DOUBLE.getSqlType(), PhoenixArray.class, null) {
+	DOUBLE_ARRAY("DOUBLE ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DOUBLE.getSqlType(), PhoenixArray.class, null) {
 	    final PArrayDataType pDataTypeForArray = new PArrayDataType();
 		@Override
     	public boolean isArrayType() {
@@ -4394,7 +4394,7 @@ public enum PDataType {
 
 	},
 	
-	DECIMAL_ARRAY("DECIMAL_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DECIMAL.getSqlType(), PhoenixArray.class, null) {
+	DECIMAL_ARRAY("DECIMAL ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DECIMAL.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4489,8 +4489,7 @@ public enum PDataType {
         }
 	
 	},
-	TIMESTAMP_ARRAY("TIMESTAMP_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TIMESTAMP.getSqlType(), PhoenixArray.class,
-			null) {
+	TIMESTAMP_ARRAY("TIMESTAMP ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TIMESTAMP.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4577,8 +4576,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_TIMESTAMP_ARRAY("UNSIGNED_TIMESTAMP_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TIMESTAMP.getSqlType(), PhoenixArray.class,
-			null) {
+	UNSIGNED_TIMESTAMP_ARRAY("UNSIGNED_TIMESTAMP ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TIMESTAMP.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4665,7 +4663,7 @@ public enum PDataType {
         }
 
 	},
-	TIME_ARRAY("TIME_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TIME.getSqlType(), PhoenixArray.class, null) {
+	TIME_ARRAY("TIME ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TIME.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4752,7 +4750,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_TIME_ARRAY("UNSIGNED_TIME_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TIME.getSqlType(), PhoenixArray.class, null) {
+	UNSIGNED_TIME_ARRAY("UNSIGNED_TIME ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TIME.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4839,7 +4837,7 @@ public enum PDataType {
         }
 
 	},
-	DATE_ARRAY("DATE_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DATE.getSqlType(), PhoenixArray.class, null) {
+	DATE_ARRAY("DATE ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DATE.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4926,7 +4924,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_DATE_ARRAY("UNSIGNED_DATE_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_DATE.getSqlType(), PhoenixArray.class, null) {
+	UNSIGNED_DATE_ARRAY("UNSIGNED_DATE ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_DATE.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5013,7 +5011,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_LONG_ARRAY("UNSIGNED_LONG_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_LONG.getSqlType(), PhoenixArray.class, null) {
+	UNSIGNED_LONG_ARRAY("UNSIGNED_LONG ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_LONG.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5100,7 +5098,7 @@ public enum PDataType {
         }
 	
 	},
-	UNSIGNED_INT_ARRAY("UNSIGNED_INT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_INT.getSqlType(), PhoenixArray.class, null) {
+	UNSIGNED_INT_ARRAY("UNSIGNED_INT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_INT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5187,8 +5185,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_SMALLINT_ARRAY("UNSIGNED_SMALLINT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_SMALLINT.getSqlType(),
-			PhoenixArray.class, null) {
+	UNSIGNED_SMALLINT_ARRAY("UNSIGNED_SMALLINT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_SMALLINT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5275,8 +5272,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_TINYINT_ARRAY("UNSIGNED_TINYINT__ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TINYINT.getSqlType(), PhoenixArray.class,
-			null) {
+	UNSIGNED_TINYINT_ARRAY("UNSIGNED_TINYINT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TINYINT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5362,7 +5358,7 @@ public enum PDataType {
             return pDataTypeForArray.getSampleValue(PDataType.UNSIGNED_TINYINT, arrayLength, maxLength);
         }
 	},
-	UNSIGNED_FLOAT_ARRAY("UNSIGNED_FLOAT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_FLOAT.getSqlType(), PhoenixArray.class, null) {
+	UNSIGNED_FLOAT_ARRAY("UNSIGNED_FLOAT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_FLOAT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5449,8 +5445,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_DOUBLE_ARRAY("UNSIGNED_DOUBLE__ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_DOUBLE.getSqlType(), PhoenixArray.class,
-			null) {
+	UNSIGNED_DOUBLE_ARRAY("UNSIGNED_DOUBLE ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_DOUBLE.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5551,6 +5546,28 @@ public enum PDataType {
     private final PDataCodec codec;
     final PArrayDataType pDataTypeForArray = new PArrayDataType();
     
+    private static final int SQL_TYPE_OFFSET;
+    private static final PDataType[] SQL_TYPE_TO_PCOLUMN_DATA_TYPE;
+    static {
+        int minSqlType = Integer.MAX_VALUE;
+        int maxSqlType = Integer.MIN_VALUE;
+        for (PDataType dataType : PDataType.values()) {
+            int sqlType = dataType.getSqlType();
+            if (sqlType < minSqlType) {
+                minSqlType = sqlType;
+            }
+            if (sqlType > maxSqlType) {
+                maxSqlType = sqlType;
+            }
+        }
+        SQL_TYPE_OFFSET = minSqlType;
+        SQL_TYPE_TO_PCOLUMN_DATA_TYPE = new PDataType[maxSqlType-minSqlType+1];
+        for (PDataType dataType : PDataType.values()) {
+            int sqlType = dataType.getSqlType();
+            SQL_TYPE_TO_PCOLUMN_DATA_TYPE[sqlType-SQL_TYPE_OFFSET] = dataType;
+        }
+    }
+    
     private PDataType(String sqlTypeName, int sqlType, Class clazz, PDataCodec codec) {
         this.sqlTypeName = sqlTypeName;
         this.sqlType = sqlType;
@@ -5559,7 +5576,7 @@ public enum PDataType {
         this.sqlTypeNameBytes = Bytes.toBytes(sqlTypeName);
         this.codec = codec;
     }
-
+    
     public boolean isCastableTo(PDataType targetType) {
         return isComparableTo(targetType);
     }
@@ -6767,6 +6784,7 @@ public enum PDataType {
     public final static Integer BYTE_PRECISION = 3;
 
     public static final int ARRAY_TYPE_BASE = 3000;
+    public static final String ARRAY_TYPE_SUFFIX = "ARRAY";
     
     private static final ThreadLocal<Random> RANDOM = new ThreadLocal<Random>(){
         @Override 
@@ -7232,30 +7250,7 @@ public enum PDataType {
     	return fromSqlTypeName.getSqlType() + PDataType.ARRAY_TYPE_BASE;
     }
 
-    private static final int SQL_TYPE_OFFSET;
-    private static final PDataType[] SQL_TYPE_TO_PCOLUMN_DATA_TYPE;
-    static {
-        int minSqlType = Integer.MAX_VALUE;
-        int maxSqlType = Integer.MIN_VALUE;
-        for (PDataType dataType : PDataType.values()) {
-            int sqlType = dataType.getSqlType();
-            if (sqlType < minSqlType) {
-                minSqlType = sqlType;
-            }
-            if (sqlType > maxSqlType) {
-                maxSqlType = sqlType;
-            }
-        }
-        SQL_TYPE_OFFSET = minSqlType;
-        SQL_TYPE_TO_PCOLUMN_DATA_TYPE = new PDataType[maxSqlType-minSqlType+1];
-        for (PDataType dataType : PDataType.values()) {
-            int sqlType = dataType.getSqlType();
-            SQL_TYPE_TO_PCOLUMN_DATA_TYPE[sqlType-SQL_TYPE_OFFSET] = dataType;
-        }
-    }
-
-         
-	private static interface PhoenixArrayFactory {
+    private static interface PhoenixArrayFactory {
 		PhoenixArray newArray(PDataType type, Object[] elements);
 	}
 
@@ -7400,6 +7395,11 @@ public enum PDataType {
     }
     
     public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+    }
+    
+    public static PDataType arrayBaseType(PDataType arrayType) {
+        Preconditions.checkArgument(arrayType.isArrayType(), "Not a phoenix array type");
+        return fromTypeId(arrayType.getSqlType() - ARRAY_TYPE_BASE);
     }
     
 }
