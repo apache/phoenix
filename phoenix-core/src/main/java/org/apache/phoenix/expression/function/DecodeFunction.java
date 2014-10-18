@@ -19,7 +19,10 @@ package org.apache.phoenix.expression.function;
 
 import java.sql.SQLException;
 import java.util.List;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.IllegalDataException;
@@ -62,7 +65,8 @@ public class DecodeFunction extends ScalarFunction {
 		}
 
 		if (ptr.getLength() == 0) {
-			throw new IllegalDataException("Missing bytes encoding.");
+	        throw new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+	        .setMessage("Missing bytes encoding").build().buildException());
 		}
 
 		type = encodingExpression.getDataType();
@@ -89,9 +93,11 @@ public class DecodeFunction extends ScalarFunction {
 			try {
 				out[i / 2] = (byte) Integer.parseInt(hexStr.substring(i, i + 2), 16);
 			} catch (NumberFormatException ex) {
-				throw new IllegalDataException("Value " + hexStr.substring(i, i + 2) + " cannot be cast to hex number");
+				throw new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+		        .setMessage("Value " + hexStr.substring(i, i + 2) + " cannot be cast to hex number").build().buildException());
 			} catch (StringIndexOutOfBoundsException ex) {
-				throw new IllegalDataException("Invalid value length, cannot cast to hex number (" + hexStr + ")");
+				throw new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+                .setMessage("Invalid value length, cannot cast to hex number (" + hexStr + ")").build().buildException());
 			}
 		}
 		return out;

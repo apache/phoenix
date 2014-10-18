@@ -17,12 +17,14 @@
  */
 package org.apache.phoenix.util;
 
-import org.apache.phoenix.schema.IllegalDataException;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
+import java.sql.SQLException;
 import java.sql.Types;
 
-import static org.junit.Assert.assertEquals;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.junit.Test;
 
 public class ColumnInfoTest {
 
@@ -37,8 +39,14 @@ public class ColumnInfoTest {
         ColumnInfo.fromString("invalid");
     }
 
-    @Test(expected= IllegalDataException.class)
+    @Test
     public void testFromString_InvalidDataType() {
-        ColumnInfo.fromString("COLNAME:badType");
+        try {
+            ColumnInfo.fromString("COLNAME:badType");
+        } catch (RuntimeException e) {
+            assertTrue(e.getCause() instanceof SQLException);
+            SQLException sqlE = (SQLException)e.getCause();
+            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), sqlE.getErrorCode());
+        }
     }
 }
