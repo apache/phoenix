@@ -166,14 +166,6 @@ public class SchemaUtil {
         return l3;
     }
 
-    public static byte[] getSequenceKey(byte[] tenantId, byte[] schemaName, byte[] sequenceName) {
-        return getTableKey(tenantId, schemaName, sequenceName);
-    }
-
-    public static byte[] getSequenceKey(String tenantId, String schemaName, String sequenceName) {
-        return getTableKey(tenantId, schemaName, sequenceName);
-    }
-
     /**
      * Get the key used in the Phoenix metadata row for a table definition
      * @param schemaName
@@ -363,7 +355,7 @@ public class SchemaUtil {
     }
     
     public static boolean isMetaTable(byte[] schemaName, byte[] tableName) {
-        return Bytes.compareTo(schemaName, PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES) == 0 && Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA_BYTES) == 0;
+        return Bytes.compareTo(schemaName, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA_BYTES) == 0 && Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES) == 0;
     }
     
     public static boolean isMetaTable(String schemaName, String tableName) {
