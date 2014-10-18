@@ -355,7 +355,7 @@ public class SchemaUtil {
     }
     
     public static boolean isSequenceTable(byte[] tableName) {
-        return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES) == 0;
+        return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES) == 0;
     }
 
     public static boolean isMetaTable(PTable table) {
