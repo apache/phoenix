@@ -427,12 +427,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public PTableStats getTableStats(String physicalName) {
+    public PTableStats getTableStats(byte[] physicalName, long clientTimeStamp) {
         return PTableStats.EMPTY_STATS;
-    }
-
-    @Override
-    public void addTableStats(String physicalName, PTableStats tableStats) {
     }
 
     @Override

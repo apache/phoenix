@@ -88,7 +88,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -137,7 +136,6 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.stats.PTableStats;
-import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
@@ -352,6 +350,7 @@ public class MetaDataClient {
                 // Otherwise, a tenant would be required to create a VIEW first
                 // which is not really necessary unless you want to filter or add
                 // columns
+                addIndexesFromPhysicalTable(result);
                 connection.addTable(resultTable);
                 return result;
             } else {
@@ -365,6 +364,7 @@ public class MetaDataClient {
                 if (table != null) {
                     result.setTable(table);
                     if (code == MutationCode.TABLE_ALREADY_EXISTS) {
+                        addIndexesFromPhysicalTable(result);
                         return result;
                     }
                     if (code == MutationCode.TABLE_NOT_FOUND && tryCount + 1 == maxTryCount) {
@@ -376,6 +376,60 @@ public class MetaDataClient {
         } while (++tryCount < maxTryCount);
         
         return result;
+    }
+    
+    /**
+     * Fault in the physical table to the cache and add any indexes it has to the indexes
+     * of the table for which we just updated.
+     * TODO: combine this round trip with the one that updates the cache for the child table.
+     * @param result the result from updating the cache for the current table.
+     * @return true if the PTable contained by result was modified and false otherwise
+     * @throws SQLException if the physical table cannot be found
+     */
+    private boolean addIndexesFromPhysicalTable(MetaDataMutationResult result) throws SQLException {
+        PTable table = result.getTable();
+        // If not a view or if a view directly over an HBase table, there's nothing to do
+        if (table.getType() != PTableType.VIEW || table.getViewType() != ViewType.MAPPED) {
+            return false;
+        }
+        String physicalName = table.getPhysicalName().getString();
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
+        String tableName = SchemaUtil.getTableNameFromFullName(physicalName);
+        MetaDataMutationResult parentResult = updateCache(null, schemaName, tableName, false);
+        PTable physicalTable = parentResult.getTable();
+        if (physicalTable == null) {
+            throw new TableNotFoundException(schemaName, tableName);
+        }
+        if (!result.wasUpdated() && !parentResult.wasUpdated()) {
+            return false;
+        }
+        List<PTable> indexes = physicalTable.getIndexes();
+        if (indexes.isEmpty()) {
+            return false;
+        }
+        // Filter out indexes if column doesn't exist in view
+        List<PTable> allIndexes = Lists.newArrayListWithExpectedSize(indexes.size() + table.getIndexes().size());
+        if (result.wasUpdated()) { // Table from server never contains inherited indexes
+            allIndexes.addAll(table.getIndexes());
+        } else { // Only add original ones, as inherited ones may have changed
+            for (PTable index : indexes) {
+                if (index.getViewIndexId() != null) {
+                    allIndexes.add(index);
+                }
+            }
+        }
+        for (PTable index : indexes) {
+            for (PColumn pkColumn : index.getPKColumns()) {
+                try {
+                    IndexUtil.getDataColumn(table, pkColumn.getName().getString());
+                    allIndexes.add(index);
+                } catch (IllegalArgumentException e) { // Ignore, and continue, as column was not found
+                }
+            }
+        }
+        PTable allIndexesTable = PTableImpl.makePTable(table, table.getTimeStamp(), allIndexes);
+        result.setTable(allIndexesTable);
+        return true;
     }
 
 
@@ -1325,11 +1379,12 @@ public class MetaDataClient {
             // Bootstrapping for our SYSTEM.TABLE that creates itself before it exists 
             if (SchemaUtil.isMetaTable(schemaName,tableName)) {
                 // TODO: what about stats for system catalog?
-                PTable table = PTableImpl.makePTable(tenantId,PNameFactory.newName(schemaName), PNameFactory.newName(tableName), tableType,
+                PName newSchemaName = PNameFactory.newName(schemaName);
+                PTable table = PTableImpl.makePTable(tenantId,newSchemaName, PNameFactory.newName(tableName), tableType,
                         null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM,
-                        PNameFactory.newName(QueryConstants.SYSTEM_TABLE_PK_NAME), null, columns, null, Collections.<PTable>emptyList(), 
-                        isImmutableRows, Collections.<PName>emptyList(),
-                        defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), null, Boolean.TRUE.equals(disableWAL), false, null, indexId, indexType);
+                        PNameFactory.newName(QueryConstants.SYSTEM_TABLE_PK_NAME), null, columns, null, null, 
+                        Collections.<PTable>emptyList(), isImmutableRows,
+                        Collections.<PName>emptyList(), defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), null, Boolean.TRUE.equals(disableWAL), false, null, indexId, indexType);
                 connection.addTable(table);
             } else if (tableType == PTableType.INDEX && indexId == null) {
                 if (tableProps.get(HTableDescriptor.MAX_FILESIZE) == null) {
@@ -1471,11 +1526,12 @@ public class MetaDataClient {
                 connection.addTable(result.getTable());
                 throw new ConcurrentTableMutationException(schemaName, tableName);
             default:
+                PName newSchemaName = PNameFactory.newName(schemaName);
                 PTable table =  PTableImpl.makePTable(
-                        tenantId, PNameFactory.newName(schemaName), PNameFactory.newName(tableName), tableType, indexState, result.getMutationTime(), 
+                        tenantId, newSchemaName, PNameFactory.newName(tableName), tableType, indexState, result.getMutationTime(), 
                         PTable.INITIAL_SEQ_NUM, pkName == null ? null : PNameFactory.newName(pkName), saltBucketNum, columns, 
-                        dataTableName == null ? null : PNameFactory.newName(dataTableName), Collections.<PTable>emptyList(), isImmutableRows, physicalNames,
-                        defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, viewType, indexId, indexType);
+                        dataTableName == null ? null : newSchemaName, dataTableName == null ? null : PNameFactory.newName(dataTableName), Collections.<PTable>emptyList(), isImmutableRows,
+                        physicalNames, defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, viewType, indexId, indexType);
                 connection.addTable(table);
                 return table;
             }
@@ -2374,57 +2430,36 @@ public class MetaDataClient {
     }
     
     public PTableStats getTableStats(PTable table) throws SQLException {
-        boolean isView = table.getType() == PTableType.VIEW;
+        /*
+         *  The shared view index case is tricky, because we don't have
+         *  table meta data for it, only an HBase table. We do have stats,
+         *  though, so we'll query them directly here and cache them so
+         *  we don't keep querying for them.
+         */
         boolean isSharedIndex = table.getViewIndexId() != null;
-        if (!isView && !isSharedIndex) {
-            return table.getTableStats();
+        if (isSharedIndex) {
+            return connection.getQueryServices().getTableStats(table.getPhysicalName().getBytes(), getClientTimeStamp());
         }
+        boolean isView = table.getType() == PTableType.VIEW;
         String physicalName = table.getPhysicalName().getString();
-        // If we have a VIEW or a local or view INDEX, check our cache rather
-        // than updating the cache for that table to prevent an extra roundtrip.
-        PTableStats tableStats = connection.getQueryServices().getTableStats(physicalName);
-        if (tableStats != null) {
-            return tableStats;
-        }
-        if (isView) {
-            String physicalSchemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
-            String physicalTableName = SchemaUtil.getTableNameFromFullName(physicalName);
-            MetaDataMutationResult result = updateCache(null, /* use global tenant id to get physical table */
-                    physicalSchemaName, physicalTableName);
-            PTable physicalTable = result.getTable();
-            if(physicalTable == null) {
-                // We should be able to find the physical table, as we found the logical one
-                // Might mean the physical table as just deleted.
-                logger.warn("Unable to retrieve physical table " + physicalName + " for table " + table.getName().getString());
-                throw new TableNotFoundException(table.getSchemaName().getString(),table.getTableName().getString());
-            }
-            tableStats = physicalTable.getTableStats();
-        } else {
-            /*
-             *  Otherwise, we have a shared view. This case is tricky, because we don't have
-             *  table metadata for it, only an HBase table. We do have stats, though, so we'll
-             *  query them directly here and cache them so we don't keep querying for them.
-             */
-            HTableInterface statsHTable = connection.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+        if (isView && table.getViewType() != ViewType.MAPPED) {
             try {
-                long clientTimeStamp = getClientTimeStamp();
-                tableStats = StatisticsUtil.readStatistics(statsHTable, table.getPhysicalName().getBytes(), clientTimeStamp);
-            } catch (IOException e) {
-                logger.warn("Unable to read from stats table", e);
-                // Just cache empty stats. We'll try again after some time anyway.
-                tableStats = PTableStats.EMPTY_STATS;
-            } finally {
-                try {
-                    statsHTable.close();
-                } catch (IOException e) {
-                    // Log, but continue. We have our stats anyway now.
-                    logger.warn("Unable to close stats table", e);
+                return connection.getMetaDataCache().getTable(new PTableKey(null, physicalName)).getTableStats();
+            } catch (TableNotFoundException e) {
+                // Possible when the table timestamp == current timestamp - 1.
+                // This would be most likely during the initial index build of a view index
+                // where we're doing an upsert select from the tenant specific table.
+                // TODO: would we want to always load the physical table in updateCache in
+                // this case too, as we might not update the view with all of it's indexes?
+                String physicalSchemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
+                String physicalTableName = SchemaUtil.getTableNameFromFullName(physicalName);
+                MetaDataMutationResult result = updateCache(null, physicalSchemaName, physicalTableName, false);
+                if (result.getTable() == null) {
+                    throw new TableNotFoundException(physicalSchemaName, physicalTableName);
                 }
+                return result.getTable().getTableStats();
             }
         }
-        // Cache these stats so that we don't keep making a roundrip just to get the stats (as
-        // they don't change very often.
-        connection.getQueryServices().addTableStats(physicalName, tableStats);
-        return tableStats;
+        return table.getTableStats();
     }
 }

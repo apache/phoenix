@@ -199,13 +199,13 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
                 // Set key value schema of the data columns.
                 serializeSchemaIntoScan(scan, schema);
-                String schemaName = context.getCurrentTable().getTable().getSchemaName().getString();
+                String parentSchema = context.getCurrentTable().getTable().getParentSchemaName().getString();
                 String parentTable = context.getCurrentTable().getTable().getParentTableName().getString();
                 final ParseNodeFactory FACTORY = new ParseNodeFactory();
                 TableRef dataTableRef =
                         FromCompiler.getResolver(
-                            FACTORY.namedTable(null, TableName.create(schemaName, parentTable)),
-                            context.getConnection()).resolveTable(schemaName, parentTable);
+                            FACTORY.namedTable(null, TableName.create(parentSchema, parentTable)),
+                            context.getConnection()).resolveTable(parentSchema, parentTable);
                 PTable dataTable = dataTableRef.getTable();
                 // Set index maintainer of the local index.
                 serializeIndexMaintainerIntoScan(scan, dataTable);
