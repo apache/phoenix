@@ -32,6 +32,7 @@ import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.concurrent.GuardedBy;
@@ -97,6 +98,7 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
@@ -123,6 +125,7 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
@@ -159,7 +162,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final ReadOnlyProps props;
     private final String userName;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
-    private final Cache<String, PTableStats> tableStatsCache;
+    private final Cache<ImmutableBytesPtr, PTableStats> tableStatsCache;
     
     // Cache the latest meta data here for future connections
     // writes guarded by "latestMetaDataLock"
@@ -1015,7 +1018,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 desc = admin.getTableDescriptor(physicalIndexName);
                 if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES)))) {
-                    this.tableStatsCache.invalidate(Bytes.toString(physicalIndexName));
+                    this.tableStatsCache.invalidate(new ImmutableBytesPtr(physicalIndexName));
                     final ReadOnlyProps props = this.getProps();
                     final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     if (dropMetadata) {
@@ -1050,7 +1053,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 desc = admin.getTableDescriptor(physicalIndexName);
                 if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
-                    this.tableStatsCache.invalidate(Bytes.toString(physicalIndexName));
+                    this.tableStatsCache.invalidate(new ImmutableBytesPtr(physicalIndexName));
                     final ReadOnlyProps props = this.getProps();
                     final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     if (dropMetadata) {
@@ -1219,11 +1222,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             invalidateTables(result.getTableNamesToDelete());
             if (tableType == PTableType.TABLE) {
-                byte[] physicalTableName = SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
+                byte[] physicalName = SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
                 long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
-                ensureViewIndexTableDropped(physicalTableName, timestamp);
-                ensureLocalIndexTableDropped(physicalTableName, timestamp);
-                tableStatsCache.invalidate(SchemaUtil.getTableName(schemaBytes, tableBytes));
+                ensureViewIndexTableDropped(physicalName, timestamp);
+                ensureLocalIndexTableDropped(physicalName, timestamp);
+                tableStatsCache.invalidate(new ImmutableBytesPtr(physicalName));
             }
             break;
         default:
@@ -1235,7 +1238,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private void invalidateTables(final List<byte[]> tableNamesToDelete) {
         if (tableNamesToDelete != null) {
             for ( byte[] tableName : tableNamesToDelete ) {
-                tableStatsCache.invalidate(Bytes.toString(tableName));
+                tableStatsCache.invalidate(new ImmutableBytesPtr(tableName));
             }
         }
     }
@@ -1913,7 +1916,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sqlE = new SQLException(e);
             } finally {
                 try {
-                    if (tenantId.length == 0) tableStatsCache.invalidate(SchemaUtil.getTableName(schemaName, tableName));
+                    if (tenantId.length == 0) tableStatsCache.invalidate(new ImmutableBytesPtr(SchemaUtil.getTableNameAsBytes(schemaName, tableName)));
                     htable.close();
                 } catch (IOException e) {
                     if (sqlE == null) {
@@ -2096,15 +2099,42 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private void throwConnectionClosedException() {
         throw new IllegalStateException("Connection to the cluster is closed");
     }
-    @Override
-    public PTableStats getTableStats(String physicalName) {
-        return tableStatsCache.getIfPresent(physicalName);
-    }
     
     @Override
-    public void addTableStats(String physicalName, PTableStats tableStats) {
-        tableStatsCache.put(physicalName, tableStats);
+    public PTableStats getTableStats(final byte[] physicalName, final long clientTimeStamp) throws SQLException {
+        try {
+            return tableStatsCache.get(new ImmutableBytesPtr(physicalName), new Callable<PTableStats>() {
+                @Override
+                public PTableStats call() throws Exception {
+                    /*
+                     *  The shared view index case is tricky, because we don't have
+                     *  table metadata for it, only an HBase table. We do have stats,
+                     *  though, so we'll query them directly here and cache them so
+                     *  we don't keep querying for them.
+                     */
+                    HTableInterface statsHTable = ConnectionQueryServicesImpl.this.getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+                    try {
+                        return StatisticsUtil.readStatistics(statsHTable, physicalName, clientTimeStamp);
+                    } catch (IOException e) {
+                        logger.warn("Unable to read from stats table", e);
+                        // Just cache empty stats. We'll try again after some time anyway.
+                        return PTableStats.EMPTY_STATS;
+                    } finally {
+                        try {
+                            statsHTable.close();
+                        } catch (IOException e) {
+                            // Log, but continue. We have our stats anyway now.
+                            logger.warn("Unable to close stats table", e);
+                        }
+                    }
+                }
+                
+            });
+        } catch (ExecutionException e) {
+            throw ServerUtil.parseServerException(e);
+        }
     }
+    
     @Override
     public int getSequenceSaltBuckets() {
         return nSequenceSaltBuckets;

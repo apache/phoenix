@@ -225,4 +225,9 @@ public class DelegateTable implements PTable {
     public DelegateTable(PTable delegate) {
         this.delegate = delegate;
     }
+
+    @Override
+    public PName getParentSchemaName() {
+        return delegate.getParentSchemaName();
+    }
 }

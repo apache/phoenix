@@ -39,7 +39,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.base.Joiner;
@@ -336,7 +335,6 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
-    @Ignore // FIXME : https://issues.apache.org/jira/browse/PHOENIX-1302
     // Multi-tenant = true; Query uses index = true; Salted = false
     public void testAssertQueryPlanDetails3() throws Exception {
         testAssertQueryPlanDetails(true, true, true);
@@ -361,7 +359,6 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
-    @Ignore // FIXME : https://issues.apache.org/jira/browse/PHOENIX-1302
     // Multi-tenant = true; Query uses index = true; Salted = false
     public void testAssertQueryPlanDetails7() throws Exception {
         testAssertQueryPlanDetails(true, true, false);
@@ -479,7 +476,6 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
-    @Ignore // FIXME : https://issues.apache.org/jira/browse/PHOENIX-1302
     public void testAssertQueryAgainstTenantSpecificViewGoesThroughIndex() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), new Properties());
         
