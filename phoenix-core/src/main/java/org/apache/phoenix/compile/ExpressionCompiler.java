@@ -1194,7 +1194,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 arrayElemChild = child;
                 arrayElemDataType = childType;
             } else {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CONVERT_TYPE)
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
                         .setMessage(
                                 "Case expressions must have common type: " + arrayElemDataType
                                         + " cannot be coerced to " + childType).build().buildException();

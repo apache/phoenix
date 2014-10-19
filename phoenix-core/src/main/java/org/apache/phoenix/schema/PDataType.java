@@ -5755,7 +5755,7 @@ public enum PDataType {
     }
     
     private static Void throwConstraintViolationException(PDataType source, PDataType target) {
-        throw new ConstraintViolationException(new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CONVERT_TYPE)
+        throw new ConstraintViolationException(new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
         .setMessage(source + " cannot be coerced to " + target).build().buildException());
     }
     
