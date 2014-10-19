@@ -2679,7 +2679,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             statement.executeQuery();
             fail("Should have got SQLException.");
         } catch (SQLException e) {
-            assertEquals(e.getErrorCode(), SQLExceptionCode.CANNOT_CONVERT_TYPE.getErrorCode());
+            assertEquals(e.getErrorCode(), SQLExceptionCode.TYPE_MISMATCH.getErrorCode());
         } finally {
             conn.close();
         }
