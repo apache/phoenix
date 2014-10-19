@@ -106,8 +106,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public String getUserName();
     public void incrementTableTimeStamp(final byte[] tenantId, final byte[] schemaName, final byte[] tableName, long clientTS) throws SQLException;
 
-    public PTableStats getTableStats(String physicalName);
-    public void addTableStats(String physicalName, PTableStats tableStats);
+    public PTableStats getTableStats(byte[] physicalName, long clientTimeStamp) throws SQLException;
     
     public void clearCache() throws SQLException;
     public int getSequenceSaltBuckets();

@@ -250,6 +250,12 @@ public interface PTable extends Writable {
      * on or null if not an index.
      */
     PName getParentTableName();
+    /**
+     * Gets the schema name of the data table for an index table.
+     * @return the schema name of the data table that this index is
+     * on or null if not an index.
+     */
+    PName getParentSchemaName();
     
     /**
      * For a view, return the name of table in Phoenix that physically stores data.

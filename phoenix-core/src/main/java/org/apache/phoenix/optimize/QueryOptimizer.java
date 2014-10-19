@@ -208,7 +208,7 @@ public class QueryOptimizer {
     private static QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, QueryPlan dataPlan) throws SQLException {
         int nColumns = dataPlan.getProjector().getColumnCount();
         String alias = '"' + dataPlan.getTableRef().getTableAlias() + '"'; // double quote in case it's case sensitive
-        String schemaName = dataPlan.getTableRef().getTable().getSchemaName().getString();
+        String schemaName = index.getParentSchemaName().getString();
         schemaName = schemaName.length() == 0 ? null :  '"' + schemaName + '"';
 
         String tableName = '"' + index.getTableName().getString() + '"';

@@ -233,4 +233,9 @@ public class DelegateTable implements PTable {
     public void write(DataOutput out) throws IOException {
         delegate.write(out);
     }
+
+    @Override
+    public PName getParentSchemaName() {
+        return delegate.getParentSchemaName();
+    }
 }

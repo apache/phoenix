@@ -475,7 +475,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
         }
         return PTableImpl
                 .makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, tableSeqNum, pkName,
-                        saltBucketNum, columns, tableType == INDEX ? dataTableName : null, indexes, isImmutableRows,
+                        saltBucketNum, columns, tableType == INDEX ? schemaName : null, tableType == INDEX ? dataTableName : null, indexes, isImmutableRows,
                         physicalTables, defaultFamilyName, viewStatement, disableWAL, multiTenant, viewType,
                         viewIndexId, stats);
     }
