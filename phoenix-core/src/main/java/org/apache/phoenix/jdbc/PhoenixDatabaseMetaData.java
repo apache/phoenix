@@ -42,7 +42,9 @@ import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.HintNode.Hint;
@@ -372,7 +374,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     }
 
     private static void appendConjunction(StringBuilder buf) {
-        buf.append(buf.length() == 0 ? " where " : " and ");
+        buf.append(buf.length() == 0 ? "" : " and ");
     }
     
     @Override
@@ -404,7 +406,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 ARRAY_SIZE + "," +
                 COLUMN_FAMILY + "," +
                 DATA_TYPE + " " + TYPE_ID + "," +// raw type id for potential internal consumption
-                VIEW_CONSTANT +
+                VIEW_CONSTANT + "," +
+                MULTI_TENANT + "," +
+                KEY_SEQ +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS);
         StringBuilder where = new StringBuilder();
         addTenantIdFilter(where, catalog);
@@ -443,10 +447,84 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
             appendConjunction(where);
             where.append(COLUMN_NAME + " is not null" );
         }
-        buf.append(where);
+        boolean isTenantSpecificConnection = connection.getTenantId() != null;
+        if (isTenantSpecificConnection) {
+            buf.append(" where (" + where + ") OR ("
+                    + COLUMN_FAMILY + " is null AND " +  COLUMN_NAME + " is null)");
+        } else {
+            buf.append(" where " + where);
+        }
         buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + "," + ORDINAL_POSITION);
-        Statement stmt = connection.createStatement();
+
+        Statement stmt;
+        if (isTenantSpecificConnection) {
+            stmt = connection.createStatement(new PhoenixStatementFactory() {
+                @Override
+                public PhoenixStatement newStatement(PhoenixConnection connection) {
+                    return new PhoenixStatement(connection) {
+                        @Override
+                        protected PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector)
+                                throws SQLException {
+                            return new PhoenixResultSet(
+                                    new TenantColumnFilteringIterator(iterator, projector),
+                                    projector, this);
+                        }
+                    };
+                }
+            });
+        } else {
+            stmt = connection.createStatement();
+        }
         return stmt.executeQuery(buf.toString());
+    }
+
+    /**
+     * Filters the tenant id column out of a column metadata result set (thus, where each row is a column definition).
+     * The tenant id is by definition the first column of the primary key, but the primary key does not necessarily
+     * start at the first column. Assumes columns are sorted on ordinal position.
+     */
+    private static class TenantColumnFilteringIterator extends DelegateResultIterator {
+        private final RowProjector rowProjector;
+        private final int columnFamilyIndex;
+        private final int columnNameIndex;
+        private final int multiTenantIndex;
+        private final int keySeqIndex;
+        private boolean inMultiTenantTable;
+
+        private TenantColumnFilteringIterator(ResultIterator delegate, RowProjector rowProjector) throws SQLException {
+            super(delegate);
+            this.rowProjector = rowProjector;
+            this.columnFamilyIndex = rowProjector.getColumnIndex(COLUMN_FAMILY);
+            this.columnNameIndex = rowProjector.getColumnIndex(COLUMN_NAME);
+            this.multiTenantIndex = rowProjector.getColumnIndex(MULTI_TENANT);
+            this.keySeqIndex = rowProjector.getColumnIndex(KEY_SEQ);
+        }
+
+        @Override
+        public Tuple next() throws SQLException {
+            Tuple tuple = super.next();
+
+            while (tuple != null
+                    && getColumn(tuple, columnFamilyIndex) == null && getColumn(tuple, columnNameIndex) == null) {
+                // new table, check if it is multitenant
+                inMultiTenantTable = getColumn(tuple, multiTenantIndex) == Boolean.TRUE;
+                // skip row representing table
+                tuple = super.next();
+            }
+
+            if (tuple != null && inMultiTenantTable && new Short((short)1).equals(getColumn(tuple, keySeqIndex))) {
+                // skip tenant id primary key column
+                return next();
+            }
+
+            return tuple;
+        }
+
+        private Object getColumn(Tuple tuple, int index) throws SQLException {
+            ColumnProjector projector = this.rowProjector.getColumnProjector(index);
+            PDataType type = projector.getExpression().getDataType();
+            return projector.getValue(tuple, type, new ImmutableBytesPtr());
+        }
     }
 
     @Override
