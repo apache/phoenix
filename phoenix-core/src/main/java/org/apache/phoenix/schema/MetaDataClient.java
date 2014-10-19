@@ -389,7 +389,7 @@ public class MetaDataClient {
     private boolean addIndexesFromPhysicalTable(MetaDataMutationResult result) throws SQLException {
         PTable table = result.getTable();
         // If not a view or if a view directly over an HBase table, there's nothing to do
-        if (table.getType() != PTableType.VIEW || table.getViewType() != ViewType.MAPPED) {
+        if (table.getType() != PTableType.VIEW || table.getViewType() == ViewType.MAPPED) {
             return false;
         }
         String physicalName = table.getPhysicalName().getString();
