@@ -17,18 +17,21 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PropertiesUtil;
+import static org.apache.phoenix.util.TestUtil.GROUPBYTEST_NAME;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
-import java.sql.*;
-import java.util.Properties;
-
-import static org.apache.phoenix.util.TestUtil.GROUPBYTEST_NAME;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.*;
 
 @Category(HBaseManagedTimeTest.class)
 public class RegexpSubstrFunctionIT extends BaseHBaseManagedTimeIT {
