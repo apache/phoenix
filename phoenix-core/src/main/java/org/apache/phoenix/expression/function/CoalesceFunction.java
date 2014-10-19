@@ -66,7 +66,7 @@ public class CoalesceFunction extends ScalarFunction {
             secondChild.evaluate(null, ptr);
 
             if (!secondChild.getDataType().isCoercibleTo(firstChild.getDataType(), secondChild.getDataType().toObject(ptr))) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CONVERT_TYPE)
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
                     .setMessage(getName() + " expected " + firstChild.getDataType() + ", but got " + secondChild.getDataType())
                     .build().buildException();
             }

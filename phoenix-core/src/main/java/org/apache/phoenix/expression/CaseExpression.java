@@ -66,7 +66,7 @@ public class CaseExpression extends BaseCompoundExpression {
             } else if (returnType.isCoercibleTo(childType)) {
                 returnType = childType;
             } else {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CONVERT_TYPE)
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
                     .setMessage("Case expressions must have common type: " + returnType + " cannot be coerced to " + childType)
                     .build().buildException();
             }

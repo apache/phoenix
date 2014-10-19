@@ -127,7 +127,6 @@ public enum SQLExceptionCode {
         }
     }),
     CANNOT_DROP_PK(506, "42817", "Primary key column may not be dropped."),
-    CANNOT_CONVERT_TYPE(507, "42846", "Cannot convert type."),
     PRIMARY_KEY_MISSING(509, "42888", "The table does not have a primary key."),
     PRIMARY_KEY_ALREADY_EXISTS(510, "42889", "The table already has a primary key."),
     ORDER_BY_NOT_IN_SELECT_DISTINCT(511, "42890", "All ORDER BY expressions must appear in SELECT DISTINCT:"),
