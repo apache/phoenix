@@ -34,7 +34,6 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
@@ -77,10 +76,10 @@ public class MappingTableDataTypeTest extends BaseTest{
 
   @Test
   public void testMappingHbaseTableToPhoenixTable() throws Exception {
-    final TableName tableName = TableName.valueOf("MTEST");
+    final byte[] tableName = Bytes.toBytes("MTEST");
     // Create table then get the single region for our new table.
-    HTable t = UTIL.createTable(tableName.getName(), Bytes.toBytes("cf"));
-    insertData(tableName.getName(), admin, t);
+    HTable t = UTIL.createTable(tableName, Bytes.toBytes("cf"));
+    insertData(tableName, admin, t);
     t.close();
     try {
       testCreateTableMismatchedType();
