@@ -19,19 +19,23 @@
 #
 ############################################################################
 
+# !!!  PLEASE READ !!!
+# !!!  Do NOT run the script against a prodcution cluster because it wipes out
+# !!!  existing data of the cluster 
+
 import os
 import subprocess
 import sys
+import phoenix_utils
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-phoenix_jar_path = os.getenv('PHOENIX_LIB_DIR',
-                             os.path.join(current_dir, "..", "phoenix-core",
-                                          "target", "*"))
+phoenix_utils.setPath()
+
+phoenix_jar_path = os.getenv(phoenix_utils.phoenix_class_path, phoenix_utils.phoenix_test_jar_path)
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
-hbase_config_path = os.getenv('HBASE_CONF_DIR', current_dir)
-hbase_library_path = os.getenv('HBASE_LIBRARY_DIR', current_dir)
+hbase_config_path = os.getenv('HBASE_CONF_DIR', phoenix_utils.hbase_conf_path)
+hbase_library_path = os.getenv('HBASE_LIBRARY_DIR', '')
 
 print "Current ClassPath=%s:%s:%s" % (hbase_config_path, phoenix_jar_path,
                                       hbase_library_path)
