@@ -76,6 +76,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 
@@ -96,6 +97,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private KeyValueBuilder kvBuilder;
     private volatile boolean initialized;
     private volatile SQLException initializationException;
+    private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
     
     public ConnectionlessQueryServicesImpl(QueryServices queryServices, ConnectionInfo connInfo) {
         super(queryServices);
@@ -123,6 +125,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
+        List<HRegionLocation> regions = tableSplits.get(Bytes.toString(tableName));
+        if (regions != null) {
+            return regions;
+        }
         return Collections.singletonList(new HRegionLocation(
             new HRegionInfo(TableName.valueOf(tableName), HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW),
             SERVER_NAME, -1));
@@ -168,16 +174,49 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         } catch (TableNotFoundException e) {
             return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0, null);
         }
-        //return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, null);
     }
 
+    private static byte[] getTableName(List<Mutation> tableMetaData, byte[] physicalTableName) {
+        if (physicalTableName != null) {
+            return physicalTableName;
+        }
+        byte[][] rowKeyMetadata = new byte[3][];
+        Mutation m = MetaDataUtil.getTableHeaderRow(tableMetaData);
+        byte[] key = m.getRow();
+        SchemaUtil.getVarChars(key, rowKeyMetadata);
+        byte[] schemaBytes = rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
+        byte[] tableBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+        return SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
+    }
+    
+    private static List<HRegionLocation> generateRegionLocations(byte[] physicalName, byte[][] splits) {
+        byte[] startKey = HConstants.EMPTY_START_ROW;
+        List<HRegionLocation> regions = Lists.newArrayListWithExpectedSize(splits.length);
+        for (byte[] split : splits) {
+            regions.add(new HRegionLocation(
+                    new HRegionInfo(TableName.valueOf(physicalName), startKey, split),
+                    SERVER_NAME, -1));
+            startKey = split;
+        }
+        regions.add(new HRegionLocation(
+                new HRegionInfo(TableName.valueOf(physicalName), startKey, HConstants.EMPTY_END_ROW),
+                SERVER_NAME, -1));
+        return regions;
+    }
+    
     @Override
     public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName, PTableType tableType, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits) throws SQLException {
+        if (splits != null) {
+            byte[] tableName = getTableName(tableMetaData, physicalName);
+            tableSplits.put(Bytes.toString(tableName), generateRegionLocations(tableName, splits));
+        }
         return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0, null);
     }
 
     @Override
     public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, PTableType tableType, boolean cascade) throws SQLException {
+        byte[] tableName = getTableName(tableMetadata, null);
+        tableSplits.remove(Bytes.toString(tableName));
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, null);
     }
 
