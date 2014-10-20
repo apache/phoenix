@@ -452,8 +452,6 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
                     addIndexToTable(tenantId, schemaName, famName, tableName, clientTimeStamp, indexes);
                 } else if (linkType == LinkType.PHYSICAL_TABLE) {
                     physicalTables.add(famName);
-                } else {
-                    logger.warn("Unknown link type: " + colKv.getBuffer()[colKv.getValueOffset()] + " for " + SchemaUtil.getTableName(schemaName.getString(), tableName.getString()));
                 }
             } else {
                 addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
