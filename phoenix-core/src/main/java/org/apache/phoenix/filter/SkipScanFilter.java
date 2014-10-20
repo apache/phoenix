@@ -137,7 +137,7 @@ public class SkipScanFilter extends FilterBase {
         // we should either have no previous hint, or the next hint should always come after the previous hint
         assert previousKeyValueHint == null
                 || Bytes.compareTo(nextKeyValueHint.getBuffer(), nextKeyValueHint.getRowOffset(),
-                    nextKeyValueHint.getRowOffset(), previousKeyValueHint.getBuffer(),
+                    nextKeyValueHint.getRowLength(), previousKeyValueHint.getBuffer(),
                     previousKeyValueHint.getRowOffset(), previousKeyValueHint.getRowLength()) > 0 : "next hint must come after previous hint (prev="
                 + previousKeyValueHint + ", next=" + nextKeyValueHint + ", kv=" + kv + ")";
     }
