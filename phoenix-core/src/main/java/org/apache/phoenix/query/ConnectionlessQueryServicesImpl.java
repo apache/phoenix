@@ -181,7 +181,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
             return physicalTableName;
         }
         byte[][] rowKeyMetadata = new byte[3][];
-        Mutation m = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetaData);
+        Mutation m = MetaDataUtil.getTableHeaderRow(tableMetaData);
         byte[] key = m.getRow();
         SchemaUtil.getVarChars(key, rowKeyMetadata);
         byte[] schemaBytes = rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
