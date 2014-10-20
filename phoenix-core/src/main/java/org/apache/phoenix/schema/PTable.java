@@ -124,7 +124,11 @@ public interface PTable {
         /**
          * Link from a view to its physical table
          */
-        PHYSICAL_TABLE((byte)2);
+        PHYSICAL_TABLE((byte)2),
+        /**
+         * Link from a view to its parent table
+         */
+        PARENT_TABLE((byte)3);
 
         private final byte[] byteValue;
         private final byte serializedValue;
