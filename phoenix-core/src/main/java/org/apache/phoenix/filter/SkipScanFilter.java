@@ -21,7 +21,9 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
@@ -70,6 +72,8 @@ public class SkipScanFilter extends FilterBase {
     private byte[] endKey; 
     private int endKeyLength;
     private boolean isDone;
+    private Map<ImmutableBytesWritable, KeyValue> nextKeyValueHintMap =
+            new HashMap<ImmutableBytesWritable, KeyValue>();
 
     private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
@@ -116,14 +120,32 @@ public class SkipScanFilter extends FilterBase {
 
     @Override
     public ReturnCode filterKeyValue(KeyValue kv) {
-        return navigate(kv.getBuffer(), kv.getRowOffset(),kv.getRowLength(),Terminate.AFTER);
+        ReturnCode code = navigate(kv.getBuffer(), kv.getRowOffset(),kv.getRowLength(),Terminate.AFTER);
+        if(code == ReturnCode.SEEK_NEXT_USING_HINT) {
+            setNextKeyValueHint(kv);
+        }
+        return code;
+    }
+
+    private void setNextKeyValueHint(KeyValue kv) {
+        ImmutableBytesWritable family =
+                new ImmutableBytesWritable(kv.getBuffer(), kv.getFamilyOffset(),
+                        kv.getFamilyLength());
+        KeyValue nextKeyValueHint = new KeyValue(startKey, 0, startKeyLength,
+                    null, 0, 0, null, 0, 0, HConstants.LATEST_TIMESTAMP, Type.Maximum, null, 0, 0);
+        KeyValue previousKeyValueHint = nextKeyValueHintMap.put(family, nextKeyValueHint);
+        // we should either have no previous hint, or the next hint should always come after the previous hint
+        assert previousKeyValueHint == null
+                || Bytes.compareTo(nextKeyValueHint.getBuffer(), nextKeyValueHint.getRowOffset(),
+                    nextKeyValueHint.getRowOffset(), previousKeyValueHint.getBuffer(),
+                    previousKeyValueHint.getRowOffset(), previousKeyValueHint.getRowLength()) > 0 : "next hint must come after previous hint (prev="
+                + previousKeyValueHint + ", next=" + nextKeyValueHint + ", kv=" + kv + ")";
     }
 
     @Override
     public KeyValue getNextKeyHint(KeyValue kv) {
-        // TODO: don't allocate new key value every time here if possible
-        return isDone ? null : new KeyValue(startKey, 0, startKeyLength,
-                null, 0, 0, null, 0, 0, HConstants.LATEST_TIMESTAMP, Type.Maximum, null, 0, 0);
+        return isDone ? null : nextKeyValueHintMap.get(new ImmutableBytesWritable(kv.getBuffer(),
+                kv.getFamilyOffset(), kv.getFamilyLength()));
     }
 
     public boolean hasIntersect(byte[] lowerInclusiveKey, byte[] upperExclusiveKey) {
