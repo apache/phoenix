@@ -591,6 +591,85 @@ public class PhoenixRuntime {
     }
     
     /**
+     * Encode the primary key values from the table as a byte array. The values must
+     * be in the same order as the primary key constraint. If the connection and
+     * table are both tenant-specific, the tenant ID column must not be present in
+     * the values.
+     * @param conn an open connection
+     * @param fullTableName the full table name
+     * @param values the values of the primary key columns ordered in the same order
+     *  as the primary key constraint
+     * @return the encoded byte array
+     * @throws SQLException if the table cannot be found or the incorrect number of
+     *  of values are provided
+     * @see #decodePK(Connection, String, byte[]) to decode the byte[] back to the
+     *  values
+     */
+    @Deprecated
+    public static byte[] encodePK(Connection conn, String fullTableName, Object[] values) throws SQLException {
+        PTable table = getTable(conn, fullTableName);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        int offset = (table.getBucketNum() == null ? 0 : 1) + (table.isMultiTenant() && pconn.getTenantId() != null ? 1 : 0);
+        List<PColumn> pkColumns = table.getPKColumns();
+        if (pkColumns.size() - offset != values.length) {
+            throw new SQLException("Expected " + (pkColumns.size() - offset) + " but got " + values.length);
+        }
+        PDataType type = null;
+        TrustedByteArrayOutputStream output = new TrustedByteArrayOutputStream(table.getRowKeySchema().getEstimatedValueLength());
+        try {
+            for (int i = offset; i < pkColumns.size(); i++) {
+                if (type != null && !type.isFixedWidth()) {
+                    output.write(QueryConstants.SEPARATOR_BYTE);
+                }
+                type = pkColumns.get(i).getDataType();
+
+                //for fixed width data types like CHAR and BINARY, we need to pad values to be of max length.
+                Object paddedObj = type.pad(values[i - offset], pkColumns.get(i).getMaxLength());
+                byte[] value = type.toBytes(paddedObj);
+                output.write(value);
+            }
+            return output.toByteArray();
+        } finally {
+            try {
+                output.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e); // Impossible
+            }
+        }
+    }
+
+    /**
+     * Decode a byte array value back into the Object values of the
+     * primary key constraint. If the connection and table are both
+     * tenant-specific, the tenant ID column is not expected to have
+     * been encoded and will not appear in the returned values.
+     * @param conn an open connection
+     * @param name the full table name
+     * @param encodedValue the value that was encoded with {@link #encodePK(Connection, String, Object[])}
+     * @return the Object values encoded in the byte array value
+     * @throws SQLException
+     */
+    @Deprecated
+    public static Object[] decodePK(Connection conn, String name, byte[] value) throws SQLException {
+        PTable table = getTable(conn, name);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        int offset = (table.getBucketNum() == null ? 0 : 1) + (table.isMultiTenant() && pconn.getTenantId() != null ? 1 : 0);
+        int nValues = table.getPKColumns().size() - offset;
+        RowKeySchema schema = table.getRowKeySchema();
+        Object[] values = new Object[nValues];
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        schema.iterator(value, ptr);
+        int i = 0;
+        int fieldIdx = offset;
+        while (i < nValues && schema.next(ptr, fieldIdx, value.length) != null) {
+            values[i] = schema.getField(fieldIdx).getDataType().toObject(ptr);
+            i++;
+            fieldIdx++;
+        }
+        return values;
+    }
+
+    /**
      * Returns the opitmized query plan used by phoenix for executing the sql.
      * @param stmt to return the plan for
      * @throws SQLException
