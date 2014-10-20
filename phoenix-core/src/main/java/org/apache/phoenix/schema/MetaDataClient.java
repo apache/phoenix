@@ -42,6 +42,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REGION_NAME;
@@ -185,6 +186,15 @@ public class MetaDataClient {
             COLUMN_FAMILY + "," +
             LINK_TYPE +
             ") VALUES (?, ?, ?, ?, ?)";
+    private static final String CREATE_VIEW_LINK =
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
+            TENANT_ID + "," +
+            TABLE_SCHEM + "," +
+            TABLE_NAME + "," +
+            COLUMN_FAMILY + "," +
+            LINK_TYPE + "," +
+            PARENT_TENANT_ID + " " + PDataType.VARCHAR.getSqlTypeName() + // Dynamic column for now to prevent schema change
+            ") VALUES (?, ?, ?, ?, ?, ?)";
     private static final String INCREMENT_SEQ_NUM =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + 
             TENANT_ID + "," +
@@ -1213,6 +1223,18 @@ public class MetaDataClient {
                     columns = newArrayListWithExpectedSize(allColumns.size() + colDefs.size());
                     columns.addAll(allColumns);
                     pkColumns = newLinkedHashSet(parent.getPKColumns());
+                    
+                    // Add row linking from view to its parent table
+                    // FIXME: not currently used, but see PHOENIX-1367
+                    // as fixing that will require it's usage.
+                    PreparedStatement linkStatement = connection.prepareStatement(CREATE_VIEW_LINK);
+                    linkStatement.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
+                    linkStatement.setString(2, schemaName);
+                    linkStatement.setString(3, tableName);
+                    linkStatement.setString(4, parent.getName().getString());
+                    linkStatement.setByte(5, LinkType.PARENT_TABLE.getSerializedValue());
+                    linkStatement.setString(6, parent.getTenantId() == null ? null : parent.getTenantId().getString());
+                    linkStatement.execute();
                 }
             } else {
                 columns = newArrayListWithExpectedSize(colDefs.size());
