@@ -418,6 +418,7 @@ public class PhoenixRuntime {
      * @see #decodePK(Connection, String, byte[]) to decode the byte[] back to the
      *  values
      */
+    @Deprecated
     public static byte[] encodePK(Connection conn, String fullTableName, Object[] values) throws SQLException {
         PTable table = getTable(conn, fullTableName);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
@@ -461,6 +462,7 @@ public class PhoenixRuntime {
      * @return the Object values encoded in the byte array value
      * @throws SQLException
      */
+    @Deprecated
     public static Object[] decodePK(Connection conn, String name, byte[] value) throws SQLException {
         PTable table = getTable(conn, name);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
