@@ -23,6 +23,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SizedUtil;
 import java.io.IOException;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.TreeMap;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
@@ -45,11 +46,12 @@ public class FirstLastValueServerAggregator extends BaseAggregator {
     protected byte[] topValue;
     protected boolean useOffset = false;
     protected int offset = -1;
-    protected TreeMap<byte[], byte[]> topValues = new TreeMap<byte[], byte[]>(new Bytes.ByteArrayComparator());
+    protected TreeMap<byte[], LinkedList<byte[]>> topValues = new TreeMap<byte[], LinkedList<byte[]>>(new Bytes.ByteArrayComparator());
     protected boolean isAscending;
     protected boolean hasValueDescSortOrder;
     protected Expression orderByColumn;
     protected Expression dataColumn;
+    protected int topValuesCount = 0;
 
     public FirstLastValueServerAggregator() {
         super(SortOrder.getDefault());
@@ -60,6 +62,7 @@ public class FirstLastValueServerAggregator extends BaseAggregator {
         topOrder = new BinaryComparator(ByteUtil.EMPTY_BYTE_ARRAY);
         topValue = null;
         topValues.clear();
+        topValuesCount = 0;
         offset = -1;
         useOffset = false;
     }
@@ -81,7 +84,7 @@ public class FirstLastValueServerAggregator extends BaseAggregator {
 
         if (useOffset) {
             boolean addFlag = false;
-            if (topValues.size() < offset) {
+            if (topValuesCount < offset) {
                 try {
                     addFlag = true;
                 } catch (Exception e) {
@@ -89,25 +92,27 @@ public class FirstLastValueServerAggregator extends BaseAggregator {
                 }
             } else {
                 if (isAscending) {
-                    byte[] lowestKey = topValues.lastKey();
-                    if (Bytes.compareTo(currentOrder, lowestKey) < 0) {
-                        topValues.remove(lowestKey);
+                    if (removeLastElement(currentOrder, topValues.lastKey(), -1)) {
                         addFlag = true;
+                        topValuesCount--;
                     }
-                } else { //desc
-                    byte[] highestKey = topValues.firstKey();
-                    if (Bytes.compareTo(currentOrder, highestKey) > 0) {
-                        topValues.remove(highestKey);
+                } else {
+                    if (removeLastElement(currentOrder, topValues.firstKey(), 1)) {
                         addFlag = true;
+                        topValuesCount--;
                     }
                 }
             }
             if (addFlag) {
+                topValuesCount++;
+                if (!topValues.containsKey(currentOrder)) {
+                    topValues.put(currentOrder, new LinkedList<byte[]>());
+                }
                 //invert bytes if is SortOrder set
                 if (hasValueDescSortOrder) {
-                    topValues.put(currentOrder, SortOrder.invert(ptr.get(), ptr.getOffset(), ptr.getLength()));
+                    topValues.get(currentOrder).push(SortOrder.invert(ptr.get(), ptr.getOffset(), ptr.getLength()));
                 } else {
-                    topValues.put(currentOrder, ptr.copyBytes());
+                    topValues.get(currentOrder).push(ptr.copyBytes());
                 }
             }
         } else {
@@ -158,14 +163,17 @@ public class FirstLastValueServerAggregator extends BaseAggregator {
         if (useOffset) {
             payload.setOffset(offset);
 
-            if (topValues.size() == 0) {
+            if (topValuesCount == 0) {
                 return false;
             }
         } else {
             if (topValue == null) {
                 return false;
             }
-            topValues.put(topOrder.getValue(), topValue);
+
+            LinkedList<byte[]> topValueList = new LinkedList<byte[]>();
+            topValueList.push(topValue);
+            topValues.put(topOrder.getValue(), topValueList);
         }
         payload.setData(topValues);
 
@@ -201,5 +209,17 @@ public class FirstLastValueServerAggregator extends BaseAggregator {
         } else {
             this.isAscending = isAscending;
         }
+    }
+
+    private boolean removeLastElement(byte[] currentOrder, byte[] lowestKey, int sortOrderInt) {
+        if (Bytes.compareTo(currentOrder, lowestKey) * sortOrderInt >= 0) {
+            if (topValues.get(lowestKey).size() == 1) {
+                topValues.remove(lowestKey);
+            } else {
+                topValues.get(lowestKey).pollFirst();
+            }
+            return true;
+        }
+        return false;
     }
 }
