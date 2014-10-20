@@ -151,8 +151,11 @@ public class SkipScanFilter extends FilterBase implements Writable {
         }
         Cell previousCellHint = nextCellHintMap.put(family, nextCellHint);
         // we should either have no previous hint, or the next hint should always come after the previous hint
-        assert previousCellHint == null || KeyValue.COMPARATOR.compare(nextCellHint, previousCellHint) > 0
-                : "next hint must come after previous hint (prev=" + previousCellHint + ", next=" + nextCellHint + ", kv=" + kv + ")";
+        assert previousCellHint == null
+                || Bytes.compareTo(nextCellHint.getRowArray(), nextCellHint.getRowOffset(),
+                    nextCellHint.getRowLength(), previousCellHint.getRowArray(), previousCellHint
+                            .getRowOffset(), previousCellHint.getRowLength()) > 0 : "next hint must come after previous hint (prev="
+                + previousCellHint + ", next=" + nextCellHint + ", kv=" + kv + ")";
     }
     
     @Override
