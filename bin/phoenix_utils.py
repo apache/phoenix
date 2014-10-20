@@ -39,23 +39,47 @@ def find(pattern, classPaths):
                 
     return ""
 
+def findFileInPathWithoutRecursion(pattern, path):
+
+    files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path,f))]
+    for name in files:
+        if fnmatch.fnmatch(name, pattern):
+            return os.path.join(path, name)
+
+    return ""
 
 def setPath():
+ PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client*.jar"
+ PHOENIX_TESTS_JAR_PATTERN = "phoenix-*-tests*.jar"
  global current_dir
  current_dir = os.path.dirname(os.path.abspath(__file__))
  global phoenix_jar_path
- phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target")
+ phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target","*")
  global phoenix_client_jar
  phoenix_client_jar = find("phoenix-*-client.jar", phoenix_jar_path)
  global phoenix_test_jar_path
- phoenix_test_jar_path = os.path.join(current_dir, "..", "phoenix-core", "target")
+ phoenix_test_jar_path = os.path.join(current_dir, "..", "phoenix-core", "target","*")
+ global hbase_conf_path
+ hbase_conf_path = os.getenv('HBASE_CONF_PATH','.')
  global testjar
- testjar = find("phoenix-*-tests.jar", phoenix_test_jar_path)
+ testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_test_jar_path)
 
  if phoenix_client_jar == "":
-    phoenix_client_jar = find("phoenix-*-client*", os.path.join(current_dir, ".."))
+     phoenix_client_jar = findFileInPathWithoutRecursion(PHOENIX_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))
 
  if testjar == "":
-    testjar = find("phoenix-*-test*", os.path.join(current_dir, ".."))
+     testjar = findFileInPathWithoutRecursion(PHOENIX_TESTS_JAR_PATTERN, os.path.join(current_dir, ".."))
+
+ # Backward support old env variable PHOENIX_LIB_DIR replaced by PHOENIX_CLASS_PATH
+ global phoenix_class_path
+ phoenix_class_path = os.getenv('PHOENIX_LIB_DIR','')
+ if phoenix_class_path == "":
+     phoenix_class_path = os.getenv('PHOENIX_CLASS_PATH','')
+
+ if phoenix_client_jar == "":
+     phoenix_client_jar = find(PHOENIX_CLIENT_JAR_PATTERN, phoenix_class_path)
+
+ if testjar == "":
+     testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_class_path)
 
  return ""
