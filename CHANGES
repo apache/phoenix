@@ -1,5 +1,99 @@
 
-Release Notes - Phoenix - Version 4.1
+Release Notes - Phoenix - Version 4.2
+
+** New Feature and Sub-task
+    * [PHOENIX-167] - Support semi/anti-joins
+    * [PHOENIX-180] - Use stats to guide query parallelization
+    * [PHOENIX-943] - Handle pushed down post-filters for subquery in joins with limit and non-groupby aggregation
+    * [PHOENIX-945] - Support correlated subqueries in comparison without ANY/SOME/ALL
+    * [PHOENIX-1249] - Support local immutable index 
+    * [PHOENIX-1259] - Perform partial scan for ANALYZE when table salted or local index
+    * [PHOENIX-1263] - Only cache guideposts on physical PTable
+    * [PHOENIX-1264] - Add StatisticsCollector to existing tables on first connection to cluster
+    * [PHOENIX-1296] - Scan entire region when tenant-specific table is analyzed
+    * [PHOENIX-1309] - Ensure Phoenix table is created for Local index and view index tables to store guideposts against them
+    * [PHOENIX-1320] - Update stats atomically
+    * [PHOENIX-1321] - Cleanup setting of timestamps when collecting and using stats
+    * [PHOENIX-1322] - Add documentation for UPDATE STATISTICS command
+    * [PHOENIX-1328] - Update ANALYZE syntax to collect stats on index tables and all tables
+    * [PHOENIX-1332] - Support correlated subqueries in comparison with ANY/SOME/ALL
+    * [PHOENIX-1333] - Store statistics guideposts as VARBINARY
+    * [PHOENIX-1254] - Add REGEXP_SPLIT function
+
+** Bug
+    * [PHOENIX-105] - Remove org.apache.commons.csv source once available in Maven repo
+    * [PHOENIX-973] - Lexer skips unexpected characters
+    * [PHOENIX-1044] - Phoenix-Pig: No results returned unless all used columns are selected
+    * [PHOENIX-1098] - Support CASCADE option on DROP TABLE that drops all VIEWs
+    * [PHOENIX-1107] - Support mutable indexes over replication
+    * [PHOENIX-1139] - Failed to disable local index when index update fails
+    * [PHOENIX-1203] - Uable to work for count (distinct col) queries via phoenix table with secondary indexes
+    * [PHOENIX-1206] - Decimal serialization broken for negative numbers with more than 19 digits of precision
+    * [PHOENIX-1208] - Check for existence of views doesn't take into account the fact that SYSTEM.CATALOG could be split across regions
+    * [PHOENIX-1211] - Use skip scan when row value constructor uses leading row key columns 
+    * [PHOENIX-1214] - SYSTEM.CATALOG cannot be created when first connection to cluster is tenant-specific
+    * [PHOENIX-1223] - arrays of byte[]s don't encode for null bytes
+    * [PHOENIX-1225] - Evaluation of OR between columns in PK and not in PK incorrect
+    * [PHOENIX-1228] - NPE in "select max(c1)" when c1 is a CHAR field
+    * [PHOENIX-1237] - COALESCE Function - type of second parameter
+    * [PHOENIX-1238] - Rollback index region split on any split failure
+    * [PHOENIX-1239] - IN clause (and some others) cannot get moved from HAVING clause to WHERE clause when qualified
+    * [PHOENIX-1242] - ArrayoutofBoundException Phoenix mapping to exisiting Hbase
+    * [PHOENIX-1248] - CsvBulkLoadTool is failing with IAE when local index specified for --index-table parameter
+    * [PHOENIX-1250] - guava dependency out-dated causing NoSuchMethod error
+    * [PHOENIX-1251] - Salted queries with range scan become full table scans
+    * [PHOENIX-1252] - Potential lock leak for ungrouped aggregation
+    * [PHOENIX-1253] - Invalid PreparedStatement.setXXX call should throw SQLException
+    * [PHOENIX-1257] - Upserted data seen by SELECT in UPSERT SELECT execution
+    * [PHOENIX-1258] - RegexpSubstrFunction is not useable with group by query 
+    * [PHOENIX-1266] - Disallow setting NOT NULL constraint on non PK columns
+    * [PHOENIX-1268] - Misleading exception when attempting to drop system table
+    * [PHOENIX-1271] - Column metadata doesn't hide tenant column on tenant-specific connections.
+    * [PHOENIX-1272] - Avoid pulling in unintended HBase dependencies in phoenix-core
+    * [PHOENIX-1273] - Phoenix should provide ILIKE keyword
+    * [PHOENIX-1275] - SYSTEM.STATS table is not created when SYSTEM.CATALOG is already present
+    * [PHOENIX-1280] - ColumnProjectionFilter creates too many ImmutableBytesPtrs
+    * [PHOENIX-1281] - Each MultiKeyValueTuple.setKeyValues creates a new immutable list object
+    * [PHOENIX-1284] - Override config properties for unit tests not making it to server
+    * [PHOENIX-1285] - Override default for histogram depth in QueryServicesTestImpl
+    * [PHOENIX-1288] - Selecting more than 2 array elements via index fails with ArrayIndexOutOfBoundsException
+    * [PHOENIX-1289] - Drop index during upsert may abort RS
+    * [PHOENIX-1298] - Queries on fixed width type columns that have an index declared on them don't use that index
+    * [PHOENIX-1305] - create index throws NPE when dataTable has specified default column family
+    * [PHOENIX-1313] - Investigate why LocalIndexIT.testLocalIndexScanAfterRegionSplit() is failing
+    * [PHOENIX-1315] - Optimize query for Pig loader
+    * [PHOENIX-1327] - Disallow creating arrays of fixed width base type without the max length being specified
+    * [PHOENIX-1330] - Flag VARBINARY VARBINARY ARRAY declaration in DDL as an error
+    * [PHOENIX-1337] - Unpadded fixed length tenant ID causes erroneous results
+    * [PHOENIX-1341] - PhoenixRuntime returns zero exit status on failure
+    * [PHOENIX-1344] - NTH_VALUE function skips duplicit values in order by
+    * [PHOENIX-1349] - VIEWs do not inherit indexes from their parent
+    * [PHOENIX-1353] - CsvBulkLoad doesn't work in secure env
+    * [PHOENIX-1355] - sqlline.py or psql.py may hang if they're not invoked from bin folder
+    * [PHOENIX-1356] - LocalIndexIT.testLocalIndexScanAfterRegionSplit() failed at distributed cluster when getting regions
+    * [PHOENIX-1357] - Salt sequence table to prevent same RS from getting all sequence calls
+    * [PHOENIX-1359] - Backward compatibility fails with 4.1 client and current 4.0 branch on server
+    * [PHOENIX-1360] - NPE in SpoolingResultIterator 
+    * [PHOENIX-1361] - Sequence value goes backwards if sequence validated before reserved
+    * [PHOENIX-1365] - Make sequence salt buckets configurable
+    * [PHOENIX-1368] - Persist link from VIEW back to its child VIEW
+
+** Improvement
+    * [PHOENIX-852] - Optimize child/parent foreign key joins
+    * [PHOENIX-1030] - Change Expression.isDeterministic() to return a enum of values ALWAYS, PER_STATEMENT, PER_ROW
+    * [PHOENIX-1216] - Making spooling directory location configurable
+    * [PHOENIX-1245] - Remove usage of empty KeyValue object BATCH_MARKER from Indexer
+    * [PHOENIX-1262] - Generate phoenix-server jar with and without antlr
+    * [PHOENIX-1300] - Allow sub-queries to choose different execution path other than hash-join
+
+** Task
+    * [PHOENIX-103] - Drop hadoop1.0 specifics from code
+    * [PHOENIX-761] - Implement getKeyPart for round/ceil/floor of a DECIMAL value
+    * [PHOENIX-1297] - Adding utility methods to get primary key information from the optimized query plan
+    * [PHOENIX-1310] - Spill files filling up /tmp on server
+
+
+Previous release - Phoenix version 4.1
 
 ** New Feature
     * [PHOENIX-71] - Support sub-joins
