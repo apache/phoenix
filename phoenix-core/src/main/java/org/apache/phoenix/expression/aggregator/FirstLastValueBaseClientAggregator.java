@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.expression.aggregator;
 
+import java.util.LinkedList;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -42,7 +44,7 @@ public class FirstLastValueBaseClientAggregator extends BaseAggregator {
     protected int offset = -1;
     protected BinaryComparator topOrder = new BinaryComparator(ByteUtil.EMPTY_BYTE_ARRAY);
     protected byte[] topValue = null;
-    protected TreeMap<byte[], byte[]> topValues = new TreeMap<byte[], byte[]>(new ByteArrayComparator());
+    protected TreeMap<byte[], LinkedList<byte[]>> topValues = new TreeMap<byte[], LinkedList<byte[]>>(new ByteArrayComparator());
     protected boolean isAscending;
 
     public FirstLastValueBaseClientAggregator() {
@@ -63,7 +65,7 @@ public class FirstLastValueBaseClientAggregator extends BaseAggregator {
                 return false;
             }
 
-            Set<Map.Entry<byte[], byte[]>> entrySet;
+            Set<Map.Entry<byte[], LinkedList<byte[]>>> entrySet;
             if (isAscending) {
                 entrySet = topValues.entrySet();
             } else {
@@ -71,10 +73,14 @@ public class FirstLastValueBaseClientAggregator extends BaseAggregator {
             }
 
             int counter = offset;
-            for (Map.Entry<byte[], byte[]> entry : entrySet) {
-                if (--counter == 0) {
-                    ptr.set(entry.getValue());
-                    return true;
+            for (Map.Entry<byte[], LinkedList<byte[]>> entry : entrySet) {
+                ListIterator<byte[]> it = entry.getValue().listIterator();
+                while (it.hasNext()) {
+                    if (--counter == 0) {
+                        ptr.set(it.next());
+                        return true;
+                    }
+                    it.next();
                 }
             }
 
@@ -103,13 +109,22 @@ public class FirstLastValueBaseClientAggregator extends BaseAggregator {
 
         payload.setPayload(ptr.copyBytes());
         isAscending = payload.getIsAscending();
-        TreeMap serverAggregatorResult = payload.getData();
+        TreeMap<byte[], LinkedList<byte[]>> serverAggregatorResult = payload.getData();
 
         if (useOffset) {
-            payload.setOffset(offset);
-            topValues.putAll(serverAggregatorResult);
+            //merge topValues
+            for (Entry<byte[], LinkedList<byte[]>> entry : serverAggregatorResult.entrySet()) {
+                byte[] itemKey = entry.getKey();
+                LinkedList<byte[]> itemList = entry.getValue();
+
+                if (topValues.containsKey(itemKey)) {
+                    topValues.get(itemKey).addAll(itemList);
+                } else {
+                    topValues.put(itemKey, itemList);
+                }
+            }
         } else {
-            Entry<byte[], byte[]> valueEntry = serverAggregatorResult.firstEntry();
+            Entry<byte[], LinkedList<byte[]>> valueEntry = serverAggregatorResult.firstEntry();
             byte[] currentOrder = valueEntry.getKey();
 
             boolean isBetter;
@@ -120,7 +135,7 @@ public class FirstLastValueBaseClientAggregator extends BaseAggregator {
             }
             if (topOrder.getValue().length < 1 || isBetter) {
                 topOrder = new BinaryComparator(currentOrder);
-                topValue = valueEntry.getValue();
+                topValue = valueEntry.getValue().getFirst();
             }
         }
     }

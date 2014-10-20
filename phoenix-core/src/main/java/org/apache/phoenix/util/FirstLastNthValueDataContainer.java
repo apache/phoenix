@@ -19,6 +19,8 @@ package org.apache.phoenix.util;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.LinkedList;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
@@ -32,7 +34,7 @@ public class FirstLastNthValueDataContainer {
 
     protected boolean isAscending = false;
     protected int offset;
-    protected TreeMap<byte[], byte[]> data;
+    protected TreeMap<byte[], LinkedList<byte[]>> data;
     protected boolean isOrderValuesFixedLength = false;
     protected boolean isDataValuesFixedLength = false;
 
@@ -40,7 +42,7 @@ public class FirstLastNthValueDataContainer {
         isAscending = ascending;
     }
 
-    public void setData(TreeMap<byte[], byte[]> topValues) {
+    public void setData(TreeMap<byte[], LinkedList<byte[]>> topValues) {
         data = topValues;
     }
 
@@ -65,7 +67,7 @@ public class FirstLastNthValueDataContainer {
         int lengthOfDataValues = Bytes.toInt(payload, 5);
         int sizeOfMap = Bytes.toInt(payload, 9);
 
-        data = new TreeMap<byte[], byte[]>(new Bytes.ByteArrayComparator());
+        data = new TreeMap<byte[], LinkedList<byte[]>>(new Bytes.ByteArrayComparator());
 
         int payloadOffset = 13;
 
@@ -93,7 +95,10 @@ public class FirstLastNthValueDataContainer {
                 payloadOffset += l;
             }
 
-            data.put(key, value);
+            if(!data.containsKey(key)) {
+                data.put(key, new LinkedList<byte[]>());
+            }
+            data.get(key).add(value);
         }
 
     }
@@ -127,7 +132,7 @@ public class FirstLastNthValueDataContainer {
 
         bos.write(isAscending ? (byte) 1 : (byte) 0);
 
-        Entry<byte[], byte[]> firstEntry = data.firstEntry();
+        Entry<byte[], LinkedList<byte[]>> firstEntry = data.firstEntry();
         if (isOrderValuesFixedLength) {
             bos.write(Bytes.toBytes(firstEntry.getKey().length));
         } else {
@@ -135,34 +140,44 @@ public class FirstLastNthValueDataContainer {
         }
 
         if (isDataValuesFixedLength) {
-            bos.write(Bytes.toBytes(firstEntry.getValue().length));
+            bos.write(Bytes.toBytes(firstEntry.getValue().getFirst().length));
         } else {
             bos.write(Bytes.toBytes(0));
         }
 
-        bos.write(Bytes.toBytes(data.size()));
+        int offsetForDataLength = bos.size();
+        bos.write(new byte[4]); //space for number of elements
+        int valuesCount = 0;
 
-        for (Map.Entry<byte[], byte[]> entry : data.entrySet()) {
+        for (Map.Entry<byte[], LinkedList<byte[]>> entry : data.entrySet()) {
+            ListIterator<byte[]> it = entry.getValue().listIterator();
+            while(it.hasNext()) {
+                valuesCount++;
+                byte[] itemValue = it.next();
 
-            if (!isOrderValuesFixedLength) {
-                bos.write(Bytes.toBytes(entry.getKey().length));
+                if (!isOrderValuesFixedLength) {
+                    bos.write(Bytes.toBytes(entry.getKey().length));
+                }
+                bos.write(entry.getKey());
+
+                if (!isDataValuesFixedLength) {
+                    bos.write(Bytes.toBytes(itemValue.length));
+                }
+                bos.write(itemValue);
             }
-            bos.write(entry.getKey());
-
-            if (!isDataValuesFixedLength) {
-                bos.write(Bytes.toBytes(entry.getValue().length));
-            }
-            bos.write(entry.getValue());
         }
 
-        return bos.toByteArray();
+        byte[] outputArray = bos.toByteArray();
+        //write number of elements
+        System.arraycopy(Bytes.toBytes(valuesCount), 0, outputArray, offsetForDataLength, 4);
+        return outputArray;
     }
 
     public boolean getIsAscending() {
         return isAscending;
     }
 
-    public TreeMap getData() {
+    public TreeMap<byte[], LinkedList<byte[]>> getData() {
         return data;
     }
 }
