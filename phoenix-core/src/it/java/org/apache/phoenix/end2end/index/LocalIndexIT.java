@@ -650,25 +650,26 @@ public class LocalIndexIT extends BaseIndexIT {
             assertTrue(rs.next());
             
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            HMaster master = getUtility().getHBaseCluster().getMaster();
             for (int i = 1; i < 5; i++) {
-                
-                admin.split(Bytes.toBytes(DATA_TABLE_NAME), ByteUtil.concat(Bytes.toBytes(strings[3*i])));
-                List<HRegionInfo> regionsOfUserTable =
-                        master.getAssignmentManager().getRegionStates().getRegionsOfTable(TableName.valueOf(DATA_TABLE_NAME));
 
-                while (regionsOfUserTable.size() != (4+i)) {
-                    Thread.sleep(100);
-                    regionsOfUserTable = master.getAssignmentManager().getRegionStates().getRegionsOfTable(TableName.valueOf(DATA_TABLE_NAME));
-                }
-                assertEquals(4+i, regionsOfUserTable.size());
-                List<HRegionInfo> regionsOfIndexTable = master.getAssignmentManager().getRegionStates()
-                                .getRegionsOfTable(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
-                while (regionsOfIndexTable.size() != (4+i)) {
-                    Thread.sleep(100);
-                    regionsOfIndexTable = master.getAssignmentManager().getRegionStates()
-                            .getRegionsOfTable(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
-                }
+              admin.split(Bytes.toBytes(DATA_TABLE_NAME), ByteUtil.concat(Bytes.toBytes(strings[3*i])));
+              List<HRegionInfo> regionsOfUserTable = admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME));
+
+              while (regionsOfUserTable.size() != (4+i)) {
+                Thread.sleep(100);
+                regionsOfUserTable = admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME)); 
+              }
+              assertEquals(4+i, regionsOfUserTable.size());
+              List<HRegionInfo> regionsOfIndexTable =
+                  admin.getTableRegions(TableName.valueOf(MetaDataUtil
+                    .getLocalIndexTableName(DATA_TABLE_NAME))); 
+
+              while (regionsOfIndexTable.size() != (4+i)) {
+                Thread.sleep(100);
+                regionsOfIndexTable =
+                    admin.getTableRegions(TableName.valueOf(MetaDataUtil
+                      .getLocalIndexTableName(DATA_TABLE_NAME)));
+              }
                 assertEquals(4 + i, regionsOfIndexTable.size());
                 String query = "SELECT t_id,k1,v1 FROM " + DATA_TABLE_NAME;
                 rs = conn1.createStatement().executeQuery(query);
