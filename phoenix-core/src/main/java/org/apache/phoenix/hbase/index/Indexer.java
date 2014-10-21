@@ -68,6 +68,7 @@ import org.apache.phoenix.trace.TracingCompat;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
+import org.cloudera.htrace.TraceScope;
 
 import com.google.common.collect.Multimap;
 
@@ -264,7 +265,8 @@ public class Indexer extends BaseRegionObserver {
     }
 
         // get the current span, or just use a null-span to avoid a bunch of if statements
-        Span current = Trace.startSpan("Starting to build index updates").getSpan();
+    TraceScope scope = Trace.startSpan("Starting to build index updates");
+        Span current = scope.getSpan();
         if (current == null) {
             current = NullSpan.INSTANCE;
         }
@@ -281,6 +283,7 @@ public class Indexer extends BaseRegionObserver {
 
         // close the span
         current.stop();
+        scope.close();
   }
 
   private class MultiMutation extends Mutation {
@@ -422,7 +425,8 @@ public class Indexer extends BaseRegionObserver {
     }
 
         // get the current span, or just use a null-span to avoid a bunch of if statements
-        Span current = Trace.startSpan("Completing index writes").getSpan();
+    TraceScope scope = Trace.startSpan("Completing index writes");
+        Span current = scope.getSpan();
         if (current == null) {
             current = NullSpan.INSTANCE;
         }
@@ -439,6 +443,7 @@ public class Indexer extends BaseRegionObserver {
      */
     if (ikv == null) {
             current.stop();
+            scope.close();
       return;
     }
 
@@ -468,6 +473,7 @@ public class Indexer extends BaseRegionObserver {
                 // finish the span
 
                 current.stop();
+                scope.close();
       }
     }
   }
