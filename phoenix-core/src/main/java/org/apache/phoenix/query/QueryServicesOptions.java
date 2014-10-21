@@ -59,7 +59,6 @@ import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.trace.util.Tracing;
@@ -163,12 +162,6 @@ public class QueryServicesOptions {
     }
     
     public ReadOnlyProps getProps(ReadOnlyProps defaultProps) {
-        // Ensure that HBase RPC time out value is at least as large as our thread time out for query. 
-        int threadTimeOutMS = config.getInt(THREAD_TIMEOUT_MS_ATTRIB, DEFAULT_THREAD_TIMEOUT_MS);
-        int hbaseRPCTimeOut = config.getInt(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT);
-        if (threadTimeOutMS > hbaseRPCTimeOut) {
-            config.setInt(HConstants.HBASE_RPC_TIMEOUT_KEY, threadTimeOutMS);
-        }
         return new ReadOnlyProps(defaultProps, config.iterator());
     }
     
