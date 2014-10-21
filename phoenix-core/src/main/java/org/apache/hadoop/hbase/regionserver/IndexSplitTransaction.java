@@ -971,4 +971,8 @@ public class IndexSplitTransaction {
     return ZKAssign.transitionNode(zkw, parent, serverName,
       beginState, endState, znodeVersion, payload);
   }
+  
+  public HRegion getParent() {
+    return this.parent;
+  }
 }
