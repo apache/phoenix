@@ -59,7 +59,6 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 
 /**
  * 
@@ -518,7 +517,7 @@ public class SchemaUtil {
         if (index < 0) {
             return Bytes.toString(tableName); 
         }
-        return Bytes.toString(tableName, index+1, tableName.length);
+        return Bytes.toString(tableName, index+1, tableName.length - index - 1);
     }
 
     public static String getTableNameFromFullName(String tableName) {
