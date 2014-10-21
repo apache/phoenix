@@ -62,31 +62,40 @@ public class LocalIndexSplitter extends BaseRegionObserver {
                         .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
             HRegion indexRegion = IndexUtil.getIndexRegion(environment);
             if (indexRegion == null) return;
-            st = new IndexSplitTransaction(indexRegion, splitKey);
-            if (!st.prepare()) {
-                LOG.error("Prepare for the table " + indexRegion.getTableDesc().getNameAsString()
+            try {
+                st = new IndexSplitTransaction(indexRegion, splitKey);
+                if (!st.prepare()) {
+                    LOG.error("Prepare for the table " + indexRegion.getTableDesc().getNameAsString()
                         + " failed. So returning null. ");
-                ctx.bypass();
-                return;
-            }
-            indexRegion.forceSplit(splitKey);
-            daughterRegions = st.stepsBeforePONR(rss, rss, false);
-            HRegionInfo copyOfParent = new HRegionInfo(indexRegion.getRegionInfo());
-            copyOfParent.setOffline(true);
-            copyOfParent.setSplit(true);
-            // Put for parent
-            Put putParent = MetaEditor.makePutFromRegionInfo(copyOfParent);
-            MetaEditor.addDaughtersToPut(putParent, daughterRegions.getFirst().getRegionInfo(),
-                daughterRegions.getSecond().getRegionInfo());
-            metaEntries.add(putParent);
-            // Puts for daughters
-            Put putA = MetaEditor.makePutFromRegionInfo(daughterRegions.getFirst().getRegionInfo());
-            Put putB =
+                    ctx.bypass();
+                    return;
+                }
+                indexRegion.forceSplit(splitKey);
+                daughterRegions = st.stepsBeforePONR(rss, rss, false);
+                HRegionInfo copyOfParent = new HRegionInfo(indexRegion.getRegionInfo());
+                copyOfParent.setOffline(true);
+                copyOfParent.setSplit(true);
+                // Put for parent
+                Put putParent = MetaEditor.makePutFromRegionInfo(copyOfParent);
+                MetaEditor.addDaughtersToPut(putParent, daughterRegions.getFirst().getRegionInfo(),
+                    daughterRegions.getSecond().getRegionInfo());
+                metaEntries.add(putParent);
+                // Puts for daughters
+                Put putA = MetaEditor.makePutFromRegionInfo(daughterRegions.getFirst().getRegionInfo());
+                Put putB =
                     MetaEditor.makePutFromRegionInfo(daughterRegions.getSecond().getRegionInfo());
-            st.addLocation(putA, rss.getServerName(), 1);
-            st.addLocation(putB, rss.getServerName(), 1);
-            metaEntries.add(putA);
-            metaEntries.add(putB);
+                st.addLocation(putA, rss.getServerName(), 1);
+                st.addLocation(putB, rss.getServerName(), 1);
+                metaEntries.add(putA);
+                metaEntries.add(putB);
+            } catch (Exception e) {
+                ctx.bypass();
+                if (st != null){
+                    st.rollback(rss, rss);
+                    st = null;
+                    daughterRegions = null;
+                }
+            }
         }
     }
 
@@ -98,4 +107,25 @@ public class LocalIndexSplitter extends BaseRegionObserver {
         HRegionServer rs = (HRegionServer) environment.getRegionServerServices();
         st.stepsAfterPONR(rs, rs, daughterRegions);
     }
+    
+    @Override
+    public void preRollBackSplit(ObserverContext<RegionCoprocessorEnvironment> ctx)
+            throws IOException {
+        RegionCoprocessorEnvironment environment = ctx.getEnvironment();
+        HRegionServer rs = (HRegionServer) environment.getRegionServerServices();
+        try {
+            if (st != null) {
+                st.rollback(rs, rs);
+                st = null;
+                daughterRegions = null;
+            }
+        } catch (Exception e) {
+            if (st != null) {
+                LOG.error("Error while rolling back the split failure for index region "
+                    + st.getParent(), e);
+            }
+            rs.abort("Abort; we got an error during rollback of index");
+        }
+    }
+
 }
