@@ -28,6 +28,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.BindTableNode;
@@ -175,6 +176,23 @@ public class FromCompiler {
         SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), true);
         return visitor;
     }
+    
+    public static ColumnResolver getResolverForCompiledDerivedTable(PhoenixConnection connection, TableRef tableRef, RowProjector projector) 
+            throws SQLException {
+        List<PColumn> projectedColumns = new ArrayList<PColumn>();
+        List<Expression> sourceExpressions = new ArrayList<Expression>();
+        PTable table = tableRef.getTable();
+        for (PColumn column : table.getColumns()) {
+            Expression sourceExpression = projector.getColumnProjector(column.getPosition()).getExpression();
+            PColumnImpl projectedColumn = new PColumnImpl(column.getName(), column.getFamilyName(), 
+                    sourceExpression.getDataType(), sourceExpression.getMaxLength(), sourceExpression.getScale(), sourceExpression.isNullable(), 
+                    column.getPosition(), sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced());                
+            projectedColumns.add(projectedColumn);
+            sourceExpressions.add(sourceExpression);
+        }
+        PTable t = PTableImpl.makePTable(table, projectedColumns);
+        return new SingleTableColumnResolver(connection, new TableRef(tableRef.getTableAlias(), t, tableRef.getLowerBoundTimeStamp(), tableRef.hasDynamicCols()));
+    }
 
     public static ColumnResolver getResolverForMutation(DMLStatement statement, PhoenixConnection connection)
             throws SQLException {
@@ -213,6 +231,12 @@ public class FromCompiler {
             super(connection, tsAddition);
             alias = tableNode.getAlias();
             TableRef tableRef = createTableRef(tableNode, updateCacheImmediately);
+            tableRefs = ImmutableList.of(tableRef);
+        }
+        
+        public SingleTableColumnResolver(PhoenixConnection connection, TableRef tableRef) {
+            super(connection, 0);
+            alias = tableRef.getTableAlias();
             tableRefs = ImmutableList.of(tableRef);
         }
 
@@ -366,8 +390,7 @@ public class FromCompiler {
         }
     }
     
-    // TODO: unused, but should be used for joins - make private once used
-    public static class MultiTableColumnResolver extends BaseColumnResolver implements TableNodeVisitor<Void> {
+    private static class MultiTableColumnResolver extends BaseColumnResolver implements TableNodeVisitor<Void> {
         private final ListMultimap<String, TableRef> tableMap;
         private final List<TableRef> tables;
 

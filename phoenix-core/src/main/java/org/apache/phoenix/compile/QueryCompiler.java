@@ -34,11 +34,14 @@ import org.apache.phoenix.compile.JoinCompiler.ProjectedPTableWrapper;
 import org.apache.phoenix.compile.JoinCompiler.Table;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.AggregatePlan;
+import org.apache.phoenix.execute.ClientAggregatePlan;
+import org.apache.phoenix.execute.ClientScanPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.HashJoinPlan.HashSubPlan;
 import org.apache.phoenix.execute.HashJoinPlan.WhereClauseSubPlan;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.TupleProjectionPlan;
+import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -47,7 +50,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.join.HashJoinInfo;
-import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.ParseNode;
@@ -59,11 +61,11 @@ import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 
 
@@ -349,14 +351,30 @@ public class QueryCompiler {
     }
     
     protected QueryPlan compileSingleQuery(StatementContext context, SelectStatement select, List<Object> binds, boolean asSubquery, boolean allowPageFilter) throws SQLException{
+        SelectStatement innerSelect = select.getInnerSelectStatement();
+        if (innerSelect == null) {
+            return compileSingleFlatQuery(context, select, binds, asSubquery, allowPageFilter, null, null);
+        }
+        
+        QueryPlan innerPlan = compileSubquery(innerSelect);
+        TupleProjector tupleProjector = new TupleProjector(innerPlan.getProjector());
+        innerPlan = new TupleProjectionPlan(innerPlan, tupleProjector, null);
+        
+        // Replace the original resolver and table with those having compiled type info.
+        TableRef tableRef = context.getResolver().getTables().get(0);        
+        ColumnResolver resolver = FromCompiler.getResolverForCompiledDerivedTable(statement.getConnection(), tableRef, innerPlan.getProjector());
+        context.setResolver(resolver);
+        tableRef = resolver.getTables().get(0);
+        context.setCurrentTable(tableRef);
+        
+        return compileSingleFlatQuery(context, select, binds, asSubquery, allowPageFilter, innerPlan, innerPlan.getOrderBy().getOrderByExpressions().isEmpty() ? tupleProjector : null);
+    }
+    
+    protected QueryPlan compileSingleFlatQuery(StatementContext context, SelectStatement select, List<Object> binds, boolean asSubquery, boolean allowPageFilter, QueryPlan innerPlan, TupleProjector innerPlanTupleProjector) throws SQLException{
         PhoenixConnection connection = statement.getConnection();
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
-        
-        // TODO PHOENIX-944. See DerivedTableIT for a list of unsupported cases.
-        if (table.getType() == PTableType.SUBQUERY)
-            throw new SQLFeatureNotSupportedException("Complex nested queries not supported.");
         
         ParseNode viewWhere = null;
         if (table.getViewStatement() != null) {
@@ -364,15 +382,18 @@ public class QueryCompiler {
         }
         Integer limit = LimitCompiler.compile(context, select);
 
-        GroupBy groupBy = GroupByCompiler.compile(context, select);
+        GroupBy groupBy = GroupByCompiler.compile(context, select, innerPlanTupleProjector);
         // Optimize the HAVING clause by finding any group by expressions that can be moved
         // to the WHERE clause
         select = HavingCompiler.rewrite(context, select, groupBy);
         Expression having = HavingCompiler.compile(context, select, groupBy);
         // Don't pass groupBy when building where clause expression, because we do not want to wrap these
         // expressions as group by key expressions since they're pre, not post filtered.
-        context.setResolver(FromCompiler.getResolverForQuery(select, connection));
-        Set<SubqueryParseNode> subqueries = WhereCompiler.compile(context, select, viewWhere);
+        if (innerPlan == null) {
+            context.setResolver(FromCompiler.getResolverForQuery(select, connection));
+        }
+        Set<SubqueryParseNode> subqueries = Sets.<SubqueryParseNode> newHashSet();
+        Expression where = WhereCompiler.compile(context, select, viewWhere, subqueries);
         context.setResolver(resolver); // recover resolver
         OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit); 
         RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, asSubquery ? Collections.<PDatum>emptyList() : targetColumns);
@@ -386,10 +407,14 @@ public class QueryCompiler {
                 limit = maxRows;
             }
         }
-        ParallelIteratorFactory parallelIteratorFactory = asSubquery ? null : this.parallelIteratorFactory;
-        QueryPlan plan = select.isAggregate() || select.isDistinct() ? 
-                  new AggregatePlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, groupBy, having)
-                : new ScanPlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, allowPageFilter);
+        
+        QueryPlan plan = innerPlan;
+        if (plan == null) {
+            ParallelIteratorFactory parallelIteratorFactory = asSubquery ? null : this.parallelIteratorFactory;
+            plan = select.isAggregate() || select.isDistinct() ? 
+                      new AggregatePlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, groupBy, having)
+                    : new ScanPlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, allowPageFilter);
+        }
         if (!subqueries.isEmpty()) {
             int count = subqueries.size();
             WhereClauseSubPlan[] subPlans = new WhereClauseSubPlan[count];
@@ -399,6 +424,13 @@ public class QueryCompiler {
                 subPlans[i++] = new WhereClauseSubPlan(compileSubquery(stmt), stmt, subqueryNode.expectSingleRow());
             }
             plan = HashJoinPlan.create(select, plan, null, subPlans);
+        }
+        
+        if (innerPlan != null) {
+            plan =  select.isAggregate() || select.isDistinct() ?
+                      new ClientAggregatePlan(context, select, tableRef, projector, limit, where, orderBy, groupBy, having, plan)
+                    : new ClientScanPlan(context, select, tableRef, projector, limit, where, orderBy, plan);
+
         }
         
         return plan;
