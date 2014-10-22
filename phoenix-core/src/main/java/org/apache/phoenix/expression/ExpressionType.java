@@ -149,7 +149,6 @@ public enum ExpressionType {
     LowerFunction(LowerFunction.class),
     TrimFunction(TrimFunction.class),
     DistinctCountAggregateFunction(DistinctCountAggregateFunction.class),
-    DistinctValueAggregateFunction(DistinctValueAggregateFunction.class),
     PercentileContAggregateFunction(PercentileContAggregateFunction.class),
     PercentRankAggregateFunction(PercentRankAggregateFunction.class),
     StddevPopFunction(StddevPopFunction.class),
@@ -185,6 +184,7 @@ public enum ExpressionType {
     InlineArrayElemRefExpression(InlineArrayElemRefExpression.class),
     SQLIndexTypeFunction(SQLIndexTypeFunction.class),
     ModulusExpression(ModulusExpression.class),
+    DistinctValueAggregateFunction(DistinctValueAggregateFunction.class),
     RegexpSplitFunctiond(RegexpSplitFunction.class);
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;

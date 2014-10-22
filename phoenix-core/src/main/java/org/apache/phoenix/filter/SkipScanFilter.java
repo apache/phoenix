@@ -514,14 +514,30 @@ public class SkipScanFilter extends FilterBase implements Writable {
         return targetKey;
     }
 
+    private static final int KEY_RANGE_LENGTH_BITS = 21;
+    private static final int SLOT_SPAN_BITS = 32 - KEY_RANGE_LENGTH_BITS;
+    
     @Override
     public void readFields(DataInput in) throws IOException {
         RowKeySchema schema = new RowKeySchema();
         schema.readFields(in);
         int andLen = in.readInt();
+        int[] slotSpan = new int[andLen];
         List<List<KeyRange>> slots = Lists.newArrayListWithExpectedSize(andLen);
         for (int i=0; i<andLen; i++) {
-            int orLen = in.readInt();
+            int orLenWithSlotSpan = in.readInt();
+            int orLen = orLenWithSlotSpan;
+            /*
+             * For 4.2+ clients, we serialize the slotSpan array. To maintain backward
+             * compatibility, we encode the slotSpan values with the size of the list
+             * of key ranges. We reserve 21 bits for the key range list and 10 bits
+             * for the slotSpan value (up to 1024 which should be plenty).
+             */
+            if (orLenWithSlotSpan < 0) {
+                orLenWithSlotSpan = -orLenWithSlotSpan - 1;
+                slotSpan[i] = orLenWithSlotSpan >>> KEY_RANGE_LENGTH_BITS;
+                orLen = (orLenWithSlotSpan << SLOT_SPAN_BITS) >>> SLOT_SPAN_BITS;            
+            }
             List<KeyRange> orClause = Lists.newArrayListWithExpectedSize(orLen);
             slots.add(orClause);
             for (int j=0; j<orLen; j++) {
@@ -530,28 +546,22 @@ public class SkipScanFilter extends FilterBase implements Writable {
                 orClause.add(range);
             }
         }
-        int[] slotSpan = new int[andLen];
-        try {
-            for (int i = 0; i < andLen; i++) {
-                slotSpan[i] = in.readInt();
-            }
-        } catch (IOException e) { // Ignore as this must be a 3.1 client
-        }
         this.init(slots, slotSpan, schema);
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
+        assert(slots.size() == slotSpan.length);
         schema.write(out);
         out.writeInt(slots.size());
-        for (List<KeyRange> orClause : slots) {
-            out.writeInt(orClause.size());
-            for (KeyRange range : orClause) {
+        for (int i = 0; i < slots.size(); i++) {
+            List<KeyRange> orLen = slots.get(i);
+            int span = slotSpan[i];
+            int orLenWithSlotSpan = -( ( (span << KEY_RANGE_LENGTH_BITS) | orLen.size() ) + 1);
+            out.writeInt(orLenWithSlotSpan);
+            for (KeyRange range : orLen) {
                 range.write(out);
             }
-        }
-        for (int span : slotSpan) {
-            out.writeInt(span);
         }
     }
     
