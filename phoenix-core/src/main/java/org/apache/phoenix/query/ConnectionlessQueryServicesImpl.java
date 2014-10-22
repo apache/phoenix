@@ -69,12 +69,14 @@ import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 
@@ -95,6 +97,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private KeyValueBuilder kvBuilder;
     private volatile boolean initialized;
     private volatile SQLException initializationException;
+    private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
     
     public ConnectionlessQueryServicesImpl(QueryServices queryServices, ConnectionInfo connInfo) {
         super(queryServices);
@@ -122,6 +125,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
+        List<HRegionLocation> regions = tableSplits.get(Bytes.toString(tableName));
+        if (regions != null) {
+            return regions;
+        }
         return Collections.singletonList(new HRegionLocation(
             new HRegionInfo(TableName.valueOf(tableName), HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW),
             SERVER_NAME, -1));
@@ -167,16 +174,49 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         } catch (TableNotFoundException e) {
             return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0, null);
         }
-        //return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, null);
     }
 
+    private static byte[] getTableName(List<Mutation> tableMetaData, byte[] physicalTableName) {
+        if (physicalTableName != null) {
+            return physicalTableName;
+        }
+        byte[][] rowKeyMetadata = new byte[3][];
+        Mutation m = MetaDataUtil.getTableHeaderRow(tableMetaData);
+        byte[] key = m.getRow();
+        SchemaUtil.getVarChars(key, rowKeyMetadata);
+        byte[] schemaBytes = rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
+        byte[] tableBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+        return SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
+    }
+    
+    private static List<HRegionLocation> generateRegionLocations(byte[] physicalName, byte[][] splits) {
+        byte[] startKey = HConstants.EMPTY_START_ROW;
+        List<HRegionLocation> regions = Lists.newArrayListWithExpectedSize(splits.length);
+        for (byte[] split : splits) {
+            regions.add(new HRegionLocation(
+                    new HRegionInfo(TableName.valueOf(physicalName), startKey, split),
+                    SERVER_NAME, -1));
+            startKey = split;
+        }
+        regions.add(new HRegionLocation(
+                new HRegionInfo(TableName.valueOf(physicalName), startKey, HConstants.EMPTY_END_ROW),
+                SERVER_NAME, -1));
+        return regions;
+    }
+    
     @Override
     public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName, PTableType tableType, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits) throws SQLException {
+        if (splits != null) {
+            byte[] tableName = getTableName(tableMetaData, physicalName);
+            tableSplits.put(Bytes.toString(tableName), generateRegionLocations(tableName, splits));
+        }
         return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0, null);
     }
 
     @Override
     public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, PTableType tableType, boolean cascade) throws SQLException {
+        byte[] tableName = getTableName(tableMetadata, null);
+        tableSplits.remove(Bytes.toString(tableName));
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, null);
     }
 
@@ -215,7 +255,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 Properties scnProps = PropertiesUtil.deepCopy(props);
                 scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
                 scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
-                metaConnection = new PhoenixConnection(this, url, scnProps, newEmptyMetaData());
+                String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
+                metaConnection = new PhoenixConnection(this, globalUrl, scnProps, newEmptyMetaData());
                 try {
                     metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
                 } catch (TableAlreadyExistsException ignore) {
@@ -223,7 +264,9 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                 }
                 try {
-                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
+                    int nSaltBuckets = getSequenceSaltBuckets();
+                    String createTableStatement = Sequence.getCreateTableStatement(nSaltBuckets);
+                   metaConnection.createStatement().executeUpdate(createTableStatement);
                 } catch (NewerTableAlreadyExistsException ignore) {
                     // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
@@ -315,7 +358,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public long createSequence(String tenantId, String schemaName, String sequenceName,
             long startWith, long incrementBy, long cacheSize, long minValue, long maxValue,
             boolean cycle, long timestamp) throws SQLException {
-        SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName);
+        SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName, getSequenceSaltBuckets());
         if (sequenceMap.get(key) != null) {
             throw new SequenceAlreadyExistsException(schemaName, sequenceName);
         }
@@ -325,7 +368,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public long dropSequence(String tenantId, String schemaName, String sequenceName, long timestamp) throws SQLException {
-        SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName);
+        SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName, getSequenceSaltBuckets());
         if (sequenceMap.remove(key) == null) {
             throw new SequenceNotFoundException(schemaName, sequenceName);
         }
@@ -423,15 +466,17 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public PTableStats getTableStats(String physicalName) {
+    public PTableStats getTableStats(byte[] physicalName, long clientTimeStamp) {
         return PTableStats.EMPTY_STATS;
     }
 
     @Override
-    public void addTableStats(String physicalName, PTableStats tableStats) {
+    public void clearCache() throws SQLException {
     }
 
     @Override
-    public void clearCache() throws SQLException {
+    public int getSequenceSaltBuckets() {
+        return getProps().getInt(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
+                QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
     }
 }

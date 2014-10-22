@@ -49,6 +49,9 @@ message PColumn {
 message PTableStats {
   required bytes key = 1;
   repeated bytes values = 2;
+  optional int64 guidePostsByteCount = 3;
+  optional int64 keyBytesCount = 4;
+  optional int32 guidePostsCount = 5;
 }
 
 message PTable {

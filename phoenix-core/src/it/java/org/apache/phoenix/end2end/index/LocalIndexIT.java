@@ -59,7 +59,6 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
@@ -162,7 +161,7 @@ public class LocalIndexIT extends BaseIndexIT {
         ResultSet rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
-                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME);
+                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED);
         assertFalse("View index sequences should be deleted.", rs.next());
     }
     
@@ -633,7 +632,6 @@ public class LocalIndexIT extends BaseIndexIT {
     }
 
     @Test
-    @Ignore // TODO: ask Rajeshbabu to take a look
     public void testLocalIndexScanAfterRegionSplit() throws Exception {
         createBaseTable(DATA_TABLE_NAME, null, "('e','j','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
@@ -652,25 +650,26 @@ public class LocalIndexIT extends BaseIndexIT {
             assertTrue(rs.next());
             
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            HMaster master = getUtility().getHBaseCluster().getMaster();
             for (int i = 1; i < 5; i++) {
-                
-                admin.split(Bytes.toBytes(DATA_TABLE_NAME), ByteUtil.concat(Bytes.toBytes(strings[3*i])));
-                List<HRegionInfo> regionsOfUserTable =
-                        master.getAssignmentManager().getRegionStates().getRegionsOfTable(TableName.valueOf(DATA_TABLE_NAME));
 
-                while (regionsOfUserTable.size() != (4+i)) {
-                    Thread.sleep(100);
-                    regionsOfUserTable = master.getAssignmentManager().getRegionStates().getRegionsOfTable(TableName.valueOf(DATA_TABLE_NAME));
-                }
-                assertEquals(4+i, regionsOfUserTable.size());
-                List<HRegionInfo> regionsOfIndexTable = master.getAssignmentManager().getRegionStates()
-                                .getRegionsOfTable(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
-                while (regionsOfIndexTable.size() != (4+i)) {
-                    Thread.sleep(100);
-                    regionsOfIndexTable = master.getAssignmentManager().getRegionStates()
-                            .getRegionsOfTable(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
-                }
+              admin.split(Bytes.toBytes(DATA_TABLE_NAME), ByteUtil.concat(Bytes.toBytes(strings[3*i])));
+              List<HRegionInfo> regionsOfUserTable = admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME));
+
+              while (regionsOfUserTable.size() != (4+i)) {
+                Thread.sleep(100);
+                regionsOfUserTable = admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME)); 
+              }
+              assertEquals(4+i, regionsOfUserTable.size());
+              List<HRegionInfo> regionsOfIndexTable =
+                  admin.getTableRegions(TableName.valueOf(MetaDataUtil
+                    .getLocalIndexTableName(DATA_TABLE_NAME))); 
+
+              while (regionsOfIndexTable.size() != (4+i)) {
+                Thread.sleep(100);
+                regionsOfIndexTable =
+                    admin.getTableRegions(TableName.valueOf(MetaDataUtil
+                      .getLocalIndexTableName(DATA_TABLE_NAME)));
+              }
                 assertEquals(4 + i, regionsOfIndexTable.size());
                 String query = "SELECT t_id,k1,v1 FROM " + DATA_TABLE_NAME;
                 rs = conn1.createStatement().executeQuery(query);
@@ -690,10 +689,11 @@ public class LocalIndexIT extends BaseIndexIT {
                 query = "SELECT t_id,k1,k3 FROM " + DATA_TABLE_NAME;
                 rs = conn1.createStatement().executeQuery("EXPLAIN "+query);
                 assertEquals(
-                    "CLIENT PARALLEL " + (4+i) + "-WAY RANGE SCAN OVER "
-                            + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)+" [-32767]\n"+
-                            "CLIENT MERGE SORT",
-                    QueryUtil.getExplainPlan(rs));
+                    "CLIENT PARALLEL "
+                            + ((strings[3 * i].compareTo("j") < 0) ? (4 + i) : (4 + i - 1))
+                            + "-WAY RANGE SCAN OVER "
+                            + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME) + " [-32767]\n"
+                            + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
                 rs = conn1.createStatement().executeQuery(query);
                 Thread.sleep(1000);
                 for (int j = 0; j < 26; j++) {

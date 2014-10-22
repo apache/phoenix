@@ -18,6 +18,7 @@
 package org.apache.phoenix.util;
 
 import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -55,5 +56,13 @@ public class JDBCUtilTest {
         assertEquals(annotVal1, customAnnotations.get(annotKey1));
         assertEquals(annotVal2, customAnnotations.get(annotKey2));
         assertEquals(annotVal3, customAnnotations.get(annotKey3));
+    }
+
+    @Test
+    public void testRemoveProperty() {
+        assertEquals("localhost;", JDBCUtil.removeProperty("localhost;TenantId=abc;", TENANT_ID_ATTRIB));
+        assertEquals("localhost;foo=bar", JDBCUtil.removeProperty("localhost;TenantId=abc;foo=bar", TENANT_ID_ATTRIB));
+        assertEquals("localhost;TenantId=abc", JDBCUtil.removeProperty("localhost;TenantId=abc;foo=bar", "foo"));
+        assertEquals("localhost;TenantId=abc;foo=bar", JDBCUtil.removeProperty("localhost;TenantId=abc;foo=bar", "bar"));
     }
 }

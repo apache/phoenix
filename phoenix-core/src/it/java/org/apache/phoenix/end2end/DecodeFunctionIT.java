@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -27,7 +28,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.PDataType;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -82,11 +83,10 @@ public class DecodeFunctionIT extends BaseHBaseManagedTimeIT {
 
 		try {
 			conn.createStatement().executeQuery("SELECT * FROM test_table WHERE some_column = DECODE('zzxxuuyyzzxxuuyy', 'hex')");
-		} catch (IllegalDataException e) {
-			assertTrue(true);
-			return;
+	        fail();
+		} catch (SQLException e) {
+			assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
 		}
-		fail();
 	}
 
 	@Test
@@ -98,11 +98,10 @@ public class DecodeFunctionIT extends BaseHBaseManagedTimeIT {
 
 		try {
 			conn.createStatement().executeQuery("SELECT * FROM test_table WHERE some_column = DECODE('8', 'hex')");
-		} catch (IllegalDataException e) {
-			assertTrue(true);
-			return;
-		}
-		fail();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+        }
 	}
 
 	@Test
@@ -114,11 +113,10 @@ public class DecodeFunctionIT extends BaseHBaseManagedTimeIT {
 
 		try {
 			conn.createStatement().executeQuery("SELECT * FROM test_table WHERE some_column = DECODE('8', NULL)");
-		} catch (IllegalDataException e) {
-			assertTrue(true);
-			return;
-		}
-		fail();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+        }
 	}
 
 	@Test
@@ -130,10 +128,9 @@ public class DecodeFunctionIT extends BaseHBaseManagedTimeIT {
 
 		try {
 			conn.createStatement().executeQuery("SELECT * FROM test_table WHERE some_column = DECODE('8', 'someNonexistFormat')");
-		} catch (SQLException e) {
-			assertTrue(true);
-			return;
-		}
-		fail();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+        }
 	}
 }

@@ -26,6 +26,7 @@ import static org.junit.Assert.fail;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.Date;
+import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
@@ -36,6 +37,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -1577,8 +1579,10 @@ public class PDataTypeTest {
         try {
             PDataType.UNSIGNED_DATE.toBytes(date1);
             fail();
-        } catch (IllegalDataException e) {
-            
+        } catch (RuntimeException e) {
+            assertTrue(e.getCause() instanceof SQLException);
+            SQLException sqlE = (SQLException)e.getCause();
+            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), sqlE.getErrorCode());
         }
     }
 

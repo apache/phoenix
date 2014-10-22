@@ -127,7 +127,6 @@ public enum SQLExceptionCode {
         }
     }),
     CANNOT_DROP_PK(506, "42817", "Primary key column may not be dropped."),
-    CANNOT_CONVERT_TYPE(507, "42846", "Cannot convert type."),
     PRIMARY_KEY_MISSING(509, "42888", "The table does not have a primary key."),
     PRIMARY_KEY_ALREADY_EXISTS(510, "42889", "The table already has a primary key."),
     ORDER_BY_NOT_IN_SELECT_DISTINCT(511, "42890", "All ORDER BY expressions must appear in SELECT DISTINCT:"),
@@ -148,7 +147,9 @@ public enum SQLExceptionCode {
      */
      READ_ONLY_CONNECTION(518,"25502","Mutations are not permitted for a read-only connection."),
  
-    /** 
+     VARBINARY_ARRAY_NOT_SUPPORTED(519, "42896", "VARBINARY ARRAY is not supported"),
+
+     /** 
      * HBase and Phoenix specific implementation defined sub-classes.
      * Column family related exceptions.
      * 
@@ -206,7 +207,7 @@ public enum SQLExceptionCode {
     SET_UNSUPPORTED_PROP_ON_ALTER_TABLE(1025, "42Y84", "Unsupported property set in ALTER TABLE command."),
     CANNOT_ADD_NOT_NULLABLE_COLUMN(1038, "42Y84", "Only nullable columns may be added for a pre-existing table."),
     NO_MUTABLE_INDEXES(1026, "42Y85", "Mutable secondary indexes are only supported for HBase version " + MetaDataUtil.decodeHBaseVersionAsString(PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) + " and above."),
-    NO_DELETE_IF_IMMUTABLE_INDEX(1027, "42Y86", "Delete not allowed on a table with IMMUTABLE_ROW with non PK column in index."),
+    INVALID_FILTER_ON_IMMUTABLE_ROWS(1027, "42Y86", "All columns referenced in a WHERE clause must be available in every index for a table with immutable rows."),
     INVALID_INDEX_STATE_TRANSITION(1028, "42Y87", "Invalid index state transition."),
     INVALID_MUTABLE_INDEX_CONFIG(1029, "42Y88", "Mutable secondary indexes must have the " 
             + IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY + " property set to " 

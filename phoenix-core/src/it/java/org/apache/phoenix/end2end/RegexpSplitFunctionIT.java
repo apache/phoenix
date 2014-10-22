@@ -17,8 +17,11 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Array;
 import java.sql.Connection;
@@ -28,12 +31,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 @Category(HBaseManagedTimeTest.class)
 public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {

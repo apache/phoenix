@@ -553,7 +553,7 @@ public abstract class BaseTest {
                 @Override
                 public void run() {
                     try {
-                        utility.shutdownMiniCluster();
+                        if (utility != null) utility.shutdownMiniCluster();
                     } catch (Exception e) {
                         logger.warn("Exception caught when shutting down mini cluster", e);
                     }
@@ -812,13 +812,9 @@ public abstract class BaseTest {
         ResultSet rs = conn.createStatement().executeQuery("SELECT " 
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + "," 
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME 
-                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME);
+                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED);
         while (rs.next()) {
-            try {
-                conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getTableName(rs.getString(1), rs.getString(2)));
-            } catch (Exception e) {
-                //FIXME: see https://issues.apache.org/jira/browse/PHOENIX-973
-            }
+            conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(1), rs.getString(2)));
         }
     }
     

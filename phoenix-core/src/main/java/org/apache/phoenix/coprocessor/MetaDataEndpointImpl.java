@@ -544,6 +544,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         Integer saltBucketNum =
                 saltBucketNumKv != null ? (Integer) PDataType.INTEGER.getCodec().decodeInt(
                     saltBucketNumKv.getValueArray(), saltBucketNumKv.getValueOffset(), SortOrder.getDefault()) : null;
+        if (saltBucketNum != null && saltBucketNum.intValue() == 0) {
+            saltBucketNum = null; // Zero salt buckets means not salted
+        }
         Cell dataTableNameKv = tableKeyValues[DATA_TABLE_NAME_INDEX];
         PName dataTableName =
                 dataTableNameKv != null ? newPName(dataTableNameKv.getValueArray(),
@@ -592,8 +595,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                   addIndexToTable(tenantId, schemaName, famName, tableName, clientTimeStamp, indexes);
               } else if (linkType == LinkType.PHYSICAL_TABLE) {
                   physicalTables.add(famName);
-              } else {
-                  logger.warn("Unknown link type: " + colKv.getValueArray()[colKv.getValueOffset()] + " for " + SchemaUtil.getTableName(schemaName.getString(), tableName.getString()));
               }
           } else {
               addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
@@ -614,9 +615,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
         }
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, 
-            tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? dataTableName : null, 
-            indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement, disableWAL, 
-            multiTenant, viewType, viewIndexId, indexType, stats);
+            tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? schemaName : null, 
+            tableType == INDEX ? dataTableName : null, indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement, 
+            disableWAL, multiTenant, viewType, viewIndexId, indexType, stats);
     }
 
     private PTable buildDeletedTable(byte[] key, ImmutableBytesPtr cacheKey, HRegion region,

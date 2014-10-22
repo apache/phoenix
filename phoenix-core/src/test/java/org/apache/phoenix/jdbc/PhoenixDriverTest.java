@@ -24,7 +24,6 @@ import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -37,10 +36,23 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testFirstConnectionWhenPropsHasTenantId() throws Exception {
-        final String url = getUrl();
-        verifyConnectionValid(url);
+        Properties props = new Properties();
+        final String tenantId = "00Dxx0000001234";
+        props.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+
+        Connection connection = new PhoenixTestDriver().connect(getUrl(), props);
+        assertEquals(tenantId, connection.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB));
     }
-    
+
+    @Test
+    public void testFirstConnectionWhenUrlHasTenantId() throws Exception {
+        final String tenantId = "00Dxx0000001234";
+        String url = getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + "=" + tenantId;
+        Driver driver = new PhoenixTestDriver();
+
+        driver.connect(url, new Properties());
+    }
+
     @Test
     public void testMaxMutationSizeSetCorrectly() throws Exception {
         Properties connectionProperties = new Properties();
@@ -58,16 +70,5 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
             }
             fail("Upsert should have failed since the number of upserts (200) is greater than the MAX_MUTATION_SIZE_ATTRIB (100)");
         } catch (IllegalArgumentException expected) {}
-    }
-
-    private void verifyConnectionValid(String url) throws SQLException {
-        Driver driver = DriverManager.getDriver(url);
-
-        Properties props = new Properties();
-        final String tenantId = "00Dxx0000001234";
-        props.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-
-        Connection connection = driver.connect(url, props);
-        assertEquals(tenantId, connection.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB));
     }
 }

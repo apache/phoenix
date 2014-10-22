@@ -26,6 +26,7 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -1205,4 +1206,44 @@ public class SequenceIT extends BaseClientManagedTimeIT {
                     + unexpectedExceptions + " missing exceptions : " + missingExceptions);
         }
     }
+    
+    @Test
+    public void testValidateBeforeReserve() throws Exception {
+        nextConnection();
+        conn.createStatement().execute(
+                "CREATE TABLE foo (k VARCHAR PRIMARY KEY, l BIGINT)");
+        conn.createStatement().execute(
+            "CREATE SEQUENCE foo.bar");
+        
+        nextConnection();
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR foo.bar FROM foo");
+        assertTrue(rs.next());
+        conn.createStatement().execute(
+                "UPSERT INTO foo VALUES ('a', NEXT VALUE FOR foo.bar)");
+        conn.createStatement().execute(
+                "UPSERT INTO foo VALUES ('b', NEXT VALUE FOR foo.bar)");
+        conn.commit();
+        
+        nextConnection();
+        rs = conn.createStatement().executeQuery("SELECT * FROM foo");
+        assertTrue(rs.next());
+        assertEquals("a",rs.getString(1));
+        assertEquals(1,rs.getLong(2));
+        assertTrue(rs.next());
+        assertEquals("b",rs.getString(1));
+        assertEquals(2,rs.getLong(2));
+        assertFalse(rs.next());
+        
+        nextConnection();
+        PreparedStatement stmt = conn.prepareStatement("SELECT NEXT VALUE FOR foo.bar FROM foo");
+        ParameterMetaData md = stmt.getParameterMetaData();
+        assertEquals(0,md.getParameterCount());
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(3, rs.getLong(1));
+        assertTrue(rs.next());
+        assertEquals(4, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+
 }

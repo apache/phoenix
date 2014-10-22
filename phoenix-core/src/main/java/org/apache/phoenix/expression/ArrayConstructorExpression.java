@@ -38,9 +38,17 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
     // and serialize into byte stream
     private int[] offsetPos;
 
+    public ArrayConstructorExpression() {
+    }
+
     public ArrayConstructorExpression(List<Expression> children, PDataType baseType) {
         super(children);
         init(baseType);
+    }
+
+    private void init(PDataType baseType) {
+        this.baseType = baseType;
+        elements = new Object[getChildren().size()];
         estimatedSize = PArrayDataType.estimateSize(this.children.size(), this.baseType);
         if (!this.baseType.isFixedWidth()) {
             offsetPos = new int[children.size()];
@@ -48,12 +56,6 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
         } else {
             byteStream = new TrustedByteArrayOutputStream(estimatedSize);
         }
-
-    }
-
-    private void init(PDataType baseType) {
-        this.baseType = baseType;
-        elements = new Object[getChildren().size()];
     }
 
     @Override

@@ -124,7 +124,11 @@ public interface PTable {
         /**
          * Link from a view to its physical table
          */
-        PHYSICAL_TABLE((byte)2);
+        PHYSICAL_TABLE((byte)2),
+        /**
+         * Link from a view to its parent table
+         */
+        PARENT_TABLE((byte)3);
 
         private final byte[] byteValue;
         private final byte serializedValue;
@@ -285,6 +289,12 @@ public interface PTable {
      * on or null if not an index.
      */
     PName getParentTableName();
+    /**
+     * Gets the schema name of the data table for an index table.
+     * @return the schema name of the data table that this index is
+     * on or null if not an index.
+     */
+    PName getParentSchemaName();
     
     /**
      * For a view, return the name of table in Phoenix that physically stores data.

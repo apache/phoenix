@@ -68,7 +68,23 @@ public class JDBCUtil {
         }
         return propValue;
     }
-    
+
+    public static String removeProperty(String url, String propName) {
+        String urlPropName = ";" + propName + "=";
+        int begIndex = url.indexOf(urlPropName);
+        if (begIndex >= 0) {
+            int endIndex = url.indexOf(';', begIndex + urlPropName.length());
+            if (endIndex < 0) {
+                endIndex = url.length();
+            }
+            String prefix = url.substring(0, begIndex);
+            String suffix = url.substring(endIndex, url.length());
+            return prefix + suffix;
+        } else {
+            return url;
+        }
+    }
+
     /**
      * Returns a map that contains connection properties from both <code>info</code> and <code>url</code>.
      */

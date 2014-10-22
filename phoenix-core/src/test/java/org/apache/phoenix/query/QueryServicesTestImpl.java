@@ -52,6 +52,12 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE =  1024L*1024L*4L; // 4 Mb
     public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE =  1024L*1024L*2L; // 2 Mb
     public static final int DEFAULT_MIN_STATS_UPDATE_FREQ_MS = 0;
+    
+    /**
+     * Set number of salt buckets lower for sequence table during testing, as a high
+     * value overwhelms our mini clusters.
+     */
+    public static final int DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS = 4;
 
     
     public QueryServicesTestImpl(ReadOnlyProps defaultProps) {
@@ -60,6 +66,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     
     private static QueryServicesOptions getDefaultServicesOptions() {
     	return withDefaults()
+    	        .setSequenceSaltBuckets(DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS)
                 .setMinStatsUpdateFrequencyMs(DEFAULT_MIN_STATS_UPDATE_FREQ_MS)
                 .setThreadPoolSize(DEFAULT_THREAD_POOL_SIZE)
                 .setQueueSize(DEFAULT_QUEUE_SIZE)

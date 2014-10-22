@@ -78,18 +78,37 @@ public class QueryOptimizer {
     }
     
     public QueryPlan optimize(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
+        List<QueryPlan>plans = getApplicablePlans(dataPlan, statement, targetColumns, parallelIteratorFactory, true);
+        return plans.get(0);
+    }
+    
+    public List<QueryPlan> getBestPlan(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
+        return getApplicablePlans(statement, select, resolver, targetColumns, parallelIteratorFactory, true);
+    }
+    
+    public List<QueryPlan> getApplicablePlans(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
+        return getApplicablePlans(statement, select, resolver, targetColumns, parallelIteratorFactory, false);
+    }
+    
+    private List<QueryPlan> getApplicablePlans(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
+        QueryCompiler compiler = new QueryCompiler(statement, select, resolver, targetColumns, parallelIteratorFactory, new SequenceManager(statement));
+        QueryPlan dataPlan = compiler.compile();
+        return getApplicablePlans(dataPlan, statement, targetColumns, parallelIteratorFactory, false);
+    }
+    
+    private List<QueryPlan> getApplicablePlans(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
         SelectStatement select = (SelectStatement)dataPlan.getStatement();
         // Exit early if we have a point lookup as we can't get better than that
         if (!useIndexes 
                 || select.isJoin() 
                 || dataPlan.getContext().getResolver().getTables().size() > 1
-                || dataPlan.getContext().getScanRanges().isPointLookup()) {
-            return dataPlan;
+                || (dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan)) {
+            return Collections.singletonList(dataPlan);
         }
         PTable dataTable = dataPlan.getTableRef().getTable();
         List<PTable>indexes = Lists.newArrayList(dataTable.getIndexes());
         if (indexes.isEmpty() || dataPlan.isDegenerate() || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX)) {
-            return dataPlan;
+            return Collections.singletonList(dataPlan);
         }
         
         // The targetColumns is set for UPSERT SELECT to ensure that the proper type conversion takes place.
@@ -110,20 +129,24 @@ public class QueryOptimizer {
         plans.add(dataPlan);
         QueryPlan hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns, parallelIteratorFactory, plans);
         if (hintedPlan != null) {
-            return hintedPlan;
+            if (stopAtBestPlan) {
+                return Collections.singletonList(hintedPlan);
+            }
+            plans.add(0, hintedPlan);
         }
+        
         for (PTable index : indexes) {
             QueryPlan plan = addPlan(statement, translatedIndexSelect, index, targetColumns, parallelIteratorFactory, dataPlan);
             if (plan != null) {
                 // Query can't possibly return anything so just return this plan.
                 if (plan.isDegenerate()) {
-                    return plan;
+                    return Collections.singletonList(plan);
                 }
                 plans.add(plan);
             }
         }
         
-        return chooseBestPlan(select, plans);
+        return hintedPlan == null ? orderPlansBestToWorst(select, plans) : plans;
     }
     
     private static QueryPlan getHintedQueryPlan(PhoenixStatement statement, SelectStatement select, List<PTable> indexes, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, List<QueryPlan> plans) throws SQLException {
@@ -160,12 +183,13 @@ public class QueryOptimizer {
                 String indexName = indexHint.substring(startIndex, endIndex);
                 int indexPos = getIndexPosition(indexes, indexName);
                 if (indexPos >= 0) {
-                    // Hinted index is applicable, so return it. It'll be the plan at position 1, after the data plan
-                    QueryPlan plan = addPlan(statement, select, indexes.get(indexPos), targetColumns, parallelIteratorFactory, dataPlan);
+                    // Hinted index is applicable, so return it's index
+                    PTable index = indexes.get(indexPos);
+                    indexes.remove(indexPos);
+                    QueryPlan plan = addPlan(statement, select, index, targetColumns, parallelIteratorFactory, dataPlan);
                     if (plan != null) {
                         return plan;
                     }
-                    indexes.remove(indexPos);
                 }
                 startIndex = endIndex + 1;
             }
@@ -185,7 +209,7 @@ public class QueryOptimizer {
     private static QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, QueryPlan dataPlan) throws SQLException {
         int nColumns = dataPlan.getProjector().getColumnCount();
         String alias = '"' + dataPlan.getTableRef().getTableAlias() + '"'; // double quote in case it's case sensitive
-        String schemaName = dataPlan.getTableRef().getTable().getSchemaName().getString();
+        String schemaName = index.getParentSchemaName().getString();
         schemaName = schemaName.length() == 0 ? null :  '"' + schemaName + '"';
 
         String tableName = '"' + index.getTableName().getString() + '"';
@@ -223,7 +247,7 @@ public class QueryOptimizer {
     }
     
     /**
-     * Choose the best plan among all the possible ones.
+     * Order the plans among all the possible ones from best to worst.
      * Since we don't keep stats yet, we use the following simple algorithm:
      * 1) If the query is a point lookup (i.e. we have a set of exact row keys), choose among those.
      * 2) If the query has an ORDER BY and a LIMIT, choose the plan that has all the ORDER BY expression
@@ -233,12 +257,12 @@ public class QueryOptimizer {
      *    b) the plan that preserves ordering for a group by.
      *    c) the data table plan
      * @param plans the list of candidate plans
-     * @return QueryPlan
+     * @return list of plans ordered from best to worst.
      */
-    private QueryPlan chooseBestPlan(SelectStatement select, List<QueryPlan> plans) {
+    private List<QueryPlan> orderPlansBestToWorst(SelectStatement select, List<QueryPlan> plans) {
         final QueryPlan dataPlan = plans.get(0);
         if (plans.size() == 1) {
-            return dataPlan;
+            return plans;
         }
         
         /**
@@ -342,8 +366,7 @@ public class QueryOptimizer {
             
         });
         
-        return candidates.get(0);
-        
+        return bestCandidates;
     }
 
     

@@ -88,18 +88,22 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     
     
     private static void throwIfScanOutOfRegion(Scan scan, HRegion region) throws DoNotRetryIOException {
+        boolean isLocalIndex = ScanUtil.isLocalIndex(scan);
         byte[] lowerInclusiveScanKey = scan.getStartRow();
         byte[] upperExclusiveScanKey = scan.getStopRow();
         byte[] lowerInclusiveRegionKey = region.getStartKey();
         byte[] upperExclusiveRegionKey = region.getEndKey();
-        byte[] expectedUpperRegionKey = scan.getAttribute(EXPECTED_UPPER_REGION_KEY);
-        if (   (expectedUpperRegionKey != null && // local index check
-                  Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0)
-            || (expectedUpperRegionKey == null && // non local index check
-                ( Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
-                ( Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0) ) ) ) {
-            @SuppressWarnings("deprecation")
-            Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTableName());
+        boolean isStaleRegionBoundaries;
+        if (isLocalIndex) {
+            byte[] expectedUpperRegionKey = scan.getAttribute(EXPECTED_UPPER_REGION_KEY);
+            isStaleRegionBoundaries = expectedUpperRegionKey != null &&
+                    Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0;
+        } else {
+            isStaleRegionBoundaries = Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
+                    ( Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0);
+        }
+        if (isStaleRegionBoundaries) {
+            Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTable().getNameAsString());
             throw new DoNotRetryIOException(cause.getMessage(), cause);
         }
     }

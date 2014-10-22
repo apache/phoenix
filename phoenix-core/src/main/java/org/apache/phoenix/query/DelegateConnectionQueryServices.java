@@ -235,17 +235,18 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public PTableStats getTableStats(String physicalName) {
-        return getDelegate().getTableStats(physicalName);
+    public PTableStats getTableStats(byte[] physicalName, long clientTimeStamp) throws SQLException {
+        return getDelegate().getTableStats(physicalName, clientTimeStamp);
     }
 
-    @Override
-    public void addTableStats(String physicalName, PTableStats tableStats) {
-        getDelegate().addTableStats(physicalName, tableStats);
-    }
 
     @Override
     public void clearCache() throws SQLException {
         getDelegate().clearCache();
+    }
+
+    @Override
+    public int getSequenceSaltBuckets() {
+        return getDelegate().getSequenceSaltBuckets();
     }
 }

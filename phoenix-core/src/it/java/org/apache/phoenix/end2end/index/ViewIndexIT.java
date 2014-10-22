@@ -27,6 +27,7 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -34,9 +35,11 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
+@Category(HBaseManagedTimeTest.class)
 public class ViewIndexIT extends BaseIndexIT {
 
     private String VIEW_NAME = "MY_VIEW";
@@ -44,7 +47,7 @@ public class ViewIndexIT extends BaseIndexIT {
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        // Drop the HBase table metadata for this test
+        // Drop the HBase table metadata for this test to confirm that view index table dropped
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         // Must update config before starting server
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
@@ -79,7 +82,7 @@ public class ViewIndexIT extends BaseIndexIT {
         ResultSet rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
-                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME);
+                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED);
         assertFalse("View index sequences should be deleted.", rs.next());
     }
 }

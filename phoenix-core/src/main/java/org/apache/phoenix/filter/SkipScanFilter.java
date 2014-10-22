@@ -21,7 +21,9 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
@@ -75,7 +77,8 @@ public class SkipScanFilter extends FilterBase implements Writable {
     private int endKeyLength;
     private boolean isDone;
     private int offset;
-    private Cell nextCellHint;
+    private Map<ImmutableBytesWritable, Cell> nextCellHintMap =
+            new HashMap<ImmutableBytesWritable, Cell>();
 
     private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
@@ -134,8 +137,8 @@ public class SkipScanFilter extends FilterBase implements Writable {
     }
 
     private void setNextCellHint(Cell kv) {
-        Cell previousCellHint = nextCellHint;
-
+        ImmutableBytesWritable family = new ImmutableBytesWritable(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength());
+        Cell nextCellHint = null;
         if (offset == 0) {
             nextCellHint = new KeyValue(startKey, 0, startKeyLength,
                     null, 0, 0, null, 0, 0, HConstants.LATEST_TIMESTAMP, Type.Maximum, null, 0, 0);
@@ -146,19 +149,19 @@ public class SkipScanFilter extends FilterBase implements Writable {
             nextCellHint = new KeyValue(nextKey, 0, nextKey.length,
                     null, 0, 0, null, 0, 0, HConstants.LATEST_TIMESTAMP, Type.Maximum, null, 0, 0);
         }
-
+        Cell previousCellHint = nextCellHintMap.put(family, nextCellHint);
         // we should either have no previous hint, or the next hint should always come after the previous hint
-        // TODO: put this assert back after trying failing tests without it
-        // Tests failing with this assert include: 
-        // DeleteIT.testDeleteAllFromTableWithIndexNoAutoCommitNoSalting()
-        // MutableIndexIT.testCoveredColumnUpdatesWithLocalIndex()
-//        assert previousCellHint == null || KeyValue.COMPARATOR.compare(nextCellHint, previousCellHint) > 0
-//                : "next hint must come after previous hint (prev=" + previousCellHint + ", next=" + nextCellHint + ", kv=" + kv + ")";
+        assert previousCellHint == null
+                || Bytes.compareTo(nextCellHint.getRowArray(), nextCellHint.getRowOffset(),
+                    nextCellHint.getRowLength(), previousCellHint.getRowArray(), previousCellHint
+                            .getRowOffset(), previousCellHint.getRowLength()) > 0 : "next hint must come after previous hint (prev="
+                + previousCellHint + ", next=" + nextCellHint + ", kv=" + kv + ")";
     }
     
     @Override
     public Cell getNextCellHint(Cell kv) {
-        return isDone ? null : nextCellHint;
+        return isDone ? null : nextCellHintMap.get(new ImmutableBytesWritable(kv.getFamilyArray(),
+                kv.getFamilyOffset(), kv.getFamilyLength()));
     }
 
     public boolean hasIntersect(byte[] lowerInclusiveKey, byte[] upperExclusiveKey) {
@@ -511,14 +514,30 @@ public class SkipScanFilter extends FilterBase implements Writable {
         return targetKey;
     }
 
+    private static final int KEY_RANGE_LENGTH_BITS = 21;
+    private static final int SLOT_SPAN_BITS = 32 - KEY_RANGE_LENGTH_BITS;
+    
     @Override
     public void readFields(DataInput in) throws IOException {
         RowKeySchema schema = new RowKeySchema();
         schema.readFields(in);
         int andLen = in.readInt();
+        int[] slotSpan = new int[andLen];
         List<List<KeyRange>> slots = Lists.newArrayListWithExpectedSize(andLen);
         for (int i=0; i<andLen; i++) {
-            int orLen = in.readInt();
+            int orLenWithSlotSpan = in.readInt();
+            int orLen = orLenWithSlotSpan;
+            /*
+             * For 4.2+ clients, we serialize the slotSpan array. To maintain backward
+             * compatibility, we encode the slotSpan values with the size of the list
+             * of key ranges. We reserve 21 bits for the key range list and 10 bits
+             * for the slotSpan value (up to 1024 which should be plenty).
+             */
+            if (orLenWithSlotSpan < 0) {
+                orLenWithSlotSpan = -orLenWithSlotSpan - 1;
+                slotSpan[i] = orLenWithSlotSpan >>> KEY_RANGE_LENGTH_BITS;
+                orLen = (orLenWithSlotSpan << SLOT_SPAN_BITS) >>> SLOT_SPAN_BITS;            
+            }
             List<KeyRange> orClause = Lists.newArrayListWithExpectedSize(orLen);
             slots.add(orClause);
             for (int j=0; j<orLen; j++) {
@@ -527,25 +546,22 @@ public class SkipScanFilter extends FilterBase implements Writable {
                 orClause.add(range);
             }
         }
-        int[] slotSpan = new int[andLen];
-        for (int i = 0; i < andLen; i++) {
-            slotSpan[i] = in.readInt();
-        }
         this.init(slots, slotSpan, schema);
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
+        assert(slots.size() == slotSpan.length);
         schema.write(out);
         out.writeInt(slots.size());
-        for (List<KeyRange> orClause : slots) {
-            out.writeInt(orClause.size());
-            for (KeyRange range : orClause) {
+        for (int i = 0; i < slots.size(); i++) {
+            List<KeyRange> orLen = slots.get(i);
+            int span = slotSpan[i];
+            int orLenWithSlotSpan = -( ( (span << KEY_RANGE_LENGTH_BITS) | orLen.size() ) + 1);
+            out.writeInt(orLenWithSlotSpan);
+            for (KeyRange range : orLen) {
                 range.write(out);
             }
-        }
-        for (int span : slotSpan) {
-            out.writeInt(span);
         }
     }
     

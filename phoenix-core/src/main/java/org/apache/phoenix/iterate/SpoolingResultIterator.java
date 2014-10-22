@@ -132,7 +132,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 scanner.close();
             } finally {
                 try {
-                    if (!usedOnDiskIterator) {
+                    if (!usedOnDiskIterator && tempFile != null) {
                         tempFile.delete();
                     }
                 } finally {

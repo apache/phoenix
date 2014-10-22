@@ -50,7 +50,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
 
 import com.google.common.collect.Lists;
@@ -59,7 +58,7 @@ import com.google.common.math.LongMath;
 public class Sequence {
     public static final int SUCCESS = 0;
     
-    public enum ValueOp {VALIDATE_SEQUENCE, RESERVE_SEQUENCE};
+    public enum ValueOp {VALIDATE_SEQUENCE, RESERVE_SEQUENCE, INCREMENT_SEQUENCE};
     public enum MetaOp {CREATE_SEQUENCE, DROP_SEQUENCE, RETURN_SEQUENCE};
     
     // create empty Sequence key values used while created a sequence row
@@ -141,10 +140,10 @@ public class Sequence {
         return value.isDeleted ? null : value;
     }
     
-    private long increment(SequenceValue value, int factor) throws SQLException {       
-        boolean increasingSeq = value.incrementBy > 0;
+    private long increment(SequenceValue value, ValueOp op) throws SQLException {       
+        boolean increasingSeq = value.incrementBy > 0 && op != ValueOp.VALIDATE_SEQUENCE;
         // check if the the sequence has already reached the min/max limit
-        if (value.limitReached) {           
+        if (value.limitReached && op != ValueOp.VALIDATE_SEQUENCE) {           
             if (value.cycle) {
                 value.limitReached=false;
                 throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
@@ -158,12 +157,11 @@ public class Sequence {
         }
         
         long returnValue = value.currentValue;
-        if (factor != 0) {
+        if (op == ValueOp.INCREMENT_SEQUENCE) {
             boolean overflowOrUnderflow=false;
             // advance currentValue while checking for overflow
             try {
-                long incrementValue = LongMath.checkedMultiply(value.incrementBy, factor);
-                value.currentValue = LongMath.checkedAdd(value.currentValue, incrementValue);
+                value.currentValue = LongMath.checkedAdd(value.currentValue, value.incrementBy);
             } catch (ArithmeticException e) {
                 overflowOrUnderflow = true;
             }
@@ -178,18 +176,18 @@ public class Sequence {
         return returnValue;
     }
 
-    public long incrementValue(long timestamp, int factor, ValueOp action) throws SQLException {
+    public long incrementValue(long timestamp, ValueOp op) throws SQLException {
         SequenceValue value = findSequenceValue(timestamp);
         if (value == null) {
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }
         if (value.currentValue == value.nextValue) {
-            if (action == ValueOp.VALIDATE_SEQUENCE) {
+            if (op == ValueOp.VALIDATE_SEQUENCE) {
                 return value.currentValue;
             }
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }    
-        return increment(value, factor);
+        return increment(value, op);
     }
 
     public List<Append> newReturns() {
@@ -217,7 +215,7 @@ public class Sequence {
     }
 
     private Append newReturn(SequenceValue value) {
-        byte[] key = SchemaUtil.getSequenceKey(this.key.getTenantId(), this.key.getSchemaName(), this.key.getSequenceName());
+        byte[] key = this.key.getKey();
         Append append = new Append(key);
         byte[] opBuf = new byte[] {(byte)MetaOp.RETURN_SEQUENCE.ordinal()};
         append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, opBuf);
@@ -247,7 +245,7 @@ public class Sequence {
         return key;
     }
 
-    public long incrementValue(Result result, int factor) throws SQLException {
+    public long incrementValue(Result result, ValueOp op) throws SQLException {
         // In this case, we don't definitely know the timestamp of the deleted sequence,
         // but we know anything older is likely deleted. Worse case, we remove a sequence
         // from the cache that we shouldn't have which will cause a gap in sequence values.
@@ -268,14 +266,14 @@ public class Sequence {
                 .build().buildException();
         }
         // If we found the sequence, we update our cache with the new value
-        SequenceValue value = new SequenceValue(result);
+        SequenceValue value = new SequenceValue(result, op);
         insertSequenceValue(value);
-        return increment(value, factor);
+        return increment(value, op);
     }
 
     @SuppressWarnings("deprecation")
     public Increment newIncrement(long timestamp, Sequence.ValueOp action) {
-        Increment inc = new Increment(SchemaUtil.getSequenceKey(key.getTenantId(), key.getSchemaName(), key.getSequenceName()));
+        Increment inc = new Increment(key.getKey());
         // It doesn't matter what we set the amount too - we always use the values we get
         // from the Get we do to prevent any race conditions. All columns that get added
         // are returned with their current value
@@ -411,7 +409,7 @@ public class Sequence {
             return this.incrementBy == 0;
         }
         
-        public SequenceValue(Result r) {
+        public SequenceValue(Result r, ValueOp op) {
             KeyValue currentValueKV = getCurrentValueKV(r);
             KeyValue incrementByKV = getIncrementByKV(r);
             KeyValue cacheSizeKV = getCacheSizeKV(r);
@@ -426,7 +424,10 @@ public class Sequence {
             this.maxValue = PDataType.LONG.getCodec().decodeLong(maxValueKV.getValueArray(), maxValueKV.getValueOffset(), SortOrder.getDefault());
             this.cycle = (Boolean)PDataType.BOOLEAN.toObject(cycleKV.getValueArray(), cycleKV.getValueOffset(), cycleKV.getValueLength());
             this.limitReached = false;
-            currentValue = nextValue - incrementBy * cacheSize;
+            currentValue = nextValue;
+            if (op != ValueOp.VALIDATE_SEQUENCE) {
+                currentValue -= incrementBy * cacheSize;
+            }
         }
     }
 
@@ -457,7 +458,7 @@ public class Sequence {
     }
 
     public Append createSequence(long startWith, long incrementBy, long cacheSize, long timestamp, long minValue, long maxValue, boolean cycle) {
-        byte[] key = SchemaUtil.getSequenceKey(this.key.getTenantId(), this.key.getSchemaName(), this.key.getSequenceName());
+        byte[] key = this.key.getKey();
         Append append = new Append(key);
         append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, new byte[] {(byte)MetaOp.CREATE_SEQUENCE.ordinal()});
         if (timestamp != HConstants.LATEST_TIMESTAMP) {
@@ -496,7 +497,7 @@ public class Sequence {
     }
 
     public Append dropSequence(long timestamp) {
-        byte[] key = SchemaUtil.getSequenceKey(this.key.getTenantId(), this.key.getSchemaName(), this.key.getSequenceName());
+        byte[] key =  this.key.getKey();
         Append append = new Append(key);
         append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, new byte[] {(byte)MetaOp.DROP_SEQUENCE.ordinal()});
         if (timestamp != HConstants.LATEST_TIMESTAMP) {
@@ -527,5 +528,12 @@ public class Sequence {
             .setSchemaName(key.getSchemaName())
             .setTableName(key.getSequenceName())
             .build().buildException();
+    }
+
+    public static String getCreateTableStatement(int nSaltBuckets) {
+        if (nSaltBuckets <= 0) {
+            return QueryConstants.CREATE_SEQUENCE_METADATA;
+        }
+        return QueryConstants.CREATE_SEQUENCE_METADATA + "," + PhoenixDatabaseMetaData.SALT_BUCKETS + "=" + nSaltBuckets;
     }
 }

@@ -75,6 +75,7 @@ import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
@@ -87,6 +88,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
@@ -178,9 +180,11 @@ public class UpsertCompiler {
         private RowProjector projector;
         private int[] columnIndexes;
         private int[] pkSlotIndexes;
+        private final TableRef tableRef;
 
-        private UpsertingParallelIteratorFactory(PhoenixConnection connection, TableRef tableRef) {
-            super(connection, tableRef);
+        private UpsertingParallelIteratorFactory (PhoenixConnection connection, TableRef tableRef) {
+            super(connection);
+            this.tableRef = tableRef;
         }
 
         @Override
@@ -223,7 +227,7 @@ public class UpsertCompiler {
         List<PColumn> allColumnsToBe = Collections.emptyList();
         boolean isTenantSpecific = false;
         boolean isSharedViewIndex = false;
-        String tenantId = null;
+        String tenantIdStr = null;
         ColumnResolver resolver = null;
         int[] columnIndexesToBe;
         int nColumnsToSet = 0;
@@ -255,7 +259,7 @@ public class UpsertCompiler {
                 boolean isSalted = table.getBucketNum() != null;
                 isTenantSpecific = table.isMultiTenant() && connection.getTenantId() != null;
                 isSharedViewIndex = table.getViewIndexId() != null;
-                tenantId = isTenantSpecific ? connection.getTenantId().getString() : null;
+                tenantIdStr = isTenantSpecific ? connection.getTenantId().getString() : null;
                 int posOffset = isSalted ? 1 : 0;
                 // Setup array of column indexes parallel to values that are going to be set
                 allColumnsToBe = table.getColumns();
@@ -376,7 +380,7 @@ public class UpsertCompiler {
                     select = SubselectRewriter.flatten(select, connection);
                     ColumnResolver selectResolver = FromCompiler.getResolverForQuery(select, connection);
                     select = StatementNormalizer.normalize(select, selectResolver);
-                    select = prependTenantAndViewConstants(table, select, tenantId, addViewColumnsToBe);
+                    select = prependTenantAndViewConstants(table, select, tenantIdStr, addViewColumnsToBe);
                     SelectStatement transformedSelect = SubqueryRewriter.transform(select, selectResolver, connection);
                     if (transformedSelect != select) {
                         selectResolver = FromCompiler.getResolverForQuery(transformedSelect, connection);
@@ -697,6 +701,8 @@ public class UpsertCompiler {
         // initialze values with constant byte values first
         final byte[][] values = new byte[nValuesToSet][];
         if (isTenantSpecific) {
+            PName tenantId = connection.getTenantId();
+            tenantId = ScanUtil.padTenantIdIfNecessary(table.getRowKeySchema(), table.getBucketNum() != null, tenantId);
             values[nodeIndex++] = connection.getTenantId().getBytes();
         }
         if (isSharedViewIndex) {

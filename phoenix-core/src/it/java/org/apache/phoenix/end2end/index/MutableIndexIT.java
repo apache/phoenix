@@ -241,7 +241,6 @@ public class MutableIndexIT extends BaseMutableIndexIT {
     }
 
     @Test
-    //@Ignore // TODO: ask Rajeshbabu to look at: SkipScanFilter:151 assert for skip_hint > current_key is failing 
     public void testCoveredColumnUpdatesWithLocalIndex() throws Exception {
         testCoveredColumnUpdates(true);
     }
@@ -1250,4 +1249,85 @@ public class MutableIndexIT extends BaseMutableIndexIT {
     	}
     }
 
+    @Test
+    public void testSkipScanFilterWhenTableHasMultipleColumnFamilies() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            createTestTable();
+            populateTestTable();
+            String upsert = "UPSERT INTO " + DATA_TABLE_FULL_NAME
+                    + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(upsert);
+            stmt.setString(1, "varchar4");
+            stmt.setString(2, "char1");
+            stmt.setInt(3, 1);
+            stmt.setLong(4, 1L);
+            stmt.setBigDecimal(5, new BigDecimal("1.1"));
+            stmt.setString(6, "varchar_a");
+            stmt.setString(7, "chara");
+            stmt.setInt(8, 2);
+            stmt.setLong(9, 2L);
+            stmt.setBigDecimal(10, new BigDecimal("2.1"));
+            stmt.setString(11, "varchar_b");
+            stmt.setString(12, "charb");
+            stmt.setInt(13, 3);
+            stmt.setLong(14, 3L);
+            stmt.setBigDecimal(15, new BigDecimal("3.1"));
+            stmt.setDate(16, null);
+            stmt.executeUpdate();
+            
+            stmt.setString(1, "varchar5");
+            stmt.setString(2, "char2");
+            stmt.setInt(3, 2);
+            stmt.setLong(4, 2L);
+            stmt.setBigDecimal(5, new BigDecimal("2.2"));
+            stmt.setString(6, "varchar_a");
+            stmt.setString(7, "chara");
+            stmt.setInt(8, 3);
+            stmt.setLong(9, 3L);
+            stmt.setBigDecimal(10, new BigDecimal("3.2"));
+            stmt.setString(11, "varchar_b");
+            stmt.setString(12, "charb");
+            stmt.setInt(13, 4);
+            stmt.setLong(14, 4L);
+            stmt.setBigDecimal(15, new BigDecimal("4.2"));
+            stmt.setDate(16, null);
+            stmt.executeUpdate();
+            
+            stmt.setString(1, "varchar6");
+            stmt.setString(2, "char3");
+            stmt.setInt(3, 3);
+            stmt.setLong(4, 3L);
+            stmt.setBigDecimal(5, new BigDecimal("3.3"));
+            stmt.setString(6, "varchar_a");
+            stmt.setString(7, "chara");
+            stmt.setInt(8, 4);
+            stmt.setLong(9, 4L);
+            stmt.setBigDecimal(10, new BigDecimal("4.3"));
+            stmt.setString(11, "varchar_b");
+            stmt.setString(12, "charb");
+            stmt.setInt(13, 5);
+            stmt.setLong(14, 5L);
+            stmt.setBigDecimal(15, new BigDecimal("5.3"));
+            stmt.setDate(16, null);
+            stmt.executeUpdate();
+            conn.commit();
+            String query = "SELECT char_col1, int_col1, long_col2 from " + DATA_TABLE_FULL_NAME + " where varchar_pk in ('varchar3','varchar6')";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("chara", rs.getString(1));
+            assertEquals(4, rs.getInt(2));
+            assertEquals(5L, rs.getLong(3));
+            assertTrue(rs.next());
+            assertEquals("chara", rs.getString(1));
+            assertEquals(4, rs.getInt(2));
+            assertEquals(5L, rs.getLong(3));
+            assertFalse(rs.next());
+            
+        } finally {
+            conn.close();
+        }
+    }
 }

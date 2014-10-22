@@ -33,6 +33,8 @@ import java.util.Random;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -85,7 +87,7 @@ public enum PDataType {
         @Override
         public Object toObject(byte[] bytes, int offset, int length, PDataType actualType, SortOrder sortOrder, Integer maxLength, Integer scale) {
             if (!actualType.isCoercibleTo(this)) {
-                throw new ConstraintViolationException(actualType + " cannot be coerced to " + this);
+                throwConstraintViolationException(actualType, this);
             }
             if (length == 0) {
                 return null;
@@ -224,11 +226,11 @@ public enum PDataType {
         @Override
         public byte[] toBytes(Object object) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             byte[] b = VARCHAR.toBytes(object);
             if (b.length != ((String) object).length()) {
-                throw new IllegalDataException("CHAR types may only contain single byte characters (" + object + ")");
+                throw newIllegalDataException("CHAR types may only contain single byte characters (" + object + ")");
             }
             return b;
         }
@@ -236,11 +238,11 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] bytes, int offset) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             int len = VARCHAR.toBytes(object, bytes, offset);
             if (len != ((String) object).length()) {
-                throw new IllegalDataException("CHAR types may only contain single byte characters (" + object + ")");
+                throw newIllegalDataException("CHAR types may only contain single byte characters (" + object + ")");
             }
             return len;
         }
@@ -248,7 +250,7 @@ public enum PDataType {
         @Override
         public Object toObject(byte[] bytes, int offset, int length, PDataType actualType, SortOrder sortOrder, Integer maxLength, Integer scale) {
             if (!actualType.isCoercibleTo(this)) { // TODO: have isCoercibleTo that takes bytes, offset?
-                throw new ConstraintViolationException(actualType + " cannot be coerced to " + this);
+                throwConstraintViolationException(actualType,this);
             }
             if (length == 0) {
                 return null;
@@ -261,7 +263,7 @@ public enum PDataType {
             // TODO: UTF-8 decoder that will invert as it decodes
             String s = Bytes.toString(bytes, offset, length);
             if (length != s.length()) {
-               throw new IllegalDataException("CHAR types may only contain single byte characters (" + s + ")");
+               throw newIllegalDataException("CHAR types may only contain single byte characters (" + s + ")");
             }
             return s;
         }
@@ -288,7 +290,7 @@ public enum PDataType {
                 Integer actualMaxLength, Integer actualScale, SortOrder actualModifier,
                 Integer desiredMaxLength, Integer desiredScale, SortOrder expectedModifier) {
             if (o != null && actualType == PDataType.VARCHAR && ((String)o).length() != ptr.getLength()) {
-                throw new IllegalDataException("CHAR types may only contain single byte characters (" + o + ")");
+                throw newIllegalDataException("CHAR types may only contain single byte characters (" + o + ")");
             }
             super.coerceBytes(ptr, o, actualType, actualMaxLength, actualScale, actualModifier, desiredMaxLength, desiredScale, expectedModifier);
         }
@@ -332,10 +334,10 @@ public enum PDataType {
         @Override
         public Object toObject(String value) {
             if (value == null || value.length() == 0) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             if (StringUtil.hasMultiByteChars(value)) {
-                throw new IllegalDataException("CHAR types may only contain single byte characters (" + value + ")");
+                throw newIllegalDataException("CHAR types may only contain single byte characters (" + value + ")");
             }
             return value;
         }
@@ -376,7 +378,7 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] b, int o) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             return this.getCodec().encodeLong(((Number)object).longValue(), b, o);
         }
@@ -406,7 +408,7 @@ public enum PDataType {
             case UNSIGNED_FLOAT:
                 Float f = (Float)object;
                 if (f > Long.MAX_VALUE || f < Long.MIN_VALUE) {
-                    throw new IllegalDataException(actualType + " value " + f + " cannot be cast to Long without changing its value");
+                    throw newIllegalDataException(actualType + " value " + f + " cannot be cast to Long without changing its value");
                 }
                 s = f.longValue();
                 return s;
@@ -414,7 +416,7 @@ public enum PDataType {
             case UNSIGNED_DOUBLE:
                 Double de = (Double) object;
                 if (de > Long.MAX_VALUE || de < Long.MIN_VALUE) {
-                    throw new IllegalDataException(actualType + " value " + de + " cannot be cast to Long without changing its value");
+                    throw newIllegalDataException(actualType + " value " + de + " cannot be cast to Long without changing its value");
                 }
                 s = de.longValue();
                 return s;
@@ -551,7 +553,7 @@ public enum PDataType {
             try {
                 return Long.parseLong(value);
             } catch (NumberFormatException e) {
-                throw new IllegalDataException(e);
+                throw newIllegalDataException(e);
             }
         }
 
@@ -576,7 +578,7 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] b, int o) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             return this.getCodec().encodeInt(((Number)object).intValue(), b, o);
         }
@@ -589,7 +591,7 @@ public enum PDataType {
             }
             long l = (Long)o;
             if (l < Integer.MIN_VALUE || l > Integer.MAX_VALUE) {
-                throw new IllegalDataException(actualType + " value " + l + " cannot be cast to Integer without changing its value");
+                throw newIllegalDataException(actualType + " value " + l + " cannot be cast to Integer without changing its value");
             }
             int v = (int)l;
             return v;
@@ -689,7 +691,7 @@ public enum PDataType {
             try {
                 return Integer.parseInt(value);
             } catch (NumberFormatException e) {
-                throw new IllegalDataException(e);
+                throw newIllegalDataException(e);
             }
         }
 
@@ -739,7 +741,7 @@ public enum PDataType {
       @Override
       public int toBytes(Object object, byte[] bytes, int offset) {
         if (object == null) {
-          throw new ConstraintViolationException(this + " may not be null");
+          throw newIllegalDataException(this + " may not be null");
         }
         return this.getCodec().encodeShort(((Number)object).shortValue(), bytes, offset);
       }
@@ -752,7 +754,7 @@ public enum PDataType {
           }
           long l = (Long)o;
           if (l < Short.MIN_VALUE || l > Short.MAX_VALUE) {
-              throw new IllegalDataException(actualType + " value " + l + " cannot be cast to Short without changing its value");
+              throw newIllegalDataException(actualType + " value " + l + " cannot be cast to Short without changing its value");
           }
           short s = (short)l;
           return s;
@@ -793,7 +795,7 @@ public enum PDataType {
         try {
             return Short.parseShort(value);
         } catch (NumberFormatException e) {
-            throw new IllegalDataException(e);
+            throw newIllegalDataException(e);
         }
       }
       
@@ -873,7 +875,7 @@ public enum PDataType {
       @Override
       public int toBytes(Object object, byte[] bytes, int offset) {
         if (object == null) {
-          throw new ConstraintViolationException(this + " may not be null");
+          throw newIllegalDataException(this + " may not be null");
         }
         return this.getCodec().encodeByte(((Number)object).byteValue(), bytes, offset);
       }
@@ -887,7 +889,7 @@ public enum PDataType {
           Byte b = Byte.parseByte(value);
           return b;
         } catch (NumberFormatException e) {
-          throw new IllegalDataException(e);
+          throw newIllegalDataException(e);
         }
       }
       
@@ -899,7 +901,7 @@ public enum PDataType {
           }
           long l = (Long)o;
           if (l < Byte.MIN_VALUE || l > Byte.MAX_VALUE) {
-              throw new IllegalDataException(actualType + " value " + l + " cannot be cast to Byte without changing its value");
+              throw newIllegalDataException(actualType + " value " + l + " cannot be cast to Byte without changing its value");
           }
           return (byte)l;
       }
@@ -1008,7 +1010,7 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] bytes, int offset) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             return this.getCodec().encodeFloat(((Number) object).floatValue(),
                     bytes, offset);
@@ -1022,7 +1024,7 @@ public enum PDataType {
             try {
                 return Float.parseFloat(value);
             } catch (NumberFormatException e) {
-                throw new IllegalDataException(e);
+                throw newIllegalDataException(e);
             }
         }
         
@@ -1044,7 +1046,7 @@ public enum PDataType {
                         || (d >= -Float.MAX_VALUE && d <= Float.MAX_VALUE)) {
                     return (float) d;
                 } else {
-                    throw new IllegalDataException(actualType + " value " + d + " cannot be cast to Float without changing its value");
+                    throw newIllegalDataException(actualType + " value " + d + " cannot be cast to Float without changing its value");
                 }
             case LONG:
             case UNSIGNED_LONG:
@@ -1188,7 +1190,7 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] bytes, int offset) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             } 
             return this.getCodec().encodeDouble(((Number) object).doubleValue(),
                     bytes, offset); 
@@ -1202,7 +1204,7 @@ public enum PDataType {
             try {
                 return Double.parseDouble(value);
             } catch (NumberFormatException e) {
-                throw new IllegalDataException(e);
+                throw newIllegalDataException(e);
             }
         }
         
@@ -1663,7 +1665,7 @@ public enum PDataType {
             try {
                 return new BigDecimal(value);
             } catch (NumberFormatException e) {
-                throw new IllegalDataException(e);
+                throw newIllegalDataException(e);
             }
         }
 
@@ -1692,7 +1694,7 @@ public enum PDataType {
         @Override
         public byte[] toBytes(Object object) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             byte[] bytes = new byte[getByteSize()];
             toBytes(object, bytes, 0);
@@ -1702,7 +1704,7 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] bytes, int offset) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             Timestamp value = (Timestamp)object;
             DATE.getCodec().encodeLong(value.getTime(), bytes, offset);
@@ -1984,7 +1986,7 @@ public enum PDataType {
         @Override
         public byte[] toBytes(Object object) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             byte[] bytes = new byte[getByteSize()];
             toBytes(object, bytes, 0);
@@ -1994,7 +1996,7 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] bytes, int offset) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             getCodec().encodeLong(((java.util.Date)object).getTime(), bytes, offset);
             return this.getByteSize();
@@ -2136,7 +2138,7 @@ public enum PDataType {
         @Override
         public byte[] toBytes(Object object) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             byte[] bytes = new byte[getByteSize()];
             toBytes(object, bytes, 0);
@@ -2146,7 +2148,7 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] bytes, int offset) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             Timestamp value = (Timestamp)object;
             UNSIGNED_DATE.getCodec().encodeLong(value.getTime(), bytes, offset);
@@ -2328,7 +2330,7 @@ public enum PDataType {
         @Override
         public byte[] toBytes(Object object) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             byte[] bytes = new byte[getByteSize()];
             toBytes(object, bytes, 0);
@@ -2338,7 +2340,7 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] bytes, int offset) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             getCodec().encodeLong(((java.util.Date)object).getTime(), bytes, offset);
             return this.getByteSize();
@@ -2452,7 +2454,7 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] b, int o) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             return this.getCodec().encodeLong(((Number)object).longValue(), b, o);
         }
@@ -2514,11 +2516,11 @@ public enum PDataType {
             try {
                 Long l = Long.parseLong(value);
                 if (l.longValue() < 0) {
-                    throw new IllegalDataException("Value may not be negative(" + l + ")");
+                    throw newIllegalDataException("Value may not be negative(" + l + ")");
                 }
                 return l;
             } catch (NumberFormatException e) {
-                throw new IllegalDataException(e);
+                throw newIllegalDataException(e);
             }
         }
         
@@ -2553,7 +2555,7 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] b, int o) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             return this.getCodec().encodeInt(((Number)object).intValue(), b, o);
         }
@@ -2610,11 +2612,11 @@ public enum PDataType {
             try {
                 Integer i = Integer.parseInt(value);
                 if (i.intValue() < 0) {
-                    throw new IllegalDataException("Value may not be negative(" + i + ")");
+                    throw newIllegalDataException("Value may not be negative(" + i + ")");
                 }
                 return i;
             } catch (NumberFormatException e) {
-                throw new IllegalDataException(e);
+                throw newIllegalDataException(e);
             }
         }
         
@@ -2657,7 +2659,7 @@ public enum PDataType {
       @Override
       public byte[] toBytes(Object object) {
         if (object == null) {
-          throw new ConstraintViolationException(this + " may not be null");
+          throw newIllegalDataException(this + " may not be null");
         }
         byte[] b = new byte[Bytes.SIZEOF_SHORT];
         toBytes(object, b, 0);
@@ -2667,7 +2669,7 @@ public enum PDataType {
       @Override
       public int toBytes(Object object, byte[] bytes, int offset) {
         if (object == null) {
-          throw new ConstraintViolationException(this + " may not be null");
+          throw newIllegalDataException(this + " may not be null");
         }
         return this.getCodec().encodeShort(((Number)object).shortValue(), bytes, offset);
       }
@@ -2680,11 +2682,11 @@ public enum PDataType {
         try {
           Short b = Short.parseShort(value);
           if (b.shortValue()<0) {
-              throw new IllegalDataException("Value may not be negative(" + b + ")");
+              throw newIllegalDataException("Value may not be negative(" + b + ")");
           }
           return b;
         } catch (NumberFormatException e) {
-          throw new IllegalDataException(e);
+          throw newIllegalDataException(e);
         }
       }
       
@@ -2763,7 +2765,7 @@ public enum PDataType {
       @Override
       public int toBytes(Object object, byte[] bytes, int offset) {
         if (object == null) {
-          throw new ConstraintViolationException(this + " may not be null");
+          throw newIllegalDataException(this + " may not be null");
         }
         return this.getCodec().encodeByte(((Number)object).byteValue(), bytes, offset);
       }
@@ -2776,11 +2778,11 @@ public enum PDataType {
         try {
           Byte b = Byte.parseByte(value);
           if (b.byteValue()<0) {
-              throw new IllegalDataException("Value may not be negative(" + b + ")");
+              throw newIllegalDataException("Value may not be negative(" + b + ")");
           }
           return b;
         } catch (NumberFormatException e) {
-          throw new IllegalDataException(e);
+          throw newIllegalDataException(e);
         }
       }
       
@@ -2861,7 +2863,7 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] bytes, int offset) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             return this.getCodec().encodeFloat(((Number) object).floatValue(),
                     bytes, offset);
@@ -2875,12 +2877,12 @@ public enum PDataType {
             try {
                 Float f = Float.parseFloat(value);
                 if (f.floatValue() < 0) {
-                    throw new IllegalDataException("Value may not be negative("
+                    throw newIllegalDataException("Value may not be negative("
                             + f + ")");
                 }
                 return f;
             } catch (NumberFormatException e) {
-                throw new IllegalDataException(e);
+                throw newIllegalDataException(e);
             }
         }
         
@@ -2959,7 +2961,7 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] bytes, int offset) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             } 
             return this.getCodec().encodeDouble(((Number) object).doubleValue(),
                     bytes, offset); 
@@ -2973,12 +2975,12 @@ public enum PDataType {
             try {
                 Double d = Double.parseDouble(value);
                 if (d.doubleValue() < 0) {
-                    throw new IllegalDataException("Value may not be negative("
+                    throw newIllegalDataException("Value may not be negative("
                             + d + ")");
                 }
                 return d;
             } catch (NumberFormatException e) {
-                throw new IllegalDataException(e);
+                throw newIllegalDataException(e);
             }
         }
         
@@ -3023,7 +3025,7 @@ public enum PDataType {
         public byte[] toBytes(Object object) {
             if (object == null) {
                 // TODO: review - return null?
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             return ((Boolean)object).booleanValue() ? TRUE_BYTES : FALSE_BYTES;
         }
@@ -3032,7 +3034,7 @@ public enum PDataType {
         public int toBytes(Object object, byte[] bytes, int offset) {
             if (object == null) {
                 // TODO: review - return null?
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             bytes[offset] = ((Boolean)object).booleanValue() ? TRUE_BYTE : FALSE_BYTE;
             return BOOLEAN_LENGTH;
@@ -3042,7 +3044,7 @@ public enum PDataType {
         public byte[] toBytes(Object object, SortOrder sortOrder) {
             if (object == null) {
                 // TODO: review - return null?
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             return ((Boolean)object).booleanValue() ^ sortOrder == SortOrder.ASC ? TRUE_BYTES : FALSE_BYTES;
         }
@@ -3056,7 +3058,7 @@ public enum PDataType {
             switch (actualType) {
                 case BOOLEAN:
                     if (length > 1) {
-                        throw new IllegalDataException("BOOLEAN may only be a single byte");
+                        throw newIllegalDataException("BOOLEAN may only be a single byte");
                     }
                     return ((bytes[offset] == FALSE_BYTE ^ sortOrder == SortOrder.DESC) ? Boolean.FALSE : Boolean.TRUE);
                 case DECIMAL:
@@ -3285,7 +3287,7 @@ public enum PDataType {
         @Override
         public byte[] toBytes(Object object) { // Deligate to VARBINARY
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             return VARBINARY.toBytes(object);
         }
@@ -3293,7 +3295,7 @@ public enum PDataType {
         @Override
         public int toBytes(Object object, byte[] bytes, int offset) {
             if (object == null) {
-                throw new ConstraintViolationException(this + " may not be null");
+                throw newIllegalDataException(this + " may not be null");
             }
             return VARBINARY.toBytes(object, bytes, offset);
             
@@ -3311,7 +3313,7 @@ public enum PDataType {
         @Override
         public Object toObject(byte[] bytes, int offset, int length, PDataType actualType, SortOrder sortOrder, Integer maxLength, Integer scale) {
             if (!actualType.isCoercibleTo(this)) {
-                throw new ConstraintViolationException(actualType + " cannot be coerced to " + this);
+                throwConstraintViolationException(actualType, this);
             }
             return VARBINARY.toObject(bytes, offset, length, actualType, sortOrder);
         }
@@ -3402,7 +3404,7 @@ public enum PDataType {
             return VARBINARY.getSampleValue(maxLength, arrayLength);
         }
     },
-    INTEGER_ARRAY("INTEGER_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.INTEGER.getSqlType(), PhoenixArray.class, null) {
+    INTEGER_ARRAY("INTEGER ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.INTEGER.getSqlType(), PhoenixArray.class, null) {
     	@Override
     	public boolean isArrayType() {
     		return true;
@@ -3491,7 +3493,7 @@ public enum PDataType {
         }
 		
 	},
-    BOOLEAN_ARRAY("BOOLEAN_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.BOOLEAN.getSqlType(), PhoenixArray.class, null) {
+	BOOLEAN_ARRAY("BOOLEAN ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.BOOLEAN.getSqlType(), PhoenixArray.class, null) {
     	@Override
     	public boolean isArrayType() {
     		return true;
@@ -3579,7 +3581,7 @@ public enum PDataType {
         }
 		
 	},
-	VARCHAR_ARRAY("VARCHAR_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.VARCHAR.getSqlType(), PhoenixArray.class, null) {
+	VARCHAR_ARRAY("VARCHAR ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.VARCHAR.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -3673,7 +3675,7 @@ public enum PDataType {
         }
 		
 	},
-	VARBINARY_ARRAY("VARBINARY_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.VARBINARY.getSqlType(), PhoenixArray.class, null) {
+	VARBINARY_ARRAY("VARBINARY ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.VARBINARY.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -3767,7 +3769,7 @@ public enum PDataType {
             return pDataTypeForArray.getSampleValue(PDataType.VARBINARY, arrayLength, maxLength);
         }
 	},
-	BINARY_ARRAY("BINARY_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.BINARY.getSqlType(), PhoenixArray.class, null) {
+	BINARY_ARRAY("BINARY ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.BINARY.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -3861,7 +3863,7 @@ public enum PDataType {
             return pDataTypeForArray.getSampleValue(PDataType.BINARY, arrayLength, maxLength);
         }
     },
-	CHAR_ARRAY("CHAR_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.CHAR.getSqlType(), PhoenixArray.class, null) {
+    CHAR_ARRAY("CHAR ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.CHAR.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -3956,7 +3958,7 @@ public enum PDataType {
         }
 		
 	},
-	LONG_ARRAY("LONG_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.LONG.getSqlType(), PhoenixArray.class, null) {
+	LONG_ARRAY("BIGINT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.LONG.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4043,7 +4045,7 @@ public enum PDataType {
         }
 		
 	},
-	SMALLINT_ARRAY("SMALLINT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.SMALLINT.getSqlType(), PhoenixArray.class, null) {
+	SMALLINT_ARRAY("SMALLINT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.SMALLINT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4130,7 +4132,7 @@ public enum PDataType {
         }
 		
 	},
-	TINYINT_ARRAY("TINYINT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TINYINT.getSqlType(), PhoenixArray.class, null) {
+	TINYINT_ARRAY("TINYINT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TINYINT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4217,7 +4219,7 @@ public enum PDataType {
         }
 		
 	},
-	FLOAT_ARRAY("FLOAT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.FLOAT.getSqlType(), PhoenixArray.class, null) {
+	FLOAT_ARRAY("FLOAT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.FLOAT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4305,7 +4307,7 @@ public enum PDataType {
         }
 		
 	},
-	DOUBLE_ARRAY("DOUBLE_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DOUBLE.getSqlType(), PhoenixArray.class, null) {
+	DOUBLE_ARRAY("DOUBLE ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DOUBLE.getSqlType(), PhoenixArray.class, null) {
 	    final PArrayDataType pDataTypeForArray = new PArrayDataType();
 		@Override
     	public boolean isArrayType() {
@@ -4394,7 +4396,7 @@ public enum PDataType {
 
 	},
 	
-	DECIMAL_ARRAY("DECIMAL_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DECIMAL.getSqlType(), PhoenixArray.class, null) {
+	DECIMAL_ARRAY("DECIMAL ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DECIMAL.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4489,8 +4491,7 @@ public enum PDataType {
         }
 	
 	},
-	TIMESTAMP_ARRAY("TIMESTAMP_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TIMESTAMP.getSqlType(), PhoenixArray.class,
-			null) {
+	TIMESTAMP_ARRAY("TIMESTAMP ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TIMESTAMP.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4577,8 +4578,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_TIMESTAMP_ARRAY("UNSIGNED_TIMESTAMP_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TIMESTAMP.getSqlType(), PhoenixArray.class,
-			null) {
+	UNSIGNED_TIMESTAMP_ARRAY("UNSIGNED_TIMESTAMP ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TIMESTAMP.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4665,7 +4665,7 @@ public enum PDataType {
         }
 
 	},
-	TIME_ARRAY("TIME_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TIME.getSqlType(), PhoenixArray.class, null) {
+	TIME_ARRAY("TIME ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.TIME.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4752,7 +4752,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_TIME_ARRAY("UNSIGNED_TIME_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TIME.getSqlType(), PhoenixArray.class, null) {
+	UNSIGNED_TIME_ARRAY("UNSIGNED_TIME ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TIME.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4839,7 +4839,7 @@ public enum PDataType {
         }
 
 	},
-	DATE_ARRAY("DATE_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DATE.getSqlType(), PhoenixArray.class, null) {
+	DATE_ARRAY("DATE ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.DATE.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -4926,7 +4926,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_DATE_ARRAY("UNSIGNED_DATE_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_DATE.getSqlType(), PhoenixArray.class, null) {
+	UNSIGNED_DATE_ARRAY("UNSIGNED_DATE ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_DATE.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5013,7 +5013,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_LONG_ARRAY("UNSIGNED_LONG_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_LONG.getSqlType(), PhoenixArray.class, null) {
+	UNSIGNED_LONG_ARRAY("UNSIGNED_LONG ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_LONG.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5100,7 +5100,7 @@ public enum PDataType {
         }
 	
 	},
-	UNSIGNED_INT_ARRAY("UNSIGNED_INT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_INT.getSqlType(), PhoenixArray.class, null) {
+	UNSIGNED_INT_ARRAY("UNSIGNED_INT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_INT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5187,8 +5187,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_SMALLINT_ARRAY("UNSIGNED_SMALLINT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_SMALLINT.getSqlType(),
-			PhoenixArray.class, null) {
+	UNSIGNED_SMALLINT_ARRAY("UNSIGNED_SMALLINT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_SMALLINT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5275,8 +5274,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_TINYINT_ARRAY("UNSIGNED_TINYINT__ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TINYINT.getSqlType(), PhoenixArray.class,
-			null) {
+	UNSIGNED_TINYINT_ARRAY("UNSIGNED_TINYINT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_TINYINT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5362,7 +5360,7 @@ public enum PDataType {
             return pDataTypeForArray.getSampleValue(PDataType.UNSIGNED_TINYINT, arrayLength, maxLength);
         }
 	},
-	UNSIGNED_FLOAT_ARRAY("UNSIGNED_FLOAT_ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_FLOAT.getSqlType(), PhoenixArray.class, null) {
+	UNSIGNED_FLOAT_ARRAY("UNSIGNED_FLOAT ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_FLOAT.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5449,8 +5447,7 @@ public enum PDataType {
         }
 
 	},
-	UNSIGNED_DOUBLE_ARRAY("UNSIGNED_DOUBLE__ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_DOUBLE.getSqlType(), PhoenixArray.class,
-			null) {
+	UNSIGNED_DOUBLE_ARRAY("UNSIGNED_DOUBLE ARRAY", PDataType.ARRAY_TYPE_BASE + PDataType.UNSIGNED_DOUBLE.getSqlType(), PhoenixArray.class, null) {
 		@Override
     	public boolean isArrayType() {
     		return true;
@@ -5551,6 +5548,28 @@ public enum PDataType {
     private final PDataCodec codec;
     final PArrayDataType pDataTypeForArray = new PArrayDataType();
     
+    private static final int SQL_TYPE_OFFSET;
+    private static final PDataType[] SQL_TYPE_TO_PCOLUMN_DATA_TYPE;
+    static {
+        int minSqlType = Integer.MAX_VALUE;
+        int maxSqlType = Integer.MIN_VALUE;
+        for (PDataType dataType : PDataType.values()) {
+            int sqlType = dataType.getSqlType();
+            if (sqlType < minSqlType) {
+                minSqlType = sqlType;
+            }
+            if (sqlType > maxSqlType) {
+                maxSqlType = sqlType;
+            }
+        }
+        SQL_TYPE_OFFSET = minSqlType;
+        SQL_TYPE_TO_PCOLUMN_DATA_TYPE = new PDataType[maxSqlType-minSqlType+1];
+        for (PDataType dataType : PDataType.values()) {
+            int sqlType = dataType.getSqlType();
+            SQL_TYPE_TO_PCOLUMN_DATA_TYPE[sqlType-SQL_TYPE_OFFSET] = dataType;
+        }
+    }
+    
     private PDataType(String sqlTypeName, int sqlType, Class clazz, PDataCodec codec) {
         this.sqlTypeName = sqlTypeName;
         this.sqlType = sqlType;
@@ -5559,7 +5578,7 @@ public enum PDataType {
         this.sqlTypeNameBytes = Bytes.toBytes(sqlTypeName);
         this.codec = codec;
     }
-
+    
     public boolean isCastableTo(PDataType targetType) {
         return isComparableTo(targetType);
     }
@@ -5727,6 +5746,33 @@ public enum PDataType {
         long diff = (long)d - l;
         return Long.signum(diff);
     }
+    
+    private static void checkForSufficientLength(byte[] b, int offset, int requiredLength) {
+        if (b.length < offset + requiredLength) {
+            throw new RuntimeException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+            .setMessage("Expected length of at least " + requiredLength + " bytes, but had " + (b.length - offset)).build().buildException());
+        }
+    }
+    
+    private static Void throwConstraintViolationException(PDataType source, PDataType target) {
+        throw new ConstraintViolationException(new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
+        .setMessage(source + " cannot be coerced to " + target).build().buildException());
+    }
+    
+    private static RuntimeException newIllegalDataException() {
+        return new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+        .build().buildException());
+    }
+
+    private static RuntimeException newIllegalDataException(String msg) {
+        return new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+        .setMessage(msg).build().buildException());
+    }
+
+    private static RuntimeException newIllegalDataException(Exception e) {
+        return new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+        .setRootCause(e).build().buildException());
+    }
 
     public static interface PDataCodec {
         public long decodeLong(ImmutableBytesWritable ptr, SortOrder sortOrder);
@@ -5878,6 +5924,7 @@ public enum PDataType {
         @Override
         public long decodeLong(byte[] bytes, int o, SortOrder sortOrder) {
         	Preconditions.checkNotNull(sortOrder);
+        	checkForSufficientLength(bytes, o, Bytes.SIZEOF_LONG);
             long v;
             byte b = bytes[o];
             if (sortOrder == SortOrder.ASC) {
@@ -5903,7 +5950,7 @@ public enum PDataType {
         public int decodeInt(byte[] b, int o, SortOrder sortOrder) {
             long v = decodeLong(b, o, sortOrder);
             if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be cast to Integer without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be cast to Integer without changing its value");
             }
             return (int)v;
         }
@@ -5911,7 +5958,7 @@ public enum PDataType {
         @Override
         public int encodeFloat(float v, byte[] b, int o) {
             if (v < Long.MIN_VALUE || v > Long.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be encoded as an Long without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be encoded as an Long without changing its value");
             }
             return encodeLong((long)v, b, o);
         }
@@ -5919,13 +5966,14 @@ public enum PDataType {
         @Override
         public int encodeDouble(double v, byte[] b, int o) {
             if (v < Long.MIN_VALUE || v > Long.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be encoded as an Long without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be encoded as an Long without changing its value");
             }
             return encodeLong((long)v, b, o);
         }
 
         @Override
         public int encodeLong(long v, byte[] b, int o) {
+            checkForSufficientLength(b, o, Bytes.SIZEOF_LONG);
             b[o + 0] = (byte) ((v >> 56) ^ 0x80); // Flip sign bit so that INTEGER is binary comparable
             b[o + 1] = (byte) (v >> 48);
             b[o + 2] = (byte) (v >> 40);
@@ -5941,7 +5989,7 @@ public enum PDataType {
         public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
           long v = decodeLong(b, o, sortOrder);
           if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
-              throw new IllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
+              throw newIllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
           }
           return (byte)v;
         }
@@ -5950,7 +5998,7 @@ public enum PDataType {
         public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
           long v = decodeLong(b, o, sortOrder);
           if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
-              throw new IllegalDataException("Value " + v + " cannot be cast to Short without changing its value");
+              throw newIllegalDataException("Value " + v + " cannot be cast to Short without changing its value");
           }
           return (short)v;
         }
@@ -6000,6 +6048,7 @@ public enum PDataType {
         @Override
         public int decodeInt(byte[] bytes, int o, SortOrder sortOrder) {
         	Preconditions.checkNotNull(sortOrder);
+            checkForSufficientLength(bytes, o, Bytes.SIZEOF_INT);
             int v;
             if (sortOrder == SortOrder.ASC) {
                 v = bytes[o] ^ 0x80; // Flip sign bit back
@@ -6017,6 +6066,7 @@ public enum PDataType {
 
         @Override
         public int encodeInt(int v, byte[] b, int o) {
+            checkForSufficientLength(b, o, Bytes.SIZEOF_INT);
             b[o + 0] = (byte) ((v >> 24) ^ 0x80); // Flip sign bit so that INTEGER is binary comparable
             b[o + 1] = (byte) (v >> 16);
             b[o + 2] = (byte) (v >> 8);
@@ -6027,7 +6077,7 @@ public enum PDataType {
         @Override
         public int encodeFloat(float v, byte[] b, int o) {
             if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be encoded as an Integer without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be encoded as an Integer without changing its value");
             }
             return encodeInt((int)v, b, o);
         }
@@ -6035,7 +6085,7 @@ public enum PDataType {
         @Override
         public int encodeDouble(double v, byte[] b, int o) {
             if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be encoded as an Integer without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be encoded as an Integer without changing its value");
             }
             return encodeInt((int)v, b, o);
         }
@@ -6043,7 +6093,7 @@ public enum PDataType {
         @Override
         public int encodeLong(long v, byte[] b, int o) {
             if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be encoded as an Integer without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be encoded as an Integer without changing its value");
             }
             return encodeInt((int)v,b,o);
         }
@@ -6052,7 +6102,7 @@ public enum PDataType {
         public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
           int v = decodeInt(b, o, sortOrder);
           if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
-              throw new IllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
+              throw newIllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
           }
           return (byte)v;
         }
@@ -6061,7 +6111,7 @@ public enum PDataType {
         public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
           int v = decodeInt(b, o, sortOrder);
           if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
-              throw new IllegalDataException("Value " + v + " cannot be cast to Short without changing its value");
+              throw newIllegalDataException("Value " + v + " cannot be cast to Short without changing its value");
           }
           return (short)v;
         }
@@ -6106,7 +6156,7 @@ public enum PDataType {
       public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
         short v = decodeShort(b, o, sortOrder);
         if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
-            throw new IllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
+            throw newIllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
         }
         return (byte)v;
       }
@@ -6114,6 +6164,7 @@ public enum PDataType {
       @Override
       public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
     	Preconditions.checkNotNull(sortOrder);
+        checkForSufficientLength(b, o, Bytes.SIZEOF_SHORT);
         int v;
         if (sortOrder == SortOrder.ASC) {
             v = b[o] ^ 0x80; // Flip sign bit back
@@ -6131,6 +6182,7 @@ public enum PDataType {
       
       @Override
       public int encodeShort(short v, byte[] b, int o) {
+          checkForSufficientLength(b, o, Bytes.SIZEOF_SHORT);
           b[o + 0] = (byte) ((v >> 8) ^ 0x80); // Flip sign bit so that Short is binary comparable
           b[o + 1] = (byte) v;
           return Bytes.SIZEOF_SHORT;
@@ -6139,7 +6191,7 @@ public enum PDataType {
       @Override
       public int encodeLong(long v, byte[] b, int o) {
           if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
-              throw new IllegalDataException("Value " + v + " cannot be encoded as an Short without changing its value");
+              throw newIllegalDataException("Value " + v + " cannot be encoded as an Short without changing its value");
           }
           return encodeShort((short)v,b,o);
       }
@@ -6147,7 +6199,7 @@ public enum PDataType {
       @Override
       public int encodeInt(int v, byte[] b, int o) {
         if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
-          throw new IllegalDataException("Value " + v + " cannot be encoded as an Short without changing its value");
+          throw newIllegalDataException("Value " + v + " cannot be encoded as an Short without changing its value");
         }
         return encodeShort((short)v,b,o);
       }
@@ -6171,7 +6223,7 @@ public enum PDataType {
       @Override
       public int encodeDouble(double v, byte[] b, int o) {
           if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
-              throw new IllegalDataException("Value " + v + " cannot be encoded as an Short without changing its value");
+              throw newIllegalDataException("Value " + v + " cannot be encoded as an Short without changing its value");
           }
           return encodeShort((short)v,b,o);
       }
@@ -6179,7 +6231,7 @@ public enum PDataType {
       @Override
       public int encodeFloat(float v, byte[] b, int o) {
           if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
-              throw new IllegalDataException("Value " + v + " cannot be encoded as an Short without changing its value");
+              throw newIllegalDataException("Value " + v + " cannot be encoded as an Short without changing its value");
           }
           return encodeShort((short)v,b,o);
       }
@@ -6213,6 +6265,7 @@ public enum PDataType {
       @Override
       public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
     	Preconditions.checkNotNull(sortOrder);
+        checkForSufficientLength(b, o, Bytes.SIZEOF_BYTE);
         int v;
         if (sortOrder == SortOrder.ASC) {
             v = b[o] ^ 0x80; // Flip sign bit back
@@ -6229,8 +6282,9 @@ public enum PDataType {
       
       @Override
       public int encodeShort(short v, byte[] b, int o) {
+          checkForSufficientLength(b, o, Bytes.SIZEOF_BYTE);
           if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
-              throw new IllegalDataException("Value " + v + " cannot be encoded as an Byte without changing its value");
+              throw newIllegalDataException("Value " + v + " cannot be encoded as an Byte without changing its value");
           }
           return encodeByte((byte)v,b,o);
       }
@@ -6238,7 +6292,7 @@ public enum PDataType {
       @Override
       public int encodeLong(long v, byte[] b, int o) {
         if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
-          throw new IllegalDataException("Value " + v + " cannot be encoded as an Byte without changing its value");
+          throw newIllegalDataException("Value " + v + " cannot be encoded as an Byte without changing its value");
         }
         return encodeByte((byte)v,b,o);
       }
@@ -6246,19 +6300,19 @@ public enum PDataType {
       @Override
       public int encodeInt(int v, byte[] b, int o) {
         if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
-          throw new IllegalDataException("Value " + v + " cannot be encoded as an Byte without changing its value");
+          throw newIllegalDataException("Value " + v + " cannot be encoded as an Byte without changing its value");
         }
         return encodeByte((byte)v,b,o);
       }
       
       @Override
       public int encodeByte(byte v, byte[] b, int o) {
-        b[o] = (byte) (v ^ 0x80); // Flip sign bit so that Short is binary comparable
-        return Bytes.SIZEOF_BYTE;
+          checkForSufficientLength(b, o, Bytes.SIZEOF_BYTE);
+          b[o] = (byte) (v ^ 0x80); // Flip sign bit so that Short is binary comparable
+          return Bytes.SIZEOF_BYTE;
       }
         @Override
-        public double decodeDouble(byte[] b, int o,
-                SortOrder sortOrder) {
+        public double decodeDouble(byte[] b, int o, SortOrder sortOrder) {
             return decodeByte(b, o, sortOrder);
         }
 
@@ -6270,7 +6324,7 @@ public enum PDataType {
         @Override
         public int encodeFloat(float v, byte[] b, int o) {
             if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be encoded as an Byte without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be encoded as an Byte without changing its value");
             }
             return encodeByte((byte)v,b,o);
         }
@@ -6278,7 +6332,7 @@ public enum PDataType {
         @Override
         public int encodeDouble(double v, byte[] b, int o) {
             if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be encoded as an Byte without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be encoded as an Byte without changing its value");
             }
             return encodeByte((byte)v,b,o);
         }
@@ -6301,12 +6355,13 @@ public enum PDataType {
       @Override
       public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
     	Preconditions.checkNotNull(sortOrder);
-        if (sortOrder == SortOrder.DESC) {
-          b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_BYTE], 0, Bytes.SIZEOF_BYTE);
-        }
+        checkForSufficientLength(b, o, Bytes.SIZEOF_BYTE);
         byte v = b[o];
+        if (sortOrder == SortOrder.DESC) {
+          v = SortOrder.invert(v);
+        }
         if (v < 0) {
-          throw new IllegalDataException();
+          throw newIllegalDataException();
         }
         return v;
       }
@@ -6314,7 +6369,7 @@ public enum PDataType {
       @Override
       public int encodeByte(byte v, byte[] b, int o) {
         if (v < 0) {
-          throw new IllegalDataException();
+          throw newIllegalDataException();
         }
         Bytes.putByte(b, o, v);
         return Bytes.SIZEOF_BYTE;
@@ -6329,6 +6384,7 @@ public enum PDataType {
         @Override
         public long decodeLong(byte[] b, int o, SortOrder sortOrder) {
         	Preconditions.checkNotNull(sortOrder);
+            checkForSufficientLength(b, o, Bytes.SIZEOF_LONG);
             long v = 0;
             if (sortOrder == SortOrder.ASC) {
                 for(int i = o; i < o + Bytes.SIZEOF_LONG; i++) {
@@ -6342,15 +6398,16 @@ public enum PDataType {
                   }
             }
             if (v < 0) {
-                throw new IllegalDataException();
+                throw newIllegalDataException();
             }
             return v;
         }
 
         @Override
         public int encodeLong(long v, byte[] b, int o) {
+            checkForSufficientLength(b, o, Bytes.SIZEOF_LONG);
             if (v < 0) {
-                throw new IllegalDataException();
+                throw newIllegalDataException();
             }
             Bytes.putLong(b, o, v);
             return Bytes.SIZEOF_LONG;
@@ -6364,20 +6421,22 @@ public enum PDataType {
       @Override
       public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
     	  Preconditions.checkNotNull(sortOrder);
+          checkForSufficientLength(b, o, Bytes.SIZEOF_SHORT);
           if (sortOrder == SortOrder.DESC) {
-              b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_INT], 0, Bytes.SIZEOF_INT);
+              b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_SHORT], 0, Bytes.SIZEOF_SHORT);
           }
           short v = Bytes.toShort(b, o);
           if (v < 0) {
-              throw new IllegalDataException();
+              throw newIllegalDataException();
           }
           return v;
       }
 
       @Override
       public int encodeShort(short v, byte[] b, int o) {
+          checkForSufficientLength(b, o, Bytes.SIZEOF_SHORT);
           if (v < 0) {
-              throw new IllegalDataException();
+              throw newIllegalDataException();
           }
           Bytes.putShort(b, o, v);
           return Bytes.SIZEOF_SHORT;
@@ -6392,20 +6451,22 @@ public enum PDataType {
         @Override
         public int decodeInt(byte[] b, int o, SortOrder sortOrder) {
         	Preconditions.checkNotNull(sortOrder);
+            checkForSufficientLength(b, o, Bytes.SIZEOF_INT);
             if (sortOrder == SortOrder.DESC) {
                 b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_INT], 0, Bytes.SIZEOF_INT);
             }
             int v = Bytes.toInt(b, o);
             if (v < 0) {
-                throw new IllegalDataException();
+                throw newIllegalDataException();
             }
             return v;
         }
 
         @Override
         public int encodeInt(int v, byte[] b, int o) {
+            checkForSufficientLength(b, o, Bytes.SIZEOF_INT);
             if (v < 0) {
-                throw new IllegalDataException();
+                throw newIllegalDataException();
             }
             Bytes.putInt(b, o, v);
             return Bytes.SIZEOF_INT;
@@ -6421,7 +6482,7 @@ public enum PDataType {
         public long decodeLong(byte[] b, int o, SortOrder sortOrder) {
             float v = decodeFloat(b, o, sortOrder);
             if (v < Long.MIN_VALUE || v > Long.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be cast to Long without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be cast to Long without changing its value");
             }
             return (long)v;
         }
@@ -6430,7 +6491,7 @@ public enum PDataType {
         public int decodeInt(byte[] b, int o, SortOrder sortOrder) {
             float v = decodeFloat(b, o, sortOrder);
             if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be cast to Integer without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be cast to Integer without changing its value");
             }
             return (int) v;
         }
@@ -6439,7 +6500,7 @@ public enum PDataType {
         public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
             float v = decodeFloat(b, o, sortOrder);
             if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
             }
             return (byte) v;
         }
@@ -6448,7 +6509,7 @@ public enum PDataType {
         public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
             float v = decodeFloat(b, o, sortOrder);
             if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be cast to Short without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be cast to Short without changing its value");
             }
             return (short) v;
         }
@@ -6462,6 +6523,7 @@ public enum PDataType {
         @Override
         public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
         	Preconditions.checkNotNull(sortOrder);
+            checkForSufficientLength(b, o, Bytes.SIZEOF_INT);
             if (sortOrder == SortOrder.DESC) {
                 for (int i = o; i < Bytes.SIZEOF_INT; i++) {
                     b[i] = (byte) (b[i] ^ 0xff);
@@ -6500,17 +6562,18 @@ public enum PDataType {
                     || (v >= -Float.MAX_VALUE && v <= Float.MAX_VALUE)) {
                 return encodeFloat((float)v, b, o);
             } else {
-                throw new IllegalDataException("Value " + v + " cannot be encoded as an Float without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be encoded as an Float without changing its value");
             }
             
         }
         
         @Override
         public int encodeFloat(float v, byte[] b, int o) {
+            checkForSufficientLength(b, o, Bytes.SIZEOF_FLOAT);
             int i = Float.floatToIntBits(v);
             i = (i ^ ((i >> Integer.SIZE - 1) | Integer.MIN_VALUE)) + 1;
             Bytes.putInt(b, o, i);
-            return Bytes.SIZEOF_INT;
+            return Bytes.SIZEOF_FLOAT;
         }
         
         @Override
@@ -6533,7 +6596,7 @@ public enum PDataType {
         public long decodeLong(byte[] b, int o, SortOrder sortOrder) {
             double v = decodeDouble(b, o, sortOrder);
             if (v < Long.MIN_VALUE || v > Long.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be cast to Long without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be cast to Long without changing its value");
             }
             return (long) v;
         }
@@ -6542,7 +6605,7 @@ public enum PDataType {
         public int decodeInt(byte[] b, int o, SortOrder sortOrder) {
             double v = decodeDouble(b, o, sortOrder);
             if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be cast to Integer without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be cast to Integer without changing its value");
             }
             return (int) v;
         }
@@ -6551,7 +6614,7 @@ public enum PDataType {
         public byte decodeByte(byte[] b, int o, SortOrder sortOrder) {
             double v = decodeDouble(b, o, sortOrder);
             if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be cast to Byte without changing its value");
             }
             return (byte) v;
         }
@@ -6560,7 +6623,7 @@ public enum PDataType {
         public short decodeShort(byte[] b, int o, SortOrder sortOrder) {
             double v = decodeDouble(b, o, sortOrder);
             if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
-                throw new IllegalDataException("Value " + v + " cannot be cast to Short without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be cast to Short without changing its value");
             }
             return (short) v;
         }
@@ -6568,6 +6631,7 @@ public enum PDataType {
         @Override
         public double decodeDouble(byte[] b, int o, SortOrder sortOrder) {
         	Preconditions.checkNotNull(sortOrder);
+            checkForSufficientLength(b, o, Bytes.SIZEOF_LONG);
             if (sortOrder == SortOrder.DESC) {
                 for (int i = o; i < Bytes.SIZEOF_LONG; i++) {
                     b[i] = (byte) (b[i] ^ 0xff);
@@ -6587,7 +6651,7 @@ public enum PDataType {
                     || (v >= -Float.MAX_VALUE && v <= Float.MAX_VALUE)) {
                 return (float) v;
             } else {
-                throw new IllegalDataException("Value " + v + " cannot be cast to Float without changing its value");
+                throw newIllegalDataException("Value " + v + " cannot be cast to Float without changing its value");
             }
             
         }
@@ -6614,6 +6678,7 @@ public enum PDataType {
         
         @Override
         public int encodeDouble(double v, byte[] b, int o) {
+            checkForSufficientLength(b, o, Bytes.SIZEOF_LONG);
             long l = Double.doubleToLongBits(v);
             l = (l ^ ((l >> Long.SIZE - 1) | Long.MIN_VALUE)) + 1;
             Bytes.putLong(b, o, l);
@@ -6642,8 +6707,9 @@ public enum PDataType {
         
         @Override
         public int encodeFloat(float v, byte[] b, int o) {
+            checkForSufficientLength(b, o, Bytes.SIZEOF_FLOAT);
             if (v < 0) {
-                throw new IllegalDataException();
+                throw newIllegalDataException();
             }
             Bytes.putFloat(b, o, v);
             return Bytes.SIZEOF_FLOAT;
@@ -6652,12 +6718,13 @@ public enum PDataType {
         @Override
         public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
         	Preconditions.checkNotNull(sortOrder);
+            checkForSufficientLength(b, o, Bytes.SIZEOF_FLOAT);
             if (sortOrder == SortOrder.DESC) {
                 b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_FLOAT], 0, Bytes.SIZEOF_FLOAT);
             }
             float v = Bytes.toFloat(b, o);
             if (v < 0) {
-                throw new IllegalDataException();
+                throw newIllegalDataException();
             }
             return v;
         }
@@ -6669,23 +6736,24 @@ public enum PDataType {
         
         @Override
         public int encodeDouble(double v, byte[] b, int o) {
+            checkForSufficientLength(b, o, Bytes.SIZEOF_DOUBLE);
             if (v < 0) {
-                throw new IllegalDataException();
+                throw newIllegalDataException();
             }
             Bytes.putDouble(b, o, v);
             return Bytes.SIZEOF_DOUBLE;
         }
         
         @Override
-        public double decodeDouble(byte[] b, int o,
-                SortOrder sortOrder) {
+        public double decodeDouble(byte[] b, int o, SortOrder sortOrder) {
         	Preconditions.checkNotNull(sortOrder);
+            checkForSufficientLength(b, o, Bytes.SIZEOF_DOUBLE);
             if (sortOrder == SortOrder.DESC) {
                 b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_DOUBLE], 0, Bytes.SIZEOF_DOUBLE);
             }
             double v = Bytes.toDouble(b, o);
             if (v < 0) {
-                throw new IllegalDataException();
+                throw newIllegalDataException();
             }
             return v;
         }
@@ -6767,6 +6835,7 @@ public enum PDataType {
     public final static Integer BYTE_PRECISION = 3;
 
     public static final int ARRAY_TYPE_BASE = 3000;
+    public static final String ARRAY_TYPE_SUFFIX = "ARRAY";
     
     private static final ThreadLocal<Random> RANDOM = new ThreadLocal<Random>(){
         @Override 
@@ -7092,17 +7161,13 @@ public enum PDataType {
         coerceBytes(ptr, null, actualType, null, null, actualModifier, desiredMaxLength, null, expectedModifier);
     }
 
-    private static Void throwConstraintViolationException(PDataType source, PDataType target) {
-        throw new ConstraintViolationException(source + " cannot be coerced to " + target);
-    }
-    
     private static boolean isNonNegativeDate(java.util.Date date) {
         return (date == null || date.getTime() >= 0);
     }
     
     private static void throwIfNonNegativeDate(java.util.Date date) {
         if (!isNonNegativeDate(date)) {
-            throw new IllegalDataException("Value may not be negative(" + date + ")");
+            throw newIllegalDataException("Value may not be negative(" + date + ")");
         }
     }
     
@@ -7112,7 +7177,7 @@ public enum PDataType {
 
     private static void throwIfNonNegativeNumber(Number v) {
         if (!isNonNegativeNumber(v)) {
-            throw new IllegalDataException("Value may not be negative(" + v + ")");
+            throw newIllegalDataException("Value may not be negative(" + v + ")");
         }
     }
     
@@ -7224,7 +7289,7 @@ public enum PDataType {
         if (dataType != null) {
             return dataType;
         }
-        throw new IllegalDataException("Unsupported sql type: " + sqlTypeName);
+        throw newIllegalDataException("Unsupported sql type: " + sqlTypeName);
     }
     
     public static int sqlArrayType(String sqlTypeName) {
@@ -7232,30 +7297,7 @@ public enum PDataType {
     	return fromSqlTypeName.getSqlType() + PDataType.ARRAY_TYPE_BASE;
     }
 
-    private static final int SQL_TYPE_OFFSET;
-    private static final PDataType[] SQL_TYPE_TO_PCOLUMN_DATA_TYPE;
-    static {
-        int minSqlType = Integer.MAX_VALUE;
-        int maxSqlType = Integer.MIN_VALUE;
-        for (PDataType dataType : PDataType.values()) {
-            int sqlType = dataType.getSqlType();
-            if (sqlType < minSqlType) {
-                minSqlType = sqlType;
-            }
-            if (sqlType > maxSqlType) {
-                maxSqlType = sqlType;
-            }
-        }
-        SQL_TYPE_OFFSET = minSqlType;
-        SQL_TYPE_TO_PCOLUMN_DATA_TYPE = new PDataType[maxSqlType-minSqlType+1];
-        for (PDataType dataType : PDataType.values()) {
-            int sqlType = dataType.getSqlType();
-            SQL_TYPE_TO_PCOLUMN_DATA_TYPE[sqlType-SQL_TYPE_OFFSET] = dataType;
-        }
-    }
-
-         
-	private static interface PhoenixArrayFactory {
+    private static interface PhoenixArrayFactory {
 		PhoenixArray newArray(PDataType type, Object[] elements);
 	}
 
@@ -7289,7 +7331,7 @@ public enum PDataType {
 				return type;
 			}
 		}
-		throw new IllegalDataException("Unsupported sql type: " + typeId);
+		throw newIllegalDataException("Unsupported sql type: " + typeId);
 	}
 	
 	public static PhoenixArrayFactory[] getArrayFactory() {
@@ -7400,6 +7442,11 @@ public enum PDataType {
     }
     
     public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+    }
+    
+    public static PDataType arrayBaseType(PDataType arrayType) {
+        Preconditions.checkArgument(arrayType.isArrayType(), "Not a phoenix array type");
+        return fromTypeId(arrayType.getSqlType() - ARRAY_TYPE_BASE);
     }
     
 }

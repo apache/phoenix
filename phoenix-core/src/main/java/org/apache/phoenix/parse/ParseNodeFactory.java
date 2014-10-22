@@ -417,7 +417,7 @@ public class ParseNodeFactory {
 
     public TableNode table(TableNode table, List<JoinPartNode> parts) {
         for (JoinPartNode part : parts) {
-            table = new JoinTableNode(part.getType(), table, part.getTable(), part.getOnNode());
+            table = new JoinTableNode(part.getType(), table, part.getTable(), part.getOnNode(), false);
         }
         return table;
     }
@@ -426,8 +426,8 @@ public class ParseNodeFactory {
         return new JoinPartNode(type, onNode, table);
     }
 
-    public JoinTableNode join(JoinType type, TableNode lhs, TableNode rhs, ParseNode on) {
-        return new JoinTableNode(type, lhs, rhs, on);
+    public JoinTableNode join(JoinType type, TableNode lhs, TableNode rhs, ParseNode on, boolean singleValueOnly) {
+        return new JoinTableNode(type, lhs, rhs, on, singleValueOnly);
     }
 
     public DerivedTableNode derivedTable (String alias, SelectStatement select) {

@@ -17,11 +17,18 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.*;
-import java.sql.*;
-import static org.apache.hadoop.hbase.util.VersionInfo.getUrl;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
+
+@Category(HBaseManagedTimeTest.class)
 public class LastValueFunctionIT extends BaseHBaseManagedTimeIT {
 
     @Test

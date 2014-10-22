@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.util;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Strings.isNullOrEmpty;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES;
 
@@ -27,6 +30,8 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Properties;
+
+import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -159,14 +164,6 @@ public class SchemaUtil {
         l3.addAll(l1);
         l3.addAll(l2);
         return l3;
-    }
-
-    public static byte[] getSequenceKey(byte[] tenantId, byte[] schemaName, byte[] sequenceName) {
-        return getTableKey(tenantId, schemaName, sequenceName);
-    }
-
-    public static byte[] getSequenceKey(String tenantId, String schemaName, String sequenceName) {
-        return getTableKey(tenantId, schemaName, sequenceName);
     }
 
     /**
@@ -350,7 +347,7 @@ public class SchemaUtil {
     }
     
     public static boolean isSequenceTable(byte[] tableName) {
-        return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES) == 0;
+        return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES) == 0;
     }
 
     public static boolean isMetaTable(PTable table) {
@@ -358,7 +355,7 @@ public class SchemaUtil {
     }
     
     public static boolean isMetaTable(byte[] schemaName, byte[] tableName) {
-        return Bytes.compareTo(schemaName, PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES) == 0 && Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA_BYTES) == 0;
+        return Bytes.compareTo(schemaName, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA_BYTES) == 0 && Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES) == 0;
     }
     
     public static boolean isMetaTable(String schemaName, String tableName) {
@@ -520,7 +517,7 @@ public class SchemaUtil {
         if (index < 0) {
             return Bytes.toString(tableName); 
         }
-        return Bytes.toString(tableName, index+1, tableName.length);
+        return Bytes.toString(tableName, index+1, tableName.length - index - 1);
     }
 
     public static String getTableNameFromFullName(String tableName) {
@@ -616,5 +613,27 @@ public class SchemaUtil {
     public static String getEscapedArgument(String argument) {
         Preconditions.checkNotNull(argument,"Argument passed cannot be null");
         return ESCAPE_CHARACTER + argument + ESCAPE_CHARACTER;
+    }
+    
+    /**
+     * 
+     * @return a fully qualified column name in the format: "CFNAME"."COLNAME" or "COLNAME" depending on whether or not
+     * there is a column family name present. 
+     */
+    public static String getQuotedFullColumnName(PColumn pCol) {
+        checkNotNull(pCol);
+        String columnName = pCol.getName().getString();
+        String columnFamilyName = pCol.getFamilyName() != null ? pCol.getFamilyName().getString() : null;
+        return getQuotedFullColumnName(columnFamilyName, columnName);
+    }
+    
+    /**
+     * 
+     * @return a fully qualified column name in the format: "CFNAME"."COLNAME" or "COLNAME" depending on whether or not
+     * there is a column family name present. 
+     */
+    public static String getQuotedFullColumnName(@Nullable String columnFamilyName, String columnName) {
+        checkArgument(!isNullOrEmpty(columnName), "Column name cannot be null or empty");
+        return columnFamilyName == null ? ("\"" + columnName + "\"") : ("\"" + columnFamilyName + "\"" + QueryConstants.NAME_SEPARATOR + "\"" + columnName + "\"");
     }
 }

@@ -55,8 +55,8 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
@@ -178,7 +178,8 @@ public class QueryIT extends BaseQueryIT {
             assertTrue (rs.next());
             rs.getDate(1);
             fail();
-        } catch (ConstraintViolationException e) { // Expected
+        } catch (SQLException e) { // Expected
+            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(),e.getErrorCode());
         } finally {
             conn.close();
         }

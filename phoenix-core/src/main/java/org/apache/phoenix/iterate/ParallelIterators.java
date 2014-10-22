@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY;
+import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
+
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -61,9 +64,9 @@ import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.trace.util.Tracing;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseables;
@@ -178,8 +181,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         doColumnProjectionOptimization(context, scan, table, statement);
         
         this.iteratorFactory = iteratorFactory;
-        this.scans = getParallelScans(context.getScan());
-        List<List<Scan>> scans = getParallelScans(context.getScan());
+        this.scans = getParallelScans();
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);
         for (List<Scan> scanList : scans) {
             for (Scan aScan : scanList) {
@@ -317,19 +319,26 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         
         List<byte[]> gps = null;
         PTable table = getTable();
-        Map<byte[],List<byte[]>> guidePostMap = tableStats.getGuidePosts();
+        Map<byte[],GuidePostsInfo> guidePostMap = tableStats.getGuidePosts();
         byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(getTable());
         if (table.getColumnFamilies().isEmpty()) {
             // For sure we can get the defaultCF from the table
-            gps = guidePostMap.get(defaultCF);
+            if (guidePostMap.get(defaultCF) != null) {
+                gps = guidePostMap.get(defaultCF).getGuidePosts();
+            }
         } else {
             Scan scan = context.getScan();
             if (scan.getFamilyMap().size() > 0 && !scan.getFamilyMap().containsKey(defaultCF)) {
                 // If default CF is not used in scan, use first CF referenced in scan
-                gps = guidePostMap.get(scan.getFamilyMap().keySet().iterator().next());
+                GuidePostsInfo guidePostsInfo = guidePostMap.get(scan.getFamilyMap().keySet().iterator().next());
+                if (guidePostsInfo != null) {
+                    gps = guidePostsInfo.getGuidePosts();
+                }
             } else {
                 // Otherwise, favor use of default CF.
-                gps = guidePostMap.get(defaultCF);
+                if (guidePostMap.get(defaultCF) != null) {
+                    gps = guidePostMap.get(defaultCF).getGuidePosts();
+                }
             }
         }
         if (gps == null) {
@@ -352,33 +361,35 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         return buf.toString();
     }
     
-    private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan, boolean crossedRegionBoundary) {
-        if (scan == null) {
-            return scans;
-        }
+    private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan, byte[] startKey, boolean crossedRegionBoundary) {
         PTable table = getTable();
-        if (!scans.isEmpty()) {
-            boolean startNewScanList = false;
-            if (!plan.isRowKeyOrdered()) {
+        boolean startNewScanList = false;
+        if (!plan.isRowKeyOrdered()) {
+            startNewScanList = true;
+        } else if (crossedRegionBoundary) {
+            if (table.getIndexType() == IndexType.LOCAL) {
                 startNewScanList = true;
-            } else if (crossedRegionBoundary) {
-                if (table.getIndexType() == IndexType.LOCAL) {
-                    startNewScanList = true;
-                } else if (table.getBucketNum() != null) {
-                    byte[] previousStartKey = scans.get(scans.size()-1).getStartRow();
-                    byte[] currentStartKey = scan.getStartRow();
-                    byte[] prefix = ScanUtil.getPrefix(previousStartKey, SaltingUtil.NUM_SALTING_BYTES);
-                    startNewScanList = ScanUtil.crossesPrefixBoundary(currentStartKey, prefix, SaltingUtil.NUM_SALTING_BYTES);
-                }
-            }
-            if (startNewScanList) {
-                parallelScans.add(scans);
-                scans = Lists.newArrayListWithExpectedSize(1);
+            } else if (table.getBucketNum() != null) {
+                startNewScanList = scans.isEmpty() ||
+                        ScanUtil.crossesPrefixBoundary(startKey,
+                                ScanUtil.getPrefix(scans.get(scans.size()-1).getStartRow(), SaltingUtil.NUM_SALTING_BYTES), 
+                                SaltingUtil.NUM_SALTING_BYTES);
             }
         }
-        scans.add(scan);
+        if (scan != null) {
+            scans.add(scan);
+        }
+        if (startNewScanList && !scans.isEmpty()) {
+            parallelScans.add(scans);
+            scans = Lists.newArrayListWithExpectedSize(1);
+        }
         return scans;
     }
+
+    private List<List<Scan>> getParallelScans() throws SQLException {
+        return getParallelScans(EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY);
+    }
+
     /**
      * Compute the list of parallel scans to run for a given query. The inner scans
      * may be concatenated together directly, while the other ones may need to be
@@ -386,9 +397,11 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
      * @return list of parallel scans to run for a given query.
      * @throws SQLException
      */
-    private List<List<Scan>> getParallelScans(final Scan scan) throws SQLException {
+    private List<List<Scan>> getParallelScans(byte[] startKey, byte[] stopKey) throws SQLException {
+        Scan scan = context.getScan();
         List<HRegionLocation> regionLocations = context.getConnection().getQueryServices()
                 .getAllTableRegions(physicalTableName);
+        
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         ScanRanges scanRanges = context.getScanRanges();
         PTable table = getTable();
@@ -399,25 +412,31 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
             logger.debug("Guideposts: " + toString(gps));
         }
         boolean traverseAllRegions = isSalted || isLocalIndex;
+        if (!traverseAllRegions) {
+            byte[] scanStartRow = scan.getStartRow();
+            if (scanStartRow.length != 0 && Bytes.compareTo(scanStartRow, startKey) > 0) {
+                startKey = scanStartRow;
+            }
+            byte[] scanStopRow = scan.getStopRow();
+            if (stopKey.length == 0 || Bytes.compareTo(scanStopRow, stopKey) < 0) {
+                stopKey = scanStopRow;
+            }
+        }
         
-        byte[] startKey = ByteUtil.EMPTY_BYTE_ARRAY;
-        byte[] currentKey = ByteUtil.EMPTY_BYTE_ARRAY;
-        byte[] stopKey = ByteUtil.EMPTY_BYTE_ARRAY;
         int regionIndex = 0;
         int stopIndex = regionBoundaries.size();
-        if (!traverseAllRegions) {
-            startKey = scan.getStartRow();
-            if (startKey.length > 0) {
-                currentKey = startKey;
-                regionIndex = getIndexContainingInclusive(regionBoundaries, startKey);
-            }
-            stopKey = scan.getStopRow();
-            if (stopKey.length > 0) {
-                stopIndex = Math.min(stopIndex, regionIndex + getIndexContainingExclusive(regionBoundaries.subList(regionIndex, stopIndex), stopKey));
+        if (startKey.length > 0) {
+            regionIndex = getIndexContainingInclusive(regionBoundaries, startKey);
+        }
+        if (stopKey.length > 0) {
+            stopIndex = Math.min(stopIndex, regionIndex + getIndexContainingExclusive(regionBoundaries.subList(regionIndex, stopIndex), stopKey));
+            if (isLocalIndex) {
+                stopKey = regionLocations.get(stopIndex).getRegionInfo().getEndKey();
             }
         }
         List<List<Scan>> parallelScans = Lists.newArrayListWithExpectedSize(stopIndex - regionIndex + 1);
         
+        byte[] currentKey = startKey;
         int guideIndex = currentKey.length == 0 ? 0 : getIndexContainingInclusive(gps, currentKey);
         int gpsSize = gps.size();
         int estGuidepostsPerRegion = gpsSize == 0 ? 1 : gpsSize / regionLocations.size() + 1;
@@ -425,21 +444,33 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         List<Scan> scans = Lists.newArrayListWithExpectedSize(estGuidepostsPerRegion);
         // Merge bisect with guideposts for all but the last region
         while (regionIndex <= stopIndex) {
-            byte[] currentGuidePost;
-            byte[] endKey = regionIndex == stopIndex ? stopKey : regionBoundaries.get(regionIndex);
+            byte[] currentGuidePost, endKey, endRegionKey = EMPTY_BYTE_ARRAY;
+            if (regionIndex == stopIndex) {
+                endKey = stopKey;
+            } else {
+                endKey = regionBoundaries.get(regionIndex);
+            }
             if (isLocalIndex) {
                 HRegionInfo regionInfo = regionLocations.get(regionIndex).getRegionInfo();
-                keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), regionInfo.getEndKey());
+                endRegionKey = regionInfo.getEndKey();
+                keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
             }
             while (guideIndex < gpsSize
                     && (Bytes.compareTo(currentGuidePost = gps.get(guideIndex), endKey) <= 0 || endKey.length == 0)) {
                 Scan newScan = scanRanges.intersectScan(scan, currentKey, currentGuidePost, keyOffset, false);
-                scans = addNewScan(parallelScans, scans, newScan, false);
+                scans = addNewScan(parallelScans, scans, newScan, currentGuidePost, false);
                 currentKey = currentGuidePost;
                 guideIndex++;
             }
             Scan newScan = scanRanges.intersectScan(scan, currentKey, endKey, keyOffset, true);
-            scans = addNewScan(parallelScans, scans, newScan, true);
+            if (isLocalIndex) {
+                if (newScan != null) {
+                    newScan.setAttribute(EXPECTED_UPPER_REGION_KEY, endRegionKey);
+                } else if (!scans.isEmpty()) {
+                    scans.get(scans.size()-1).setAttribute(EXPECTED_UPPER_REGION_KEY, endRegionKey);
+                }
+            }
+            scans = addNewScan(parallelScans, scans, newScan, endKey, true);
             currentKey = endKey;
             regionIndex++;
         }
@@ -473,6 +504,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
     public List<PeekingResultIterator> getIterators() throws SQLException {
         boolean success = false;
         boolean isReverse = ScanUtil.isReversed(context.getScan());
+        boolean isLocalIndex = getTable().getIndexType() == IndexType.LOCAL;
         final ConnectionQueryServices services = context.getConnection().getQueryServices();
         ReadOnlyProps props = services.getProps();
         int numSplits = size();
@@ -501,7 +533,12 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
                             }
                             // Resubmit just this portion of work again
                             Scan oldScan = scanPair.getFirst();
-                            List<List<Scan>> newNestedScans = this.getParallelScans(oldScan);
+                            byte[] startKey = oldScan.getStartRow();
+                            byte[] endKey = oldScan.getStopRow();
+                            if (isLocalIndex) {
+                                endKey = oldScan.getAttribute(EXPECTED_UPPER_REGION_KEY);
+                            }
+                            List<List<Scan>> newNestedScans = this.getParallelScans(startKey, endKey);
                             // Add any concatIterators that were successful so far
                             // as we need these to be in order
                             addConcatResultIterator(iterators, concatIterators);

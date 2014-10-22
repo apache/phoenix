@@ -36,7 +36,6 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -46,11 +45,9 @@ import org.apache.phoenix.util.KeyValueUtil;
  */
 public abstract class MutatingParallelIteratorFactory implements ParallelIteratorFactory {
     protected final PhoenixConnection connection;
-    protected final TableRef tableRef;
 
-    protected MutatingParallelIteratorFactory(PhoenixConnection connection, TableRef tableRef) {
+    protected MutatingParallelIteratorFactory(PhoenixConnection connection) {
         this.connection = connection;
-        this.tableRef = tableRef;
     }
     
     /**

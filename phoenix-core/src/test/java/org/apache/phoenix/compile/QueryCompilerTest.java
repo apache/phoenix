@@ -545,7 +545,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             }
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 201 (22000): Illegal data."));
-            assertTrue(e.getCause().getMessage().contains("CHAR types may only contain single byte characters"));
+            assertTrue(e.getMessage().contains("CHAR types may only contain single byte characters"));
         }
     }
 
@@ -769,7 +769,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.executeQuery();
             fail();
         } catch (SQLException e) { // expected
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 507 (42846): Cannot convert type. COALESCE expected INTEGER, but got VARCHAR"));
+            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 203 (22005): Type mismatch. COALESCE expected INTEGER, but got VARCHAR"));
         } finally {
             conn.close();
         }
@@ -1166,10 +1166,20 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertImmutableRows(conn, "T", true);
             conn.createStatement().execute(indexDDL);
             assertImmutableRows(conn, "T", true);
-            conn.createStatement().execute("DELETE FROM t");
+            conn.createStatement().execute("DELETE FROM t WHERE v2 = 'foo'");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NO_DELETE_IF_IMMUTABLE_INDEX.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
+        }
+        // Test with one index having the referenced key value column, but one not having it.
+        // Still should fail
+        try {
+            indexDDL = "CREATE INDEX i2 ON t (v2)";
+            conn.createStatement().execute(indexDDL);
+            conn.createStatement().execute("DELETE FROM t WHERE v2 = 'foo'");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -1278,6 +1288,18 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
+        }
+        conn.close();
+    }
+
+    @Test
+    public void testVarbinaryArrayNotSupported() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t (k VARCHAR PRIMARY KEY, a VARBINARY[10])");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.VARBINARY_ARRAY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
         }
         conn.close();
     }

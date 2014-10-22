@@ -29,6 +29,7 @@ import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
+import org.apache.phoenix.parse.SequenceValueParseNode.Op;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PDataType;
@@ -37,6 +38,7 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.tuple.DelegateTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -46,8 +48,8 @@ public class SequenceManager {
     private int[] sequencePosition;
     private List<SequenceKey> nextSequences;
     private List<SequenceKey> currentSequences;
-    private Map<SequenceKey,SequenceValueExpression> sequenceMap;
-    private BitSet isNextSequence;
+    private final Map<SequenceKey,SequenceValueExpression> sequenceMap = Maps.newHashMap();
+    private final BitSet isNextSequence = new BitSet();
     
     public SequenceManager(PhoenixStatement statement) {
         this.statement = statement;
@@ -117,22 +119,21 @@ public class SequenceManager {
     }
 
     public SequenceValueExpression newSequenceReference(SequenceValueParseNode node) {
-        if (sequenceMap == null) {
-            sequenceMap = Maps.newHashMap();
-            isNextSequence = new BitSet();
-        }
         PName tenantName = statement.getConnection().getTenantId();
         String tenantId = tenantName == null ? null : tenantName.getString();
         TableName tableName = node.getTableName();
-        SequenceKey key = new SequenceKey(tenantId, tableName.getSchemaName(), tableName.getTableName());
+        int nSaltBuckets = statement.getConnection().getQueryServices().getSequenceSaltBuckets();
+        SequenceKey key = new SequenceKey(tenantId, tableName.getSchemaName(), tableName.getTableName(), nSaltBuckets);
         SequenceValueExpression expression = sequenceMap.get(key);
         if (expression == null) {
             int index = sequenceMap.size();
-            expression = new SequenceValueExpression(index);
+            expression = new SequenceValueExpression(key, node.getOp(), index);
             sequenceMap.put(key, expression);
+        } else if (expression.op != node.getOp()){
+            expression = new SequenceValueExpression(key, node.getOp(), expression.getIndex());
         }
         // If we see a NEXT and a CURRENT, treat the CURRENT just like a NEXT
-        if (node.getOp() == SequenceValueParseNode.Op.NEXT_VALUE) {
+        if (node.getOp() == Op.NEXT_VALUE) {
             isNextSequence.set(expression.getIndex());
         }
            
@@ -140,7 +141,7 @@ public class SequenceManager {
     }
     
     public void validateSequences(Sequence.ValueOp action) throws SQLException {
-        if (sequenceMap == null || sequenceMap.isEmpty()) {
+        if (sequenceMap.isEmpty()) {
             return;
         }
         int maxSize = sequenceMap.size();
@@ -174,9 +175,13 @@ public class SequenceManager {
     }
     
     private class SequenceValueExpression extends BaseTerminalExpression {
+        private final SequenceKey key;
+        private final Op op;
         private final int index;
 
-        private SequenceValueExpression(int index) {
+        private SequenceValueExpression(SequenceKey key, Op op, int index) {
+            this.key = key;
+            this.op = op;
             this.index = index;
         }
 
@@ -212,5 +217,9 @@ public class SequenceManager {
             return true;
         }
 
+        @Override
+        public String toString() {
+            return op.getName() + " VALUE FOR " + SchemaUtil.getTableName(key.getSchemaName(),key.getSequenceName());
+        }
     }
 }

@@ -22,6 +22,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
@@ -249,6 +250,11 @@ public class TupleProjector {
 
     public ValueBitSet getValueBitSet() {
         return valueSet;
+    }
+    
+    @Override
+    public String toString() {
+        return "TUPLE-PROJECTOR {" + Arrays.toString(expressions) + " ==> " + schema.toString() + "}";
     }
 }
 

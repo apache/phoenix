@@ -167,7 +167,7 @@ public class TraceMetricSource implements PhoenixSpanReceiver, MetricsSource {
     // noop
   }
 
-  private class Metric {
+  private static class Metric {
 
     List<Pair<MetricsInfo, Long>> counters = new ArrayList<Pair<MetricsInfo, Long>>();
     List<MetricsTag> tags = new ArrayList<MetricsTag>();

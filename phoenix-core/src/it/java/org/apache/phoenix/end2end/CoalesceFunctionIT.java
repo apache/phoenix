@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -31,7 +32,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Assert;
 import org.junit.Test;
@@ -263,9 +264,9 @@ public class CoalesceFunctionIT extends BaseHBaseManagedTimeIT {
 
             assertTrue(rs.next());
             assertEquals(0, rs.getLong(1));
-            Assert.fail("Should not cast -2 to UNSIGNED_INT");
-        } catch (IllegalDataException e) {
-
+            fail("Should not cast -2 to UNSIGNED_INT");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
         }
     }
 

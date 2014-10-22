@@ -70,6 +70,7 @@ public class MetaDataUtil {
     public static final String LOCAL_INDEX_TABLE_PREFIX = "_LOCAL_IDX_";
     public static final byte[] LOCAL_INDEX_TABLE_PREFIX_BYTES = Bytes.toBytes(LOCAL_INDEX_TABLE_PREFIX);
     public static final String VIEW_INDEX_SEQUENCE_PREFIX = "_SEQ_";
+    public static final String VIEW_INDEX_SEQUENCE_NAME_PREFIX = "_ID_";
     public static final byte[] VIEW_INDEX_SEQUENCE_PREFIX_BYTES = Bytes.toBytes(VIEW_INDEX_SEQUENCE_PREFIX);
     public static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
     public static final String PARENT_TABLE_KEY = "PARENT_TABLE";
@@ -291,14 +292,18 @@ public class MetaDataUtil {
         return SchemaUtil.getTableName(schemaName, tableName);
     }
 
-    public static SequenceKey getViewIndexSequenceKey(String tenantId, PName physicalName) {
+    public static String getViewIndexSchemaName(PName physicalName) {
+        return VIEW_INDEX_SEQUENCE_PREFIX + physicalName.getString();
+    }
+    
+    public static SequenceKey getViewIndexSequenceKey(String tenantId, PName physicalName, int nSaltBuckets) {
         // Create global sequence of the form: <prefixed base table name><tenant id>
         // rather than tenant-specific sequence, as it makes it much easier
         // to cleanup when the physical table is dropped, as we can delete
         // all global sequences leading with <prefix> + physical name.
-        String schemaName = VIEW_INDEX_SEQUENCE_PREFIX + physicalName.getString();
-        String tableName = tenantId == null ? "" : tenantId;
-        return new SequenceKey(null, schemaName, tableName);
+        String schemaName = getViewIndexSchemaName(physicalName);
+        String tableName = VIEW_INDEX_SEQUENCE_NAME_PREFIX + (tenantId == null ? "" : tenantId);
+        return new SequenceKey(null, schemaName, tableName, nSaltBuckets);
     }
 
     public static PDataType getViewIndexIdDataType() {
@@ -346,10 +351,10 @@ public class MetaDataUtil {
     }
 
     public static void deleteViewIndexSequences(PhoenixConnection connection, PName name) throws SQLException {
-        SequenceKey key = getViewIndexSequenceKey(null, name);
-        connection.createStatement().executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME + 
+        String schemaName = getViewIndexSchemaName(name);
+        connection.createStatement().executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED + 
                 " WHERE " + PhoenixDatabaseMetaData.TENANT_ID + " IS NULL AND " + 
-                PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + key.getSchemaName() + "'");
+                PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + schemaName + "'");
         
     }
     

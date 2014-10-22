@@ -51,7 +51,6 @@ import org.apache.phoenix.parse.ComparisonParseNode;
 import org.apache.phoenix.parse.DerivedTableNode;
 import org.apache.phoenix.parse.EqualParseNode;
 import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.JoinTableNode;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
@@ -60,6 +59,7 @@ import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
@@ -187,7 +187,7 @@ public class JoinCompiler {
             if (joinSpecs == null) {
                 joinSpecs = new ArrayList<JoinSpec>();
             }
-            joinSpecs.add(new JoinSpec(joinNode.getType(), joinNode.getOnNode(), joinTable, origResolver));
+            joinSpecs.add(new JoinSpec(joinNode.getType(), joinNode.getOnNode(), joinTable, joinNode.isSingleValueOnly(), origResolver));
             
             return new Pair<Table, List<JoinSpec>>(lhs.getFirst(), joinSpecs);
         }
@@ -313,6 +313,9 @@ public class JoinCompiler {
             for (ParseNode node : table.getPreFilters()) {
                 node.accept(prefilterRefVisitor);
             }
+            for (ParseNode node : table.getPostFilters()) {
+                node.accept(generalRefVisitor);
+            }
             for (ParseNode node : postFilters) {
                 node.accept(generalRefVisitor);
             }
@@ -331,22 +334,12 @@ public class JoinCompiler {
             }
         }
         
-        public Expression compilePostFilterExpression(StatementContext context) throws SQLException {
-            if (postFilters.isEmpty())
-                return null;
-            
-            ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
-            List<Expression> expressions = new ArrayList<Expression>(postFilters.size());
-            for (ParseNode postFilter : postFilters) {
-                expressionCompiler.reset();
-                Expression expression = postFilter.accept(expressionCompiler);
-                expressions.add(expression);
+        public Expression compilePostFilterExpression(StatementContext context, Table table) throws SQLException {
+            List<ParseNode> filtersCombined = Lists.<ParseNode> newArrayList(postFilters);
+            if (table != null) {
+                filtersCombined.addAll(table.getPostFilters());
             }
-            
-            if (expressions.size() == 1)
-                return expressions.get(0);
-            
-            return AndExpression.create(expressions);
+            return JoinCompiler.compilePostFilterExpression(context, filtersCombined);
         }
         
         /**
@@ -362,7 +355,8 @@ public class JoinCompiler {
                             && count > 1 
                             && joinSpecs.get(count - 1).getType() != JoinType.Left
                             && joinSpecs.get(count - 1).getType() != JoinType.Semi
-                            && joinSpecs.get(count - 1).getType() != JoinType.Anti))
+                            && joinSpecs.get(count - 1).getType() != JoinType.Anti
+                            && !joinSpecs.get(count - 1).isSingleValueOnly()))
                 return null;
 
             boolean[] vector = new boolean[count];
@@ -437,16 +431,21 @@ public class JoinCompiler {
         private final JoinType type;
         private final List<ComparisonParseNode> onConditions;
         private final JoinTable joinTable;
+        private final boolean singleValueOnly;
         private Set<TableRef> dependencies;
         
         private JoinSpec(JoinType type, ParseNode onNode, JoinTable joinTable, 
-                ColumnResolver resolver) throws SQLException {
+                boolean singleValueOnly, ColumnResolver resolver) throws SQLException {
             this.type = type;
             this.onConditions = new ArrayList<ComparisonParseNode>();
             this.joinTable = joinTable;
+            this.singleValueOnly = singleValueOnly;
             this.dependencies = new HashSet<TableRef>();
             OnNodeVisitor visitor = new OnNodeVisitor(resolver, onConditions, dependencies, joinTable);
             onNode.accept(visitor);
+            if (onConditions.isEmpty()) {
+                visitor.throwUnsupportedJoinConditionException();
+            }
         }
         
         public JoinType getType() {
@@ -459,6 +458,10 @@ public class JoinCompiler {
         
         public JoinTable getJoinTable() {
             return joinTable;
+        }
+        
+        public boolean isSingleValueOnly() {
+            return singleValueOnly;
         }
         
         public Set<TableRef> getDependencies() {
@@ -536,7 +539,7 @@ public class JoinCompiler {
                 return lType;
             
             if (!lType.isComparableTo(rType))
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CONVERT_TYPE)
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
                     .setMessage("On-clause LHS expression and RHS expression must be comparable. LHS type: " + lType + ", RHS type: " + rType)
                     .build().buildException();
 
@@ -602,6 +605,7 @@ public class JoinCompiler {
         private final List<AliasedNode> selectNodes; // all basic nodes related to this table, no aggregation.
         private final List<ParseNode> preFilters;
         private final List<ParseNode> postFilters;
+        private final boolean isPostFilterConvertible;
         
         private Table(TableNode tableNode, List<ColumnDef> dynamicColumns, 
                 List<AliasedNode> selectNodes, TableRef tableRef) {
@@ -612,6 +616,7 @@ public class JoinCompiler {
             this.selectNodes = selectNodes;
             this.preFilters = new ArrayList<ParseNode>();
             this.postFilters = Collections.<ParseNode>emptyList();
+            this.isPostFilterConvertible = false;
         }
         
         private Table(DerivedTableNode tableNode, 
@@ -621,8 +626,9 @@ public class JoinCompiler {
             this.subselect = SubselectRewriter.flatten(tableNode.getSelect(), statement.getConnection());
             this.tableRef = tableRef;
             this.selectNodes = selectNodes;
-            this.preFilters = Collections.<ParseNode>emptyList();
+            this.preFilters = new ArrayList<ParseNode>();
             this.postFilters = new ArrayList<ParseNode>();
+            this.isPostFilterConvertible = SubselectRewriter.isPostFilterConvertible(subselect);
         }
         
         public TableNode getTableNode() {
@@ -654,21 +660,24 @@ public class JoinCompiler {
         }
         
         public void addFilter(ParseNode filter) {
-            if (!isSubselect()) {
+            if (!isSubselect() || isPostFilterConvertible) {
                 preFilters.add(filter);
-                return;
+            } else {
+                postFilters.add(filter);
             }
-            
-            postFilters.add(filter);
         }
         
         public ParseNode getPreFiltersCombined() {
             return combine(preFilters);
         }
         
+        public Expression compilePostFilterExpression(StatementContext context) throws SQLException {
+            return JoinCompiler.compilePostFilterExpression(context, postFilters);
+        }
+        
         public SelectStatement getAsSubquery() throws SQLException {
             if (isSubselect())
-                return SubselectRewriter.applyPostFilters(subselect, postFilters, tableNode.getAlias());
+                return SubselectRewriter.applyPostFilters(subselect, preFilters, tableNode.getAlias());
             
             List<TableNode> from = Collections.<TableNode>singletonList(tableNode);
             return NODE_FACTORY.select(from, select.getHint(), false, selectNodes, getPreFiltersCombined(), null, null, null, null, 0, false, select.hasSequence());
@@ -735,8 +744,8 @@ public class JoinCompiler {
             
             PTable t = PTableImpl.makePTable(table.getTenantId(), PNameFactory.newName(PROJECTED_TABLE_SCHEMA), table.getName(), PTableType.JOIN,
                         table.getIndexState(), table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
-                        retainPKColumns ? table.getBucketNum() : null, projectedColumns, table.getParentTableName(),
-                        table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null, table.isWALDisabled(), table.isMultiTenant(), table.getViewType(), table.getViewIndexId(), table.getIndexType());
+                        retainPKColumns ? table.getBucketNum() : null, projectedColumns, table.getParentSchemaName(),
+                        table.getParentTableName(), table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null, table.isWALDisabled(), table.isMultiTenant(), table.getViewType(), table.getViewIndexId(), table.getIndexType());
             return new ProjectedPTableWrapper(t, columnNameMap, sourceExpressions);
         }
         
@@ -785,8 +794,8 @@ public class JoinCompiler {
             }
             PTable t = PTableImpl.makePTable(table.getTenantId(), PNameFactory.newName(PROJECTED_TABLE_SCHEMA), table.getName(), PTableType.JOIN,
                         table.getIndexState(), table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
-                        null, projectedColumns, table.getParentTableName(),
-                        table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null, table.isWALDisabled(), table.isMultiTenant(), table.getViewType(), table.getViewIndexId(), table.getIndexType());
+                        null, projectedColumns, table.getParentSchemaName(),
+                        table.getParentTableName(), table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null, table.isWALDisabled(), table.isMultiTenant(), table.getViewType(), table.getViewIndexId(), table.getIndexType());
             return new ProjectedPTableWrapper(t, columnNameMap, sourceExpressions);
         }
     }
@@ -963,7 +972,7 @@ public class JoinCompiler {
          * 2) a boolean condition referencing to the self table only.
          * Otherwise, it can be ambiguous.
          */
-        private void throwUnsupportedJoinConditionException() 
+        public void throwUnsupportedJoinConditionException() 
                 throws SQLFeatureNotSupportedException {
             throw new SQLFeatureNotSupportedException("Does not support non-standard or non-equi join conditions.");
         }           
@@ -1086,6 +1095,24 @@ public class JoinCompiler {
         return ret;
     }
     
+    private static Expression compilePostFilterExpression(StatementContext context, List<ParseNode> postFilters) throws SQLException {
+        if (postFilters.isEmpty())
+            return null;
+        
+        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
+        List<Expression> expressions = new ArrayList<Expression>(postFilters.size());
+        for (ParseNode postFilter : postFilters) {
+            expressionCompiler.reset();
+            Expression expression = postFilter.accept(expressionCompiler);
+            expressions.add(expression);
+        }
+        
+        if (expressions.size() == 1)
+            return expressions.get(0);
+        
+        return AndExpression.create(expressions);
+    }
+    
     public static SelectStatement optimize(PhoenixStatement statement, SelectStatement select, final ColumnResolver resolver) throws SQLException {
         TableRef groupByTableRef = null;
         TableRef orderByTableRef = null;
@@ -1177,7 +1204,7 @@ public class JoinCompiler {
                     if (lhs == lhsReplace && rhs == rhsReplace)
                         return joinNode;
 
-                    return NODE_FACTORY.join(joinNode.getType(), lhsReplace, rhsReplace, joinNode.getOnNode());
+                    return NODE_FACTORY.join(joinNode.getType(), lhsReplace, rhsReplace, joinNode.getOnNode(), joinNode.isSingleValueOnly());
                 }
 
                 @Override
@@ -1273,7 +1300,7 @@ public class JoinCompiler {
             }
             PTable t = PTableImpl.makePTable(left.getTenantId(), left.getSchemaName(),
                     PNameFactory.newName(SchemaUtil.getTableName(left.getName().getString(), right.getName().getString())), left.getType(), left.getIndexState(), left.getTimeStamp(), left.getSequenceNumber(), left.getPKName(), left.getBucketNum(), merged,
-                    left.getParentTableName(), left.getIndexes(), left.isImmutableRows(), Collections.<PName>emptyList(), null, null, PTable.DEFAULT_DISABLE_WAL, left.isMultiTenant(), left.getViewType(), left.getViewIndexId(), left.getIndexType());
+                    left.getParentSchemaName(), left.getParentTableName(), left.getIndexes(), left.isImmutableRows(), Collections.<PName>emptyList(), null, null, PTable.DEFAULT_DISABLE_WAL, left.isMultiTenant(), left.getViewType(), left.getViewIndexId(), left.getIndexType());
 
             ListMultimap<String, String> mergedMap = ArrayListMultimap.<String, String>create();
             mergedMap.putAll(this.getColumnNameMap());

@@ -19,20 +19,20 @@ package org.apache.phoenix.expression;
 
 import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.EOFException;
 import java.io.IOException;
 import java.util.List;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.io.WritableUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.StringUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.Lists;
 
 
 /**
@@ -193,13 +193,27 @@ public class LikeExpression extends BaseCompoundExpression {
 //        return sb.toString();
 //    }
 
+    private static final int LIKE_TYPE_INDEX = 2;
+    private static final LiteralExpression[] LIKE_TYPE_LITERAL = new LiteralExpression[LikeType.values().length];
+    static {
+        for (LikeType likeType : LikeType.values()) {
+            LIKE_TYPE_LITERAL[likeType.ordinal()] = LiteralExpression.newConstant(likeType.name());
+        }
+    }
     private Pattern pattern;
 
     public LikeExpression() {
     }
 
+    private static List<Expression> addLikeTypeChild(List<Expression> children, LikeType likeType) {
+        List<Expression> newChildren = Lists.newArrayListWithExpectedSize(children.size()+1);
+        newChildren.addAll(children);
+        newChildren.add(LIKE_TYPE_LITERAL[likeType.ordinal()]);
+        return newChildren;
+    }
+    
     public LikeExpression(List<Expression> children, LikeType likeType) {
-        super(children);
+        super(addLikeTypeChild(children,likeType));
         this.likeType = likeType;
         init();
     }
@@ -213,6 +227,13 @@ public class LikeExpression extends BaseCompoundExpression {
     }
 
     private void init() {
+        List<Expression> children = getChildren();
+        if (children.size() <= LIKE_TYPE_INDEX) {
+            this.likeType = LikeType.CASE_SENSITIVE;
+        } else {
+            LiteralExpression likeTypeExpression = (LiteralExpression)children.get(LIKE_TYPE_INDEX);
+            this.likeType = LikeType.valueOf((String)likeTypeExpression.getValue());
+        }
         Expression e = getPatternExpression();
         if (e instanceof LiteralExpression) {
             LiteralExpression patternExpression = (LiteralExpression)e;
@@ -276,17 +297,11 @@ public class LikeExpression extends BaseCompoundExpression {
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
         init();
-        try {
-            likeType = LikeType.values()[WritableUtils.readVInt(input)];
-        } catch (EOFException e) {
-            likeType = LikeType.CASE_SENSITIVE;
-        }
     }
 
     @Override
     public void write(DataOutput output) throws IOException {
         super.write(output);
-        WritableUtils.writeVInt(output, likeType.ordinal());
     }
 
     @Override

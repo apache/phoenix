@@ -24,6 +24,7 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
 
@@ -147,5 +148,48 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         assertEquals("e",rs.getString(1));
         assertFalse(rs.next());
         
+    }
+    
+    @Test
+    public void testNonPaddedTenantId() throws Exception {
+        String tenantId1 = "org1";
+        String tenantId2 = "org2";
+        String ddl = "CREATE TABLE T (tenantId char(15) NOT NULL, pk1 varchar NOT NULL, pk2 INTEGER NOT NULL, val1 VARCHAR CONSTRAINT pk primary key (tenantId,pk1,pk2)) MULTI_TENANT = true";
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO T (tenantId, pk1, pk2, val1) VALUES (?, ?, ?, ?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        
+        String pk = "pk1b";
+        // insert two rows in table T. One for tenantId1 and other for tenantId2.
+        stmt.setString(1, tenantId1);
+        stmt.setString(2, pk);
+        stmt.setInt(3, 100);
+        stmt.setString(4, "value1");
+        stmt.executeUpdate();
+        
+        stmt.setString(1, tenantId2);
+        stmt.setString(2, pk);
+        stmt.setInt(3, 200);
+        stmt.setString(4, "value2");
+        stmt.executeUpdate();
+        conn.commit();
+        conn.close();
+        
+        // get a tenant specific url.
+        String tenantUrl = getUrl() + ';' + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId1;
+        Connection tenantConn = DriverManager.getConnection(tenantUrl);
+        
+        // create a tenant specific view.
+        tenantConn.createStatement().execute("CREATE VIEW V AS select * from T");
+        String query = "SELECT val1 FROM V WHERE pk1 = ?";
+        
+        // using the tenant connection query the view.
+        PreparedStatement stmt2 = tenantConn.prepareStatement(query);
+        stmt2.setString(1, pk); // for tenantId1 the row inserted has pk1 = "pk1b"
+        ResultSet rs = stmt2.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("value1", rs.getString(1));
+        assertFalse("No other rows should have been returned for the tenant", rs.next()); // should have just returned one record since for org1 we have only one row.
     }
 }

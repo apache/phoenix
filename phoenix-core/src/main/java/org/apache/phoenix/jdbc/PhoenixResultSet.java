@@ -35,7 +35,6 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLWarning;
 import java.sql.SQLXML;
-import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.Format;
@@ -43,7 +42,6 @@ import java.util.Calendar;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -552,7 +550,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     }
 
     @Override
-    public Statement getStatement() throws SQLException {
+    public PhoenixStatement getStatement() throws SQLException {
         return statement;
     }
 
@@ -725,6 +723,10 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
         throw new SQLFeatureNotSupportedException();
     }
 
+    public Tuple getCurrentRow() {
+        return currentRow;
+    }
+    
     @Override
     public boolean next() throws SQLException {
         checkOpen();

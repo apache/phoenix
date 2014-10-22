@@ -74,7 +74,6 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         Connection conn;
         PreparedStatement stmt;
         ResultSet rs;
-        long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         // props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);

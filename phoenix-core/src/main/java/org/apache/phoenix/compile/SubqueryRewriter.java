@@ -25,9 +25,12 @@ import java.util.List;
 import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.expression.function.DistinctValueAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AndParseNode;
+import org.apache.phoenix.parse.ArrayAllComparisonNode;
+import org.apache.phoenix.parse.ArrayAnyComparisonNode;
 import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.ComparisonParseNode;
@@ -36,6 +39,7 @@ import org.apache.phoenix.parse.ExistsParseNode;
 import org.apache.phoenix.parse.InParseNode;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.LiteralParseNode;
+import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.ParseNodeRewriter;
@@ -129,26 +133,32 @@ public class SubqueryRewriter extends ParseNodeRewriter {
 
     @Override
     public ParseNode visitLeave(InParseNode node, List<ParseNode> l) throws SQLException {
+        boolean isTopNode = topNode == node;
+        if (isTopNode) {
+            topNode = null;
+        }
+        
         SubqueryParseNode subqueryNode = (SubqueryParseNode) l.get(1);
         SelectStatement subquery = subqueryNode.getSelectNode();
         String rhsTableAlias = ParseNodeFactory.createTempAlias();
-        List<AliasedNode> selectNodes = fixAliasedNodes(subquery.getSelect());
+        List<AliasedNode> selectNodes = fixAliasedNodes(subquery.getSelect(), true);
         subquery = NODE_FACTORY.select(subquery, true, selectNodes);
         ParseNode onNode = getJoinConditionNode(l.get(0), selectNodes, rhsTableAlias);
         TableNode rhsTable = NODE_FACTORY.derivedTable(rhsTableAlias, subquery);
-        JoinType joinType = topNode == node ? (node.isNegate() ? JoinType.Anti : JoinType.Semi) : JoinType.Left;
-        ParseNode ret = topNode == node ? null : NODE_FACTORY.isNull(NODE_FACTORY.column(NODE_FACTORY.table(null, rhsTableAlias), selectNodes.get(0).getAlias(), null), !node.isNegate());
-        tableNode = NODE_FACTORY.join(joinType, tableNode, rhsTable, onNode);
-        
-        if (topNode == node) {
-            topNode = null;
-        }
+        JoinType joinType = isTopNode ? (node.isNegate() ? JoinType.Anti : JoinType.Semi) : JoinType.Left;
+        ParseNode ret = isTopNode ? null : NODE_FACTORY.isNull(NODE_FACTORY.column(NODE_FACTORY.table(null, rhsTableAlias), selectNodes.get(0).getAlias(), null), !node.isNegate());
+        tableNode = NODE_FACTORY.join(joinType, tableNode, rhsTable, onNode, false);
         
         return ret;
     }
 
     @Override
     public ParseNode visitLeave(ExistsParseNode node, List<ParseNode> l) throws SQLException {
+        boolean isTopNode = topNode == node;
+        if (isTopNode) {
+            topNode = null;
+        }
+        
         SubqueryParseNode subqueryNode = (SubqueryParseNode) l.get(0);
         SelectStatement subquery = subqueryNode.getSelectNode();
         String rhsTableAlias = ParseNodeFactory.createTempAlias();
@@ -169,19 +179,20 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         subquery = NODE_FACTORY.select(subquery, true, selectNodes, where);
         ParseNode onNode = conditionExtractor.getJoinCondition();
         TableNode rhsTable = NODE_FACTORY.derivedTable(rhsTableAlias, subquery);
-        JoinType joinType = topNode == node ? (node.isNegate() ? JoinType.Anti : JoinType.Semi) : JoinType.Left;
-        ParseNode ret = topNode == node ? null : NODE_FACTORY.isNull(NODE_FACTORY.column(NODE_FACTORY.table(null, rhsTableAlias), selectNodes.get(0).getAlias(), null), !node.isNegate());
-        tableNode = NODE_FACTORY.join(joinType, tableNode, rhsTable, onNode);
-        
-        if (topNode == node) {
-            topNode = null;
-        }
+        JoinType joinType = isTopNode ? (node.isNegate() ? JoinType.Anti : JoinType.Semi) : JoinType.Left;
+        ParseNode ret = isTopNode ? null : NODE_FACTORY.isNull(NODE_FACTORY.column(NODE_FACTORY.table(null, rhsTableAlias), selectNodes.get(0).getAlias(), null), !node.isNegate());
+        tableNode = NODE_FACTORY.join(joinType, tableNode, rhsTable, onNode, false);
         
         return ret;
     }
 
     @Override
     public ParseNode visitLeave(ComparisonParseNode node, List<ParseNode> l) throws SQLException {
+        boolean isTopNode = topNode == node;
+        if (isTopNode) {
+            topNode = null;
+        }
+        
         ParseNode secondChild = l.get(1);
         if (!(secondChild instanceof SubqueryParseNode)) {
             return super.visitLeave(node, l);
@@ -200,12 +211,9 @@ public class SubqueryRewriter extends ParseNodeRewriter {
             return super.visitLeave(node, l);
         }
         
-        if (!subquery.isAggregate() || !subquery.getGroupBy().isEmpty()) {
-            //TODO add runtime singleton check or add a "singleton" aggregate funtion
-            throw new SQLFeatureNotSupportedException("Do not support non-aggregate or groupby subquery in comparison.");
-        }
-        
         ParseNode rhsNode = null; 
+        boolean isGroupby = !subquery.getGroupBy().isEmpty();
+        boolean isAggregate = subquery.isAggregate();
         List<AliasedNode> aliasedNodes = subquery.getSelect();
         if (aliasedNodes.size() == 1) {
             rhsNode = aliasedNodes.get(0).getNode();
@@ -221,28 +229,139 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         List<AliasedNode> selectNodes = Lists.newArrayListWithExpectedSize(additionalSelectNodes.size() + 1);        
         selectNodes.add(NODE_FACTORY.aliasedNode(ParseNodeFactory.createTempAlias(), rhsNode));
         selectNodes.addAll(additionalSelectNodes);
+        
+        if (!isAggregate) {
+            subquery = NODE_FACTORY.select(subquery, subquery.isDistinct(), selectNodes, where);            
+        } else {
+            List<ParseNode> groupbyNodes = Lists.newArrayListWithExpectedSize(additionalSelectNodes.size() + subquery.getGroupBy().size());
+            for (AliasedNode aliasedNode : additionalSelectNodes) {
+                groupbyNodes.add(aliasedNode.getNode());
+            }
+            groupbyNodes.addAll(subquery.getGroupBy());
+            subquery = NODE_FACTORY.select(subquery, selectNodes, where, groupbyNodes, true);
+        }
+        
+        ParseNode onNode = conditionExtractor.getJoinCondition();
+        TableNode rhsTable = NODE_FACTORY.derivedTable(rhsTableAlias, subquery);
+        JoinType joinType = isTopNode ? JoinType.Inner : JoinType.Left;
+        ParseNode ret = NODE_FACTORY.comparison(node.getFilterOp(), l.get(0), NODE_FACTORY.column(NODE_FACTORY.table(null, rhsTableAlias), selectNodes.get(0).getAlias(), null));
+        tableNode = NODE_FACTORY.join(joinType, tableNode, rhsTable, onNode, !isAggregate || isGroupby);
+        
+        return ret;
+    }
+
+    @Override
+    public ParseNode visitLeave(ArrayAnyComparisonNode node, List<ParseNode> l) throws SQLException {
+        List<ParseNode> children = leaveArrayComparisonNode(node, l);
+        if (children == l)
+            return super.visitLeave(node, l);
+        
+        node = NODE_FACTORY.arrayAny(children.get(0), (ComparisonParseNode) children.get(1));
+        return node;
+    }
+
+    @Override
+    public ParseNode visitLeave(ArrayAllComparisonNode node, List<ParseNode> l) throws SQLException {
+        List<ParseNode> children = leaveArrayComparisonNode(node, l);
+        if (children == l)
+            return super.visitLeave(node, l);
+        
+        node = NODE_FACTORY.arrayAll(children.get(0), (ComparisonParseNode) children.get(1));
+        return node;
+    }
+    
+    protected List<ParseNode> leaveArrayComparisonNode(ParseNode node, List<ParseNode> l) throws SQLException {
+        boolean isTopNode = topNode == node;
+        if (isTopNode) {
+            topNode = null;
+        }
+
+        ParseNode firstChild = l.get(0);
+        if (!(firstChild instanceof SubqueryParseNode)) {
+            return l;
+        }
+        
+        SubqueryParseNode subqueryNode = (SubqueryParseNode) firstChild;
+        SelectStatement subquery = subqueryNode.getSelectNode();
+        String rhsTableAlias = ParseNodeFactory.createTempAlias();
+        JoinConditionExtractor conditionExtractor = new JoinConditionExtractor(subquery, resolver, connection, rhsTableAlias);
+        ParseNode where = subquery.getWhere() == null ? null : subquery.getWhere().accept(conditionExtractor);
+        if (where == subquery.getWhere()) { // non-correlated any/all comparison subquery
+            return l;
+        }
+        
+        ParseNode rhsNode = null; 
+        boolean isNonGroupByAggregate = subquery.getGroupBy().isEmpty() && subquery.isAggregate();
+        List<AliasedNode> aliasedNodes = subquery.getSelect();
+        String derivedTableAlias = null;
+        if (!subquery.getGroupBy().isEmpty()) {
+            derivedTableAlias = ParseNodeFactory.createTempAlias();
+            aliasedNodes = fixAliasedNodes(aliasedNodes, false);
+        }
+        
+        if (aliasedNodes.size() == 1) {
+            rhsNode = derivedTableAlias == null ? aliasedNodes.get(0).getNode() : NODE_FACTORY.column(NODE_FACTORY.table(null, derivedTableAlias), aliasedNodes.get(0).getAlias(), null);
+        } else {
+            List<ParseNode> nodes = Lists.<ParseNode> newArrayListWithExpectedSize(aliasedNodes.size());
+            for (AliasedNode aliasedNode : aliasedNodes) {
+                nodes.add(derivedTableAlias == null ? aliasedNode.getNode() : NODE_FACTORY.column(NODE_FACTORY.table(null, derivedTableAlias), aliasedNode.getAlias(), null));
+            }
+            rhsNode = NODE_FACTORY.rowValueConstructor(nodes);
+        }
+        
+        if (!isNonGroupByAggregate) {
+            rhsNode = NODE_FACTORY.function(DistinctValueAggregateFunction.NAME, Collections.singletonList(rhsNode));
+        }
+        
+        List<AliasedNode> additionalSelectNodes = conditionExtractor.getAdditionalSelectNodes();
+        List<AliasedNode> selectNodes = Lists.newArrayListWithExpectedSize(additionalSelectNodes.size() + 1);        
+        selectNodes.add(NODE_FACTORY.aliasedNode(ParseNodeFactory.createTempAlias(), rhsNode));
+        selectNodes.addAll(additionalSelectNodes);
         List<ParseNode> groupbyNodes = Lists.newArrayListWithExpectedSize(additionalSelectNodes.size());
         for (AliasedNode aliasedNode : additionalSelectNodes) {
             groupbyNodes.add(aliasedNode.getNode());
         }
         
-        subquery = NODE_FACTORY.select(subquery, selectNodes, where, groupbyNodes, true);
-        ParseNode onNode = conditionExtractor.getJoinCondition();
-        TableNode rhsTable = NODE_FACTORY.derivedTable(rhsTableAlias, subquery);
-        JoinType joinType = topNode == node ? JoinType.Inner : JoinType.Left;
-        ParseNode ret = NODE_FACTORY.comparison(node.getFilterOp(), l.get(0), NODE_FACTORY.column(NODE_FACTORY.table(null, rhsTableAlias), selectNodes.get(0).getAlias(), null));
-        tableNode = NODE_FACTORY.join(joinType, tableNode, rhsTable, onNode);
-        
-        if (topNode == node) {
-            topNode = null;
+        if (derivedTableAlias == null) {
+            subquery = NODE_FACTORY.select(subquery, selectNodes, where, groupbyNodes, true);
+        } else {
+            List<ParseNode> derivedTableGroupBy = Lists.newArrayListWithExpectedSize(subquery.getGroupBy().size() + groupbyNodes.size());
+            derivedTableGroupBy.addAll(subquery.getGroupBy());
+            derivedTableGroupBy.addAll(groupbyNodes);
+            List<AliasedNode> derivedTableSelect = Lists.newArrayListWithExpectedSize(aliasedNodes.size() + selectNodes.size() - 1);
+            derivedTableSelect.addAll(aliasedNodes);
+            for (int i = 1; i < selectNodes.size(); i++) {
+                AliasedNode aliasedNode = selectNodes.get(i);
+                String alias = ParseNodeFactory.createTempAlias();
+                derivedTableSelect.add(NODE_FACTORY.aliasedNode(alias, aliasedNode.getNode()));
+                aliasedNode = NODE_FACTORY.aliasedNode(aliasedNode.getAlias(), NODE_FACTORY.column(NODE_FACTORY.table(null, derivedTableAlias), alias, null));
+                selectNodes.set(i, aliasedNode);
+                groupbyNodes.set(i - 1, aliasedNode.getNode());
+            }
+            SelectStatement derivedTableStmt = NODE_FACTORY.select(subquery, derivedTableSelect, where, derivedTableGroupBy, true);
+            subquery = NODE_FACTORY.select(Collections.singletonList(NODE_FACTORY.derivedTable(derivedTableAlias, derivedTableStmt)), subquery.getHint(), false, selectNodes, null, groupbyNodes, null, Collections.<OrderByNode> emptyList(), null, subquery.getBindCount(), true, subquery.hasSequence());
         }
         
-        return ret;
+        ParseNode onNode = conditionExtractor.getJoinCondition();
+        TableNode rhsTable = NODE_FACTORY.derivedTable(rhsTableAlias, subquery);
+        JoinType joinType = isTopNode ? JoinType.Inner : JoinType.Left;
+        tableNode = NODE_FACTORY.join(joinType, tableNode, rhsTable, onNode, false);
+
+        firstChild = NODE_FACTORY.column(NODE_FACTORY.table(null, rhsTableAlias), selectNodes.get(0).getAlias(), null);
+        if (isNonGroupByAggregate) {
+            firstChild = NODE_FACTORY.upsertStmtArrayNode(Collections.singletonList(firstChild)); 
+        }
+        ComparisonParseNode secondChild = (ComparisonParseNode) l.get(1);
+        secondChild = NODE_FACTORY.comparison(secondChild.getFilterOp(), secondChild.getLHS(), NODE_FACTORY.elementRef(Lists.newArrayList(firstChild, NODE_FACTORY.literal(1))));
+        
+        return Lists.newArrayList(firstChild, secondChild);
     }
     
-    private List<AliasedNode> fixAliasedNodes(List<AliasedNode> nodes) {
-        List<AliasedNode> normNodes = Lists.<AliasedNode> newArrayListWithExpectedSize(nodes.size() + 1);
-        normNodes.add(NODE_FACTORY.aliasedNode(ParseNodeFactory.createTempAlias(), LiteralParseNode.ONE));
+    private List<AliasedNode> fixAliasedNodes(List<AliasedNode> nodes, boolean addSelectOne) {
+        List<AliasedNode> normNodes = Lists.<AliasedNode> newArrayListWithExpectedSize(nodes.size() + (addSelectOne ? 1 : 0));
+        if (addSelectOne) {
+            normNodes.add(NODE_FACTORY.aliasedNode(ParseNodeFactory.createTempAlias(), LiteralParseNode.ONE));
+        }
         for (int i = 0; i < nodes.size(); i++) {
             AliasedNode aliasedNode = nodes.get(i);
             normNodes.add(NODE_FACTORY.aliasedNode(

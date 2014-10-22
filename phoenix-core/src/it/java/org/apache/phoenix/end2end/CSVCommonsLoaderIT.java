@@ -30,10 +30,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Properties;
 
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.PArrayDataType;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.CSVCommonsLoader;
@@ -156,7 +158,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                     new StringReader(statements), null);
             globalConn.close();
 
-            tenantConn = DriverManager.getConnection(getUrl() + ";TenantId=acme").unwrap(
+            tenantConn = new PhoenixTestDriver().connect(getUrl() + ";TenantId=acme", new Properties()).unwrap(
                     PhoenixConnection.class);
 
             // Upsert CSV file
