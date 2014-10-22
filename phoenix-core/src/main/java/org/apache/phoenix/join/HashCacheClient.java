@@ -93,9 +93,8 @@ public class HashCacheClient  {
                 WritableUtils.writeVInt(out, ExpressionType.valueOf(expression).ordinal());
                 expression.write(out);                
             }
-            out.writeBoolean(singleValueOnly);
             int exprSize = baOut.size() + Bytes.SIZEOF_INT;
-            out.writeInt(exprSize);
+            out.writeInt(exprSize * (singleValueOnly ? -1 : 1));
             int nRows = 0;
             out.writeInt(nRows); // In the end will be replaced with total number of rows            
             for (Tuple result = iterator.next(); result != null; result = iterator.next()) {

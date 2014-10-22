@@ -98,8 +98,14 @@ public class HashCacheFactory implements ServerCacheFactory {
                     expression.readFields(dataInput);
                     onExpressions.add(expression);                        
                 }
-                this.singleValueOnly = dataInput.readBoolean();
-                int exprSize = dataInput.readInt();
+                boolean singleValueOnly = false;
+                int exprSizeAndSingleValueOnly = dataInput.readInt();
+                int exprSize = exprSizeAndSingleValueOnly;
+                if (exprSize < 0) {
+                    exprSize *= -1;
+                    singleValueOnly = true;
+                }
+                this.singleValueOnly = singleValueOnly;
                 offset += exprSize;
                 int nRows = dataInput.readInt();
                 long estimatedSize = SizedUtil.sizeOfMap(nRows, SizedUtil.IMMUTABLE_BYTES_WRITABLE_SIZE, SizedUtil.RESULT_SIZE) + hashCacheBytes.length;
