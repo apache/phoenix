@@ -123,7 +123,7 @@ public class ColumnRef {
         // use ProjectedColumnExpression, but not sure. The column values from the data
         // table should get returned in a single KeyValue in a similar format (using a
         // KeyValueSchema).
-        if (table.getType() == PTableType.JOIN) {
+        if (table.getType() == PTableType.JOIN || table.getType() == PTableType.SUBQUERY) {
         	return new ProjectedColumnExpression(column, table, column.getName().getString());
         }
        

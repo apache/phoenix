@@ -630,8 +630,8 @@ public class ParseNodeFactory {
                 statement.hasSequence());
     }
 
-    public SelectStatement select(SelectStatement statement, List<AliasedNode> select, ParseNode where, List<ParseNode> groupBy, boolean isAggregate) {
-        return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), select, where, groupBy,
+    public SelectStatement select(SelectStatement statement, boolean isDistinct, List<AliasedNode> select, ParseNode where, List<ParseNode> groupBy, boolean isAggregate) {
+        return select(statement.getFrom(), statement.getHint(), isDistinct, select, where, groupBy,
                 statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), isAggregate,
                 statement.hasSequence());
     }

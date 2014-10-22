@@ -20,14 +20,12 @@ package org.apache.phoenix.execute;
 import java.sql.SQLException;
 import java.util.List;
 
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.DelegateResultIterator;
+import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
-import org.apache.phoenix.join.TupleProjector;
-import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 import com.google.common.collect.Lists;
@@ -49,52 +47,33 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
         if (postFilter != null) {
             planSteps.add("CLIENT FILTER BY " + postFilter.toString());
         }
-        
+
         return new ExplainPlan(planSteps);
     }
 
     @Override
     public ResultIterator iterator() throws SQLException {
-        final ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
-
-        return new DelegateResultIterator(delegate.iterator()) {
+        ResultIterator iterator = new DelegateResultIterator(delegate.iterator()) {
             
             @Override
             public Tuple next() throws SQLException {
-                Tuple tuple = null;
-                while (tuple == null) {
-                    tuple = super.next();
-                    if (tuple == null) {
-                        break;
-                    }
-                    
-                    tuple = tupleProjector.projectResults(tuple);
-                    
-                    if (postFilter != null) {
-                        postFilter.reset();
-                        try {
-                            if (postFilter.evaluate(tuple, tempPtr)) {
-                                Boolean b = (Boolean)postFilter.getDataType().toObject(tempPtr);
-                                if (!b.booleanValue()) {
-                                    tuple = null;
-                                }            
-                            } else {
-                                tuple = null;
-                            }
-                        } catch (IllegalDataException e) {
-                            tuple = null;
-                        }
-                    }
-                }
+                Tuple tuple = super.next();
+                if (tuple == null)
+                    return null;
                 
-                return tuple;
+                return tupleProjector.projectResults(tuple);
             }
 
             @Override
             public String toString() {
-                return "TupleProjectionResultIterator [projector=" + tupleProjector + ", postFilter="
-                        + postFilter + "]";
+                return "TupleProjectionResultIterator [projector=" + tupleProjector + "]";
             }            
         };
+        
+        if (postFilter != null) {
+            iterator = new FilterResultIterator(iterator, postFilter);
+        }
+        
+        return iterator;
     }
 }

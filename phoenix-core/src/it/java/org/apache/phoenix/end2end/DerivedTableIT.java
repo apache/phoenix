@@ -35,19 +35,19 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLFeatureNotSupportedException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -61,33 +61,65 @@ import com.google.common.collect.Lists;
 @RunWith(Parameterized.class)
 public class DerivedTableIT extends BaseClientManagedTimeIT {
     private static final String tenantId = getOrganizationId();
-    private static final String MSG = "Complex nested queries not supported.";
     
     private long ts;
-    private String indexDDL;
+    private String[] indexDDL;
+    private String[] plans;
     
-    public DerivedTableIT(String indexDDL) {
+    public DerivedTableIT(String[] indexDDL, String[] plans) {
         this.indexDDL = indexDDL;
+        this.plans = plans;
     }
     
     @Before
     public void initTable() throws Exception {
          ts = nextTimestamp();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
-        if (indexDDL != null && indexDDL.length() > 0) {
+        if (indexDDL != null && indexDDL.length > 0) {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
             Connection conn = DriverManager.getConnection(getUrl(), props);
-            conn.createStatement().execute(indexDDL);
+            for (String ddl : indexDDL) {
+                conn.createStatement().execute(ddl);
+            }
         }
     }
     
     @Parameters(name="{0}")
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
-        testCases.add(new String[] { "CREATE INDEX ATABLE_DERIVED_IDX ON aTable (a_byte) INCLUDE ("
-                + "    A_STRING, " + "    B_STRING)" });
-        testCases.add(new String[] { "" });
+        testCases.add(new String[][] {
+                { 
+                "CREATE INDEX ATABLE_DERIVED_IDX ON aTable (a_byte) INCLUDE (A_STRING, B_STRING)" 
+                }, {
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE_DERIVED_IDX\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [B_STRING]\n" +
+                "CLIENT SORTED BY [A]\n" +
+                "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
+                "CLIENT SORTED BY [A DESC]",
+                
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE_DERIVED_IDX\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
+                "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]"}});
+        testCases.add(new String[][] {
+                {}, {
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER ATABLE\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [B_STRING]\n" +
+                "CLIENT SORTED BY [A]\n" +
+                "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
+                "CLIENT SORTED BY [A DESC]",
+                
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER ATABLE\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
+                "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]"}});
         return testCases;
     }
 
@@ -183,21 +215,21 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             
             // (limit) where
             query = "SELECT t.eid FROM (SELECT entity_id eid, b_string b FROM aTable LIMIT 2) AS t WHERE t.b = '" + C_VALUE + "'";
-            try {
-                conn.createStatement().executeQuery(query);
-                fail("Should have got SQLFeatureNotSupportedException");
-            } catch (SQLFeatureNotSupportedException e) {
-                assertEquals(MSG, e.getMessage());
-            }
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(ROW2,rs.getString(1));
+
+            assertFalse(rs.next());
 
             // (count) where
             query = "SELECT t.c FROM (SELECT count(*) c FROM aTable) AS t WHERE t.c > 0";
-            try {
-                conn.createStatement().executeQuery(query);
-                fail("Should have got SQLFeatureNotSupportedException");
-            } catch (SQLFeatureNotSupportedException e) {                
-                assertEquals(MSG, e.getMessage());
-            }
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(9,rs.getInt(1));
+
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }
@@ -227,12 +259,78 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             
             // (groupby) groupby
             query = "SELECT t.c, count(*) FROM (SELECT count(*) c FROM aTable GROUP BY a_string) AS t GROUP BY t.c";
-            try {
-                conn.createStatement().executeQuery(query);
-                fail("Should have got SQLFeatureNotSupportedException");
-            } catch (SQLFeatureNotSupportedException e) {                
-                assertEquals(MSG, e.getMessage());
-            }
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(1,rs.getInt(1));
+            assertEquals(1,rs.getInt(2));
+            assertTrue (rs.next());
+            assertEquals(4,rs.getInt(1));
+            assertEquals(2,rs.getInt(2));
+
+            assertFalse(rs.next());
+            
+            // (groupby) groupby orderby
+            query = "SELECT t.c, count(*) FROM (SELECT count(*) c FROM aTable GROUP BY a_string) AS t GROUP BY t.c ORDER BY count(*) DESC";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(4,rs.getInt(1));
+            assertEquals(2,rs.getInt(2));
+            assertTrue (rs.next());
+            assertEquals(1,rs.getInt(1));
+            assertEquals(1,rs.getInt(2));
+
+            assertFalse(rs.next());
+            
+            // (groupby a, b orderby b) groupby a orderby a
+            query = "SELECT t.a, COLLECTDISTINCT(t.b) FROM (SELECT b_string b, a_string a FROM aTable GROUP BY a_string, b_string ORDER BY b_string) AS t GROUP BY t.a ORDER BY t.a DESC";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(C_VALUE,rs.getString(1));
+            String[] b = new String[1];
+            b[0] = E_VALUE;
+            Array array = conn.createArrayOf("VARCHAR", b);
+            assertEquals(array,rs.getArray(2));
+            assertTrue (rs.next());
+            assertEquals(B_VALUE,rs.getString(1));
+            b = new String[3];
+            b[0] = B_VALUE;
+            b[1] = C_VALUE;
+            b[2] = E_VALUE;
+            array = conn.createArrayOf("VARCHAR", b);
+            assertEquals(array,rs.getArray(2));
+            assertTrue (rs.next());
+            assertEquals(A_VALUE,rs.getString(1));
+            assertEquals(array,rs.getArray(2));
+
+            assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals(plans[0], QueryUtil.getExplainPlan(rs));
+            
+            // distinct b (groupby b, a) groupby a
+            query = "SELECT DISTINCT COLLECTDISTINCT(t.b) FROM (SELECT b_string b, a_string a FROM aTable GROUP BY b_string, a_string) AS t GROUP BY t.a";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            b = new String[1];
+            b[0] = E_VALUE;
+            array = conn.createArrayOf("VARCHAR", b);
+            assertEquals(array,rs.getArray(1));
+            assertTrue (rs.next());
+            b = new String[3];
+            b[0] = B_VALUE;
+            b[1] = C_VALUE;
+            b[2] = E_VALUE;
+            array = conn.createArrayOf("VARCHAR", b);
+            assertEquals(array,rs.getArray(1));
+
+            assertFalse(rs.next());
+            
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals(plans[1], QueryUtil.getExplainPlan(rs));
         } finally {
             conn.close();
         }
@@ -321,13 +419,15 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
             
             // (limit) orderby
-            query = "SELECT t.eid FROM (SELECT entity_id eid, b_string b FROM aTable LIMIT 2) AS t ORDER BY t.b, t.eid";
-            try {
-                conn.createStatement().executeQuery(query);
-                fail("Should have got SQLFeatureNotSupportedException");
-            } catch (SQLFeatureNotSupportedException e) {                
-                assertEquals(MSG, e.getMessage());
-            }
+            query = "SELECT t.eid FROM (SELECT entity_id eid, b_string b FROM aTable LIMIT 2) AS t ORDER BY t.b DESC, t.eid";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(ROW2,rs.getString(1));
+            assertTrue (rs.next());
+            assertEquals(ROW1,rs.getString(1));
+
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }
@@ -386,15 +486,16 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             
             // limit ? limit ?            
             query = "SELECT t.eid FROM (SELECT entity_id eid FROM aTable LIMIT ?) AS t LIMIT ?";
-            try {
-                statement = conn.prepareStatement(query);
-                statement.setInt(1, 4);
-                statement.setInt(2, 2);
-                statement.executeQuery();
-                fail("Should have got SQLFeatureNotSupportedException");
-            } catch (SQLFeatureNotSupportedException e) {                
-                assertEquals(MSG, e.getMessage());
-            }
+            statement = conn.prepareStatement(query);
+            statement.setInt(1, 4);
+            statement.setInt(2, 2);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(ROW1,rs.getString(1));
+            assertTrue (rs.next());
+            assertEquals(ROW2,rs.getString(1));
+
+            assertFalse(rs.next());
             
             // (groupby orderby) limit
             query = "SELECT a, s FROM (SELECT a_string a, sum(a_byte) s FROM aTable GROUP BY a_string ORDER BY sum(a_byte)) LIMIT 2";
@@ -466,30 +567,51 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             
             // distinct (distinct)
             query = "SELECT DISTINCT t.a FROM (SELECT DISTINCT a_string a, b_string b FROM aTable) AS t";
-            try {
-                conn.createStatement().executeQuery(query);
-                fail("Should have got SQLFeatureNotSupportedException");
-            } catch (SQLFeatureNotSupportedException e) {                
-                assertEquals(MSG, e.getMessage());
-            }
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(A_VALUE,rs.getString(1));
+            assertTrue (rs.next());
+            assertEquals(B_VALUE,rs.getString(1));
+            assertTrue (rs.next());
+            assertEquals(C_VALUE,rs.getString(1));
+
+            assertFalse(rs.next());
             
             // distinct (groupby)
             query = "SELECT distinct t.c FROM (SELECT count(*) c FROM aTable GROUP BY a_string) AS t";
-            try {
-                conn.createStatement().executeQuery(query);
-                fail("Should have got SQLFeatureNotSupportedException");
-            } catch (SQLFeatureNotSupportedException e) {                
-                assertEquals(MSG, e.getMessage());
-            }
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(1,rs.getInt(1));
+            assertTrue (rs.next());
+            assertEquals(4,rs.getInt(1));
+
+            assertFalse(rs.next());
+            
+            // distinct (groupby) orderby
+            query = "SELECT distinct t.c FROM (SELECT count(*) c FROM aTable GROUP BY a_string) AS t ORDER BY t.c DESC";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(4,rs.getInt(1));
+            assertTrue (rs.next());
+            assertEquals(1,rs.getInt(1));
+
+            assertFalse(rs.next());
             
             // distinct (limit)
             query = "SELECT DISTINCT t.a, t.b FROM (SELECT a_string a, b_string b FROM aTable LIMIT 2) AS t";
-            try {
-                conn.createStatement().executeQuery(query);
-                fail("Should have got SQLFeatureNotSupportedException");
-            } catch (SQLFeatureNotSupportedException e) {                
-                assertEquals(MSG, e.getMessage());
-            }
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(A_VALUE,rs.getString(1));
+            assertEquals(B_VALUE,rs.getString(2));
+            assertTrue (rs.next());
+            assertEquals(A_VALUE,rs.getString(1));
+            assertEquals(C_VALUE,rs.getString(2));
+
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }
@@ -522,30 +644,30 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             
             // count (distinct)
             query = "SELECT count(*) FROM (SELECT DISTINCT a_string FROM aTable) AS t";
-            try {
-                conn.createStatement().executeQuery(query);
-                fail("Should have got SQLFeatureNotSupportedException");
-            } catch (SQLFeatureNotSupportedException e) {                
-                assertEquals(MSG, e.getMessage());
-            }
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(3,rs.getInt(1));
+
+            assertFalse(rs.next());
             
             // count (groupby)
             query = "SELECT count(*) FROM (SELECT count(*) c FROM aTable GROUP BY a_string) AS t";
-            try {
-                conn.createStatement().executeQuery(query);
-                fail("Should have got SQLFeatureNotSupportedException");
-            } catch (SQLFeatureNotSupportedException e) {                
-                assertEquals(MSG, e.getMessage());
-            }
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(3,rs.getInt(1));
+
+            assertFalse(rs.next());
             
             // count (limit)
             query = "SELECT count(*) FROM (SELECT entity_id FROM aTable LIMIT 2) AS t";
-            try {
-                conn.createStatement().executeQuery(query);
-                fail("Should have got SQLFeatureNotSupportedException");
-            } catch (SQLFeatureNotSupportedException e) {                
-                assertEquals(MSG, e.getMessage());
-            }
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(2,rs.getInt(1));
+
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }

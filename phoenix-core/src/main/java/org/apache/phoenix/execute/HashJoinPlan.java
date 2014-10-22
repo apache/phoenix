@@ -51,6 +51,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
+import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
@@ -76,7 +77,7 @@ import com.google.common.collect.Lists;
 public class HashJoinPlan extends DelegateQueryPlan {
     private static final Log LOG = LogFactory.getLog(HashJoinPlan.class);
 
-    private final FilterableStatement statement;
+    private final SelectStatement statement;
     private final HashJoinInfo joinInfo;
     private final SubPlan[] subPlans;
     private final boolean recompileWhereClause;
@@ -88,14 +89,13 @@ public class HashJoinPlan extends DelegateQueryPlan {
     private AtomicLong firstJobEndTime;
     private List<Expression> keyRangeExpressions;
     
-    public static HashJoinPlan create(FilterableStatement statement, 
+    public static HashJoinPlan create(SelectStatement statement, 
             QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans) {
-        if (plan instanceof BaseQueryPlan)
+        if (!(plan instanceof HashJoinPlan))
             return new HashJoinPlan(statement, plan, joinInfo, subPlans, joinInfo == null);
         
-        assert (plan instanceof HashJoinPlan);
         HashJoinPlan hashJoinPlan = (HashJoinPlan) plan;
-        assert hashJoinPlan.joinInfo == null;
+        assert (hashJoinPlan.joinInfo == null && hashJoinPlan.delegate instanceof BaseQueryPlan);
         SubPlan[] mergedSubPlans = new SubPlan[hashJoinPlan.subPlans.length + subPlans.length];
         int i = 0;
         for (SubPlan subPlan : hashJoinPlan.subPlans) {
@@ -107,7 +107,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
         return new HashJoinPlan(statement, hashJoinPlan.delegate, joinInfo, mergedSubPlans, true);
     }
     
-    private HashJoinPlan(FilterableStatement statement, 
+    private HashJoinPlan(SelectStatement statement, 
             QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans, boolean recompileWhereClause) {
         super(plan);
         this.statement = statement;
@@ -170,6 +170,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             throw firstException;
         }
         
+        Expression postFilter = null;
         boolean hasKeyRangeExpressions = keyRangeExpressions != null && !keyRangeExpressions.isEmpty();
         if (recompileWhereClause || hasKeyRangeExpressions) {
             StatementContext context = delegate.getContext();
@@ -177,10 +178,10 @@ public class HashJoinPlan extends DelegateQueryPlan {
             ParseNode viewWhere = table.getViewStatement() == null ? null : new SQLParser(table.getViewStatement()).parseQuery().getWhere();
             context.setResolver(FromCompiler.getResolverForQuery((SelectStatement) (delegate.getStatement()), delegate.getContext().getConnection()));
             if (recompileWhereClause) {
-                WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere);                
+                postFilter = WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere, null);
             }
             if (hasKeyRangeExpressions) {
-                WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere, keyRangeExpressions, true);
+                WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere, keyRangeExpressions, true, null);
             }
         }
 
@@ -189,7 +190,12 @@ public class HashJoinPlan extends DelegateQueryPlan {
             HashJoinInfo.serializeHashJoinIntoScan(scan, joinInfo);
         }
         
-        return ((BaseQueryPlan) delegate).iterator(dependencies);
+        ResultIterator iterator = joinInfo == null ? delegate.iterator() : ((BaseQueryPlan) delegate).iterator(dependencies);
+        if (statement.getInnerSelectStatement() != null && postFilter != null) {
+            iterator = new FilterResultIterator(iterator, postFilter);
+        }
+        
+        return iterator;
     }
 
     private Expression createKeyRangeExpression(Expression lhsExpression,

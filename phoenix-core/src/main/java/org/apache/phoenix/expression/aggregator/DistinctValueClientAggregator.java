@@ -21,7 +21,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.PArrayDataType;
 import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -37,15 +36,15 @@ public class DistinctValueClientAggregator extends DistinctValueWithCountClientA
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (buffer == null || buffer.length == 0) {            
+        if (cachedResult == null) {            
             Object[] values = new Object[valueVsCount.size()];
             int i = 0;
             for (ImmutableBytesPtr key : valueVsCount.keySet()) {
                 values[i++] = valueType.toObject(key, sortOrder);
             }
-            PhoenixArray array = PArrayDataType.instantiatePhoenixArray(valueType, values);
-            buffer = resultType.toBytes(array, sortOrder);
+            cachedResult = PArrayDataType.instantiatePhoenixArray(valueType, values);
         }
+        buffer = resultType.toBytes(cachedResult, sortOrder);
         ptr.set(buffer);
         return true;
     }
