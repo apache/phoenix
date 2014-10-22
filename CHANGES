@@ -1,4 +1,3 @@
-
 Release Notes - Phoenix - Version 3.2
 
 ** New Features and Sub-task
@@ -6,6 +5,7 @@ Release Notes - Phoenix - Version 3.2
     * [PHOENIX-180] - Use stats to guide query parallelization
     * [PHOENIX-943] - Handle pushed down post-filters for subquery in joins with limit and non-groupby aggregation
     * [PHOENIX-945] - Support correlated subqueries in comparison without ANY/SOME/ALL
+    * [PHOENIX-1085] - Commonize logic for adding salt byte and adding region start key in ParallelIterators
     * [PHOENIX-1259] - Perform partial scan for ANALYZE when table salted or local index
     * [PHOENIX-1263] - Only cache guideposts on physical PTable
     * [PHOENIX-1264] - Add StatisticsCollector to existing tables on first connection to cluster
@@ -21,21 +21,27 @@ Release Notes - Phoenix - Version 3.2
 
 ** Bug
     * [PHOENIX-105] - Remove org.apache.commons.csv source once available in Maven repo
+    * [PHOENIX-941] - Parallelize within regions to prevent rpc timeout
     * [PHOENIX-954] - View index sequences of a non multi tenant table are not getting deleted after main table drop
     * [PHOENIX-973] - Lexer skips unexpected characters
     * [PHOENIX-1044] - Phoenix-Pig: No results returned unless all used columns are selected
     * [PHOENIX-1050] - Can't load pig bytearray into a phoenix VARBINARY column
+    * [PHOENIX-1095] - Cannot add column to SYSTEM.CATALOG using Alter Table 
     * [PHOENIX-1098] - Support CASCADE option on DROP TABLE that drops all VIEWs
+    * [PHOENIX-1163] - Intersect min/max range with scan range during compilation when salted
     * [PHOENIX-1203] - Uable to work for count (distinct col) queries via phoenix table with secondary indexes
     * [PHOENIX-1206] - Decimal serialization broken for negative numbers with more than 19 digits of precision
     * [PHOENIX-1208] - Check for existence of views doesn't take into account the fact that SYSTEM.CATALOG could be split across regions
+    * [PHOENIX-1209] - DROP of system table doesn't correctly look for the right kind of table
     * [PHOENIX-1211] - Use skip scan when row value constructor uses leading row key columns 
     * [PHOENIX-1214] - SYSTEM.CATALOG cannot be created when first connection to cluster is tenant-specific
+    * [PHOENIX-1219] - Salt the SYSTEM.SEQUENCE table
     * [PHOENIX-1225] - Evaluation of OR between columns in PK and not in PK incorrect
     * [PHOENIX-1228] - NPE in "select max(c1)" when c1 is a CHAR field
     * [PHOENIX-1237] - COALESCE Function - type of second parameter
     * [PHOENIX-1239] - IN clause (and some others) cannot get moved from HAVING clause to WHERE clause when qualified
     * [PHOENIX-1242] - ArrayoutofBoundException Phoenix mapping to exisiting Hbase
+    * [PHOENIX-1246] - Region server gets aborted with Phoenix exception
     * [PHOENIX-1250] - guava dependency out-dated causing NoSuchMethod error
     * [PHOENIX-1251] - Salted queries with range scan become full table scans
     * [PHOENIX-1252] - Potential lock leak for ungrouped aggregation
@@ -54,23 +60,33 @@ Release Notes - Phoenix - Version 3.2
     * [PHOENIX-1285] - Override default for histogram depth in QueryServicesTestImpl
     * [PHOENIX-1288] - Selecting more than 2 array elements via index fails with ArrayIndexOutOfBoundsException
     * [PHOENIX-1298] - Queries on fixed width type columns that have an index declared on them don't use that index
+    * [PHOENIX-1303] - Possible NPE in StatisticCollector#stop
+    * [PHOENIX-1314] - Assertion tripped for skip scan with two unit tests
     * [PHOENIX-1315] - Optimize query for Pig loader
+    * [PHOENIX-1316] - Improve test coverage of stats framework
+    * [PHOENIX-1324] - Consolidate code that initializes Scan
+    * [PHOENIX-1325] - Pass in instead of calculate if we've crossed a region boundary in ScanRanges intersect methods
     * [PHOENIX-1327] - Disallow creating arrays of fixed width base type without the max length being specified
     * [PHOENIX-1330] - Flag VARBINARY VARBINARY ARRAY declaration in DDL as an error
     * [PHOENIX-1337] - Unpadded fixed length tenant ID causes erroneous results
+    * [PHOENIX-1338] - Logic to group together parallel scans is incorrect
     * [PHOENIX-1341] - PhoenixRuntime returns zero exit status on failure
     * [PHOENIX-1344] - NTH_VALUE function skips duplicit values in order by
     * [PHOENIX-1349] - VIEWs do not inherit indexes from their parent
     * [PHOENIX-1353] - CsvBulkLoad doesn't work in secure env
     * [PHOENIX-1355] - sqlline.py or psql.py may hang if they're not invoked from bin folder
     * [PHOENIX-1357] - Salt sequence table to prevent same RS from getting all sequence calls
+    * [PHOENIX-1358] - OOB in SchemaUtil.getTableNameFromFullName
     * [PHOENIX-1359] - Backward compatibility fails with 4.1 client and current 4.0 branch on server
     * [PHOENIX-1360] - NPE in SpoolingResultIterator 
     * [PHOENIX-1361] - Sequence value goes backwards if sequence validated before reserved
     * [PHOENIX-1365] - Make sequence salt buckets configurable
     * [PHOENIX-1368] - Persist link from VIEW back to its child VIEW
+    * [PHOENIX-1369] - Add back encode/decode methods as deprecated
+    * [PHOENIX-1370] - Allow query timeout to differ from RPC timeout
 
 ** Improvement
+    * [PHOENIX-619] - Support DELETE over table with immutable index when possible
     * [PHOENIX-852] - Optimize child/parent foreign key joins
     * [PHOENIX-1030] - Change Expression.isDeterministic() to return a enum of values ALWAYS, PER_STATEMENT, PER_ROW
     * [PHOENIX-1216] - Making spooling directory location configurable
@@ -78,6 +94,7 @@ Release Notes - Phoenix - Version 3.2
 
 ** Task
     * [PHOENIX-761] - Implement getKeyPart for round/ceil/floor of a DECIMAL value
+    * [PHOENIX-960] - Don't spin mini cluster up and down between tests
     * [PHOENIX-1297] - Adding utility methods to get primary key information from the optimized query plan
     * [PHOENIX-1310] - Spill files filling up /tmp on server
 
