@@ -94,6 +94,9 @@ import org.apache.phoenix.util.SchemaUtil;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import org.apache.phoenix.expression.function.ArrayInsertUniqueFunction;
+import org.apache.phoenix.expression.function.UpsertFunctionExpression;
+import org.apache.phoenix.parse.FunctionParseNode;
 
 public class UpsertCompiler {
 

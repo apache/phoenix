@@ -18,6 +18,7 @@ package org.apache.phoenix.jdbc;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import static org.apache.hadoop.hbase.util.VersionInfo.getUrl;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.schema.PDataType;
@@ -36,7 +37,7 @@ public class ArrayInsertUniqueFunctionIT extends BaseHBaseManagedTimeIT {
     public void simpleAddTest() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE IF NOT EXISTS ARRAY_UPSERT_UNIQUE_TABLE"
-                + " (k1 INTEGER NOT NULL, arr INTEGER_ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
+                + " (k1 INTEGER NOT NULL, arr INTEGER ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO ARRAY_UPSERT_UNIQUE_TABLE (k1, arr) VALUES (1, ARRAY[1, 2, 3])";
         conn.createStatement().execute(dml);
@@ -61,7 +62,7 @@ public class ArrayInsertUniqueFunctionIT extends BaseHBaseManagedTimeIT {
     public void insertSameValues() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE IF NOT EXISTS ARRAY_UPSERT_UNIQUE_TABLE"
-                + " (k1 INTEGER NOT NULL, arr INTEGER_ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
+                + " (k1 INTEGER NOT NULL, arr INTEGER ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO ARRAY_UPSERT_UNIQUE_TABLE (k1, arr) VALUES (1, ARRAY[1, 2, 3])";
         conn.createStatement().execute(dml);
@@ -86,7 +87,7 @@ public class ArrayInsertUniqueFunctionIT extends BaseHBaseManagedTimeIT {
     public void testInsertNewArray() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE IF NOT EXISTS ARRAY_UPSERT_UNIQUE_TABLE"
-                + " (k1 INTEGER NOT NULL, arr SMALLINT_ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
+                + " (k1 INTEGER NOT NULL, arr SMALLINT ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO ARRAY_UPSERT_UNIQUE_TABLE (k1, arr) VALUES (1, ARRAY_INSERT_UNIQUE(ARRAY[1, 2]))";
@@ -107,7 +108,7 @@ public class ArrayInsertUniqueFunctionIT extends BaseHBaseManagedTimeIT {
     public void simpleAddTestBigInt() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE IF NOT EXISTS ARRAY_UPSERT_UNIQUE_TABLE"
-                + " (k1 INTEGER NOT NULL, arr LONG_ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
+                + " (k1 INTEGER NOT NULL, arr BIGINT ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO ARRAY_UPSERT_UNIQUE_TABLE (k1, arr) VALUES (1, ARRAY[1, 2, 3])";
         conn.createStatement().execute(dml);
@@ -129,10 +130,35 @@ public class ArrayInsertUniqueFunctionIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
+    public void simpleAddTestDouble() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE IF NOT EXISTS ARRAY_UPSERT_UNIQUE_TABLE"
+                + " (k1 INTEGER NOT NULL, arr DOUBLE ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO ARRAY_UPSERT_UNIQUE_TABLE (k1, arr) VALUES (1, ARRAY[1.0, 2.0, 0.3])";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        dml = "UPSERT INTO ARRAY_UPSERT_UNIQUE_TABLE (k1, arr) VALUES (1, ARRAY_INSERT_UNIQUE(ARRAY[1.0, 2.0, 5.0, 6.0]))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT arr FROM ARRAY_UPSERT_UNIQUE_TABLE");
+
+        Double[] mockArray = {1., 2., .3, 5., 6.};
+        PhoenixArray.PrimitiveDoublePhoenixArray mockPhoenixArray = new PhoenixArray.PrimitiveDoublePhoenixArray(PDataType.DOUBLE, mockArray);
+
+        assertTrue(rs.next());
+
+        PhoenixArray.PrimitiveDoublePhoenixArray modifiedArray = (PhoenixArray.PrimitiveDoublePhoenixArray) (rs.getArray(1));
+        assertArrayEquals((double[]) (mockPhoenixArray.getArray()), (double[])(modifiedArray.getArray()), 0.001);
+    }
+
+    @Test
     public void modifyMultipleArrayOneQuery() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE IF NOT EXISTS ARRAY_UPSERT_UNIQUE_TABLE"
-                + " (k1 INTEGER NOT NULL, arr1 INTEGER_ARRAY, arr2 INTEGER_ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
+                + " (k1 INTEGER NOT NULL, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO ARRAY_UPSERT_UNIQUE_TABLE (k1, arr1, arr2) VALUES (1, ARRAY[1, 2, 3], ARRAY[10, 20, 30])";
         conn.createStatement().execute(dml);
@@ -167,7 +193,7 @@ public class ArrayInsertUniqueFunctionIT extends BaseHBaseManagedTimeIT {
     public void atPrimaryKeyAsc() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE IF NOT EXISTS ARRAY_UPSERT_UNIQUE_TABLE"
-                + " (k1 INTEGER NOT NULL, arr LONG_ARRAY, val INTEGER CONSTRAINT pk PRIMARY KEY (k1, arr))";
+                + " (k1 INTEGER NOT NULL, arr BIGINT ARRAY, val INTEGER CONSTRAINT pk PRIMARY KEY (k1, arr))";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO ARRAY_UPSERT_UNIQUE_TABLE (k1, arr, val) VALUES (1, ARRAY[1, 2, 3], 4)";
         conn.createStatement().execute(dml);
@@ -193,7 +219,7 @@ public class ArrayInsertUniqueFunctionIT extends BaseHBaseManagedTimeIT {
     public void atPrimaryKeyDesc() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE IF NOT EXISTS ARRAY_UPSERT_UNIQUE_TABLE"
-                + " (k1 INTEGER NOT NULL, arr LONG_ARRAY, val INTEGER CONSTRAINT pk PRIMARY KEY (k1, arr DESC))";
+                + " (k1 INTEGER NOT NULL, arr BIGINT ARRAY, val INTEGER CONSTRAINT pk PRIMARY KEY (k1, arr DESC))";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO ARRAY_UPSERT_UNIQUE_TABLE (k1, arr, val) VALUES (1, ARRAY[1, 2, 3], 4)";
         conn.createStatement().execute(dml);
@@ -219,7 +245,7 @@ public class ArrayInsertUniqueFunctionIT extends BaseHBaseManagedTimeIT {
     public void stringDataType() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE IF NOT EXISTS ARRAY_UPSERT_UNIQUE_TABLE"
-                + " (k1 INTEGER NOT NULL, arr VARCHAR_ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
+                + " (k1 INTEGER NOT NULL, arr VARCHAR ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO ARRAY_UPSERT_UNIQUE_TABLE (k1, arr) VALUES (1, ARRAY['a', 'bb', 'c'])";
         conn.createStatement().execute(dml);
@@ -243,7 +269,7 @@ public class ArrayInsertUniqueFunctionIT extends BaseHBaseManagedTimeIT {
     public void stringDataTypeNewArray() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE IF NOT EXISTS ARRAY_UPSERT_UNIQUE_TABLE"
-                + " (k1 INTEGER NOT NULL, arr VARCHAR_ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
+                + " (k1 INTEGER NOT NULL, arr VARCHAR ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO ARRAY_UPSERT_UNIQUE_TABLE (k1, arr) VALUES (1, ARRAY_INSERT_UNIQUE(ARRAY['a', 'bb', 'd', 'ee']))";
@@ -264,7 +290,7 @@ public class ArrayInsertUniqueFunctionIT extends BaseHBaseManagedTimeIT {
     public void stringDataTypeDuplicitArray() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE IF NOT EXISTS ARRAY_UPSERT_UNIQUE_TABLE"
-                + " (k1 INTEGER NOT NULL, arr VARCHAR_ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
+                + " (k1 INTEGER NOT NULL, arr VARCHAR ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO ARRAY_UPSERT_UNIQUE_TABLE (k1, arr)"
                 + " VALUES (1, ARRAY['foo', 'bar', 'test', 'long word', 'and'])";
@@ -291,7 +317,7 @@ public class ArrayInsertUniqueFunctionIT extends BaseHBaseManagedTimeIT {
     public void insertDuplicitArray() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE IF NOT EXISTS ARRAY_UPSERT_UNIQUE_TABLE"
-                + " (k1 INTEGER NOT NULL, arr INTEGER_ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
+                + " (k1 INTEGER NOT NULL, arr INTEGER ARRAY CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO ARRAY_UPSERT_UNIQUE_TABLE (k1, arr) VALUES (1, ARRAY[1, 2, 3])";
         conn.createStatement().execute(dml);

@@ -36,7 +36,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 	public PhoenixArray() {
 		// empty constructor
 	}
-
+	
 	public Integer getMaxLength() {
 	    return maxLength;
 	}
@@ -78,7 +78,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 	    }
 	    return coerceToNewLength(baseType, elements, maxLength);
 	}
-
+	
 	public PhoenixArray(PDataType baseType, Object[] elements) {
 		// As we are dealing with primitive types and only the Boxed objects
 		this.baseType = baseType;
@@ -95,7 +95,7 @@ public class PhoenixArray implements Array,SQLCloseable {
         this.array = convertObjectArrayToPrimitiveArray(elements);
 		this.numElements = elements.length;
 	}
-
+	
 	public PhoenixArray(PhoenixArray pArr, Integer desiredMaxLength) {
 	    this.baseType = pArr.baseType;
 	    Object[] elements = (Object[])pArr.array;
@@ -112,9 +112,9 @@ public class PhoenixArray implements Array,SQLCloseable {
     }
 
     public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-	    return elements;
+	    return elements; 
 	}
-
+	
 	@Override
 	public void free() throws SQLException {
 	}
@@ -123,7 +123,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 	public Object getArray() throws SQLException {
 		return array;
 	}
-
+	
 	@Override
 	public void close() throws SQLException {
 		this.array = null;
@@ -202,22 +202,22 @@ public class PhoenixArray implements Array,SQLCloseable {
 	public int getDimensions() {
 		return this.numElements;
 	}
-
+	
 	public int estimateByteSize(int pos) {
 	    if(((Object[])array)[pos] == null) {
 	        return 0;
 	    }
 		return this.baseType.estimateByteSize(((Object[])array)[pos]);
 	}
-
+	
 	public Integer getMaxLength(int pos) {
 	    return this.baseType.getMaxLength(((Object[])array)[pos]);
 	}
-
+	
 	public byte[] toBytes(int pos) {
 		return this.baseType.toBytes(((Object[])array)[pos]);
 	}
-
+	
 	public boolean isNull(int pos) {
 	    if(this.baseType.toBytes(((Object[])array)[pos]).length == 0) {
 	        return true;
@@ -225,7 +225,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 	        return false;
 	    }
 	}
-
+	
 	@Override
 	public boolean equals(Object obj) {
 		if (this.numElements != ((PhoenixArray) obj).numElements) {
@@ -247,7 +247,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 				+ ((array == null) ? 0 : array.hashCode());
 		return result;
 	}
-
+	
 	public static class PrimitiveIntPhoenixArray extends PhoenixArray {
 		private int[] intArr;
 		public PrimitiveIntPhoenixArray(PDataType dataType, Object[] elements) {
@@ -267,17 +267,17 @@ public class PhoenixArray implements Array,SQLCloseable {
 			}
 			return intArr;
 		}
-
+		
 		@Override
         public int estimateByteSize(int pos) {
 			return this.baseType.estimateByteSize(intArr[pos]);
 		}
-
+		
 		@Override
         public byte[] toBytes(int pos) {
 			return this.baseType.toBytes(intArr[pos]);
 		}
-
+		
 		@Override
 		public boolean equals(Object obj) {
 			if (this.numElements != ((PhoenixArray) obj).numElements) {
@@ -290,7 +290,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 					(int[]) ((PhoenixArray) obj).array);
 		}
 	}
-
+	
 	public static class PrimitiveShortPhoenixArray extends PhoenixArray {
 		private short[] shortArr;
 		public PrimitiveShortPhoenixArray(PDataType dataType, Object[] elements) {
@@ -310,17 +310,17 @@ public class PhoenixArray implements Array,SQLCloseable {
             }
 			return shortArr;
 		}
-
+		
 		@Override
         public int estimateByteSize(int pos) {
 			return this.baseType.estimateByteSize(shortArr[pos]);
 		}
-
+		
 		@Override
         public byte[] toBytes(int pos) {
 			return this.baseType.toBytes(shortArr[pos]);
 		}
-
+		
 		@Override
 		public boolean equals(Object obj) {
 			if (this.numElements != ((PhoenixArray) obj).numElements) {
@@ -333,7 +333,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 					(short[]) ((PhoenixArray) obj).array);
 		}
 	}
-
+	
 	public static class PrimitiveLongPhoenixArray extends PhoenixArray {
 		private long[] longArr;
 		public PrimitiveLongPhoenixArray(PDataType dataType, Object[] elements) {
@@ -357,12 +357,12 @@ public class PhoenixArray implements Array,SQLCloseable {
         public int estimateByteSize(int pos) {
 			return this.baseType.estimateByteSize(longArr[pos]);
 		}
-
+		
 		@Override
         public byte[] toBytes(int pos) {
 			return this.baseType.toBytes(longArr[pos]);
 		}
-
+		
 		@Override
 		public boolean equals(Object obj) {
 			if (this.numElements != ((PhoenixArray) obj).numElements) {
@@ -376,7 +376,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 		}
 
 	}
-
+	
 	public static class PrimitiveDoublePhoenixArray extends PhoenixArray {
 		private double[] doubleArr;
 		public PrimitiveDoublePhoenixArray(PDataType dataType, Object[] elements) {
@@ -396,17 +396,17 @@ public class PhoenixArray implements Array,SQLCloseable {
 			}
 			return doubleArr;
 		}
-
+		
 		@Override
         public int estimateByteSize(int pos) {
 			return this.baseType.estimateByteSize(doubleArr[pos]);
 		}
-
+		
 		@Override
         public byte[] toBytes(int pos) {
 			return this.baseType.toBytes(doubleArr[pos]);
 		}
-
+		
 		@Override
 		public boolean equals(Object obj) {
 			if (this.numElements != ((PhoenixArray) obj).numElements) {
@@ -419,7 +419,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 					(double[]) ((PhoenixArray) obj).array);
 		}
 	}
-
+	
 	public static class PrimitiveFloatPhoenixArray extends PhoenixArray {
 		private float[] floatArr;
 		public PrimitiveFloatPhoenixArray(PDataType dataType, Object[] elements) {
@@ -439,17 +439,17 @@ public class PhoenixArray implements Array,SQLCloseable {
             }
 			return floatArr;
 		}
-
+		
 		@Override
         public int estimateByteSize(int pos) {
 			return this.baseType.estimateByteSize(floatArr[pos]);
 		}
-
+		
 		@Override
         public byte[] toBytes(int pos) {
 			return this.baseType.toBytes(floatArr[pos]);
 		}
-
+		
 		@Override
 		public boolean equals(Object obj) {
 			if (this.numElements != ((PhoenixArray) obj).numElements) {
@@ -462,7 +462,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 					(float[]) ((PhoenixArray) obj).array);
 		}
 	}
-
+	
 	public static class PrimitiveBytePhoenixArray extends PhoenixArray {
 		private byte[] byteArr;
 		public PrimitiveBytePhoenixArray(PDataType dataType, Object[] elements) {
@@ -482,17 +482,17 @@ public class PhoenixArray implements Array,SQLCloseable {
             }
 			return byteArr;
 		}
-
+		
 		@Override
         public int estimateByteSize(int pos) {
 			return this.baseType.estimateByteSize(byteArr[pos]);
 		}
-
+		
 		@Override
         public byte[] toBytes(int pos) {
 			return this.baseType.toBytes(byteArr[pos]);
 		}
-
+		
 		@Override
 		public boolean equals(Object obj) {
 			if (this.numElements != ((PhoenixArray) obj).numElements) {
@@ -505,7 +505,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 					(byte[]) ((PhoenixArray) obj).array);
 		}
 	}
-
+	
 	public static class PrimitiveBooleanPhoenixArray extends PhoenixArray {
 		private boolean[] booleanArr;
 		public PrimitiveBooleanPhoenixArray(PDataType dataType, Object[] elements) {
@@ -525,17 +525,17 @@ public class PhoenixArray implements Array,SQLCloseable {
             }
 			return booleanArr;
 		}
-
+		
 		@Override
         public int estimateByteSize(int pos) {
 			return this.baseType.estimateByteSize(booleanArr[pos]);
 		}
-
+		
 		@Override
         public byte[] toBytes(int pos) {
 			return this.baseType.toBytes(booleanArr[pos]);
 		}
-
+		
 		@Override
 		public boolean equals(Object obj) {
 			if (this.numElements != ((PhoenixArray) obj).numElements) {

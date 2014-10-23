@@ -19,7 +19,7 @@ package org.apache.phoenix.parse;
 import java.util.List;
 
 /**
- * Mark for UpsertCompiler to evaluate info for upsert coprocessors
+ * Upsert coprocessors marker
  */
 public class UpsertFunctionParseNode extends FunctionParseNode {
 

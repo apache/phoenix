@@ -23,14 +23,15 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.ArrayUpdateObserver;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.ArrayInsertUniqueParseNode;
-import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.FunctionParseNode.Argument;
+import org.apache.phoenix.parse.UpsertFunctionParseNode;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-
-@FunctionParseNode.BuiltInFunction(name = ArrayInsertUniqueFunction.NAME,
-        nodeClass = ArrayInsertUniqueParseNode.class, args = {
-		@FunctionParseNode.Argument() })
+@UpsertFunctionParseNode.BuiltInFunction(name = ArrayInsertUniqueFunction.NAME,
+        nodeClass = ArrayInsertUniqueParseNode.class,
+        args = {
+            @Argument(allowedTypes = {})})
 public class ArrayInsertUniqueFunction extends UpsertFunctionExpression {
 
     public static final String NAME = "ARRAY_INSERT_UNIQUE";

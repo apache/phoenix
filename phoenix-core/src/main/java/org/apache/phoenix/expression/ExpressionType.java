@@ -22,6 +22,7 @@ import java.util.Map;
 import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
+import org.apache.phoenix.expression.function.ArrayInsertUniqueFunction;
 import org.apache.phoenix.expression.function.ArrayLengthFunction;
 import org.apache.phoenix.expression.function.CeilDateExpression;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
@@ -80,7 +81,6 @@ import org.apache.phoenix.expression.function.TruncFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
 
 import com.google.common.collect.Maps;
-import org.apache.phoenix.expression.function.ArrayInsertUniqueFunction;
 
 /**
  *
