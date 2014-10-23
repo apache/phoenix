@@ -270,19 +270,6 @@ public class FunctionParseNode extends CompoundParseNode {
         String maxValue() default "";
     }
 
-//
-//    /**
-//     * Marker used to indicate that a class should evaluate info for upsert coprocessors
-//     */
-//    @Retention(RetentionPolicy.RUNTIME)
-//    @Target(ElementType.TYPE)
-//    public
-//    @interface BuiltInFunction {
-//        String name();
-//        Argument[] args() default {};
-//        Class<? extends FunctionParseNode> nodeClass() default FunctionParseNode.class;
-//    }
-//
     /**
      * Structure used to hold parse-time information about Function implementation classes
      */
