@@ -24,6 +24,7 @@ import java.util.TreeMap;
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
@@ -31,6 +32,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.HRegion.RowLock;
 import org.apache.hadoop.hbase.util.Bytes;
 import static org.apache.phoenix.coprocessor.ArrayUpdateObserver.BASE_DATATYPE_ATTRIBUTE_SUFFIX;
 import static org.apache.phoenix.coprocessor.ArrayUpdateObserver.FAMILY_ATTRIBUTE_SUFFIX;
@@ -57,36 +59,45 @@ public class ArrayInsertUniqueCoprocessor {
         RegionCoprocessorEnvironment regionEnv = env.getEnvironment();
 
         HRegion region = regionEnv.getRegion();
-        Result getResult = region.get(get);
+        RowLock rowLock = region.getRowLock(rowKey);
+        if (rowLock == null) {
+            throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(rowKey));
+        }
 
-        if (!getResult.isEmpty()) {
-            byte[] currentValue = getResult.getValue(columnFamilyName, columnQualifierName);
+        try {
+            Result getResult = region.get(get);
 
-            for (Cell cell : put.getFamilyCellMap().get(columnFamilyName)) {
-                //get right cell
-                if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                        columnQualifierName, 0, columnQualifierName.length) == 0) {
+            if (!getResult.isEmpty()) {
+                byte[] currentValue = getResult.getValue(columnFamilyName, columnQualifierName);
 
-                    ByteBuffer resultBuffer;
-                    if (baseDataType.isFixedWidth()) {
-                        resultBuffer = buildBufferFixedWidth(cell, baseDataType, currentValue);
-                    } else {
-                        try {
-                            resultBuffer = buildBufferVarLength(cell, baseDataType, currentValue, sortOrder);
-                        } catch (SQLException ex) {
-                            throw new IOException(ex);
+                for (Cell cell : put.getFamilyCellMap().get(columnFamilyName)) {
+                    //get right cell
+                    if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
+                            columnQualifierName, 0, columnQualifierName.length) == 0) {
+
+                        ByteBuffer resultBuffer;
+                        if (baseDataType.isFixedWidth()) {
+                            resultBuffer = buildBufferFixedWidth(cell, baseDataType, currentValue);
+                        } else {
+                            try {
+                                resultBuffer = buildBufferVarLength(cell, baseDataType, currentValue, sortOrder);
+                            } catch (SQLException ex) {
+                                throw new IOException(ex);
+                            }
                         }
-                    }
-                    put.getFamilyCellMap().get(columnFamilyName).remove(cell);
-                    put.add(keyValueFactory(rowKey, columnFamilyName, columnQualifierName,
-                            resultBuffer.array(), resultBuffer.arrayOffset(), resultBuffer.position()));
+                        put.getFamilyCellMap().get(columnFamilyName).remove(cell);
+                        put.add(keyValueFactory(rowKey, columnFamilyName, columnQualifierName,
+                                resultBuffer.array(), resultBuffer.arrayOffset(), resultBuffer.position()));
 
-                    env.complete();
-                    return;
+                        env.complete();
+                        return;
+                    }
                 }
             }
+            env.complete();
+        } finally {
+            rowLock.release();
         }
-        env.complete();
     }
 
     private KeyValue keyValueFactory(byte[] row, byte[] family, byte[] qualifier,
