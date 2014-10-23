@@ -59,9 +59,9 @@
   </parent>
 
   <scm>
-    <connection>scm:git:http://git-wip-us.apache.org/repos/asf/incubator-phoenix.git</connection>
-    <url>https://git-wip-us.apache.org/repos/asf/incubator-phoenix.git</url>
-    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/incubator-phoenix.git</developerConnection>
+    <connection>scm:git:http://git-wip-us.apache.org/repos/asf/phoenix.git</connection>
+    <url>https://git-wip-us.apache.org/repos/asf/phoenix.git</url>
+    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/phoenix.git</developerConnection>
   </scm>
 
   <properties>
