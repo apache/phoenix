@@ -43,6 +43,7 @@ import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.TupleProjectionPlan;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
@@ -427,6 +428,9 @@ public class QueryCompiler {
         }
         
         if (innerPlan != null) {
+            if (LiteralExpression.isTrue(where)) {
+                where = null; // we do not pass "true" as filter
+            }
             plan =  select.isAggregate() || select.isDistinct() ?
                       new ClientAggregatePlan(context, select, tableRef, projector, limit, where, orderBy, groupBy, having, plan)
                     : new ClientScanPlan(context, select, tableRef, projector, limit, where, orderBy, plan);

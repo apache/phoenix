@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.execute;
 
+import static org.apache.phoenix.query.QueryConstants.*;
+
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collections;
@@ -210,7 +212,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         @Override
         protected ImmutableBytesWritable getGroupingKey(Tuple tuple,
                 ImmutableBytesWritable ptr) throws SQLException {
-            tuple.getKey(ptr);
+            ptr.set(UNGROUPED_AGG_ROW_KEY);
             return ptr;
         }
 
