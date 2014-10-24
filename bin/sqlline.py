@@ -31,6 +31,8 @@ def kill_child():
     if childProc is not None:
         childProc.terminate()
         childProc.kill()
+        if os.name != 'nt':
+            os.system("reset")
 atexit.register(kill_child)
 
 phoenix_utils.setPath()
