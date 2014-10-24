@@ -84,7 +84,7 @@ public class OrderByCompiler {
         // accumulate columns in ORDER BY
         TrackOrderPreservingExpressionCompiler visitor = 
                 new TrackOrderPreservingExpressionCompiler(context, groupBy, 
-                        orderByNodes.size(), Ordering.ORDERED);
+                        orderByNodes.size(), Ordering.ORDERED, null);
         LinkedHashSet<OrderByExpression> orderByExpressions = Sets.newLinkedHashSetWithExpectedSize(orderByNodes.size());
         for (OrderByNode node : orderByNodes) {
             boolean isAscending = node.isAscending();

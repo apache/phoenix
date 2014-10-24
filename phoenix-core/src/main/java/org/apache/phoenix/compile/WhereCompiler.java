@@ -76,8 +76,8 @@ public class WhereCompiler {
     private WhereCompiler() {
     }
 
-    public static Set<SubqueryParseNode> compile(StatementContext context, FilterableStatement statement) throws SQLException {
-        return compile(context, statement, null);
+    public static Expression compile(StatementContext context, FilterableStatement statement) throws SQLException {
+        return compile(context, statement, null, null);
     }
     
     /**
@@ -90,8 +90,8 @@ public class WhereCompiler {
      * @throws ColumnNotFoundException if column name could not be resolved
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */
-    public static Set<SubqueryParseNode> compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere) throws SQLException {
-        return compile(context, statement, viewWhere, Collections.<Expression>emptyList(), false);
+    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, Set<SubqueryParseNode> subqueryNodes) throws SQLException {
+        return compile(context, statement, viewWhere, Collections.<Expression>emptyList(), false, subqueryNodes);
     }
     
     /**
@@ -104,18 +104,20 @@ public class WhereCompiler {
      * @throws ColumnNotFoundException if column name could not be resolved
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */    
-    public static Set<SubqueryParseNode> compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, List<Expression> dynamicFilters, boolean hashJoinOptimization) throws SQLException {
+    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, List<Expression> dynamicFilters, boolean hashJoinOptimization, Set<SubqueryParseNode> subqueryNodes) throws SQLException {
         ParseNode where = statement.getWhere();
-        Set<SubqueryParseNode> subqueryNodes = Sets.<SubqueryParseNode> newHashSet();
-        SubqueryParseNodeVisitor subqueryVisitor = new SubqueryParseNodeVisitor(context, subqueryNodes);
-        if (where != null) {
-            where.accept(subqueryVisitor);
+        if (subqueryNodes != null) { // if the subqueryNodes passed in is null, we assume there will be no sub-queries in the WHERE clause.
+            SubqueryParseNodeVisitor subqueryVisitor = new SubqueryParseNodeVisitor(context, subqueryNodes);
+            if (where != null) {
+                where.accept(subqueryVisitor);
+            }
+            if (viewWhere != null) {
+                viewWhere.accept(subqueryVisitor);
+            }
+            if (!subqueryNodes.isEmpty()) {
+                return null;
+            }
         }
-        if (viewWhere != null) {
-            viewWhere.accept(subqueryVisitor);
-        }
-        if (!subqueryNodes.isEmpty())
-            return subqueryNodes;
         
         Set<Expression> extractedNodes = Sets.<Expression>newHashSet();
         WhereExpressionCompiler whereCompiler = new WhereExpressionCompiler(context);
@@ -140,7 +142,7 @@ public class WhereCompiler {
         expression = WhereOptimizer.pushKeyExpressionsToScan(context, statement, expression, extractedNodes);
         setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily, hashJoinOptimization);
 
-        return subqueryNodes;
+        return expression;
     }
     
     private static class WhereExpressionCompiler extends ExpressionCompiler {

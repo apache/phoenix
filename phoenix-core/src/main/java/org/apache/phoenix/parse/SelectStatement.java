@@ -192,4 +192,11 @@ public class SelectStatement implements FilterableStatement {
     public boolean isJoin() {
         return fromTable.size() > 1 || (fromTable.size() > 0 && fromTable.get(0) instanceof JoinTableNode);
     }
+    
+    public SelectStatement getInnerSelectStatement() {
+        if (fromTable.size() != 1 || !(fromTable.get(0) instanceof DerivedTableNode))
+            return null;
+        
+        return ((DerivedTableNode) fromTable.get(0)).getSelect();
+    }
 }

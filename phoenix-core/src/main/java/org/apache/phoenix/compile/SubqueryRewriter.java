@@ -238,7 +238,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
                 groupbyNodes.add(aliasedNode.getNode());
             }
             groupbyNodes.addAll(subquery.getGroupBy());
-            subquery = NODE_FACTORY.select(subquery, selectNodes, where, groupbyNodes, true);
+            subquery = NODE_FACTORY.select(subquery, subquery.isDistinct(), selectNodes, where, groupbyNodes, true);
         }
         
         ParseNode onNode = conditionExtractor.getJoinCondition();
@@ -323,11 +323,11 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         }
         
         if (derivedTableAlias == null) {
-            subquery = NODE_FACTORY.select(subquery, selectNodes, where, groupbyNodes, true);
+            subquery = NODE_FACTORY.select(subquery, false, selectNodes, where, groupbyNodes, true);
         } else {
             List<ParseNode> derivedTableGroupBy = Lists.newArrayListWithExpectedSize(subquery.getGroupBy().size() + groupbyNodes.size());
-            derivedTableGroupBy.addAll(subquery.getGroupBy());
             derivedTableGroupBy.addAll(groupbyNodes);
+            derivedTableGroupBy.addAll(subquery.getGroupBy());
             List<AliasedNode> derivedTableSelect = Lists.newArrayListWithExpectedSize(aliasedNodes.size() + selectNodes.size() - 1);
             derivedTableSelect.addAll(aliasedNodes);
             for (int i = 1; i < selectNodes.size(); i++) {
@@ -338,8 +338,8 @@ public class SubqueryRewriter extends ParseNodeRewriter {
                 selectNodes.set(i, aliasedNode);
                 groupbyNodes.set(i - 1, aliasedNode.getNode());
             }
-            SelectStatement derivedTableStmt = NODE_FACTORY.select(subquery, derivedTableSelect, where, derivedTableGroupBy, true);
-            subquery = NODE_FACTORY.select(Collections.singletonList(NODE_FACTORY.derivedTable(derivedTableAlias, derivedTableStmt)), subquery.getHint(), false, selectNodes, null, groupbyNodes, null, Collections.<OrderByNode> emptyList(), null, subquery.getBindCount(), true, subquery.hasSequence());
+            SelectStatement derivedTableStmt = NODE_FACTORY.select(subquery, subquery.isDistinct(), derivedTableSelect, where, derivedTableGroupBy, true);
+            subquery = NODE_FACTORY.select(Collections.singletonList(NODE_FACTORY.derivedTable(derivedTableAlias, derivedTableStmt)), subquery.getHint(), false, selectNodes, null, groupbyNodes, null, Collections.<OrderByNode> emptyList(), null, subquery.getBindCount(), true, false);
         }
         
         ParseNode onNode = conditionExtractor.getJoinCondition();

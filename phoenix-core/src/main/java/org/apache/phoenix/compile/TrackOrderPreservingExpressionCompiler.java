@@ -24,8 +24,10 @@ import java.util.Comparator;
 import java.util.List;
 
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
+import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.FunctionExpression.OrderPreserving;
 import org.apache.phoenix.parse.CaseParseNode;
@@ -35,8 +37,8 @@ import org.apache.phoenix.parse.MultiplyParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
 
@@ -56,12 +58,13 @@ public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
     private final List<Entry> entries;
     private final Ordering ordering;
     private final int positionOffset;
+    private final TupleProjector tupleProjector; // for derived-table query compilation
     private OrderPreserving orderPreserving = OrderPreserving.YES;
     private ColumnRef columnRef;
     private boolean isOrderPreserving = true;
     private Boolean isReverse;
     
-    TrackOrderPreservingExpressionCompiler(StatementContext context, GroupBy groupBy, int expectedEntrySize, Ordering ordering) {
+    TrackOrderPreservingExpressionCompiler(StatementContext context, GroupBy groupBy, int expectedEntrySize, Ordering ordering, TupleProjector tupleProjector) {
         super(context, groupBy);
         PTable table = context.getResolver().getTables().get(0).getTable();
         boolean isSalted = table.getBucketNum() != null;
@@ -71,6 +74,7 @@ public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
         positionOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
         entries = Lists.newArrayListWithExpectedSize(expectedEntrySize);
         this.ordering = ordering;
+        this.tupleProjector = tupleProjector;
     }
     
     public Boolean isReverse() {
@@ -158,7 +162,7 @@ public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
         ColumnRef ref = super.resolveColumn(node);
         // If we encounter any non PK column, then we can't aggregate on-the-fly
         // because the distinct groups have no correlation to the KV column value
-        if (!SchemaUtil.isPKColumn(ref.getColumn())) {
+        if (getColumnPKPosition(ref) < 0) {
             orderPreserving = OrderPreserving.NO;
         }
         
@@ -171,6 +175,17 @@ public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
             orderPreserving = OrderPreserving.NO;
         }
         return ref;
+    }
+    
+    private int getColumnPKPosition(ColumnRef ref) {
+        if (tupleProjector != null && ref.getTable().getType() == PTableType.SUBQUERY) {
+            Expression expression = tupleProjector.getExpressions()[ref.getColumnPosition()];
+            if (expression instanceof RowKeyColumnExpression) {
+                return ((RowKeyColumnExpression) expression).getPosition();
+            }
+        }
+        
+        return ref.getPKSlotPosition();
     }
 
     public boolean addEntry(Expression expression) {
@@ -205,7 +220,7 @@ public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
         return entries;
     }
 
-    public static class Entry {
+    public class Entry {
         private final Expression expression;
         private final ColumnRef columnRef;
         private final OrderPreserving orderPreserving;
@@ -221,7 +236,7 @@ public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
         }
 
         public int getPkPosition() {
-            return columnRef.getPKSlotPosition();
+            return getColumnPKPosition(columnRef);
         }
 
         public int getColumnPosition() {

@@ -17,19 +17,13 @@
  */
 package org.apache.phoenix.iterate;
 
-import static org.apache.phoenix.query.QueryConstants.*;
-
 import java.sql.SQLException;
-import java.util.List;
 
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
-import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.KeyValueUtil;
-import org.apache.phoenix.util.TupleUtil;
 
 
 
@@ -51,54 +45,20 @@ import org.apache.phoenix.util.TupleUtil;
  * 
  * @since 0.1
  */
-public class GroupedAggregatingResultIterator implements AggregatingResultIterator {
-    private final ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
-    private final PeekingResultIterator resultIterator;
-    protected final Aggregators aggregators;
-    
-    public GroupedAggregatingResultIterator( PeekingResultIterator resultIterator, Aggregators aggregators) {
-        if (resultIterator == null) throw new NullPointerException();
-        if (aggregators == null) throw new NullPointerException();
-        this.resultIterator = resultIterator;
-        this.aggregators = aggregators;
+public class GroupedAggregatingResultIterator extends BaseGroupedAggregatingResultIterator {
+
+    public GroupedAggregatingResultIterator(PeekingResultIterator resultIterator, Aggregators aggregators) {
+        super(resultIterator, aggregators);
     }
     
     @Override
-    public Tuple next() throws SQLException {
-        Tuple result = resultIterator.next();
-        if (result == null) {
-            return null;
-        }
-        Aggregator[] rowAggregators = aggregators.getAggregators();
-        aggregators.reset(rowAggregators);
-        while (true) {
-            aggregators.aggregate(rowAggregators, result);
-            Tuple nextResult = resultIterator.peek();
-            if (nextResult == null || !TupleUtil.equals(result, nextResult, tempPtr)) {
-                break;
-            }
-            result = resultIterator.next();
-        }
-        
-        byte[] value = aggregators.toBytes(rowAggregators);
-        result.getKey(tempPtr);
-        return new SingleKeyValueTuple(KeyValueUtil.newKeyValue(tempPtr, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length));
-    }
-    
-    @Override
-    public void close() throws SQLException {
-        resultIterator.close();
-    }
-    
-    @Override
-    public void aggregate(Tuple result) {
-        Aggregator[] rowAggregators = aggregators.getAggregators();
-        aggregators.reset(rowAggregators);
-        aggregators.aggregate(rowAggregators, result);
+    protected ImmutableBytesWritable getGroupingKey(Tuple tuple, ImmutableBytesWritable ptr) throws SQLException {
+        tuple.getKey(ptr);
+        return ptr;
     }
 
     @Override
-    public void explain(List<String> planSteps) {
-        resultIterator.explain(planSteps);
+    protected Tuple wrapKeyValueAsResult(KeyValue keyValue) throws SQLException {
+        return new SingleKeyValueTuple(keyValue);
     }
 }

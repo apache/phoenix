@@ -30,6 +30,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.AliasedNode;
@@ -135,7 +136,7 @@ public class GroupByCompiler {
      * @throws ColumnNotFoundException if column name could not be resolved
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */
-    public static GroupBy compile(StatementContext context, SelectStatement statement) throws SQLException {
+    public static GroupBy compile(StatementContext context, SelectStatement statement, TupleProjector tupleProjector) throws SQLException {
         List<ParseNode> groupByNodes = statement.getGroupBy();
         /**
          * Distinct can use an aggregate plan if there's no group by.
@@ -160,7 +161,7 @@ public class GroupByCompiler {
         TrackOrderPreservingExpressionCompiler groupByVisitor =
                 new TrackOrderPreservingExpressionCompiler(context, 
                         GroupBy.EMPTY_GROUP_BY, groupByNodes.size(), 
-                        Ordering.UNORDERED);
+                        Ordering.UNORDERED, tupleProjector);
         for (ParseNode node : groupByNodes) {
             Expression expression = node.accept(groupByVisitor);
             if (groupByVisitor.isAggregate()) {

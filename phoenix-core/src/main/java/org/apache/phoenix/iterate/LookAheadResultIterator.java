@@ -25,7 +25,11 @@ import org.apache.phoenix.schema.tuple.Tuple;
 
 
 abstract public class LookAheadResultIterator implements PeekingResultIterator {
-    public static LookAheadResultIterator wrap(final ResultIterator iterator) {
+    public static PeekingResultIterator wrap(final ResultIterator iterator) {
+        if (iterator instanceof PeekingResultIterator) {
+            return (PeekingResultIterator) iterator;
+        }
+        
         return new LookAheadResultIterator() {
 
             @Override

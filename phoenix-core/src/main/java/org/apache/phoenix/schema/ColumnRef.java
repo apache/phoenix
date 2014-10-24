@@ -114,7 +114,7 @@ public final class ColumnRef {
         	return new KeyValueColumnExpression(column, displayName);
         }
         
-        if (table.getType() == PTableType.JOIN) {
+        if (table.getType() == PTableType.JOIN || table.getType() == PTableType.SUBQUERY) {
         	return new ProjectedColumnExpression(column, table, column.getName().getString());
         }
        

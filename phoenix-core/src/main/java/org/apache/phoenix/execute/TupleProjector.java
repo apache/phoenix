@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.join;
+package org.apache.phoenix.execute;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -30,7 +30,9 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.JoinCompiler.ProjectedPTableWrapper;
+import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.schema.KeyValueSchema;
@@ -52,6 +54,20 @@ public class TupleProjector {
     private final Expression[] expressions;
     private ValueBitSet valueSet;
     private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    
+    public TupleProjector(RowProjector rowProjector) {
+        List<? extends ColumnProjector> columnProjectors = rowProjector.getColumnProjectors();
+        int count = columnProjectors.size();
+        KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
+        expressions = new Expression[count];
+        for (int i = 0; i < count; i++) {
+            Expression expression = columnProjectors.get(i).getExpression();
+            builder.addField(expression);
+            expressions[i] = expression;
+        }
+        schema = builder.build();
+        valueSet = ValueBitSet.newInstance(schema);
+    }
     
     public TupleProjector(ProjectedPTableWrapper projected) {
     	List<PColumn> columns = projected.getTable().getColumns();
@@ -203,7 +219,7 @@ public class TupleProjector {
     }
     
     public ProjectedValueTuple projectResults(Tuple tuple) {
-    	byte[] bytesValue = schema.toBytes(tuple, expressions, valueSet, ptr);
+    	byte[] bytesValue = schema.toBytes(tuple, getExpressions(), valueSet, ptr);
     	KeyValue base = tuple.getValue(0);
         return new ProjectedValueTuple(base.getBuffer(), base.getRowOffset(), base.getRowLength(), base.getTimestamp(), bytesValue, valueSet.getEstimatedLength());
     }
@@ -238,9 +254,22 @@ public class TupleProjector {
     	ImmutableBytesWritable keyPtr = dest.getKeyPtr();
         return new ProjectedValueTuple(keyPtr.get(), keyPtr.getOffset(), keyPtr.getLength(), dest.getTimestamp(), merged, destBitSetLen);
     }
+
+    public KeyValueSchema getSchema() {
+        return schema;
+    }
+
+    public Expression[] getExpressions() {
+        return expressions;
+    }
+
+    public ValueBitSet getValueBitSet() {
+        return valueSet;
+    }
     
     @Override
     public String toString() {
         return "TUPLE-PROJECTOR {" + Arrays.toString(expressions) + " ==> " + schema.toString() + "}";
     }
 }
+

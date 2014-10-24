@@ -101,6 +101,7 @@ public class QueryOptimizer {
         if (!useIndexes 
                 || select.isJoin() 
                 || dataPlan.getContext().getResolver().getTables().size() > 1
+                || select.getInnerSelectStatement() != null
                 || (dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan)) {
             return Collections.singletonList(dataPlan);
         }
