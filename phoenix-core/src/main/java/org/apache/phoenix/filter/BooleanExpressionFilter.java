@@ -37,6 +37,7 @@ import org.apache.phoenix.util.ServerUtil;
  * 
  * Base class for filter that evaluates a WHERE clause expression.
  *
+ * Subclass is expected to implement filterRow() method
  * 
  * @since 0.1
  */
@@ -56,6 +57,11 @@ abstract public class BooleanExpressionFilter extends FilterBase implements Writ
         return expression;
     }
     
+    @Override
+    public boolean hasFilterRow() {
+      return true;
+    }
+
     @Override
     public int hashCode() {
         final int prime = 31;
