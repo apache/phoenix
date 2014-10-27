@@ -634,6 +634,7 @@ public abstract class BaseTest {
         conf.setInt("hbase.hlog.asyncer.number", 2);
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
+        conf.setInt("hbase.catalogjanitor.interval", 5000);
         return conf;
     }
 
