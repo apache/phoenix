@@ -24,22 +24,31 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.catalog.CatalogTracker;
+import org.apache.hadoop.hbase.catalog.MetaReader;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.master.HMaster;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
+import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
+import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.regionserver.StoreFile;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
@@ -51,12 +60,15 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -64,6 +76,9 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 public class LocalIndexIT extends BaseIndexIT {
+
+    private static CountDownLatch latch1 = new CountDownLatch(1);
+    private static CountDownLatch latch2 = new CountDownLatch(1);
 
     @BeforeClass 
     public static void doSetup() throws Exception {
@@ -651,25 +666,25 @@ public class LocalIndexIT extends BaseIndexIT {
             
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
             for (int i = 1; i < 5; i++) {
+                CatalogTracker ct = new CatalogTracker(admin.getConfiguration());
+                admin.split(Bytes.toBytes(DATA_TABLE_NAME), ByteUtil.concat(Bytes.toBytes(strings[3*i])));
+                List<HRegionInfo> regionsOfUserTable =
+                        MetaReader.getTableRegions(ct, TableName.valueOf(DATA_TABLE_NAME), false);
 
-              admin.split(Bytes.toBytes(DATA_TABLE_NAME), ByteUtil.concat(Bytes.toBytes(strings[3*i])));
-              List<HRegionInfo> regionsOfUserTable = admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME));
+                while (regionsOfUserTable.size() != (4+i)) {
+                    Thread.sleep(100);
+                    regionsOfUserTable = MetaReader.getTableRegions(ct, TableName.valueOf(DATA_TABLE_NAME), false);
+                }
+                assertEquals(4+i, regionsOfUserTable.size());
+                TableName indexTable =
+                        TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME));
+                List<HRegionInfo> regionsOfIndexTable =
+                        MetaReader.getTableRegions(ct, indexTable, false);
 
-              while (regionsOfUserTable.size() != (4+i)) {
-                Thread.sleep(100);
-                regionsOfUserTable = admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME)); 
-              }
-              assertEquals(4+i, regionsOfUserTable.size());
-              List<HRegionInfo> regionsOfIndexTable =
-                  admin.getTableRegions(TableName.valueOf(MetaDataUtil
-                    .getLocalIndexTableName(DATA_TABLE_NAME))); 
-
-              while (regionsOfIndexTable.size() != (4+i)) {
-                Thread.sleep(100);
-                regionsOfIndexTable =
-                    admin.getTableRegions(TableName.valueOf(MetaDataUtil
-                      .getLocalIndexTableName(DATA_TABLE_NAME)));
-              }
+                while (regionsOfIndexTable.size() != (4 + i)) {
+                    Thread.sleep(100);
+                    regionsOfIndexTable = MetaReader.getTableRegions(ct, indexTable, false);
+                }
                 assertEquals(4 + i, regionsOfIndexTable.size());
                 String query = "SELECT t_id,k1,v1 FROM " + DATA_TABLE_NAME;
                 rs = conn1.createStatement().executeQuery(query);
@@ -705,6 +720,107 @@ public class LocalIndexIT extends BaseIndexIT {
             }
        } finally {
             conn1.close();
+        }
+    }
+
+    @Test
+    public void testLocalIndexStateWhenSplittingInProgress() throws Exception {
+        createBaseTable(DATA_TABLE_NAME+"2", null, "('e','j','o')");
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try{
+            String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
+            for (int i = 0; i < 26; i++) {
+                conn1.createStatement().execute(
+                    "UPSERT INTO " + DATA_TABLE_NAME+"2" + " values('"+strings[i]+"'," + i + ","
+                            + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
+            }
+            conn1.commit();
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME+"2" + "(v1)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + "_2 ON " + DATA_TABLE_NAME+"2" + "(k3)");
+
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_NAME+"2");
+            assertTrue(rs.next());
+            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(DATA_TABLE_NAME+"2"));
+            tableDesc.removeCoprocessor(LocalIndexSplitter.class.getName());
+            tableDesc.addCoprocessor(MockedLocalIndexSplitter.class.getName(), null,
+                1, null);
+            admin.disableTable(tableDesc.getTableName());
+            admin.modifyTable(tableDesc.getTableName(), tableDesc);
+            admin.enableTable(tableDesc.getTableName());
+            TableName indexTable =
+                    TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME+"2"));
+            HTableDescriptor indexTableDesc = admin.getTableDescriptor(indexTable);
+            indexTableDesc.removeCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName());
+            indexTableDesc.addCoprocessor(MockedIndexHalfStoreFileReaderGenerator.class.getName(), null,
+                1, null);
+            admin.disableTable(indexTable);
+            admin.modifyTable(indexTable, indexTableDesc);
+            admin.enableTable(indexTable);
+
+            admin.split(Bytes.toBytes(DATA_TABLE_NAME+"2"), ByteUtil.concat(Bytes.toBytes(strings[3])));
+            List<HRegionInfo> regionsOfUserTable =
+                    admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME+"2"));
+
+            while (regionsOfUserTable.size() != 5) {
+                Thread.sleep(100);
+                regionsOfUserTable = admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME+"2"));
+            }
+            assertEquals(5, regionsOfUserTable.size());
+
+            List<HRegionInfo> regionsOfIndexTable = admin.getTableRegions(indexTable);
+
+            while (regionsOfIndexTable.size() != 5) {
+                Thread.sleep(100);
+                regionsOfIndexTable = admin.getTableRegions(indexTable);
+            }
+
+            assertEquals(5, regionsOfIndexTable.size());
+            latch1.await();
+            // Verify the metadata for index is correct.
+            rs = conn1.getMetaData().getTables(null, StringUtil.escapeLike(SCHEMA_NAME), INDEX_TABLE_NAME,
+                    new String[] { PTableType.INDEX.toString() });
+            assertTrue(rs.next());
+            assertEquals(INDEX_TABLE_NAME, rs.getString(3));
+            assertEquals(PIndexState.INACTIVE.toString(), rs.getString("INDEX_STATE"));
+            assertFalse(rs.next());
+            rs = conn1.getMetaData().getTables(null, StringUtil.escapeLike(SCHEMA_NAME), INDEX_TABLE_NAME+"_2",
+                new String[] { PTableType.INDEX.toString() });
+            assertTrue(rs.next());
+            assertEquals(INDEX_TABLE_NAME+"_2", rs.getString(3));
+            assertEquals(PIndexState.INACTIVE.toString(), rs.getString("INDEX_STATE"));
+            assertFalse(rs.next());
+
+            String query = "SELECT t_id,k1,v1 FROM " + DATA_TABLE_NAME+"2";
+            rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals("CLIENT PARALLEL " + 1 + "-WAY FULL SCAN OVER " + DATA_TABLE_NAME+"2",
+                QueryUtil.getExplainPlan(rs));
+            latch2.countDown();
+       } finally {
+            conn1.close();
+            latch1.countDown();
+            latch2.countDown();
+        }
+    }
+
+    public static class MockedIndexHalfStoreFileReaderGenerator extends IndexHalfStoreFileReaderGenerator {
+        @Override
+        public void postCompact(ObserverContext<RegionCoprocessorEnvironment> e, Store store,
+                StoreFile resultFile) throws IOException {
+            try {
+                latch2.await();
+            } catch (InterruptedException e1) {
+            }
+            super.postCompact(e, store, resultFile);
+        }
+    }
+
+    public static class MockedLocalIndexSplitter extends LocalIndexSplitter {
+        @Override
+        public void preSplitAfterPONR(ObserverContext<RegionCoprocessorEnvironment> ctx)
+                throws IOException {
+            super.preSplitAfterPONR(ctx);
+            latch1.countDown();
         }
     }
 }
