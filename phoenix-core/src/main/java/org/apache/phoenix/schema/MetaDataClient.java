@@ -2160,10 +2160,8 @@ public class MetaDataClient {
                     // If we've done any index metadata updates, don't bother trying to update
                     // client-side cache as it would be too painful. Just let it pull it over from
                     // the server when needed.
-                    if (columnsToDrop.size() > 0 && indexesToDrop.isEmpty()) {
-                        for(PColumn columnToDrop : tableColumnsToDrop) {
-                            connection.removeColumn(tenantId, SchemaUtil.getTableName(schemaName, tableName) , columnToDrop.getFamilyName().getString(), columnToDrop.getName().getString(), result.getMutationTime(), seqNum);
-                        }
+                    if (tableColumnsToDrop.size() > 0 && indexesToDrop.isEmpty()) {
+                        connection.removeColumn(tenantId, SchemaUtil.getTableName(schemaName, tableName) , tableColumnsToDrop, result.getMutationTime(), seqNum);
                     }
                     // If we have a VIEW, then only delete the metadata, and leave the table data alone
                     if (table.getType() != PTableType.VIEW) {

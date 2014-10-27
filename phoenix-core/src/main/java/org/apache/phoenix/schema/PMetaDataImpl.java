@@ -365,38 +365,41 @@ public class PMetaDataImpl implements PMetaData {
     }
     
     @Override
-    public PMetaData removeColumn(PName tenantId, String tableName, String familyName, String columnName, long tableTimeStamp, long tableSeqNum) throws SQLException {
+    public PMetaData removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp, long tableSeqNum) throws SQLException {
         PTableRef tableRef = metaData.get(new PTableKey(tenantId, tableName));
         if (tableRef == null) {
             return this;
         }
         PTable table = tableRef.table;
         PTableCache tables = metaData.clone();
-        PColumn column;
-        if (familyName == null) {
-            column = table.getPKColumn(columnName);
-        } else {
-            column = table.getColumnFamily(familyName).getColumn(columnName);
+        for (PColumn columnToRemove : columnsToRemove) {
+            PColumn column;
+            String familyName = columnToRemove.getFamilyName().getString();
+            if (familyName == null) {
+                column = table.getPKColumn(columnToRemove.getName().getString());
+            } else {
+                column = table.getColumnFamily(familyName).getColumn(columnToRemove.getName().getString());
+            }
+            int positionOffset = 0;
+            int position = column.getPosition();
+            List<PColumn> oldColumns = table.getColumns();
+            if (table.getBucketNum() != null) {
+                position--;
+                positionOffset = 1;
+                oldColumns = oldColumns.subList(positionOffset, oldColumns.size());
+            }
+            List<PColumn> columns = Lists.newArrayListWithExpectedSize(oldColumns.size() - 1);
+            columns.addAll(oldColumns.subList(0, position));
+            // Update position of columns that follow removed column
+            for (int i = position+1; i < oldColumns.size(); i++) {
+                PColumn oldColumn = oldColumns.get(i);
+                PColumn newColumn = new PColumnImpl(oldColumn.getName(), oldColumn.getFamilyName(), oldColumn.getDataType(), oldColumn.getMaxLength(), oldColumn.getScale(), oldColumn.isNullable(), i-1+positionOffset, oldColumn.getSortOrder(), oldColumn.getArraySize(), oldColumn.getViewConstant(), oldColumn.isViewReferenced());
+                columns.add(newColumn);
+            }
+            
+            table = PTableImpl.makePTable(table, tableTimeStamp, tableSeqNum, columns);
         }
-        int positionOffset = 0;
-        int position = column.getPosition();
-        List<PColumn> oldColumns = table.getColumns();
-        if (table.getBucketNum() != null) {
-            position--;
-            positionOffset = 1;
-            oldColumns = oldColumns.subList(positionOffset, oldColumns.size());
-        }
-        List<PColumn> columns = Lists.newArrayListWithExpectedSize(oldColumns.size() - 1);
-        columns.addAll(oldColumns.subList(0, position));
-        // Update position of columns that follow removed column
-        for (int i = position+1; i < oldColumns.size(); i++) {
-            PColumn oldColumn = oldColumns.get(i);
-            PColumn newColumn = new PColumnImpl(oldColumn.getName(), oldColumn.getFamilyName(), oldColumn.getDataType(), oldColumn.getMaxLength(), oldColumn.getScale(), oldColumn.isNullable(), i-1+positionOffset, oldColumn.getSortOrder(), oldColumn.getArraySize(), oldColumn.getViewConstant(), oldColumn.isViewReferenced());
-            columns.add(newColumn);
-        }
-        
-        PTable newTable = PTableImpl.makePTable(table, tableTimeStamp, tableSeqNum, columns);
-        tables.put(newTable.getKey(), newTable);
+        tables.put(table.getKey(), table);
         return new PMetaDataImpl(tables);
     }
 

@@ -697,11 +697,11 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
 
     @Override
-    public PMetaData removeColumn(PName tenantId, String tableName, String familyName, String columnName,
-            long tableTimeStamp, long tableSeqNum) throws SQLException {
-        metaData = metaData.removeColumn(tenantId, tableName, familyName, columnName, tableTimeStamp, tableSeqNum);
+    public PMetaData removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp,
+            long tableSeqNum) throws SQLException {
+        metaData = metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum);
         //Cascade through to connectionQueryServices too
-        getQueryServices().removeColumn(tenantId, tableName, familyName, columnName, tableTimeStamp, tableSeqNum);
+        getQueryServices().removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum);
         return metaData;
     }
 
