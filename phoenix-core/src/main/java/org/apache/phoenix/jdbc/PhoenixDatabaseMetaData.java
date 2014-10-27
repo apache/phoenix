@@ -29,7 +29,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.commons.lang.StringEscapeUtils;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -257,6 +256,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String PARENT_TENANT_ID = "PARENT_TENANT_ID";
     public static final byte[] PARENT_TENANT_ID_BYTES = Bytes.toBytes(PARENT_TENANT_ID);
         
+    private static final String TENANT_POS_SHIFT = "TENANT_POS_SHIFT";
+    private static final byte[] TENANT_POS_SHIFT_BYTES = Bytes.toBytes(TENANT_POS_SHIFT);
+    
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;
 
@@ -403,7 +405,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 SQL_DATA_TYPE + "," +
                 SQL_DATETIME_SUB + "," +
                 CHAR_OCTET_LENGTH + "," +
-                "CASE WHEN TENANT_POS_SHIFT THEN ORDINAL_POSITION-1 ELSE ORDINAL_POSITION END AS " + ORDINAL_POSITION + "," +
+                "CASE WHEN " + TENANT_POS_SHIFT + " THEN " + ORDINAL_POSITION + "-1 ELSE " + ORDINAL_POSITION + " END AS " + ORDINAL_POSITION + "," +
                 "CASE " + NULLABLE + " WHEN " + DatabaseMetaData.attributeNoNulls +  " THEN '" + Boolean.FALSE.toString() + "' WHEN " + DatabaseMetaData.attributeNullable + " THEN '" + Boolean.TRUE.toString() + "' END AS " + IS_NULLABLE + "," +
                 SCOPE_CATALOG + "," +
                 SCOPE_SCHEMA + "," +
@@ -415,8 +417,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 DATA_TYPE + " " + TYPE_ID + "," +// raw type id for potential internal consumption
                 VIEW_CONSTANT + "," +
                 MULTI_TENANT + "," +
-                "CASE WHEN TENANT_POS_SHIFT THEN KEY_SEQ-1 ELSE KEY_SEQ END AS " + KEY_SEQ +
-                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS + "(TENANT_POS_SHIFT BOOLEAN)");
+                "CASE WHEN " + TENANT_POS_SHIFT + " THEN " + KEY_SEQ + "-1 ELSE " + KEY_SEQ + " END AS " + KEY_SEQ +
+                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS + "(" + TENANT_POS_SHIFT + " BOOLEAN)");
         StringBuilder where = new StringBuilder();
         addTenantIdFilter(where, catalog);
         if (schemaPattern != null) {
@@ -521,23 +523,25 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 tuple = super.next();
             }
 
-            if (tuple != null && inMultiTenantTable && !tenantColumnSkipped
-                    && new Long(1L).equals(getColumn(tuple, keySeqIndex))) {
-                tenantColumnSkipped = true;
-                // skip tenant id primary key column
-                return next();
+            if (tuple != null && inMultiTenantTable && !tenantColumnSkipped) {
+                Object value = getColumn(tuple, keySeqIndex);
+                if (value != null && ((Number)value).longValue() == 1L) {
+                    tenantColumnSkipped = true;
+                    // skip tenant id primary key column
+                    return next();
+                }
             }
 
             if (tuple != null && tenantColumnSkipped) {
                 ResultTuple resultTuple = (ResultTuple)tuple;
-                List<Cell> cells = resultTuple.getResult().listCells();
-                KeyValue kv = new KeyValue(resultTuple.getResult().getRow(), QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                        Bytes.toBytes("TENANT_POS_SHIFT"), PDataType.TRUE_BYTES);
-                List<Cell> newCells = Lists.newArrayListWithCapacity(cells.size() + 1);
+                List<KeyValue> cells = resultTuple.getResult().list();
+                KeyValue kv = new KeyValue(resultTuple.getResult().getRow(), TABLE_FAMILY_BYTES,
+                        TENANT_POS_SHIFT_BYTES, PDataType.TRUE_BYTES);
+                List<KeyValue> newCells = Lists.newArrayListWithCapacity(cells.size() + 1);
                 newCells.addAll(cells);
                 newCells.add(kv);
                 Collections.sort(newCells, KeyValue.COMPARATOR);
-                resultTuple.setResult(Result.create(newCells));
+                resultTuple.setResult(new Result(newCells));
             }
 
             return tuple;
