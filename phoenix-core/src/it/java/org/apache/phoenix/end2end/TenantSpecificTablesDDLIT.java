@@ -22,6 +22,8 @@ import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_DROP_PK;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MODIFY_VIEW_PK;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_UNDEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
@@ -554,21 +556,22 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             // make sure tenants see parent table's columns and their own
             rs = meta.getColumns(null, null, StringUtil.escapeLike(TENANT_TABLE_NAME) + "%", null);
             assertTrue(rs.next());
-            assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "user");
+            assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "user", 1);
             assertTrue(rs.next());
             // (tenant_id column is not visible in tenant-specific connection)
-            assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "tenant_type_id");
+            assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "tenant_type_id", 2);
+            assertEquals(1, rs.getInt(KEY_SEQ));
             assertTrue(rs.next());
-            assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "id");
+            assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "id", 3);
             assertTrue(rs.next());
-            assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "tenant_col");
+            assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "tenant_col", 4);
             assertTrue(rs.next());
-            assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "user");
+            assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "user", 1);
             assertTrue(rs.next());
             // (tenant_id column is not visible in tenant-specific connection)
-            assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "id");
+            assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "id", 2);
             assertTrue(rs.next());
-            assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "tenant_col");
+            assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "tenant_col", 3);
             assertFalse(rs.next()); 
         }
         finally {
@@ -586,5 +589,11 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
         assertEquals(schema, rs.getString("TABLE_SCHEM"));
         assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier(column), rs.getString("COLUMN_NAME"));
+    }
+
+    private void assertColumnMetaData(ResultSet rs, String schema, String table, String column, int ordinalPosition)
+            throws SQLException {
+        assertColumnMetaData(rs, schema, table, column);
+        assertEquals(ordinalPosition, rs.getInt(ORDINAL_POSITION));
     }
 }
