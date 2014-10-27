@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -536,14 +537,14 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
             if (tuple != null && tenantColumnSkipped) {
                 ResultTuple resultTuple = (ResultTuple)tuple;
-                List<KeyValue> cells = resultTuple.getResult().list();
+                List<Cell> cells = resultTuple.getResult().listCells();
                 KeyValue kv = new KeyValue(resultTuple.getResult().getRow(), TABLE_FAMILY_BYTES,
                         TENANT_POS_SHIFT_BYTES, PDataType.TRUE_BYTES);
-                List<KeyValue> newCells = Lists.newArrayListWithCapacity(cells.size() + 1);
+                List<Cell> newCells = Lists.newArrayListWithCapacity(cells.size() + 1);
                 newCells.addAll(cells);
                 newCells.add(kv);
                 Collections.sort(newCells, KeyValue.COMPARATOR);
-                resultTuple.setResult(new Result(newCells));
+                resultTuple.setResult(Result.create(newCells));
             }
 
             return tuple;
