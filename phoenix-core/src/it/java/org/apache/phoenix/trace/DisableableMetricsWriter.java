@@ -17,31 +17,32 @@
  */
 package org.apache.phoenix.trace;
 
-import java.sql.SQLException;
-import java.util.concurrent.atomic.AtomicBoolean;
-
+import org.apache.commons.configuration.SubsetConfiguration;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.phoenix.metrics.MetricsWriter;
-import org.apache.phoenix.metrics.PhoenixMetricsRecord;
+import org.apache.hadoop.metrics2.MetricsRecord;
+import org.apache.hadoop.metrics2.MetricsSink;
+
+import java.sql.SQLException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  *
  */
-public class DisableableMetricsWriter implements MetricsWriter {
+public class DisableableMetricsWriter implements MetricsSink {
 
     private static final Log LOG = LogFactory.getLog(DisableableMetricsWriter.class);
-    private PhoenixTableMetricsWriter writer;
+    private PhoenixMetricsSink writer;
     private AtomicBoolean disabled = new AtomicBoolean(false);
 
-    public DisableableMetricsWriter(PhoenixTableMetricsWriter writer) {
+    public DisableableMetricsWriter(PhoenixMetricsSink writer) {
         this.writer = writer;
     }
 
     @Override
-    public void initialize() {
+    public void init(SubsetConfiguration config) {
         if (this.disabled.get()) return;
-        writer.initialize();
+        writer.init(config);
     }
 
     @Override
@@ -55,9 +56,9 @@ public class DisableableMetricsWriter implements MetricsWriter {
     }
 
     @Override
-    public void addMetrics(PhoenixMetricsRecord record) {
+    public void putMetrics(MetricsRecord record) {
         if (this.disabled.get()) return;
-        writer.addMetrics(record);
+        writer.putMetrics(record);
     }
 
     public void disable() {
@@ -77,7 +78,7 @@ public class DisableableMetricsWriter implements MetricsWriter {
         }
     }
 
-    public PhoenixTableMetricsWriter getDelegate() {
+    public PhoenixMetricsSink getDelegate() {
         return this.writer;
     }
 }

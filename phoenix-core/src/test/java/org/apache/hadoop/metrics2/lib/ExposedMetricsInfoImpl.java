@@ -15,24 +15,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.trace;
+package org.apache.hadoop.metrics2.lib;
 
-import org.apache.hadoop.metrics2.MetricsInfo;
-import org.apache.hadoop.metrics2.MetricsTag;
+import org.apache.hadoop.metrics2.lib.MetricsInfoImpl;
 
 /**
- * Simple Tag implementation for testing
+ * Helper class to expose access to the {@link org.apache.hadoop.metrics2.lib.MetricsInfoImpl}
  */
-public class PhoenixTagImpl extends MetricsTag {
+public class ExposedMetricsInfoImpl extends MetricsInfoImpl {
 
-    private final String name;
-    private final String description;
-    private final String value;
-
-    public PhoenixTagImpl(String name, String description, String value) {
-        super(new MetricsInfoImpl(name, description), value);
-        this.name = name;
-        this.description = description;
-        this.value = value;
+    /**
+     * @param name
+     * @param description
+     */
+    public ExposedMetricsInfoImpl(String name, String description) {
+        super(name, description);
     }
 }

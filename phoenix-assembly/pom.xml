@@ -138,14 +138,6 @@
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-hadoop-compat</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-hadoop2-compat</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-flume</artifactId>
     </dependency>
         <dependency>

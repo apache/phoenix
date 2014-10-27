@@ -17,9 +17,21 @@
  */
 package org.apache.phoenix.trace;
 
-import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import com.google.common.collect.ImmutableMap;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.metrics2.MetricsSource;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
+import org.apache.phoenix.metrics.Metrics;
+import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.trace.TraceReader.SpanInfo;
+import org.apache.phoenix.trace.TraceReader.TraceHolder;
+import org.cloudera.htrace.*;
+import org.junit.After;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -29,34 +41,13 @@ import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.end2end.HBaseManagedTimeTest;
-import org.apache.phoenix.metrics.Metrics;
-import org.apache.phoenix.metrics.TracingTestCompat;
-import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.trace.Hadoop1TracingTestEnabler.Hadoop1Disabled;
-import org.apache.phoenix.trace.TraceReader.SpanInfo;
-import org.apache.phoenix.trace.TraceReader.TraceHolder;
-import org.cloudera.htrace.Sampler;
-import org.cloudera.htrace.Span;
-import org.cloudera.htrace.SpanReceiver;
-import org.cloudera.htrace.Trace;
-import org.cloudera.htrace.TraceScope;
-import org.junit.After;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
-import org.junit.runner.RunWith;
-
-import com.google.common.collect.ImmutableMap;
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Test that the logging sink stores the expected metrics/stats
  */
-@RunWith(Hadoop1TracingTestEnabler.class)
-@Hadoop1Disabled("tracing")
 @Category(HBaseManagedTimeTest.class)
 public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
@@ -69,15 +60,12 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
     @BeforeClass
     public static void setupMetrics() throws Exception {
-        if (shouldEarlyExitForHadoop1Test()) {
-            return;
-        }
-        PhoenixTableMetricsWriter pWriter = new PhoenixTableMetricsWriter();
+        PhoenixMetricsSink pWriter = new PhoenixMetricsSink();
         Connection conn = getConnectionWithoutTracing();
         pWriter.initForTesting(conn);
         sink = new DisableableMetricsWriter(pWriter);
 
-        TracingTestCompat.registerSink(sink);
+        TracingTestUtil.registerSink(sink);
     }
 
     @After
@@ -112,10 +100,10 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     @Test
     public void testWriteSpans() throws Exception {
         // get a receiver for the spans
-        SpanReceiver receiver = TracingCompat.newTraceMetricSource();
+        SpanReceiver receiver = new TraceMetricSource();
         // which also needs to a source for the metrics system
-        Metrics.getManager().registerSource("testWriteSpans-source", "source for testWriteSpans",
-            receiver);
+        Metrics.initialize().register("testWriteSpans-source", "source for testWriteSpans",
+                (MetricsSource) receiver);
 
         // watch our sink so we know when commits happen
         CountDownLatch latch = new CountDownLatch(1);
@@ -128,7 +116,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         // add a child with some annotations
         Span child = span.child("child 1");
         child.addTimelineAnnotation("timeline annotation");
-        TracingCompat.addAnnotation(child, "test annotation", 10);
+        TracingUtils.addAnnotation(child, "test annotation", 10);
         child.stop();
 
         // sleep a little bit to get some time difference
@@ -230,10 +218,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
                 if (traceInfo.contains(QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME)) {
                     return false;
                 }
-                if (traceInfo.contains("Completing index")) {
-                    return true;
-                }
-                return false;
+                return traceInfo.contains("Completing index");
             }
         });
 

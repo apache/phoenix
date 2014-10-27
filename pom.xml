@@ -24,12 +24,9 @@
 
   <modules>
     <module>phoenix-core</module>
-    <module>phoenix-hadoop-compat</module>
     <module>phoenix-flume</module>
     <module>phoenix-pig</module>
     <module>phoenix-assembly</module>
-    <!--Temporary inclusion - to be removed in next patch, for ease of review -->
-    <module>phoenix-hadoop2-compat</module>
   </modules>
 
   <repositories>
@@ -410,36 +407,12 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hadoop-compat</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hadoop-compat</artifactId>
-        <version>${project.version}</version>
-        <classifier>tests</classifier>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hadoop2-compat</artifactId>
-        <version>${project.version}</version>
-        <classifier>tests</classifier>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-flume</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-pig</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hadoop2-compat</artifactId>
         <version>${project.version}</version>
       </dependency>
 

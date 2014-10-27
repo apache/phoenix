@@ -40,7 +40,7 @@ import com.google.common.base.Joiner;
 import com.google.common.primitives.Longs;
 
 /**
- * Read the traces written to phoenix tables by the {@link PhoenixTableMetricsWriter}.
+ * Read the traces written to phoenix tables by the {@link PhoenixMetricsSink}.
  */
 public class TraceReader {
 
@@ -54,8 +54,8 @@ public class TraceReader {
                 comma.join(MetricInfo.TRACE.columnName, MetricInfo.PARENT.columnName,
                     MetricInfo.SPAN.columnName, MetricInfo.DESCRIPTION.columnName,
                     MetricInfo.START.columnName, MetricInfo.END.columnName,
-                    MetricInfo.HOSTNAME.columnName, PhoenixTableMetricsWriter.TAG_COUNT,
-                    PhoenixTableMetricsWriter.ANNOTATION_COUNT);
+                    MetricInfo.HOSTNAME.columnName, PhoenixMetricsSink.TAG_COUNT,
+                        PhoenixMetricsSink.ANNOTATION_COUNT);
     }
 
     private Connection conn;
@@ -181,13 +181,13 @@ public class TraceReader {
     private Collection<? extends String> getTags(long traceid, long parent, long span, int count)
             throws SQLException {
         return getDynamicCountColumns(traceid, parent, span, count,
-            PhoenixTableMetricsWriter.TAG_FAMILY, MetricInfo.TAG.columnName);
+                PhoenixMetricsSink.TAG_FAMILY, MetricInfo.TAG.columnName);
     }
 
     private Collection<? extends String> getAnnotations(long traceid, long parent, long span,
             int count) throws SQLException {
         return getDynamicCountColumns(traceid, parent, span, count,
-            PhoenixTableMetricsWriter.ANNOTATION_FAMILY, MetricInfo.ANNOTATION.columnName);
+                PhoenixMetricsSink.ANNOTATION_FAMILY, MetricInfo.ANNOTATION.columnName);
     }
 
     private Collection<? extends String> getDynamicCountColumns(long traceid, long parent,
@@ -199,7 +199,7 @@ public class TraceReader {
         // build the column strings, family.column<index>
         String[] parts = new String[count];
         for (int i = 0; i < count; i++) {
-            parts[i] = PhoenixTableMetricsWriter.getDynamicColumnName(family, columnName, i);
+            parts[i] = PhoenixMetricsSink.getDynamicColumnName(family, columnName, i);
         }
         // join the columns together
         String columns = comma.join(parts);

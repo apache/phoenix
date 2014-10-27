@@ -36,8 +36,7 @@ import org.apache.phoenix.call.CallWrapper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.trace.TracingCompat;
-import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.trace.TraceMetricSource;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
@@ -313,7 +312,7 @@ public class Tracing {
     public synchronized static void addTraceMetricsSource() {
         try {
             if (!initialized) {
-                Trace.addReceiver(TracingCompat.newTraceMetricSource());
+                Trace.addReceiver(new TraceMetricSource());
             }
         } catch (RuntimeException e) {
             LOG.warn("Tracing will outputs will not be written to any metrics sink! No "
