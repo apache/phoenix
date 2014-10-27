@@ -56,7 +56,7 @@ import com.google.common.collect.Lists;
  */
 public interface MetaDataProtocol extends CoprocessorProtocol {
     public static final int PHOENIX_MAJOR_VERSION = 3;
-    public static final int PHOENIX_MINOR_VERSION = 1;
+    public static final int PHOENIX_MINOR_VERSION = 2;
     public static final int PHOENIX_PATCH_NUMBER = 0;
     public static final int PHOENIX_VERSION = 
             VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER);
