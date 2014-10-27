@@ -26,8 +26,12 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExpressionProjector;
@@ -56,6 +60,7 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
@@ -400,7 +405,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 SQL_DATA_TYPE + "," +
                 SQL_DATETIME_SUB + "," +
                 CHAR_OCTET_LENGTH + "," +
-                ORDINAL_POSITION + "," +
+                "CASE WHEN TENANT_POS_SHIFT THEN ORDINAL_POSITION-1 ELSE ORDINAL_POSITION END AS " + ORDINAL_POSITION + "," +
                 "CASE " + NULLABLE + " WHEN " + DatabaseMetaData.attributeNoNulls +  " THEN '" + Boolean.FALSE.toString() + "' WHEN " + DatabaseMetaData.attributeNullable + " THEN '" + Boolean.TRUE.toString() + "' END AS " + IS_NULLABLE + "," +
                 SCOPE_CATALOG + "," +
                 SCOPE_SCHEMA + "," +
@@ -412,8 +417,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 DATA_TYPE + " " + TYPE_ID + "," +// raw type id for potential internal consumption
                 VIEW_CONSTANT + "," +
                 MULTI_TENANT + "," +
-                KEY_SEQ +
-                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS);
+                "CASE WHEN TENANT_POS_SHIFT THEN KEY_SEQ-1 ELSE KEY_SEQ END AS " + KEY_SEQ +
+                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS + "(TENANT_POS_SHIFT BOOLEAN)");
         StringBuilder where = new StringBuilder();
         addTenantIdFilter(where, catalog);
         if (schemaPattern != null) {
@@ -458,7 +463,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         } else {
             buf.append(" where " + where);
         }
-        buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + "," + ORDINAL_POSITION);
+        buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + "," + SYSTEM_CATALOG_ALIAS + "." + ORDINAL_POSITION);
 
         Statement stmt;
         if (isTenantSpecificConnection) {
@@ -494,6 +499,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         private final int multiTenantIndex;
         private final int keySeqIndex;
         private boolean inMultiTenantTable;
+        private boolean tenantColumnSkipped;
 
         private TenantColumnFilteringIterator(ResultIterator delegate, RowProjector rowProjector) throws SQLException {
             super(delegate);
@@ -512,13 +518,28 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                     && getColumn(tuple, columnFamilyIndex) == null && getColumn(tuple, columnNameIndex) == null) {
                 // new table, check if it is multitenant
                 inMultiTenantTable = getColumn(tuple, multiTenantIndex) == Boolean.TRUE;
+                tenantColumnSkipped = false;
                 // skip row representing table
                 tuple = super.next();
             }
 
-            if (tuple != null && inMultiTenantTable && new Short((short)1).equals(getColumn(tuple, keySeqIndex))) {
+            if (tuple != null && inMultiTenantTable && !tenantColumnSkipped
+                    && new Long(1L).equals(getColumn(tuple, keySeqIndex))) {
+                tenantColumnSkipped = true;
                 // skip tenant id primary key column
                 return next();
+            }
+
+            if (tuple != null && tenantColumnSkipped) {
+                ResultTuple resultTuple = (ResultTuple)tuple;
+                List<Cell> cells = resultTuple.getResult().listCells();
+                KeyValue kv = new KeyValue(resultTuple.getResult().getRow(), QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                        Bytes.toBytes("TENANT_POS_SHIFT"), PDataType.TRUE_BYTES);
+                List<Cell> newCells = Lists.newArrayListWithCapacity(cells.size() + 1);
+                newCells.addAll(cells);
+                newCells.add(kv);
+                Collections.sort(newCells, KeyValue.COMPARATOR);
+                resultTuple.setResult(Result.create(newCells));
             }
 
             return tuple;
