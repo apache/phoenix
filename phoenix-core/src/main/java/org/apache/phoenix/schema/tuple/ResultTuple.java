@@ -65,7 +65,7 @@ public class ResultTuple extends BaseTuple {
     public String toString() {
       StringBuilder sb = new StringBuilder();
       sb.append("keyvalues=");
-      if(this.result.isEmpty()) {
+      if(this.result == null || this.result.isEmpty()) {
         sb.append("NONE");
         return sb.toString();
       }
