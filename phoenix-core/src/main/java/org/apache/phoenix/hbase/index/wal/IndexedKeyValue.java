@@ -34,7 +34,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 public class IndexedKeyValue extends KeyValue {
-    public static final byte [] COLUMN_FAMILY = Bytes.toBytes("INDEXEDKEYVALUE_FAKED_FAMILY");
+    public static final byte [] COLUMN_QUALIFIER = Bytes.toBytes("INDEXEDKEYVALUE_FAKED_COLUMN");
   
     private static int calcHashCode(ImmutableBytesPtr indexTableName, Mutation mutation) {
         final int prime = 31;
@@ -71,9 +71,51 @@ public class IndexedKeyValue extends KeyValue {
      */
     @Override
     public byte [] getFamily() {
-      return COLUMN_FAMILY;
+      return WALEdit.METAFAMILY;
     }
     
+    @Override
+    public byte[] getFamilyArray() {
+        return WALEdit.METAFAMILY;
+    }
+
+    /**
+     * @return Family offset
+     */
+    @Override
+    public int getFamilyOffset() {
+        return 0;
+    }
+
+    /**
+     * @return Family length
+     */
+    @Override
+    public byte getFamilyLength() {
+        return (byte) WALEdit.METAFAMILY.length;
+    }
+
+    @Override
+    public byte[] getQualifierArray() {
+        return COLUMN_QUALIFIER;
+    }
+
+    /**
+     * @return Qualifier offset
+     */
+    @Override
+    public int getQualifierOffset() {
+        return 0;
+    }
+
+    /**
+     * @return Qualifier length
+     */
+    @Override
+    public int getQualifierLength() {
+        return COLUMN_QUALIFIER.length;
+    }
+
     /**
      * This is a KeyValue that shouldn't actually be replayed/replicated, so we always mark it as 
      * an {@link WALEdit#METAFAMILY} so it isn't replayed/replicated via the normal replay mechanism
