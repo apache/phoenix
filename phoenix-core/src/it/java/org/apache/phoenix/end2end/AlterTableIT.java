@@ -892,4 +892,24 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
         pstmt2.close();
         conn1.close();
     }
-}
+    
+    @Test
+    public void testAddColumnsUsingNewConnection() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String ddl = "CREATE TABLE T (\n"
+                +"ID1 VARCHAR(15) NOT NULL,\n"
+                +"ID2 VARCHAR(15) NOT NULL,\n"
+                +"CREATED_DATE DATE,\n"
+                +"CREATION_TIME BIGINT,\n"
+                +"LAST_USED DATE,\n"
+                +"CONSTRAINT PK PRIMARY KEY (ID1, ID2))";
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        conn1.createStatement().execute(ddl);
+        ddl = "ALTER TABLE T ADD STRING VARCHAR, STRING_DATA_TYPES VARCHAR";
+        conn1.createStatement().execute(ddl);
+        ddl = "ALTER TABLE T DROP COLUMN STRING, STRING_DATA_TYPES";
+        conn1.createStatement().execute(ddl);
+        ddl = "ALTER TABLE T ADD STRING_ARRAY1 VARCHAR[]";
+        conn1.createStatement().execute(ddl);
+        conn1.close();
+    }}
