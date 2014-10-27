@@ -49,7 +49,7 @@ def findFileInPathWithoutRecursion(pattern, path):
     return ""
 
 def setPath():
- PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client*.jar"
+ PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client.jar"
  PHOENIX_TESTS_JAR_PATTERN = "phoenix-*-tests*.jar"
  global current_dir
  current_dir = os.path.dirname(os.path.abspath(__file__))
