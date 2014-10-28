@@ -50,7 +50,7 @@ import com.google.common.collect.Maps;
 @Category(HBaseManagedTimeTest.class)
 public class ReverseScanIT extends BaseHBaseManagedTimeIT {
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

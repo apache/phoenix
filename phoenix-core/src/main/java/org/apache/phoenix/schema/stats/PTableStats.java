@@ -37,6 +37,11 @@ public interface PTableStats {
         public int getEstimatedSize() {
             return 0;
         }
+
+        @Override
+        public long getTimestamp() {
+            return StatisticsCollector.NO_TIMESTAMP;
+        }
     };
 
     /**
@@ -47,4 +52,6 @@ public interface PTableStats {
     SortedMap<byte[], GuidePostsInfo> getGuidePosts();
 
     int getEstimatedSize();
+    
+    long getTimestamp();
 }

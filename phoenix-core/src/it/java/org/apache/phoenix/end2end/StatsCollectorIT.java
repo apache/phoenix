@@ -1,6 +1,8 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.getAllSplits;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -10,9 +12,15 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -24,7 +32,8 @@ import com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
-    
+    private static final String STATS_TEST_TABLE_NAME = "S";
+        
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
@@ -205,4 +214,48 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         return stmt;
     }
 
+    private void compactTable(Connection conn) throws IOException, InterruptedException, SQLException {
+        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        HBaseAdmin admin = services.getAdmin();
+        try {
+            admin.flush(STATS_TEST_TABLE_NAME);
+            admin.majorCompact(STATS_TEST_TABLE_NAME);
+            Thread.sleep(10000); // FIXME: how do we know when compaction is done?
+        } finally {
+            admin.close();
+        }
+        services.clearCache();
+    }
+    
+    @Test
+    public void testCompactUpdatesStats() throws Exception {
+        int nRows = 10;
+        Connection conn;
+        PreparedStatement stmt;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE " + STATS_TEST_TABLE_NAME + "(k CHAR(1) PRIMARY KEY, v INTEGER) " + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
+        stmt = conn.prepareStatement("UPSERT INTO " + STATS_TEST_TABLE_NAME + " VALUES(?,?)");
+        for (int i = 0; i < nRows; i++) {
+            stmt.setString(1, Character.toString((char) ('a' + i)));
+            stmt.setInt(2, i);
+            stmt.executeUpdate();
+        }
+        conn.commit();
+        
+        compactTable(conn);
+        conn = DriverManager.getConnection(getUrl(), props);
+        List<KeyRange>keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
+        assertEquals(nRows+1, keyRanges.size());
+        
+        int nDeletedRows = conn.createStatement().executeUpdate("DELETE FROM " + STATS_TEST_TABLE_NAME + " WHERE V < 5");
+        conn.commit();
+        assertEquals(5, nDeletedRows);
+        
+        compactTable(conn);
+        
+        keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
+        assertEquals(nRows/2+1, keyRanges.size());
+        
+    }
 }

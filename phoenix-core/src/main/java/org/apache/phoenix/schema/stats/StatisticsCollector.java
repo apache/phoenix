@@ -23,8 +23,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
@@ -45,12 +43,15 @@ import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.StoreScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TimeKeeper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -64,31 +65,43 @@ import com.google.common.collect.Maps;
  * board for now.
  */
 public class StatisticsCollector {
+    private static final Logger logger = LoggerFactory.getLogger(StatisticsCollector.class);
+    public static final long NO_TIMESTAMP = -1;
 
     private Map<String, byte[]> minMap = Maps.newHashMap();
     private Map<String, byte[]> maxMap = Maps.newHashMap();
     private long guidepostDepth;
+    private boolean useCurrentTime;
+    private long maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
     private Map<String, Pair<Long,GuidePostsInfo>> guidePostsMap = Maps.newHashMap();
     // Tracks the bytecount per family if it has reached the guidePostsDepth
     private Map<ImmutableBytesPtr, Boolean> familyMap = Maps.newHashMap();
     protected StatisticsWriter statsTable;
-    // Ensures that either analyze or compaction happens at any point of time.
-    private static final Log LOG = LogFactory.getLog(StatisticsCollector.class);
 
     public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp) throws IOException {
         Configuration config = env.getConfiguration();
         HTableInterface statsHTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES));
-        long maxFileSize = statsHTable.getTableDescriptor().getMaxFileSize();
-        if (maxFileSize <= 0) { // HBase brain dead API doesn't give you the "real" max file size if it's not set...
-            maxFileSize = HConstants.DEFAULT_MAX_FILE_SIZE;
+        useCurrentTime = 
+            config.getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
+                    QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
+        int guidepostPerRegion = config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, 0);
+        if (guidepostPerRegion > 0) {
+            long maxFileSize = statsHTable.getTableDescriptor().getMaxFileSize();
+            if (maxFileSize <= 0) { // HBase brain dead API doesn't give you the "real" max file size if it's not set...
+                maxFileSize = HConstants.DEFAULT_MAX_FILE_SIZE;
+            }
+            guidepostDepth = maxFileSize / guidepostPerRegion;
+        } else {
+            guidepostDepth = config.getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                    QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES);
         }
-        guidepostDepth =
-            config.getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
-                    maxFileSize / config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, 
-                                                QueryServicesOptions.DEFAULT_GUIDE_POSTS_PER_REGION));
         // Get the stats table associated with the current table on which the CP is
         // triggered
         this.statsTable = StatisticsWriter.newWriter(statsHTable, tableName, clientTimeStamp);
+    }
+    
+    public long getMaxTimeStamp() {
+        return maxTimeStamp;
     }
     
     public void close() throws IOException {
@@ -99,12 +112,12 @@ public class StatisticsCollector {
         try {
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
             writeStatsToStatsTable(region, true, mutations, TimeKeeper.SYSTEM.getCurrentTime());
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Committing new stats for the region " + region.getRegionInfo());
+            if (logger.isDebugEnabled()) {
+                logger.debug("Committing new stats for the region " + region.getRegionInfo());
             }
             commitStats(mutations);
         } catch (IOException e) {
-            LOG.error(e);
+            logger.error("Unable to commit new stats", e);
         } finally {
             clear();
         }
@@ -116,20 +129,20 @@ public class StatisticsCollector {
             // update the statistics table
             for (ImmutableBytesPtr fam : familyMap.keySet()) {
                 if (delete) {
-                    if(LOG.isDebugEnabled()) {
-                        LOG.debug("Deleting the stats for the region "+region.getRegionInfo());
+                    if(logger.isDebugEnabled()) {
+                        logger.debug("Deleting the stats for the region "+region.getRegionInfo());
                     }
                     statsTable.deleteStats(region.getRegionInfo().getRegionNameAsString(), this, Bytes.toString(fam.copyBytesIfNecessary()),
                             mutations);
                 }
-                if(LOG.isDebugEnabled()) {
-                    LOG.debug("Adding new stats for the region "+region.getRegionInfo());
+                if(logger.isDebugEnabled()) {
+                    logger.debug("Adding new stats for the region "+region.getRegionInfo());
                 }
                 statsTable.addStats((region.getRegionInfo().getRegionNameAsString()), this, Bytes.toString(fam.copyBytesIfNecessary()),
                         mutations);
             }
         } catch (IOException e) {
-            LOG.error("Failed to update statistics table!", e);
+            logger.error("Failed to update statistics table!", e);
             throw e;
         }
     }
@@ -147,7 +160,7 @@ public class StatisticsCollector {
                         mutations);
             }
         } catch (IOException e) {
-            LOG.error("Failed to delete from statistics table!", e);
+            logger.error("Failed to delete from statistics table!", e);
             throw e;
         }
     }
@@ -195,8 +208,8 @@ public class StatisticsCollector {
                 internalScan = new StoreScanner(store, store.getScanInfo(), scan, scanners, scanType,
                         smallestReadPoint, earliestPutTs);
             }
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Compaction scanner created for stats");
+            if (logger.isDebugEnabled()) {
+                logger.debug("Compaction scanner created for stats");
             }
             InternalScanner scanner = getInternalScanner(region, store, internalScan, store.getColumnFamilyName());
             if (scanner != null) {
@@ -212,22 +225,22 @@ public class StatisticsCollector {
             // Create a delete operation on the parent region
             // Then write the new guide posts for individual regions
             List<Mutation> mutations = Lists.newArrayListWithExpectedSize(3);
-            long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
+            long currentTime = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : -1;
             deleteStatsFromStatsTable(region, mutations, currentTime);
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Collecting stats for the daughter region " + l.getRegionInfo());
+            if (logger.isDebugEnabled()) {
+                logger.debug("Collecting stats for the daughter region " + l.getRegionInfo());
             }
             collectStatsForSplitRegions(conf, l, mutations, currentTime);
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Collecting stats for the daughter region " + r.getRegionInfo());
+            if (logger.isDebugEnabled()) {
+                logger.debug("Collecting stats for the daughter region " + r.getRegionInfo());
             }
             collectStatsForSplitRegions(conf, r, mutations, currentTime);
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Committing stats for the daughter regions as part of split " + r.getRegionInfo());
+            if (logger.isDebugEnabled()) {
+                logger.debug("Committing stats for the daughter regions as part of split " + r.getRegionInfo());
             }
             commitStats(mutations);
         } catch (IOException e) {
-            LOG.error("Error while capturing stats after split of region "
+            logger.error("Error while capturing stats after split of region "
                     + region.getRegionInfo().getRegionNameAsString(), e);
         }
     }
@@ -244,13 +257,13 @@ public class StatisticsCollector {
             count = scanRegion(scanner, count);
             writeStatsToStatsTable(daughter, false, mutations, currentTime);
         } catch (IOException e) {
-            LOG.error(e);
+            logger.error("Unable to collects stats during split", e);
             toThrow = e;
         } finally {
                 try {
                     if (scanner != null) scanner.close();
                 } catch (IOException e) {
-                    LOG.error(e);
+                    logger.error("Unable to close scanner after split", e);
                     if (toThrow != null) toThrow = e;
                 } finally {
                     if (toThrow != null) throw toThrow;
@@ -278,6 +291,7 @@ public class StatisticsCollector {
         this.minMap.clear();
         this.guidePostsMap.clear();
         this.familyMap.clear();
+        maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
     }
 
     public void updateStatistic(KeyValue kv) {
@@ -302,6 +316,7 @@ public class StatisticsCollector {
                 maxMap.put(fam, row);
             }
         }
+        maxTimeStamp = Math.max(maxTimeStamp, kv.getTimestamp());
         // TODO : This can be moved to an interface so that we could collect guide posts in different ways
         Pair<Long,GuidePostsInfo> gps = guidePostsMap.get(fam);
         if (gps == null) {
