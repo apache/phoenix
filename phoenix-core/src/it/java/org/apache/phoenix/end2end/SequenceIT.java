@@ -51,7 +51,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 
 @Category(ClientManagedTimeTest.class)
 public class SequenceIT extends BaseClientManagedTimeIT {
@@ -63,11 +62,9 @@ public class SequenceIT extends BaseClientManagedTimeIT {
     @BeforeClass
     @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
-        
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        // Make a small batch size to test multiple calls to reserve sequences
-        props.put(QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB, Long.toString(BATCH_SIZE));
+        Map<String,String> props = getDefaultProps();
         // Must update config before starting server
+        props.put(QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB, Long.toString(BATCH_SIZE));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     

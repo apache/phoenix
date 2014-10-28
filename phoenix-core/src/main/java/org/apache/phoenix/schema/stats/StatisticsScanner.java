@@ -35,7 +35,6 @@ public class StatisticsScanner implements InternalScanner {
 
     public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, HRegion region,
             InternalScanner delegate, byte[] family) {
-        // should there be only one tracker?
         this.tracker = tracker;
         this.stats = stats;
         this.delegate = delegate;

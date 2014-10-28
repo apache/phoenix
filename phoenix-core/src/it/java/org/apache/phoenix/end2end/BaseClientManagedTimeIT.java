@@ -17,15 +17,20 @@
  */
 package org.apache.phoenix.end2end;
 
+import java.util.Map;
+
 import javax.annotation.concurrent.NotThreadSafe;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
+
+import com.google.common.collect.Maps;
 
 /**
  * Base class for tests that manage their own time stamps
@@ -54,9 +59,17 @@ public abstract class BaseClientManagedTimeIT extends BaseTest {
         deletePriorTables(ts - 1, getUrl());    
     }
     
+    public static Map<String,String> getDefaultProps() {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
+        // Must update config before starting server
+        props.put(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, Boolean.FALSE.toString());
+        return props;
+    }
+    
     @BeforeClass
     public static void doSetup() throws Exception {
-        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+        Map<String,String> props = getDefaultProps();
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
     @AfterClass

@@ -55,8 +55,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-import com.google.common.collect.Maps;
-
 @Category(ClientManagedTimeTest.class)
 public class UpsertSelectIT extends BaseClientManagedTimeIT {
 	
@@ -64,7 +62,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
   @BeforeClass
   @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
   public static void doSetup() throws Exception {
-      Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
+      Map<String,String> props = getDefaultProps();
       props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(500));
       props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(64));
 

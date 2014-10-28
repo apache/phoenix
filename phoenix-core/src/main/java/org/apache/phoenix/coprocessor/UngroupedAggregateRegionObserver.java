@@ -72,6 +72,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
@@ -459,9 +460,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         if (!table.getNameAsString().equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)
                 && scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             try {
-                // TODO: for users that manage timestamps themselves, we should provide
-                // a means of specifying/getting this.
-                long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
+                boolean useCurrentTime = 
+                        c.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
+                                QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
+                // Provides a means of clients controlling their timestamps to not use current time
+                // when background tasks are updating stats. Instead we track the max timestamp of
+                // the cells and use that.
+                long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
                 StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table.getNameAsString(), clientTimeStamp);
                 internalScan =
                         stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanners, scanType, earliestPutTs, s);
@@ -485,9 +490,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         if (!table.getNameAsString().equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
             StatisticsCollector stats = null;
             try {
-                // TODO: for users that manage timestamps themselves, we should provide
-                // a means of specifying/getting this.
-                long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
+                boolean useCurrentTime = 
+                        e.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
+                                QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
+                // Provides a means of clients controlling their timestamps to not use current time
+                // when background tasks are updating stats. Instead we track the max timestamp of
+                // the cells and use that.
+                long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
                 stats = new StatisticsCollector(e.getEnvironment(), table.getNameAsString(), clientTimeStamp);
                 stats.collectStatsDuringSplit(e.getEnvironment().getConfiguration(), l, r, region);
             } catch (IOException ioe) { 

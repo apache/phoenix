@@ -62,7 +62,9 @@ public class StatisticsWriter implements Closeable {
             clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
         }
         StatisticsWriter statsTable = new StatisticsWriter(hTable, tableName, clientTimeStamp);
-        statsTable.commitLastStatsUpdatedTime();
+        if (clientTimeStamp != StatisticsCollector.NO_TIMESTAMP) { // Otherwise we do this later as we don't know the ts yet
+            statsTable.commitLastStatsUpdatedTime();
+        }
         return statsTable;
     }
 
@@ -101,26 +103,31 @@ public class StatisticsWriter implements Closeable {
      */
     public void addStats(String regionName, StatisticsCollector tracker, String fam, List<Mutation> mutations) throws IOException {
         if (tracker == null) { return; }
-
+        boolean useMaxTimeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP;
+        long timeStamp = clientTimeStamp;
+        if (useMaxTimeStamp) { // When using max timestamp, we write the update time later because we only know the ts now
+            timeStamp = tracker.getMaxTimeStamp();
+            mutations.add(getLastStatsUpdatedTimePut(timeStamp));
+        }
         byte[] prefix = StatisticsUtil.getRowKey(tableName, PDataType.VARCHAR.toBytes(fam),
                 PDataType.VARCHAR.toBytes(regionName));
         Put put = new Put(prefix);
         GuidePostsInfo gp = tracker.getGuidePosts(fam);
         if (gp != null) {
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_COUNT_BYTES,
-                    clientTimeStamp, PDataType.LONG.toBytes((gp.getGuidePosts().size())));
+                    timeStamp, PDataType.LONG.toBytes((gp.getGuidePosts().size())));
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES,
-                    clientTimeStamp, PDataType.VARBINARY.toBytes(gp.toBytes()));
+                    timeStamp, PDataType.VARBINARY.toBytes(gp.toBytes()));
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
-                    clientTimeStamp, PDataType.LONG.toBytes(gp.getByteCount()));
+                    timeStamp, PDataType.LONG.toBytes(gp.getByteCount()));
         }
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.MIN_KEY_BYTES,
-                clientTimeStamp, PDataType.VARBINARY.toBytes(tracker.getMinKey(fam)));
+                timeStamp, PDataType.VARBINARY.toBytes(tracker.getMinKey(fam)));
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.MAX_KEY_BYTES,
-                clientTimeStamp, PDataType.VARBINARY.toBytes(tracker.getMaxKey(fam)));
+                timeStamp, PDataType.VARBINARY.toBytes(tracker.getMaxKey(fam)));
         // Add our empty column value so queries behave correctly
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
-                clientTimeStamp, ByteUtil.EMPTY_BYTE_ARRAY);
+                timeStamp, ByteUtil.EMPTY_BYTE_ARRAY);
         mutations.add(put);
     }
 
@@ -153,21 +160,27 @@ public class StatisticsWriter implements Closeable {
         }
     }
 
-    private void commitLastStatsUpdatedTime() throws IOException {
-        // Always use wallclock time for this, as it's a mechanism to prevent
-        // stats from being collected too often.
+    private Put getLastStatsUpdatedTimePut(long timeStamp) {
         long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
         byte[] prefix = tableName;
         Put put = new Put(prefix);
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES, clientTimeStamp,
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES, timeStamp,
                 PDataType.DATE.toBytes(new Date(currentTime)));
+        return put;
+    }
+
+    private void commitLastStatsUpdatedTime() throws IOException {
+        // Always use wallclock time for this, as it's a mechanism to prevent
+        // stats from being collected too often.
+        Put put = getLastStatsUpdatedTimePut(clientTimeStamp);
         statisticsTable.put(put);
     }
     
     public void deleteStats(String regionName, StatisticsCollector tracker, String fam, List<Mutation> mutations)
             throws IOException {
+        long timeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP ? tracker.getMaxTimeStamp() : clientTimeStamp;
         byte[] prefix = StatisticsUtil.getRowKey(tableName, PDataType.VARCHAR.toBytes(fam),
                 PDataType.VARCHAR.toBytes(regionName));
-        mutations.add(new Delete(prefix, clientTimeStamp - 1));
+        mutations.add(new Delete(prefix, timeStamp - 1));
     }
 }

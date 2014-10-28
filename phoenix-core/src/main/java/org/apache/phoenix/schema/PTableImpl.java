@@ -886,7 +886,7 @@ public class PTableImpl implements PTable {
             GuidePostsInfo info = new GuidePostsInfo(pTableStatsProto.getGuidePostsByteCount(), value);
             tableGuidePosts.put(pTableStatsProto.getKey().toByteArray(), info);
       }
-      PTableStats stats = new PTableStatsImpl(tableGuidePosts);
+      PTableStats stats = new PTableStatsImpl(tableGuidePosts, timeStamp);
 
       PName dataTableName = null;
       if (table.hasDataTableNameBytes()) {

@@ -72,6 +72,7 @@ public class StatisticsUtil {
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
         ResultScanner scanner = statsHTable.getScanner(s);
         Result result = null;
+        long timeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
         TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
         while ((result = scanner.next()) != null) {
             CellScanner cellScanner = result.cellScanner();
@@ -88,10 +89,13 @@ public class StatisticsUtil {
                 if (oldInfo != null) {
                     newInfo.combine(oldInfo);
                 }
+                if (current.getTimestamp() > timeStamp) {
+                    timeStamp = current.getTimestamp();
+                }
             }
         }
         if (!guidePostsPerCf.isEmpty()) {
-            return new PTableStatsImpl(guidePostsPerCf);
+            return new PTableStatsImpl(guidePostsPerCf, timeStamp);
         }
         return PTableStats.EMPTY_STATS;
     }
