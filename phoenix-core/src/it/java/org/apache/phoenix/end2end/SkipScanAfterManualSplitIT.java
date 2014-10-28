@@ -128,7 +128,7 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
             assertEquals(nRegions, nInitialRegions);
             
             int nRows = 2;
-            String query = "SELECT /*+ NO_INTRA_REGION_PARALLELIZATION */ count(*) FROM S WHERE a IN ('tl','jt',' a',' b',' c',' d')";
+            String query = "SELECT count(*) FROM S WHERE a IN ('tl','jt',' a',' b',' c',' d')";
             ResultSet rs1 = conn.createStatement().executeQuery(query);
             assertTrue(rs1.next());
             nRegions = services.getAllTableRegions(TABLE_NAME_BYTES).size();

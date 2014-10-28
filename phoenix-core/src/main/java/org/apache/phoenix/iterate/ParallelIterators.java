@@ -134,7 +134,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
     
     public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory)
             throws SQLException {
-        super(plan.getContext(), plan.getTableRef(), plan.getGroupBy());
+        super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint());
         this.plan = plan;
         StatementContext context = plan.getContext();
         TableRef tableRef = plan.getTableRef();
