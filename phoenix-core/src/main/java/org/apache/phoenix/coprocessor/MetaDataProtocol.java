@@ -266,7 +266,7 @@ public interface MetaDataProtocol extends CoprocessorProtocol {
      */
     void clearCache();
     
-    void incrementTableTimeStamp(byte[] tenantId, byte[] schema, byte[] tableName, long clientTimestamp)
+    void clearTableFromCache(byte[] tenantId, byte[] schema, byte[] tableName, long clientTimestamp)
             throws IOException;
     
     /**

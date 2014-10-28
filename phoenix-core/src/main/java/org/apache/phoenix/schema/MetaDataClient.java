@@ -621,7 +621,7 @@ public class MetaDataClient {
 
         // We need to update the stats table so that client will pull the new one with
         // the updated stats.
-        connection.getQueryServices().incrementTableTimeStamp(tenantIdBytes,
+        connection.getQueryServices().clearTableFromCache(tenantIdBytes,
                 Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())),
                 Bytes.toBytes(SchemaUtil.getTableNameFromFullName(physicalName.getString())), clientTimeStamp);
         return rowCount;

@@ -36,6 +36,7 @@ import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
@@ -132,6 +133,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
         
         Scan scan = context.getScan();
+        
+        if (statement.getHint().hasHint(Hint.SMALL)) {
+            ScanUtil.setSmall(scan, true);
+        }
+        
         // Set producer on scan so HBase server does round robin processing
         //setProducer(scan);
         // Set the time range on the scan so we don't get back rows newer than when the statement was compiled

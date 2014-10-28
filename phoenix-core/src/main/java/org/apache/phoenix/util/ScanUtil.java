@@ -59,7 +59,11 @@ import com.google.common.collect.Lists;
 public class ScanUtil {
     public static final int[] SINGLE_COLUMN_SLOT_SPAN = new int[1];
     private static final byte[] ZERO_BYTE_ARRAY = new byte[1024];
-
+    // Don't use constants in Scan as they didn't exist before.
+    // Doing this maintains backward compatibility.
+    private static final String REVERSED_ATTR = "_reversed_";
+    private static final String SMALL_ATTRIB = "_small_";
+    
     private ScanUtil() {
     }
 
@@ -432,10 +436,7 @@ public class ScanUtil {
         return key;
     }
 
-    private static final String REVERSED_ATTR = "_reversed_";
-    
     public static void setReversed(Scan scan) {
-        // TODO: set attribute dynamically here to prevent dependency on newer HBase release
         scan.setAttribute(REVERSED_ATTR, PDataType.TRUE_BYTES);
     }
 
@@ -537,5 +538,9 @@ public class ScanUtil {
             }
         }
         return tenantId;
+    }
+
+    public static void setSmall(Scan scan, boolean b) {
+        scan.setAttribute(SMALL_ATTRIB, Bytes.toBytes(true));
     }
 }

@@ -49,7 +49,6 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
-import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
@@ -333,7 +332,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     @Override
     public ResultSet getCatalogs() throws SQLException {
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n" +
+        StringBuilder buf = new StringBuilder("select \n" +
                 " DISTINCT " + TENANT_ID + " " + TABLE_CAT +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                 " where " + COLUMN_NAME + " is null" +
@@ -389,7 +388,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     @Override
     public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern)
             throws SQLException {
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n " +
+        StringBuilder buf = new StringBuilder("select \n " +
                 TENANT_ID + " " + TABLE_CAT + "," + // use this for tenant id
                 TABLE_SCHEM + "," +
                 TABLE_NAME + " ," +
@@ -647,7 +646,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         if (unique) { // No unique indexes
             return emptyResultSet;
         }
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n" +
+        StringBuilder buf = new StringBuilder("select \n" +
                 TENANT_ID + " " + TABLE_CAT + ",\n" + // use this column for column family name
                 TABLE_SCHEM + ",\n" +
                 DATA_TABLE_NAME + " " + TABLE_NAME + ",\n" +
@@ -800,7 +799,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         if (table == null || table.length() == 0) {
             return emptyResultSet;
         }
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n" +
+        StringBuilder buf = new StringBuilder("select \n" +
                 TENANT_ID + " " + TABLE_CAT + "," + // use catalog for tenant_id
                 TABLE_SCHEM + "," +
                 TABLE_NAME + " ," +
@@ -874,7 +873,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     @Override
     public ResultSet getSchemas(String catalog, String schemaPattern) throws SQLException {
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n distinct " +
+        StringBuilder buf = new StringBuilder("select distinct \n" +
                 TENANT_ID + " " + TABLE_CATALOG + "," + // no catalog for tables
                 TABLE_SCHEM +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
@@ -899,7 +898,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     @Override
     public ResultSet getSuperTables(String catalog, String schemaPattern, String tableNamePattern) throws SQLException {
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n" +
+        StringBuilder buf = new StringBuilder("select \n" +
                 TENANT_ID + " " + TABLE_CAT + "," + // Use tenantId for catalog
                 TABLE_SCHEM + "," +
                 TABLE_NAME + "," +
@@ -986,7 +985,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     @Override
     public ResultSet getTables(String catalog, String schemaPattern, String tableNamePattern, String[] types)
             throws SQLException {
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n" +
+        StringBuilder buf = new StringBuilder("select \n" +
                 TENANT_ID + " " + TABLE_CAT + "," + // tenant_id is the catalog
                 TABLE_SCHEM + "," +
                 TABLE_NAME + " ," +

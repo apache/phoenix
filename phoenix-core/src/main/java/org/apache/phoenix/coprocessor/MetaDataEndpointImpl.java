@@ -1384,7 +1384,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
     }
     
     @Override
-    public void incrementTableTimeStamp(byte[] tenantId, byte[] schemaName, byte[] tableName, final long clientTimeStamp)
+    public void clearTableFromCache(byte[] tenantId, byte[] schemaName, byte[] tableName, final long clientTimeStamp)
             throws IOException {
         try {
             byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
