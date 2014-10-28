@@ -55,11 +55,6 @@ public class HintNode {
          */
         SKIP_SCAN_HASH_JOIN,
         /**
-         * Prevents the spawning of multiple threads during
-         * query processing.
-         */
-        NO_INTRA_REGION_PARALLELIZATION,
-        /**
         * Prevents the usage of indexes, forcing usage
         * of the data table for a query.
         */
@@ -100,6 +95,10 @@ public class HintNode {
         * between 2 selected columns this will be give better performance.
         */
       NO_SEEK_TO_COLUMN,
+      /**
+       * Saves an RPC call on the scan. See Scan.setSmall(true) in HBase documentation.
+       */
+     SMALL,
     };
 
     private final Map<Hint,String> hints;

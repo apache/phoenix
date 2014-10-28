@@ -31,9 +31,12 @@ import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.schema.PDataType;
@@ -50,15 +53,19 @@ public abstract class ExplainTable {
     protected final StatementContext context;
     protected final TableRef tableRef;
     protected final GroupBy groupBy;
+    protected final OrderBy orderBy;
+    protected final HintNode hint;
    
     public ExplainTable(StatementContext context, TableRef table) {
-        this(context,table,GroupBy.EMPTY_GROUP_BY);
+        this(context,table,GroupBy.EMPTY_GROUP_BY, OrderBy.EMPTY_ORDER_BY, HintNode.EMPTY_HINT_NODE);
     }
 
-    public ExplainTable(StatementContext context, TableRef table, GroupBy groupBy) {
+    public ExplainTable(StatementContext context, TableRef table, GroupBy groupBy, OrderBy orderBy, HintNode hintNode) {
         this.context = context;
         this.tableRef = table;
         this.groupBy = groupBy;
+        this.orderBy = orderBy;
+        this.hint = hintNode;
     }
 
     private boolean explainSkipScan(StringBuilder buf) {
@@ -90,6 +97,12 @@ public abstract class ExplainTable {
         StringBuilder buf = new StringBuilder(prefix);
         ScanRanges scanRanges = context.getScanRanges();
         boolean hasSkipScanFilter = false;
+        if (hint.hasHint(Hint.SMALL)) {
+            buf.append("SMALL ");
+        }
+        if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
+            buf.append("REVERSE ");
+        }
         if (scanRanges.isEverything()) {
             buf.append("FULL SCAN ");
         } else {
