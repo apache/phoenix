@@ -65,6 +65,7 @@ public class StatisticsUtil {
         ResultScanner scanner = statsHTable.getScanner(s);
         try {
             Result result = null;
+            long timeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
             TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
             while ((result = scanner.next()) != null) {
                 KeyValue current = result.raw()[0];
@@ -78,9 +79,12 @@ public class StatisticsUtil {
                 if (oldInfo != null) {
                     newInfo.combine(oldInfo);
                 }
+                if (current.getTimestamp() > timeStamp) {
+                    timeStamp = current.getTimestamp();
+                }
             }
             if (!guidePostsPerCf.isEmpty()) {
-                return new PTableStatsImpl(guidePostsPerCf);
+                return new PTableStatsImpl(guidePostsPerCf, timeStamp);
             }
         } finally {
             scanner.close();

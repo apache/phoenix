@@ -465,6 +465,7 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             try {
                 statsHTable = getEnvironment().getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
                 stats = StatisticsUtil.readStatistics(statsHTable, physicalTableName.getBytes(), clientTimeStamp);
+                timeStamp = Math.max(timeStamp, stats.getTimestamp()); 
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 logger.warn(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " not online yet?");
             } finally {
@@ -1119,33 +1120,6 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
             return null; // impossible
         }
     }
-
-    private PTable incrementTableTimestamp(byte[] key, long clientTimeStamp) throws IOException, SQLException {
-        RegionCoprocessorEnvironment env = getEnvironment();
-        HRegion region = env.getRegion();
-        Integer lid = region.getLock(null, key, true);
-        if (lid == null) {
-            throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
-        }
-        try {
-            PTable table = doGetTable(key, clientTimeStamp, lid);
-            if (table != null) {
-                long tableTimeStamp = table.getTimeStamp() + 1;
-                List<Mutation> mutations = Lists.newArrayListWithExpectedSize(1);
-                Put p = new Put(key);
-                p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, tableTimeStamp, ByteUtil.EMPTY_BYTE_ARRAY);
-                mutations.add(p);
-                region.mutateRowsWithLocks(mutations, Collections.<byte[]> emptySet());
-                
-                Cache<ImmutableBytesPtr, PTable> metaDataCache = GlobalCache.getInstance(getEnvironment()).getMetaDataCache();
-                ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
-                metaDataCache.invalidate(cacheKey);
-            }
-            return table;
-        } finally {
-            region.releaseRowLock(lid);
-        }
-    }
     
     private PTable doGetTable(byte[] key, long clientTimeStamp) throws IOException, SQLException {
         return doGetTable(key, clientTimeStamp, null);
@@ -1413,8 +1387,11 @@ public class MetaDataEndpointImpl extends BaseEndpointCoprocessor implements Met
     public void incrementTableTimeStamp(byte[] tenantId, byte[] schemaName, byte[] tableName, final long clientTimeStamp)
             throws IOException {
         try {
-            byte[] tableKey = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
-            incrementTableTimestamp(tableKey, clientTimeStamp);
+            byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+            ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
+            Cache<ImmutableBytesPtr, PTable> metaDataCache =
+                    GlobalCache.getInstance(this.getEnvironment()).getMetaDataCache();
+            metaDataCache.invalidate(cacheKey);
         } catch (Throwable t) {
             ServerUtil.throwIOException(SchemaUtil.getTableName(schemaName, tableName), t);
         }

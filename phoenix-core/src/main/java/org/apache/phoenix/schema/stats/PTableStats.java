@@ -57,6 +57,11 @@ public interface PTableStats extends Writable {
         public int getEstimatedSize() {
             return 0;
         }
+
+        @Override
+        public long getTimestamp() {
+            return StatisticsCollector.NO_TIMESTAMP;
+        }
     };
 
     /**
@@ -67,4 +72,6 @@ public interface PTableStats extends Writable {
     SortedMap<byte[], GuidePostsInfo> getGuidePosts();
 
     int getEstimatedSize();
+    
+    long getTimestamp();
 }

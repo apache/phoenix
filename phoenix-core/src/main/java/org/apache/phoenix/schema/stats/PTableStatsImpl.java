@@ -28,6 +28,7 @@ import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.util.SizedUtil;
 
 import com.google.common.collect.Lists;
@@ -40,13 +41,15 @@ import com.sun.istack.NotNull;
 public class PTableStatsImpl implements PTableStats {
     private final SortedMap<byte[], GuidePostsInfo> guidePosts;
     private final int estimatedSize;
+    private final long timeStamp;
 
     public PTableStatsImpl() {
-        this(new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR));
+        this(new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR), MetaDataProtocol.MIN_TABLE_TIMESTAMP);
     }
 
-    public PTableStatsImpl(@NotNull SortedMap<byte[], GuidePostsInfo> guidePosts) {
+    public PTableStatsImpl(@NotNull SortedMap<byte[], GuidePostsInfo> guidePosts, long timeStamp) {
         this.guidePosts = guidePosts;
+        this.timeStamp = timeStamp;
         int estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.INT_SIZE + SizedUtil.sizeOfTreeMap(guidePosts.size());
         for (Map.Entry<byte[], GuidePostsInfo> entry : guidePosts.entrySet()) {
             byte[] cf = entry.getKey();
@@ -118,5 +121,10 @@ public class PTableStatsImpl implements PTableStats {
     @Override
     public int getEstimatedSize() {
         return estimatedSize;
+    }
+
+    @Override
+    public long getTimestamp() {
+        return timeStamp;
     }
 }
