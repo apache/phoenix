@@ -17,8 +17,18 @@
  */
 package org.apache.phoenix.trace;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hadoop.metrics2.MetricsInfo;
 import org.apache.hadoop.metrics2.MetricsRecord;
@@ -38,22 +48,12 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.experimental.categories.Category;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.util.*;
-
-import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-
 /**
  * Base test for tracing tests - helps manage getting tracing/non-tracing
  * connections, as well as any supporting utils.
  */
 @Category(HBaseManagedTimeTest.class)
 public class BaseTracingTestIT extends BaseHBaseManagedTimeIT {
-    private static final Log LOG = LogFactory.getLog(BaseTracingTestIT.class);
-
     @Before
     public void resetTracingTableIfExists() throws Exception {
         Connection conn = getConnectionWithoutTracing();

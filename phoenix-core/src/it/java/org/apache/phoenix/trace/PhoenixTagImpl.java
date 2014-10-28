@@ -17,22 +17,13 @@
  */
 package org.apache.phoenix.trace;
 
-import org.apache.hadoop.metrics2.MetricsInfo;
 import org.apache.hadoop.metrics2.MetricsTag;
 
 /**
  * Simple Tag implementation for testing
  */
 public class PhoenixTagImpl extends MetricsTag {
-
-    private final String name;
-    private final String description;
-    private final String value;
-
     public PhoenixTagImpl(String name, String description, String value) {
         super(new MetricsInfoImpl(name, description), value);
-        this.name = name;
-        this.description = description;
-        this.value = value;
     }
 }

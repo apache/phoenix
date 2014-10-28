@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.trace;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.cloudera.htrace.Span;
@@ -27,9 +25,6 @@ import org.cloudera.htrace.Span;
  * Utilities for tracing
  */
 public class TracingUtils {
-
-    private static final Log LOG = LogFactory.getLog(TracingUtils.class);
-
     public static final String METRIC_SOURCE_KEY = "phoenix.";
 
     /** Set context to enable filtering */
