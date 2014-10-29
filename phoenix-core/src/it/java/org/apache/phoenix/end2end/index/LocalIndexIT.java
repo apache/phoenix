@@ -266,7 +266,29 @@ public class LocalIndexIT extends BaseIndexIT {
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
             int numRegions = admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME)).size();
             
-            String query = "SELECT t_id, k1, k2,V1 FROM " + DATA_TABLE_NAME +" where v1='a'";
+            String query = "SELECT * FROM " + DATA_TABLE_NAME +" where v1 like 'a%'";
+            rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
+            
+            assertEquals(
+                "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
+                        + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME) + " [-32768,'a'] - [-32768,'b']\nCLIENT MERGE SORT",
+                        QueryUtil.getExplainPlan(rs));
+            
+            rs = conn1.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("f", rs.getString("t_id"));
+            assertEquals(1, rs.getInt("k1"));
+            assertEquals(2, rs.getInt("k2"));
+            assertEquals("a", rs.getString("v1"));
+            assertEquals(3, rs.getInt("k3"));
+            assertTrue(rs.next());
+            assertEquals("j", rs.getString("t_id"));
+            assertEquals(2, rs.getInt("k1"));
+            assertEquals(4, rs.getInt("k2"));
+            assertEquals("a", rs.getString("v1"));
+            assertEquals(2, rs.getInt("k3"));
+            assertFalse(rs.next());
+            query = "SELECT t_id, k1, k2,V1 FROM " + DATA_TABLE_NAME +" where v1='a'";
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             assertEquals(

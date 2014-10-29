@@ -66,12 +66,15 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.LocalIndexDataColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
@@ -172,9 +175,11 @@ public class ProjectionCompiler {
         int tableOffset = table.getBucketNum() == null ? 0 : 1;
         int minTablePKOffset = getMinPKOffset(table, tenantId);
         int minIndexPKOffset = getMinPKOffset(index, tenantId);
-        if (index.getColumns().size()-minIndexPKOffset != table.getColumns().size()-minTablePKOffset) {
-            // We'll end up not using this by the optimizer, so just throw
-            throw new ColumnNotFoundException(WildcardParseNode.INSTANCE.toString());
+        if (index.getIndexType() != IndexType.LOCAL) {
+            if (index.getColumns().size()-minIndexPKOffset != table.getColumns().size()-minTablePKOffset) {
+                // We'll end up not using this by the optimizer, so just throw
+                throw new ColumnNotFoundException(WildcardParseNode.INSTANCE.toString());
+            }
         }
         for (int i = tableOffset, j = tableOffset; i < table.getColumns().size(); i++) {
             PColumn column = table.getColumns().get(i);
@@ -185,8 +190,23 @@ public class ProjectionCompiler {
             }
             PColumn tableColumn = table.getColumns().get(i);
             String indexColName = IndexUtil.getIndexColumnName(tableColumn);
-            PColumn indexColumn = index.getColumn(indexColName);
-            ColumnRef ref = new ColumnRef(tableRef,indexColumn.getPosition());
+            PColumn indexColumn = null;
+            ColumnRef ref = null;
+            try {
+                indexColumn = index.getColumn(indexColName);
+                ref = new ColumnRef(tableRef, indexColumn.getPosition());
+            } catch (ColumnNotFoundException e) {
+                if (index.getIndexType() == IndexType.LOCAL) {
+                    try {
+                        ref = new LocalIndexDataColumnRef(context, indexColName);
+                        indexColumn = ref.getColumn();
+                    } catch (ColumnFamilyNotFoundException c) {
+                        throw e;
+                    }
+                } else {
+                    throw e;
+                }
+            }
             String colName = tableColumn.getName().getString();
             if (resolveColumn) {
                 if (tableRef.getTableAlias() != null) {
@@ -230,8 +250,24 @@ public class ProjectionCompiler {
         PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), tableName));
         PColumnFamily pfamily = table.getColumnFamily(cfName);
         for (PColumn column : pfamily.getColumns()) {
-            PColumn indexColumn = index.getColumn(IndexUtil.getIndexColumnName(column));
-            ColumnRef ref = new ColumnRef(tableRef, indexColumn.getPosition());
+            String indexColName = IndexUtil.getIndexColumnName(column);
+            PColumn indexColumn = null;
+            ColumnRef ref = null;
+            try {
+                indexColumn = index.getColumn(indexColName);
+                ref = new ColumnRef(tableRef, indexColumn.getPosition());
+            } catch (ColumnNotFoundException e) {
+                if (index.getIndexType() == IndexType.LOCAL) {
+                    try {
+                        ref = new LocalIndexDataColumnRef(context, indexColName);
+                        indexColumn = ref.getColumn();
+                    } catch (ColumnFamilyNotFoundException c) {
+                        throw e;
+                    }
+                } else {
+                    throw e;
+                }
+            }
             Expression expression = ref.newColumnExpression();
             projectedExpressions.add(expression);
             String colName = column.getName().toString();
