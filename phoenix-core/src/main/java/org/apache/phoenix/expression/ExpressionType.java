@@ -22,6 +22,7 @@ import java.util.Map;
 import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
+import org.apache.phoenix.expression.function.ArrayInsertUniqueFunction;
 import org.apache.phoenix.expression.function.ArrayLengthFunction;
 import org.apache.phoenix.expression.function.CeilDateExpression;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
@@ -185,7 +186,8 @@ public enum ExpressionType {
     SQLIndexTypeFunction(SQLIndexTypeFunction.class),
     ModulusExpression(ModulusExpression.class),
     DistinctValueAggregateFunction(DistinctValueAggregateFunction.class),
-    RegexpSplitFunctiond(RegexpSplitFunction.class);
+    RegexpSplitFunctiond(RegexpSplitFunction.class),
+    ArrayInsertUniqueFunction(ArrayInsertUniqueFunction.class);
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }
