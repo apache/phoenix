@@ -214,9 +214,9 @@ public class QueryOptimizer {
         schemaName = schemaName.length() == 0 ? null :  '"' + schemaName + '"';
 
         String tableName = '"' + index.getTableName().getString() + '"';
-        List<? extends TableNode> tables = Collections.singletonList(FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName)));
+        TableNode table = FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName));
         try {
-            SelectStatement indexSelect = FACTORY.select(select, tables);
+            SelectStatement indexSelect = FACTORY.select(select, table);
             ColumnResolver resolver = FromCompiler.getResolverForQuery(indexSelect, statement.getConnection());
             // Check index state of now potentially updated index table to make sure it's active
             if (PIndexState.ACTIVE.equals(resolver.getTables().get(0).getTable().getIndexState())) {

@@ -292,7 +292,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     }
     
     private static class ExecutableSelectStatement extends SelectStatement implements CompilableStatement {
-        private ExecutableSelectStatement(List<? extends TableNode> from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
+        private ExecutableSelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
                 List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
             super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate, hasSequence);
         }
@@ -796,7 +796,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     protected static class ExecutableNodeFactory extends ParseNodeFactory {
         @Override
-        public ExecutableSelectStatement select(List<? extends TableNode> from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
+        public ExecutableSelectStatement select(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
                                                 ParseNode where, List<ParseNode> groupBy, ParseNode having,
                                                 List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
             return new ExecutableSelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy,

@@ -83,13 +83,13 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         if (normWhere == where)
             return select;
         
-        return NODE_FACTORY.select(select, Collections.singletonList(rewriter.tableNode), normWhere);
+        return NODE_FACTORY.select(select, rewriter.tableNode, normWhere);
     }
     
     protected SubqueryRewriter(SelectStatement select, ColumnResolver resolver, PhoenixConnection connection) {
         this.resolver = resolver;
         this.connection = connection;
-        this.tableNode = select.getFrom().get(0);
+        this.tableNode = select.getFrom();
         this.topNode = null;
     }
     
@@ -339,7 +339,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
                 groupbyNodes.set(i - 1, aliasedNode.getNode());
             }
             SelectStatement derivedTableStmt = NODE_FACTORY.select(subquery, subquery.isDistinct(), derivedTableSelect, where, derivedTableGroupBy, true);
-            subquery = NODE_FACTORY.select(Collections.singletonList(NODE_FACTORY.derivedTable(derivedTableAlias, derivedTableStmt)), subquery.getHint(), false, selectNodes, null, groupbyNodes, null, Collections.<OrderByNode> emptyList(), null, subquery.getBindCount(), true, false);
+            subquery = NODE_FACTORY.select(NODE_FACTORY.derivedTable(derivedTableAlias, derivedTableStmt), subquery.getHint(), false, selectNodes, null, groupbyNodes, null, Collections.<OrderByNode> emptyList(), null, subquery.getBindCount(), true, false);
         }
         
         ParseNode onNode = conditionExtractor.getJoinCondition();

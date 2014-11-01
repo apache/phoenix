@@ -415,17 +415,6 @@ public class ParseNodeFactory {
         return new IsNullParseNode(child, negate);
     }
 
-    public TableNode table(TableNode table, List<JoinPartNode> parts) {
-        for (JoinPartNode part : parts) {
-            table = new JoinTableNode(part.getType(), table, part.getTable(), part.getOnNode(), false);
-        }
-        return table;
-    }
-
-    JoinPartNode joinPart(JoinType type, ParseNode onNode, TableNode table) {
-        return new JoinPartNode(type, onNode, table);
-    }
-
     public JoinTableNode join(JoinType type, TableNode lhs, TableNode rhs, ParseNode on, boolean singleValueOnly) {
         return new JoinTableNode(type, lhs, rhs, on, singleValueOnly);
     }
@@ -586,7 +575,7 @@ public class ParseNodeFactory {
         return new OuterJoinParseNode(node);
     }
 
-    public SelectStatement select(List<? extends TableNode> from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
+    public SelectStatement select(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
             List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
 
         return new SelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy, having,
@@ -606,14 +595,14 @@ public class ParseNodeFactory {
                 statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
     }
 
-    public SelectStatement select(SelectStatement statement, List<? extends TableNode> tables) {
-        return select(tables, statement.getHint(), statement.isDistinct(), statement.getSelect(), statement.getWhere(), statement.getGroupBy(),
+    public SelectStatement select(SelectStatement statement, TableNode table) {
+        return select(table, statement.getHint(), statement.isDistinct(), statement.getSelect(), statement.getWhere(), statement.getGroupBy(),
                 statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(),
                 statement.hasSequence());
     }
 
-    public SelectStatement select(SelectStatement statement, List<? extends TableNode> tables, ParseNode where) {
-        return select(tables, statement.getHint(), statement.isDistinct(), statement.getSelect(), where, statement.getGroupBy(),
+    public SelectStatement select(SelectStatement statement, TableNode table, ParseNode where) {
+        return select(table, statement.getHint(), statement.isDistinct(), statement.getSelect(), where, statement.getGroupBy(),
                 statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(),
                 statement.hasSequence());
     }
