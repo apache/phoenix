@@ -59,9 +59,9 @@ public class SubselectRewriter extends ParseNodeRewriter {
     }
     
     public static SelectStatement flatten(SelectStatement select, PhoenixConnection connection) throws SQLException {
-        List<TableNode> from = select.getFrom();
-        while (from.size() == 1 && from.get(0) instanceof DerivedTableNode) {
-            DerivedTableNode derivedTable = (DerivedTableNode) from.get(0);
+        TableNode from = select.getFrom();
+        while (from != null && from instanceof DerivedTableNode) {
+            DerivedTableNode derivedTable = (DerivedTableNode) from;
             SelectStatement subselect = derivedTable.getSelect();
             ColumnResolver resolver = FromCompiler.getResolverForQuery(subselect, connection);
             SubselectRewriter rewriter = new SubselectRewriter(resolver, subselect.getSelect(), derivedTable.getAlias());

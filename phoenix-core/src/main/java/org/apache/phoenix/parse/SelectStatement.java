@@ -36,14 +36,14 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 public class SelectStatement implements FilterableStatement {
     public static final SelectStatement SELECT_ONE =
             new SelectStatement(
-                    Collections.<TableNode>emptyList(), null, false, 
+                    null, null, false, 
                     Collections.<AliasedNode>singletonList(new AliasedNode(null, LiteralParseNode.ONE)),
                     null, Collections.<ParseNode>emptyList(),
                     null, Collections.<OrderByNode>emptyList(),
                     null, 0, false, false);
     public static final SelectStatement COUNT_ONE =
             new SelectStatement(
-                    Collections.<TableNode>emptyList(), null, false,
+                    null, null, false,
                     Collections.<AliasedNode>singletonList(
                     new AliasedNode(null, 
                         new AggregateFunctionParseNode(
@@ -80,7 +80,7 @@ public class SelectStatement implements FilterableStatement {
                 select.getOrderBy(), select.getLimit(), select.getBindCount(), select.isAggregate(), select.hasSequence());
     }
     
-    private final List<TableNode> fromTable;
+    private final TableNode fromTable;
     private final HintNode hint;
     private final boolean isDistinct;
     private final List<AliasedNode> select;
@@ -104,10 +104,10 @@ public class SelectStatement implements FilterableStatement {
         return count;
     }
     
-    protected SelectStatement(List<? extends TableNode> from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
+    protected SelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
             ParseNode where, List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit,
             int bindCount, boolean isAggregate, boolean hasSequence) {
-        this.fromTable = Collections.unmodifiableList(from);
+        this.fromTable = from;
         this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
         this.isDistinct = isDistinct;
         this.select = Collections.unmodifiableList(select);
@@ -136,7 +136,7 @@ public class SelectStatement implements FilterableStatement {
         return bindCount;
     }
     
-    public List<TableNode> getFrom() {
+    public TableNode getFrom() {
         return fromTable;
     }
     
@@ -190,13 +190,13 @@ public class SelectStatement implements FilterableStatement {
     }
 
     public boolean isJoin() {
-        return fromTable.size() > 1 || (fromTable.size() > 0 && fromTable.get(0) instanceof JoinTableNode);
+        return fromTable != null && fromTable instanceof JoinTableNode;
     }
     
     public SelectStatement getInnerSelectStatement() {
-        if (fromTable.size() != 1 || !(fromTable.get(0) instanceof DerivedTableNode))
+        if (fromTable == null || !(fromTable instanceof DerivedTableNode))
             return null;
         
-        return ((DerivedTableNode) fromTable.get(0)).getSelect();
+        return ((DerivedTableNode) fromTable).getSelect();
     }
 }

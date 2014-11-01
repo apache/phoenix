@@ -41,7 +41,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
@@ -1810,13 +1809,22 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testStarJoin() throws Exception {
-        String[] query = new String[2];
+        String[] query = new String[5];
         query[0] = "SELECT \"order_id\", c.name, i.name iname, quantity, o.date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o JOIN " 
             + JOIN_CUSTOMER_TABLE_FULL_NAME + " c ON o.\"customer_id\" = c.\"customer_id\" JOIN " 
             + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\"";
-        query[1] = "SELECT /*+ NO_STAR_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o JOIN " 
+        query[1] = "SELECT \"order_id\", c.name, i.name iname, quantity, o.date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o, " 
+                + JOIN_CUSTOMER_TABLE_FULL_NAME + " c, " 
+                + JOIN_ITEM_TABLE_FULL_NAME + " i WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
+        query[2] = "SELECT /*+ NO_STAR_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o JOIN " 
                 + JOIN_CUSTOMER_TABLE_FULL_NAME + " c ON o.\"customer_id\" = c.\"customer_id\" JOIN " 
                 + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\"";
+        query[3] = "SELECT /*+ NO_STAR_JOIN*/  \"order_id\", c.name, i.name iname, quantity, o.date FROM (" + JOIN_ORDER_TABLE_FULL_NAME + " o, " 
+                + JOIN_CUSTOMER_TABLE_FULL_NAME + " c), " 
+                + JOIN_ITEM_TABLE_FULL_NAME + " i WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
+        query[4] = "SELECT \"order_id\", c.name, i.name iname, quantity, o.date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o, (" 
+                + JOIN_CUSTOMER_TABLE_FULL_NAME + " c, " 
+                + JOIN_ITEM_TABLE_FULL_NAME + " i) WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -1860,8 +1868,10 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
 
                 assertFalse(rs.next());
                 
-                rs = conn.createStatement().executeQuery("EXPLAIN " + query[i]);
-                assertEquals(plans[11 + i], QueryUtil.getExplainPlan(rs));
+                if (i < 4) {
+                    rs = conn.createStatement().executeQuery("EXPLAIN " + query[i]);
+                    assertEquals(plans[11 + (i/2)], QueryUtil.getExplainPlan(rs));
+                }
             }
         } finally {
             conn.close();
@@ -3828,17 +3838,56 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
-    public void testUnsupportedJoinConditions() throws Exception {
-        String query = "SELECT * FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON (item.\"supplier_id\" || supp.\"supplier_id\") = ''";
+    public void testNonEquiJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
+            String query = "SELECT item.name, supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item, " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp WHERE item.\"supplier_id\" > supp.\"supplier_id\"";
             PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "T3");
+            assertEquals(rs.getString(2), "S1");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "T4");
+            assertEquals(rs.getString(2), "S1");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "T5");
+            assertEquals(rs.getString(2), "S1");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "T5");
+            assertEquals(rs.getString(2), "S2");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "T5");
+            assertEquals(rs.getString(2), "S3");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "T5");
+            assertEquals(rs.getString(2), "S4");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "T6");
+            assertEquals(rs.getString(2), "S1");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "T6");
+            assertEquals(rs.getString(2), "S2");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "T6");
+            assertEquals(rs.getString(2), "S3");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "T6");
+            assertEquals(rs.getString(2), "S4");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "T6");
+            assertEquals(rs.getString(2), "S5");
+
+            assertFalse(rs.next());
+            
+            query = "SELECT item.name, supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" > supp.\"supplier_id\"";
+            statement = conn.prepareStatement(query);
             try {
                 statement.executeQuery();
-                fail("Should have got SQLFeatureNotSupportedException.");
-            } catch (SQLFeatureNotSupportedException e) {
-                assertEquals("Does not support non-standard or non-equi join conditions.", e.getMessage());
+                fail("Should have got SQLException.");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.AMBIGUOUS_JOIN_CONDITION.getErrorCode(), e.getErrorCode());
             }
         } finally {
             conn.close();
@@ -3846,4 +3895,5 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     }
 
 }
+
 

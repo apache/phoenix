@@ -57,24 +57,8 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
      */
     public static SelectStatement rewrite(SelectStatement statement, ParseNodeRewriter rewriter) throws SQLException {
         Map<String,ParseNode> aliasMap = rewriter.getAliasMap();
-        List<TableNode> from = statement.getFrom();
-        List<TableNode> normFrom = from;
-        TableNodeRewriter tableNodeRewriter = new TableNodeRewriter(rewriter);
-        for (int i = 0; i < from.size(); i++) {
-            TableNode tableNode = from.get(i);
-            tableNodeRewriter.reset();
-            TableNode normTableNode = tableNode.accept(tableNodeRewriter);
-            if (normTableNode == tableNode) {
-                if (from != normFrom) {
-                    normFrom.add(tableNode);
-                }
-                continue;
-            }
-            if (from == normFrom) {
-                normFrom = Lists.newArrayList(from.subList(0, i));        		    
-            }
-            normFrom.add(normTableNode);
-        }
+        TableNode from = statement.getFrom();
+        TableNode normFrom = from.accept(new TableNodeRewriter(rewriter));
         ParseNode where = statement.getWhere();
         ParseNode normWhere = where;
         if (where != null) {
@@ -541,9 +525,6 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
 	        this.parseNodeRewriter = parseNodeRewriter;
 	    }
 
-	    public void reset() {
-	    }
-
         @Override
         public TableNode visit(BindTableNode boundTableNode) throws SQLException {
             return boundTableNode;
@@ -557,7 +538,7 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
             TableNode normLhsNode = lhsNode.accept(this);
             TableNode normRhsNode = rhsNode.accept(this);
             parseNodeRewriter.reset();
-            ParseNode normOnNode = onNode.accept(parseNodeRewriter);
+            ParseNode normOnNode = onNode == null ? null : onNode.accept(parseNodeRewriter);
             if (lhsNode == normLhsNode && rhsNode == normRhsNode && onNode == normOnNode)
                 return joinNode;
 
