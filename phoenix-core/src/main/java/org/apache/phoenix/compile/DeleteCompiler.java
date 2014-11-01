@@ -315,7 +315,7 @@ public class DeleteCompiler {
                     aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(null, '"' + column.getName().getString() + '"', null)));
                 }
                 select = FACTORY.select(
-                        Collections.singletonList(delete.getTable()), 
+                        delete.getTable(), 
                         hint, false, aliasedNodes, delete.getWhere(), 
                         Collections.<ParseNode>emptyList(), null, 
                         delete.getOrderBy(), delete.getLimit(),

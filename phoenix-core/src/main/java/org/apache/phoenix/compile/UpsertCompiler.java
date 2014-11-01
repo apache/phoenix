@@ -381,7 +381,7 @@ public class UpsertCompiler {
                         selectResolver = FromCompiler.getResolverForQuery(transformedSelect, connection);
                         select = StatementNormalizer.normalize(transformedSelect, selectResolver);
                     }
-                    sameTable = select.getFrom().size() == 1
+                    sameTable = !select.isJoin()
                         && tableRefToBe.equals(selectResolver.getTables().get(0));
                     tableRefToBe = adjustTimestampToMinOfSameTable(tableRefToBe, selectResolver.getTables());
                     /* We can run the upsert in a coprocessor if:

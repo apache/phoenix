@@ -154,14 +154,12 @@ public class FromCompiler {
      */
     public static ColumnResolver getResolverForQuery(SelectStatement statement, PhoenixConnection connection)
     		throws SQLException {
-    	List<TableNode> fromNodes = statement.getFrom();
-        if (!statement.isJoin() && fromNodes.get(0) instanceof NamedTableNode)
-            return new SingleTableColumnResolver(connection, (NamedTableNode) fromNodes.get(0), true, 1);
+    	TableNode fromNode = statement.getFrom();
+        if (fromNode instanceof NamedTableNode)
+            return new SingleTableColumnResolver(connection, (NamedTableNode) fromNode, true, 1);
         
         MultiTableColumnResolver visitor = new MultiTableColumnResolver(connection, 1);
-        for (TableNode node : fromNodes) {
-            node.accept(visitor);
-        }
+        fromNode.accept(visitor);
         return visitor;
     }
 

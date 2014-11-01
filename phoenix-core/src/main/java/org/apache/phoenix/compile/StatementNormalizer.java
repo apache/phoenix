@@ -37,7 +37,6 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeRewriter;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
@@ -88,13 +87,10 @@ public class StatementNormalizer extends ParseNodeRewriter {
                     if (selectNodes == normSelectNodes) {
                         normSelectNodes = Lists.newArrayList(selectNodes.subList(0, i));
                     }
-                    for (TableNode tNode : statement.getFrom()) {
-                        TableNameVisitor visitor = new TableNameVisitor();
-                        List<TableName> tableNames = tNode.accept(visitor);
-                        for (TableName tableName : tableNames) {
-                            TableWildcardParseNode node = NODE_FACTORY.tableWildcard(tableName);
-                            normSelectNodes.add(NODE_FACTORY.aliasedNode(null, node));
-                        }
+                    List<TableName> tableNames = statement.getFrom().accept(new TableNameVisitor());
+                    for (TableName tableName : tableNames) {
+                        TableWildcardParseNode node = NODE_FACTORY.tableWildcard(tableName);
+                        normSelectNodes.add(NODE_FACTORY.aliasedNode(null, node));
                     }
                 } else if (selectNodes != normSelectNodes) {
                     normSelectNodes.add(aliasedNode);

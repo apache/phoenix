@@ -247,7 +247,7 @@ public class QueryCompiler {
         JoinSpec lastJoinSpec = joinSpecs.get(joinSpecs.size() - 1);
         JoinType type = lastJoinSpec.getType();
         if (type == JoinType.Full)
-            throw new SQLFeatureNotSupportedException("Full joins not supported.");
+            throw new SQLFeatureNotSupportedException(type + " joins not supported.");
         
         if (type == JoinType.Right || type == JoinType.Inner) {
             if (!lastJoinSpec.getJoinTable().getJoinSpecs().isEmpty())
@@ -294,7 +294,7 @@ public class QueryCompiler {
             if (rhs.getLimit() != null && !rhs.isAggregate() && !rhs.isDistinct() && rhs.getOrderBy().isEmpty()) {
                 limit = LimitCompiler.compile(context, rhs);
             }
-            HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, new List[] {joinExpressions}, new JoinType[] {type == JoinType.Inner ? type : JoinType.Left}, new boolean[] {true}, new PTable[] {lhsProjTable.getTable()}, new int[] {fieldPosition}, postJoinFilterExpression, limit, forceProjection);
+            HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, new List[] {joinExpressions}, new JoinType[] {type == JoinType.Right ? JoinType.Left : type}, new boolean[] {true}, new PTable[] {lhsProjTable.getTable()}, new int[] {fieldPosition}, postJoinFilterExpression, limit, forceProjection);
             Pair<Expression, Expression> keyRangeExpressions = new Pair<Expression, Expression>(null, null);
             getKeyExpressionCombinations(keyRangeExpressions, context, rhsTableRef, type, joinExpressions, hashExpressions);
             return HashJoinPlan.create(joinTable.getStatement(), rhsPlan, joinInfo, new HashSubPlan[] {new HashSubPlan(0, lhsPlan, hashExpressions, false, keyRangeExpressions.getFirst(), keyRangeExpressions.getSecond(), lhsJoin.hasFilters())});

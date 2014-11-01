@@ -648,30 +648,24 @@ parseOrderByField returns [OrderByNode ret]
         { $ret = factory.orderBy(expr, nullsLast, isAscending); }
     ;
 
-parseFrom returns [List<TableNode> ret]
-@init{ret = new ArrayList<TableNode>(4); }
-    :   t=table_ref {$ret.add(t);} (COMMA s=table_ref { $ret.add(s); })*
+parseFrom returns [TableNode ret]
+    :   t=table_list {$ret = t;}
+    ;
+    
+table_list returns [TableNode ret]
+    :   t=table_ref {$ret = t;} (COMMA s=table_ref { $ret = factory.join(JoinTableNode.JoinType.Inner, ret, s, null, false); })*
     ;
 
 table_ref returns [TableNode ret]
-    : t=single_table_ref p=join_parts { $ret = factory.table(t, p); }
-    ;
+	:	l=table_factor { $ret = l; } (j=join_type JOIN r=table_factor ON e=expression { $ret = factory.join(j, ret, r, e, false); })*
+	;
 
-single_table_ref returns [TableNode ret]
-    :   n=bind_name ((AS)? alias=identifier)? { $ret = factory.bindTable(alias, factory.table(null,n)); } // TODO: review
-    |   t=from_table_name ((AS)? alias=identifier)? (LPAREN cdefs=dyn_column_defs RPAREN)? { $ret = factory.namedTable(alias,t,cdefs); }
+table_factor returns [TableNode ret]
+    :   LPAREN t=table_list RPAREN { $ret = t; }
+    |   n=bind_name ((AS)? alias=identifier)? { $ret = factory.bindTable(alias, factory.table(null,n)); } // TODO: review
+    |   f=from_table_name ((AS)? alias=identifier)? (LPAREN cdefs=dyn_column_defs RPAREN)? { $ret = factory.namedTable(alias,f,cdefs); }
     |   LPAREN SELECT s=hinted_select_node RPAREN ((AS)? alias=identifier)? { $ret = factory.derivedTable(alias, s); }
     ;
-
-join_parts returns [List<JoinPartNode> ret]
-@init{ret = new ArrayList<JoinPartNode>(4); }
-	:	(p=join_part { $ret.add(p); })*
-	;
-
-join_part returns [JoinPartNode ret]
-	:	j=join_type JOIN r=single_table_ref ON e=expression { $ret = factory.joinPart(j, e, r); }
-	|	j=join_type JOIN LPAREN r=table_ref RPAREN ON e=expression { $ret = factory.joinPart(j, e, r); }
-	;
 
 join_type returns [JoinTableNode.JoinType ret]
     :   INNER?   { $ret = JoinTableNode.JoinType.Inner; }
