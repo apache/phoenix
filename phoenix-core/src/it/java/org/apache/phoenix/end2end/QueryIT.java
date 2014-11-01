@@ -50,6 +50,7 @@ import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -60,6 +61,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -248,7 +250,7 @@ public class QueryIT extends BaseQueryIT {
     @Test
     public void testPointInTimeScan() throws Exception {
         // Override value that was set at creation time
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 10);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         String upsertStmt =
@@ -265,13 +267,15 @@ public class QueryIT extends BaseQueryIT {
         stmt.setString(2, ROW4);
         stmt.setInt(3, 5);
         stmt.execute(); // should commit too
-        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 15);
+        Connection conn1 = DriverManager.getConnection(url, props);
         analyzeTable(conn1, "ATABLE");
         conn1.close();
         upsertConn.close();
 
         // Override value again, but should be ignored since it's past the SCN
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3); // Run query at timestamp 5
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 30);
         upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
         // Insert all rows at ts
@@ -283,7 +287,7 @@ public class QueryIT extends BaseQueryIT {
         upsertConn.close();
         
         String query = "SELECT organization_id, a_string AS a FROM atable WHERE organization_id=? and a_integer = 5";
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         statement.setString(1, tenantId);
@@ -392,7 +396,7 @@ public class QueryIT extends BaseQueryIT {
             "    A_TIMESTAMP) " +
             "VALUES (?, ?, ?)";
         // Override value that was set at creation time
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1);
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 10);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
@@ -403,9 +407,12 @@ public class QueryIT extends BaseQueryIT {
         byte[] ts1 = PDataType.TIMESTAMP.toBytes(tsValue1);
         stmt.setTimestamp(3, tsValue1);
         stmt.execute();
-        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 15);       
+        Connection conn1 = DriverManager.getConnection(url, props);
         analyzeTable(conn1, "ATABLE");
         conn1.close();
+        
         updateStmt = 
             "upsert into " +
             "ATABLE(" +
@@ -424,15 +431,18 @@ public class QueryIT extends BaseQueryIT {
         stmt.setTime(4, new Time(tsValue2.getTime()));
         stmt.execute();
         upsertConn.close();
-        conn1 = DriverManager.getConnection(getUrl(), props);
+        
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 20);       
+        conn1 = DriverManager.getConnection(url, props);
         analyzeTable(conn1, "ATABLE");
         conn1.close();
+        
         analyzeTable(upsertConn, "ATABLE");
         assertTrue(compare(CompareOp.GREATER, new ImmutableBytesWritable(ts2), new ImmutableBytesWritable(ts1)));
         assertFalse(compare(CompareOp.GREATER, new ImmutableBytesWritable(ts1), new ImmutableBytesWritable(ts1)));
 
         String query = "SELECT entity_id, a_timestamp, a_time FROM aTable WHERE organization_id=? and a_timestamp > ?";
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3)); // Execute at timestamp 2
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -761,14 +771,16 @@ public class QueryIT extends BaseQueryIT {
             HTable htable = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName);
             htable.clearRegionCache();
             int nRegions = htable.getRegionLocations().size();
-            admin.split(tableName, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A" + Character.valueOf((char) ('3' + nextRunCount())) + ts))); // vary split point with test run
-            int retryCount = 0;
-            do {
-                Thread.sleep(2000);
-                retryCount++;
-                //htable.clearRegionCache();
-            } while (retryCount < 10 && htable.getRegionLocations().size() == nRegions);
-            assertNotEquals(nRegions, htable.getRegionLocations().size());
+            if(!admin.tableExists(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(ATABLE_NAME)))) {
+                admin.split(tableName, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A" + Character.valueOf((char) ('3' + nextRunCount())) + ts))); // vary split point with test run
+                int retryCount = 0;
+                do {
+                    Thread.sleep(2000);
+                    retryCount++;
+                    //htable.clearRegionCache();
+                } while (retryCount < 10 && htable.getRegionLocations().size() == nRegions);
+                assertNotEquals(nRegions, htable.getRegionLocations().size());
+            } 
             
             statement.setString(1, tenantId);
             rs = statement.executeQuery();

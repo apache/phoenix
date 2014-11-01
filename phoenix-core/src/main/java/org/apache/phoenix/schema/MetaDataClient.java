@@ -613,13 +613,13 @@ public class MetaDataClient {
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTimeStamp = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
-        String query = "SELECT CURRENT_DATE() - " + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
+        String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
                 + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
                 + " IS NULL AND " + REGION_NAME + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
         ResultSet rs = connection.createStatement().executeQuery(query);
         long msSinceLastUpdate = Long.MAX_VALUE;
         if (rs.next()) {
-            msSinceLastUpdate = rs.getLong(1);
+            msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
         }
         if (msSinceLastUpdate < msMinBetweenUpdates) {
             return 0;
@@ -640,7 +640,7 @@ public class MetaDataClient {
 
         // We need to update the stats table so that client will pull the new one with
         // the updated stats.
-        connection.getQueryServices().incrementTableTimeStamp(tenantIdBytes,
+        connection.getQueryServices().clearTableFromCache(tenantIdBytes,
                 Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())),
                 Bytes.toBytes(SchemaUtil.getTableNameFromFullName(physicalName.getString())), clientTimeStamp);
         return rowCount;
@@ -2308,10 +2308,8 @@ public class MetaDataClient {
                     // If we've done any index metadata updates, don't bother trying to update
                     // client-side cache as it would be too painful. Just let it pull it over from
                     // the server when needed.
-                    if (columnsToDrop.size() > 0 && indexesToDrop.isEmpty()) {
-                        for(PColumn columnToDrop : tableColumnsToDrop) {
-                            connection.removeColumn(tenantId, SchemaUtil.getTableName(schemaName, tableName) , columnToDrop.getFamilyName().getString(), columnToDrop.getName().getString(), result.getMutationTime(), seqNum);
-                        }
+                    if (tableColumnsToDrop.size() > 0 && indexesToDrop.isEmpty()) {
+                        connection.removeColumn(tenantId, SchemaUtil.getTableName(schemaName, tableName) , tableColumnsToDrop, result.getMutationTime(), seqNum);
                     }
                     // If we have a VIEW, then only delete the metadata, and leave the table data alone
                     if (table.getType() != PTableType.VIEW) {

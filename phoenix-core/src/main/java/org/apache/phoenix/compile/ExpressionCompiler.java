@@ -891,7 +891,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 if (isType1Date || isType2Date) {
                     if (isType1Date && isType2Date) {
                         i = 2;
-                        theType = PDataType.LONG;
+                        theType = PDataType.DECIMAL;
                     } else if (isType1Date && type2 != null
                             && type2.isCoercibleTo(PDataType.DECIMAL)) {
                         i = 2;

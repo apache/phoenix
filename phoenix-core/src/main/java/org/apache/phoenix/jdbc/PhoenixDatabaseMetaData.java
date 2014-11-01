@@ -26,8 +26,12 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExpressionProjector;
@@ -47,7 +51,6 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
-import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
@@ -56,6 +59,7 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
@@ -254,6 +258,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String PARENT_TENANT_ID = "PARENT_TENANT_ID";
     public static final byte[] PARENT_TENANT_ID_BYTES = Bytes.toBytes(PARENT_TENANT_ID);
         
+    private static final String TENANT_POS_SHIFT = "TENANT_POS_SHIFT";
+    private static final byte[] TENANT_POS_SHIFT_BYTES = Bytes.toBytes(TENANT_POS_SHIFT);
+    
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;
 
@@ -328,7 +335,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     @Override
     public ResultSet getCatalogs() throws SQLException {
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n" +
+        StringBuilder buf = new StringBuilder("select \n" +
                 " DISTINCT " + TENANT_ID + " " + TABLE_CAT +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                 " where " + COLUMN_NAME + " is null" +
@@ -384,7 +391,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     @Override
     public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern)
             throws SQLException {
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n " +
+        StringBuilder buf = new StringBuilder("select \n " +
                 TENANT_ID + " " + TABLE_CAT + "," + // use this for tenant id
                 TABLE_SCHEM + "," +
                 TABLE_NAME + " ," +
@@ -400,7 +407,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 SQL_DATA_TYPE + "," +
                 SQL_DATETIME_SUB + "," +
                 CHAR_OCTET_LENGTH + "," +
-                ORDINAL_POSITION + "," +
+                "CASE WHEN " + TENANT_POS_SHIFT + " THEN " + ORDINAL_POSITION + "-1 ELSE " + ORDINAL_POSITION + " END AS " + ORDINAL_POSITION + "," +
                 "CASE " + NULLABLE + " WHEN " + DatabaseMetaData.attributeNoNulls +  " THEN '" + Boolean.FALSE.toString() + "' WHEN " + DatabaseMetaData.attributeNullable + " THEN '" + Boolean.TRUE.toString() + "' END AS " + IS_NULLABLE + "," +
                 SCOPE_CATALOG + "," +
                 SCOPE_SCHEMA + "," +
@@ -412,8 +419,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 DATA_TYPE + " " + TYPE_ID + "," +// raw type id for potential internal consumption
                 VIEW_CONSTANT + "," +
                 MULTI_TENANT + "," +
-                KEY_SEQ +
-                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS);
+                "CASE WHEN " + TENANT_POS_SHIFT + " THEN " + KEY_SEQ + "-1 ELSE " + KEY_SEQ + " END AS " + KEY_SEQ +
+                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS + "(" + TENANT_POS_SHIFT + " BOOLEAN)");
         StringBuilder where = new StringBuilder();
         addTenantIdFilter(where, catalog);
         if (schemaPattern != null) {
@@ -458,7 +465,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         } else {
             buf.append(" where " + where);
         }
-        buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + "," + ORDINAL_POSITION);
+        buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + "," + SYSTEM_CATALOG_ALIAS + "." + ORDINAL_POSITION);
 
         Statement stmt;
         if (isTenantSpecificConnection) {
@@ -494,6 +501,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         private final int multiTenantIndex;
         private final int keySeqIndex;
         private boolean inMultiTenantTable;
+        private boolean tenantColumnSkipped;
 
         private TenantColumnFilteringIterator(ResultIterator delegate, RowProjector rowProjector) throws SQLException {
             super(delegate);
@@ -512,13 +520,30 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                     && getColumn(tuple, columnFamilyIndex) == null && getColumn(tuple, columnNameIndex) == null) {
                 // new table, check if it is multitenant
                 inMultiTenantTable = getColumn(tuple, multiTenantIndex) == Boolean.TRUE;
+                tenantColumnSkipped = false;
                 // skip row representing table
                 tuple = super.next();
             }
 
-            if (tuple != null && inMultiTenantTable && new Short((short)1).equals(getColumn(tuple, keySeqIndex))) {
-                // skip tenant id primary key column
-                return next();
+            if (tuple != null && inMultiTenantTable && !tenantColumnSkipped) {
+                Object value = getColumn(tuple, keySeqIndex);
+                if (value != null && ((Number)value).longValue() == 1L) {
+                    tenantColumnSkipped = true;
+                    // skip tenant id primary key column
+                    return next();
+                }
+            }
+
+            if (tuple != null && tenantColumnSkipped) {
+                ResultTuple resultTuple = (ResultTuple)tuple;
+                List<Cell> cells = resultTuple.getResult().listCells();
+                KeyValue kv = new KeyValue(resultTuple.getResult().getRow(), TABLE_FAMILY_BYTES,
+                        TENANT_POS_SHIFT_BYTES, PDataType.TRUE_BYTES);
+                List<Cell> newCells = Lists.newArrayListWithCapacity(cells.size() + 1);
+                newCells.addAll(cells);
+                newCells.add(kv);
+                Collections.sort(newCells, KeyValue.COMPARATOR);
+                resultTuple.setResult(Result.create(newCells));
             }
 
             return tuple;
@@ -624,7 +649,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         if (unique) { // No unique indexes
             return emptyResultSet;
         }
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n" +
+        StringBuilder buf = new StringBuilder("select \n" +
                 TENANT_ID + " " + TABLE_CAT + ",\n" + // use this column for column family name
                 TABLE_SCHEM + ",\n" +
                 DATA_TABLE_NAME + " " + TABLE_NAME + ",\n" +
@@ -777,7 +802,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         if (table == null || table.length() == 0) {
             return emptyResultSet;
         }
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n" +
+        StringBuilder buf = new StringBuilder("select \n" +
                 TENANT_ID + " " + TABLE_CAT + "," + // use catalog for tenant_id
                 TABLE_SCHEM + "," +
                 TABLE_NAME + " ," +
@@ -851,7 +876,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     @Override
     public ResultSet getSchemas(String catalog, String schemaPattern) throws SQLException {
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n distinct " +
+        StringBuilder buf = new StringBuilder("select distinct \n" +
                 TENANT_ID + " " + TABLE_CATALOG + "," + // no catalog for tables
                 TABLE_SCHEM +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
@@ -876,7 +901,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     @Override
     public ResultSet getSuperTables(String catalog, String schemaPattern, String tableNamePattern) throws SQLException {
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n" +
+        StringBuilder buf = new StringBuilder("select \n" +
                 TENANT_ID + " " + TABLE_CAT + "," + // Use tenantId for catalog
                 TABLE_SCHEM + "," +
                 TABLE_NAME + "," +
@@ -963,7 +988,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     @Override
     public ResultSet getTables(String catalog, String schemaPattern, String tableNamePattern, String[] types)
             throws SQLException {
-        StringBuilder buf = new StringBuilder("select /*+" + Hint.NO_INTRA_REGION_PARALLELIZATION + "*/\n" +
+        StringBuilder buf = new StringBuilder("select \n" +
                 TENANT_ID + " " + TABLE_CAT + "," + // tenant_id is the catalog
                 TABLE_SCHEM + "," +
                 TABLE_NAME + " ," +

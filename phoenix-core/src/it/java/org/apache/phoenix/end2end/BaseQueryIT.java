@@ -48,7 +48,6 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 
 
 
@@ -70,7 +69,7 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     @BeforeClass
     @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
+        Map<String,String> props = getDefaultProps();
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(5000));
         props.put(IndexWriterUtils.HTABLE_THREAD_KEY, Integer.toString(100));
         // Make a small batch size to test multiple calls to reserve sequences

@@ -152,9 +152,9 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public PMetaData removeColumn(PName tenantId, String tableName, String familyName, String columnName,
-            long tableTimeStamp, long tableSeqNum) throws SQLException {
-        return metaData = metaData.removeColumn(tenantId, tableName, familyName, columnName, tableTimeStamp, tableSeqNum);
+    public PMetaData removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp,
+            long tableSeqNum) throws SQLException {
+        return metaData = metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum);
     }
 
     
@@ -231,7 +231,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
     
     @Override
-    public void incrementTableTimeStamp(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTS)
+    public void clearTableFromCache(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTS)
             throws SQLException {}
     // TODO: share this with ConnectionQueryServicesImpl
     @Override

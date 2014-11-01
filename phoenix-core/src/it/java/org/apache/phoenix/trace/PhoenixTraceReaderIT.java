@@ -17,40 +17,31 @@
  */
 package org.apache.phoenix.trace;
 
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Properties;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.metrics2.AbstractMetric;
+import org.apache.hadoop.metrics2.MetricsRecord;
+import org.apache.hadoop.metrics2.MetricsTag;
 import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.metrics.MetricInfo;
-import org.apache.phoenix.metrics.PhoenixAbstractMetric;
-import org.apache.phoenix.metrics.PhoenixMetricTag;
-import org.apache.phoenix.metrics.PhoenixMetricsRecord;
-import org.apache.phoenix.trace.Hadoop1TracingTestEnabler.Hadoop1Disabled;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
 import org.cloudera.htrace.Span;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.junit.runner.RunWith;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.util.*;
+
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 /**
  * Test that the {@link TraceReader} will correctly read traces written by the
- * {@link PhoenixTableMetricsWriter}
+ * {@link org.apache.phoenix.trace.PhoenixMetricsSink}
  */
-@RunWith(Hadoop1TracingTestEnabler.class)
-@Hadoop1Disabled("tracing")
 @Category(HBaseManagedTimeTest.class)
 public class PhoenixTraceReaderIT extends BaseTracingTestIT {
 
@@ -58,14 +49,14 @@ public class PhoenixTraceReaderIT extends BaseTracingTestIT {
 
     @Test
     public void singleSpan() throws Exception {
-        PhoenixTableMetricsWriter sink = new PhoenixTableMetricsWriter();
+        PhoenixMetricsSink sink = new PhoenixMetricsSink();
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         sink.initForTesting(conn);
 
         // create a simple metrics record
         long traceid = 987654;
-        PhoenixMetricsRecord record =
+        MetricsRecord record =
                 createAndFlush(sink, traceid, Span.ROOT_SPAN_ID, 10, "root", 12, 13,
                     "host-name.value", "test annotation for a span");
 
@@ -73,12 +64,12 @@ public class PhoenixTraceReaderIT extends BaseTracingTestIT {
         validateTraces(Collections.singletonList(record), conn, traceid);
     }
 
-    private PhoenixMetricsRecord createAndFlush(PhoenixTableMetricsWriter sink, long traceid,
+    private MetricsRecord createAndFlush(PhoenixMetricsSink sink, long traceid,
             long parentid, long spanid, String desc, long startTime, long endTime, String hostname,
             String... tags) {
-        PhoenixMetricsRecord record =
+        MetricsRecord record =
                 createRecord(traceid, parentid, spanid, desc, startTime, endTime, hostname, tags);
-        sink.addMetrics(record);
+        sink.putMetrics(record);
         sink.flush();
         return record;
     }
@@ -91,14 +82,14 @@ public class PhoenixTraceReaderIT extends BaseTracingTestIT {
     @Test
     public void testMultipleSpans() throws Exception {
         // hook up a phoenix sink
-        PhoenixTableMetricsWriter sink = new PhoenixTableMetricsWriter();
+        PhoenixMetricsSink sink = new PhoenixMetricsSink();
         Connection conn = getConnectionWithoutTracing();
         sink.initForTesting(conn);
 
         // create a simple metrics record
         long traceid = 12345;
-        List<PhoenixMetricsRecord> records = new ArrayList<PhoenixMetricsRecord>();
-        PhoenixMetricsRecord record =
+        List<MetricsRecord> records = new ArrayList<MetricsRecord>();
+        MetricsRecord record =
                 createAndFlush(sink, traceid, Span.ROOT_SPAN_ID, 7777, "root", 10, 30,
                     "hostname.value", "root-span tag");
         records.add(record);
@@ -128,7 +119,7 @@ public class PhoenixTraceReaderIT extends BaseTracingTestIT {
         validateTraces(records, conn, traceid);
     }
 
-    private void validateTraces(List<PhoenixMetricsRecord> records, Connection conn, long traceid)
+    private void validateTraces(List<MetricsRecord> records, Connection conn, long traceid)
             throws Exception {
         TraceReader reader = new TraceReader(conn);
         Collection<TraceHolder> traces = reader.readAll(1);
@@ -145,13 +136,13 @@ public class PhoenixTraceReaderIT extends BaseTracingTestIT {
      * @param records
      * @param trace
      */
-    private void validateTrace(List<PhoenixMetricsRecord> records, TraceHolder trace) {
+    private void validateTrace(List<MetricsRecord> records, TraceHolder trace) {
         // drop each span into a sorted list so we get the expected ordering
         Iterator<SpanInfo> spanIter = trace.spans.iterator();
-        for (PhoenixMetricsRecord record : records) {
+        for (MetricsRecord record : records) {
             SpanInfo spanInfo = spanIter.next();
             LOG.info("Checking span:\n" + spanInfo);
-            Iterator<PhoenixAbstractMetric> metricIter = record.metrics().iterator();
+            Iterator<AbstractMetric> metricIter = record.metrics().iterator();
             assertEquals("Got an unexpected span id", metricIter.next().value(), spanInfo.id);
             long parentId = (Long) metricIter.next().value();
             if (parentId == Span.ROOT_SPAN_ID) {
@@ -162,12 +153,12 @@ public class PhoenixTraceReaderIT extends BaseTracingTestIT {
             assertEquals("Got an unexpected start time", metricIter.next().value(), spanInfo.start);
             assertEquals("Got an unexpected end time", metricIter.next().value(), spanInfo.end);
 
-            Iterator<PhoenixMetricTag> tags = record.tags().iterator();
+            Iterator<MetricsTag> tags = record.tags().iterator();
 
             int annotationCount = 0;
             while (tags.hasNext()) {
                 // hostname is a tag, so we differentiate it
-                PhoenixMetricTag tag = tags.next();
+                MetricsTag tag = tags.next();
                 if (tag.name().equals(MetricInfo.HOSTNAME.traceName)) {
                     assertEquals("Didn't store correct hostname value", tag.value(),
                         spanInfo.hostname);

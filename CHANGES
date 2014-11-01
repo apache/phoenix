@@ -6,6 +6,8 @@ Release Notes - Phoenix - Version 4.2
     * [PHOENIX-943] - Handle pushed down post-filters for subquery in joins with limit and non-groupby aggregation
     * [PHOENIX-945] - Support correlated subqueries in comparison without ANY/SOME/ALL
     * [PHOENIX-1085] - Commonize logic for adding salt byte and adding region start key in ParallelIterators
+    * [PHOENIX-1168] - Support non-correlated sub-queries in where clause having a comparison operator with no modifier or a comparison operator modified by ANY, SOME or ALL
+    * [PHOENIX-1170] - Change status of local index during splitting to prevent usage when slower than query through data table
     * [PHOENIX-1249] - Support local immutable index 
     * [PHOENIX-1259] - Perform partial scan for ANALYZE when table salted or local index
     * [PHOENIX-1263] - Only cache guideposts on physical PTable
@@ -23,7 +25,9 @@ Release Notes - Phoenix - Version 4.2
 
 ** Bug
     * [PHOENIX-105] - Remove org.apache.commons.csv source once available in Maven repo
+    * [PHOENIX-897] - psql command doesn't allow using certain characters in invocation
     * [PHOENIX-941] - Parallelize within regions to prevent rpc timeout
+    * [PHOENIX-944] - Support derived tables in FROM clause that needs extra steps of client-side aggregation or other processing
     * [PHOENIX-973] - Lexer skips unexpected characters
     * [PHOENIX-1044] - Phoenix-Pig: No results returned unless all used columns are selected
     * [PHOENIX-1095] - Cannot add column to SYSTEM.CATALOG using Alter Table 
@@ -63,6 +67,7 @@ Release Notes - Phoenix - Version 4.2
     * [PHOENIX-1281] - Each MultiKeyValueTuple.setKeyValues creates a new immutable list object
     * [PHOENIX-1284] - Override config properties for unit tests not making it to server
     * [PHOENIX-1285] - Override default for histogram depth in QueryServicesTestImpl
+    * [PHOENIX-1286] - Remove hadoop2 compat modules
     * [PHOENIX-1288] - Selecting more than 2 array elements via index fails with ArrayIndexOutOfBoundsException
     * [PHOENIX-1289] - Drop index during upsert may abort RS
     * [PHOENIX-1298] - Queries on fixed width type columns that have an index declared on them don't use that index
@@ -92,9 +97,18 @@ Release Notes - Phoenix - Version 4.2
     * [PHOENIX-1361] - Sequence value goes backwards if sequence validated before reserved
     * [PHOENIX-1364] - Close tracing scope to stop excessive tracing
     * [PHOENIX-1365] - Make sequence salt buckets configurable
+    * [PHOENIX-1366] - ORDINAL_POSITION incorrect for multi-tenant table over tenant-specific connection
     * [PHOENIX-1368] - Persist link from VIEW back to its child VIEW
     * [PHOENIX-1369] - Add back encode/decode methods as deprecated
     * [PHOENIX-1370] - Allow query timeout to differ from RPC timeout
+    * [PHOENIX-1376] - java.lang.NullPointerException occurs in JDBC driver
+    * [PHOENIX-1379] - Wrong MultiIndexWriteFailureException when recovering local index table
+    * [PHOENIX-1381] - NPE in CellUtil.matchingFamily() for IndexedKeyValue
+    * [PHOENIX-1382] - Phoenix 4.2 RC Issue
+    * [PHOENIX-1385] - Adding, dropping and adding columns fails with NPE
+    * [PHOENIX-1386] - ANY function only works with absolute value and doesn't work with other parameters  
+    * [PHOENIX-1390] - Stats not updated on client after major compaction
+    * [PHOENIX-1391] - Remove obsolete hint
 
 ** Improvement
     * [PHOENIX-619] - Support DELETE over table with immutable index when possible

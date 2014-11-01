@@ -49,6 +49,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -596,5 +597,47 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
         }
     }
 
+    @Test
+    public void testDateDateSubtract() throws Exception {
+        String url;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 15);
+        Connection conn = DriverManager.getConnection(url, props);
+        PreparedStatement statement = conn.prepareStatement("UPSERT INTO ATABLE(organization_id,entity_id,a_time) VALUES(?,?,?)");
+        statement.setString(1, getOrganizationId());
+        statement.setString(2, ROW2);
+        statement.setDate(3, date);
+        statement.execute();
+        statement.setString(2, ROW3);
+        statement.setDate(3, date);
+        statement.execute();
+        statement.setString(2, ROW4);
+        statement.setDate(3, new Date(date.getTime() + TestUtil.MILLIS_IN_DAY - 1));
+        statement.execute();
+        statement.setString(2, ROW6);
+        statement.setDate(3, new Date(date.getTime() + TestUtil.MILLIS_IN_DAY - 1));
+        statement.execute();
+        statement.setString(2, ROW9);
+        statement.setDate(3, date);
+        statement.execute();
+        conn.commit();
+        conn.close();
+
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 25);
+        conn = DriverManager.getConnection(url, props);
+        try {
+            statement = conn.prepareStatement("SELECT entity_id, b_string FROM ATABLE WHERE a_date - a_time > 1");
+            ResultSet rs = statement.executeQuery();
+            @SuppressWarnings("unchecked")
+            List<List<Object>> expectedResults = Lists.newArrayList(
+                    Arrays.<Object>asList(ROW3, E_VALUE),
+                    Arrays.<Object>asList( ROW6, E_VALUE), 
+                    Arrays.<Object>asList(ROW9, E_VALUE));
+            assertValuesEqualsResultSet(rs, expectedResults);
+        } finally {
+            conn.close();
+        }
+    }
 
 }

@@ -886,7 +886,7 @@ public class PTableImpl implements PTable {
             GuidePostsInfo info = new GuidePostsInfo(pTableStatsProto.getGuidePostsByteCount(), value);
             tableGuidePosts.put(pTableStatsProto.getKey().toByteArray(), info);
       }
-      PTableStats stats = new PTableStatsImpl(tableGuidePosts);
+      PTableStats stats = new PTableStatsImpl(tableGuidePosts, table.getStatsTimeStamp());
 
       PName dataTableName = null;
       if (table.hasDataTableNameBytes()) {
@@ -979,7 +979,8 @@ public class PTableImpl implements PTable {
          }
          statsBuilder.setGuidePostsByteCount(entry.getValue().getByteCount());
          builder.addGuidePosts(statsBuilder.build());
-       }
+      }
+      builder.setStatsTimeStamp(table.getTableStats().getTimestamp());
 
       if (table.getParentName() != null) {
         builder.setDataTableNameBytes(HBaseZeroCopyByteString.wrap(table.getParentTableName().getBytes()));

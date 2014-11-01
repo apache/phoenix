@@ -23,19 +23,22 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.metrics2.AbstractMetric;
+import org.apache.hadoop.metrics2.MetricsInfo;
+import org.apache.hadoop.metrics2.MetricsRecord;
+import org.apache.hadoop.metrics2.MetricsTag;
+import org.apache.hadoop.metrics2.impl.ExposedMetricCounterLong;
+import org.apache.hadoop.metrics2.impl.ExposedMetricsRecordImpl;
+import org.apache.hadoop.metrics2.lib.ExposedMetricsInfoImpl;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.metrics.MetricInfo;
-import org.apache.phoenix.metrics.Metrics;
-import org.apache.phoenix.metrics.PhoenixAbstractMetric;
-import org.apache.phoenix.metrics.PhoenixMetricTag;
-import org.apache.phoenix.metrics.PhoenixMetricsRecord;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.trace.util.Tracing;
@@ -51,38 +54,17 @@ import org.junit.experimental.categories.Category;
  */
 @Category(HBaseManagedTimeTest.class)
 public class BaseTracingTestIT extends BaseHBaseManagedTimeIT {
-    private static final Log LOG = LogFactory.getLog(BaseTracingTestIT.class);
-
-    /**
-     * Hadoop1 doesn't yet support tracing (need metrics library support) so we just skip those
-     * tests for the moment
-     * @return <tt>true</tt> if the test should exit because some necessary classes are missing, or
-     *         <tt>false</tt> if the tests can continue normally
-     */
-    static boolean shouldEarlyExitForHadoop1Test() {
-        try {
-            // get a receiver for the spans
-            TracingCompat.newTraceMetricSource();
-            // which also needs to a source for the metrics system
-            Metrics.getManager();
-            return false;
-        } catch (RuntimeException e) {
-            LOG.error("Shouldn't run test because can't instantiate necessary metrics/tracing classes!");
-        }
-
-        return true;
-    }
-
     @Before
     public void resetTracingTableIfExists() throws Exception {
         Connection conn = getConnectionWithoutTracing();
         conn.setAutoCommit(true);
         try {
-            conn.createStatement().executeUpdate("DELETE FROM " + QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
+            conn.createStatement().executeUpdate(
+                    "DELETE FROM " + QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
         } catch (TableNotFoundException ignore) {
         }
     }
-    
+
     public static Connection getConnectionWithoutTracing() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         return getConnectionWithoutTracing(props);
@@ -93,18 +75,19 @@ public class BaseTracingTestIT extends BaseHBaseManagedTimeIT {
         conn.setAutoCommit(false);
         return conn;
     }
-    
-    public static Connection getTracingConnection() throws Exception { 
-    	return getTracingConnection(Collections.<String, String>emptyMap(), null);
+
+    public static Connection getTracingConnection() throws Exception {
+        return getTracingConnection(Collections.<String, String>emptyMap(), null);
     }
 
-    public static Connection getTracingConnection(Map<String, String> customAnnotations, String tenantId) throws Exception {
+    public static Connection getTracingConnection(Map<String, String> customAnnotations,
+            String tenantId) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         for (Map.Entry<String, String> annot : customAnnotations.entrySet()) {
-        	props.put(ANNOTATION_ATTRIB_PREFIX + annot.getKey(), annot.getValue());
+            props.put(ANNOTATION_ATTRIB_PREFIX + annot.getKey(), annot.getValue());
         }
         if (tenantId != null) {
-        	props.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+            props.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
         return getConnectionWithTracingFrequency(props, Tracing.Frequency.ALWAYS);
     }
@@ -115,34 +98,49 @@ public class BaseTracingTestIT extends BaseHBaseManagedTimeIT {
         return DriverManager.getConnection(getUrl(), props);
     }
 
-    public static PhoenixMetricsRecord createRecord(long traceid, long parentid, long spanid,
+    public static MetricsRecord createRecord(long traceid, long parentid, long spanid,
             String desc, long startTime, long endTime, String hostname, String... tags) {
-        PhoenixMetricRecordImpl record =
-                new PhoenixMetricRecordImpl(TracingCompat.getTraceMetricName(traceid), desc);
-        PhoenixAbstractMetric span = new PhoenixMetricImpl(MetricInfo.SPAN.traceName, spanid);
-        record.addMetric(span);
 
-        PhoenixAbstractMetric parent = new PhoenixMetricImpl(MetricInfo.PARENT.traceName, parentid);
-        record.addMetric(parent);
+        List<AbstractMetric> metrics = new ArrayList<AbstractMetric>();
+        AbstractMetric span = new ExposedMetricCounterLong(asInfo(MetricInfo
+                .SPAN.traceName),
+                spanid);
+        metrics.add(span);
 
-        PhoenixAbstractMetric start = new PhoenixMetricImpl(MetricInfo.START.traceName, startTime);
-        record.addMetric(start);
+        AbstractMetric parent = new ExposedMetricCounterLong(asInfo(MetricInfo.PARENT.traceName),
+                parentid);
+        metrics.add(parent);
 
-        PhoenixAbstractMetric end = new PhoenixMetricImpl(MetricInfo.END.traceName, endTime);
-        record.addMetric(end);
+        AbstractMetric start = new ExposedMetricCounterLong(asInfo(MetricInfo.START.traceName),
+                startTime);
+        metrics.add(start);
 
+        AbstractMetric
+                end =
+                new ExposedMetricCounterLong(asInfo(MetricInfo.END.traceName), endTime);
+        metrics.add(end);
+
+        List<MetricsTag> tagsList = new ArrayList<MetricsTag>();
         int tagCount = 0;
         for (String annotation : tags) {
-            PhoenixMetricTag tag =
+            MetricsTag tag =
                     new PhoenixTagImpl(MetricInfo.ANNOTATION.traceName,
                             Integer.toString(tagCount++), annotation);
-            record.addTag(tag);
+            tagsList.add(tag);
         }
         String hostnameValue = "host-name.value";
-        PhoenixMetricTag hostnameTag =
+        MetricsTag hostnameTag =
                 new PhoenixTagImpl(MetricInfo.HOSTNAME.traceName, "", hostnameValue);
-        record.addTag(hostnameTag);
+        tagsList.add(hostnameTag);
 
+        MetricsRecord record =
+                new ExposedMetricsRecordImpl(new ExposedMetricsInfoImpl(TracingUtils
+                        .getTraceMetricName(traceid), desc), System.currentTimeMillis(),
+                        tagsList, metrics);
         return record;
+    }
+
+    private static MetricsInfo asInfo(String name) {
+        return new ExposedMetricsInfoImpl(name, "");
     }
 }

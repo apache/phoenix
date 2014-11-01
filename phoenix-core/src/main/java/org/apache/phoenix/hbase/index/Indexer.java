@@ -64,7 +64,7 @@ import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.apache.phoenix.hbase.index.write.recovery.TrackingParallelWriterIndexCommitter;
-import org.apache.phoenix.trace.TracingCompat;
+import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
@@ -276,7 +276,7 @@ public class Indexer extends BaseRegionObserver {
         this.builder.getIndexUpdate(miniBatchOp, mutations.values());
 
         current.addTimelineAnnotation("Built index updates, doing preStep");
-        TracingCompat.addAnnotation(current, "index update count", indexUpdates.size());
+        TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
 
     // write them, either to WAL or the index tables
     doPre(indexUpdates, edit, durability);

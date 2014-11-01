@@ -27,6 +27,7 @@ import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.MULTI_CF_NAME;
 import static org.apache.phoenix.util.TestUtil.PHOENIX_CONNECTIONLESS_JDBC_URL;
+import static org.apache.phoenix.util.TestUtil.PTSDB2_NAME;
 import static org.apache.phoenix.util.TestUtil.PTSDB3_NAME;
 import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
@@ -104,6 +105,7 @@ public class BaseConnectionlessQueryTest extends BaseTest {
         ensureTableCreated(getUrl(), ENTITY_HISTORY_TABLE_NAME);
         ensureTableCreated(getUrl(), FUNKY_NAME);
         ensureTableCreated(getUrl(), PTSDB_NAME);
+        ensureTableCreated(getUrl(), PTSDB2_NAME);
         ensureTableCreated(getUrl(), PTSDB3_NAME);
         ensureTableCreated(getUrl(), MULTI_CF_NAME);
         ensureTableCreated(getUrl(), JOIN_ORDER_TABLE_FULL_NAME);

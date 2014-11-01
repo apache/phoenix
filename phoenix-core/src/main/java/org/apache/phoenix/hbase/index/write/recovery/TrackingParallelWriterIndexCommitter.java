@@ -158,7 +158,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                                 if (indexRegion != null) {
                                     throwFailureIfDone();
                                     indexRegion.batchMutate(mutations.toArray(new Mutation[mutations.size()]));
-                                    return null;
+                                    return Boolean.TRUE;
                                 }
                             }
                         } catch (IOException ignord) {

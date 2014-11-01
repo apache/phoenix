@@ -41,6 +41,14 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 3 KEYS OVER PTSDB3 [~'na3'] - [~'na1']\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY",
 
+                "SELECT /*+ SMALL*/ host FROM PTSDB3 WHERE host IN ('na1', 'na2','na3')",
+                "CLIENT PARALLEL 1-WAY SMALL SKIP SCAN ON 3 KEYS OVER PTSDB3 [~'na3'] - [~'na1']\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY",
+
+                "SELECT inst,date FROM PTSDB2 WHERE inst = 'na1' ORDER BY inst DESC, date DESC",
+                "CLIENT PARALLEL 1-WAY REVERSE RANGE SCAN OVER PTSDB2 ['na1']\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY",
+
                 "SELECT host FROM PTSDB WHERE inst IS NULL AND host IS NOT NULL AND date >= to_date('2013-01-01')",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [null,not null]\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY AND DATE >= '2013-01-01 00:00:00.000'",
