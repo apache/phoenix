@@ -17,13 +17,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.pig.util;
+package org.apache.phoenix.mapreduce.util;
 
 import static org.junit.Assert.assertEquals;
 
 import java.util.List;
 
-import org.apache.phoenix.pig.util.ColumnInfoToStringEncoderDecoder;
+import org.apache.phoenix.mapreduce.util.ColumnInfoToStringEncoderDecoder;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ColumnInfo;
 import org.junit.Test;

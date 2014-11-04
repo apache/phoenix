@@ -26,16 +26,16 @@ import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.pig.PhoenixPigConfiguration;
+import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 
 /**
@@ -46,21 +46,20 @@ import com.google.common.collect.Lists;
 public class QuerySchemaParserFunction implements Function<String,Pair<String,String>> {
 
     private static final Log LOG = LogFactory.getLog(QuerySchemaParserFunction.class);
-    private PhoenixPigConfiguration phoenixConfiguration;
+    private final Configuration configuration;
     
-    public QuerySchemaParserFunction(PhoenixPigConfiguration phoenixConfiguration) {
-        Preconditions.checkNotNull(phoenixConfiguration);
-        this.phoenixConfiguration = phoenixConfiguration;
+    public QuerySchemaParserFunction(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        this.configuration = configuration;
     }
     
     @Override
     public Pair<String, String> apply(final String selectStatement) {
         Preconditions.checkNotNull(selectStatement);
         Preconditions.checkArgument(!selectStatement.isEmpty(), "Select Query is empty!!");
-        Preconditions.checkNotNull(this.phoenixConfiguration);
         Connection connection = null;
         try {
-            connection = this.phoenixConfiguration.getConnection();
+            connection = ConnectionUtil.getConnection(this.configuration);
             final Statement  statement = connection.createStatement();
             final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
             final QueryPlan queryPlan = pstmt.compileQuery(selectStatement);
@@ -78,17 +77,17 @@ public class QuerySchemaParserFunction implements Function<String,Pair<String,St
             return new Pair<String, String>(tableName, columnsAsStr);
         } catch (SQLException e) {
             LOG.error(String.format(" Error [%s] parsing SELECT query [%s] ",e.getMessage(),selectStatement));
-            Throwables.propagate(e);
+            throw new RuntimeException(e);
         } finally {
             if(connection != null) {
                 try {
                     connection.close();
                 } catch(SQLException sqle) {
-                    Throwables.propagate(sqle);
+                    LOG.error(" Error closing connection ");
+                    throw new RuntimeException(sqle);
                 }
             }
         }
-        return null;
     }
     
     /**

@@ -26,26 +26,24 @@ import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.pig.PhoenixPigConfiguration;
+import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.util.ColumnInfo;
 
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 
 public final class SqlQueryToColumnInfoFunction implements Function<String,List<ColumnInfo>> {
 	
 	private static final Log LOG = LogFactory.getLog(SqlQueryToColumnInfoFunction.class);
-	private final PhoenixPigConfiguration phoenixConfiguration;
+	private final Configuration configuration;
 
-	public SqlQueryToColumnInfoFunction(
-			final PhoenixPigConfiguration phoenixPigConfiguration) {
-		super();
-		this.phoenixConfiguration = phoenixPigConfiguration;
+	public SqlQueryToColumnInfoFunction(final Configuration configuration) {
+		this.configuration = configuration;
 	}
 
 	@Override
@@ -54,7 +52,7 @@ public final class SqlQueryToColumnInfoFunction implements Function<String,List<
 		Connection connection = null;
 		List<ColumnInfo> columnInfos = null;
         try {
-            connection = this.phoenixConfiguration.getConnection();
+            connection = ConnectionUtil.getConnection(this.configuration);
             final Statement  statement = connection.createStatement();
             final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
             final QueryPlan queryPlan = pstmt.compileQuery(sqlQuery);
@@ -69,13 +67,14 @@ public final class SqlQueryToColumnInfoFunction implements Function<String,List<
             });
 	   } catch (SQLException e) {
             LOG.error(String.format(" Error [%s] parsing SELECT query [%s] ",e.getMessage(),sqlQuery));
-            Throwables.propagate(e);
+            throw new RuntimeException(e);
         } finally {
             if(connection != null) {
                 try {
                     connection.close();
                 } catch(SQLException sqle) {
-                    Throwables.propagate(sqle);
+                    LOG.error("Error closing connection!!");
+                    throw new RuntimeException(sqle);
                 }
             }
         }

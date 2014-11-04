@@ -17,7 +17,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.pig.hadoop;
+package org.apache.phoenix.mapreduce;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -120,8 +120,6 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
 
     @Override
     public boolean equals(Object obj) {
-        // TODO: review: it's a reasonable check to use the keyRange,
-        // but it's not perfect. Do we need an equals impl?
         if (this == obj) { return true; }
         if (obj == null) { return false; }
         if (!(obj instanceof PhoenixInputSplit)) { return false; }

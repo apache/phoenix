@@ -17,7 +17,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.pig.util;
+package org.apache.phoenix.mapreduce.util;
 
 import java.util.List;
 
@@ -45,8 +45,8 @@ public final class ColumnInfoToStringEncoderDecoder {
     
     public static String encode(List<ColumnInfo> columnInfos) {
         Preconditions.checkNotNull(columnInfos);
-        return Joiner.on(COLUMN_INFO_DELIMITER).
-                        skipNulls().join(columnInfos);
+        return Joiner.on(COLUMN_INFO_DELIMITER)
+                     .join(columnInfos);
     }
     
     public static List<ColumnInfo> decode(final String columnInfoStr) {
@@ -57,10 +57,7 @@ public final class ColumnInfoToStringEncoderDecoder {
                                         new Function<String, ColumnInfo>() {
                                             @Override
                                             public ColumnInfo apply(String colInfo) {
-                                                if (colInfo.isEmpty()) {
-                                                      return null;
-                                                }
-                                                return ColumnInfo.fromString(colInfo);
+                                               return ColumnInfo.fromString(colInfo);
                                             }
                                         }));
         return columnInfos;
