@@ -119,6 +119,7 @@ public class ScanUtil {
             newScan.setFamilyMap(clonedMap);
             // Carry over the reversed attribute
             newScan.setReversed(scan.isReversed());
+            newScan.setSmall(scan.isSmall());
             return newScan;
         } catch (IOException e) {
             throw new RuntimeException(e);
