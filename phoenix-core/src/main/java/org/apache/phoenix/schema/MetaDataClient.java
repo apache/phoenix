@@ -1532,7 +1532,7 @@ public class MetaDataClient {
             case TABLE_ALREADY_EXISTS:
                 connection.addTable(result.getTable());
                 if (!statement.ifNotExists()) {
-                    throw new TableAlreadyExistsException(schemaName, tableName);
+                    throw new TableAlreadyExistsException(schemaName, tableName, result.getTable());
                 }
                 return null;
             case PARENT_TABLE_NOT_FOUND:
