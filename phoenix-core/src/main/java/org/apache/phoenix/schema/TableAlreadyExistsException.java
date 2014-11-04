@@ -35,16 +35,26 @@ public class TableAlreadyExistsException extends SQLException {
     private static SQLExceptionCode code = SQLExceptionCode.TABLE_ALREADY_EXIST;
     private final String schemaName;
     private final String tableName;
+    private final PTable table;
 
     public TableAlreadyExistsException(String schemaName, String tableName) {
-        this(schemaName, tableName, null);
+        this(schemaName, tableName, null, null);
     }
 
     public TableAlreadyExistsException(String schemaName, String tableName, String msg) {
+        this(schemaName, tableName, msg, null);
+    }
+
+    public TableAlreadyExistsException(String schemaName, String tableName, PTable table) {
+        this(schemaName, tableName, null, table);
+    }
+
+    public TableAlreadyExistsException(String schemaName, String tableName, String msg, PTable table) {
         super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(tableName).setMessage(msg).build().toString(),
                 code.getSQLState(), code.getErrorCode());
         this.schemaName = schemaName;
         this.tableName = tableName;
+        this.table = table;
     }
 
     public String getTableName() {
@@ -53,5 +63,9 @@ public class TableAlreadyExistsException extends SQLException {
 
     public String getSchemaName() {
         return schemaName;
+    }
+    
+    public PTable getTable() {
+        return table;
     }
 }
