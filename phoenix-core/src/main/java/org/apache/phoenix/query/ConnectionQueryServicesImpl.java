@@ -1539,12 +1539,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             } catch (TableAlreadyExistsException e) {
                                 // This will occur if we have an older SYSTEM.SEQUENCE, so we need to update it to include
                                 // any new columns we've added.
-                                if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSaltBuckets)) {
+                                if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSaltBuckets, e.getTable())) {
                                     metaConnection.removeTable(null,
-                                            PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
-                                            PhoenixDatabaseMetaData.TYPE_SEQUENCE,
+                                            PhoenixDatabaseMetaData.SEQUENCE_SCHEMA_NAME,
+                                            PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME,
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
-                                    clearCache();
+                                    clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY, 
+                                            PhoenixDatabaseMetaData.SEQUENCE_SCHEMA_NAME_BYTES,
+                                            PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
+                                    clearTableRegionCache(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
                                 }
                                 nSequenceSaltBuckets = nSaltBuckets;
                             }
