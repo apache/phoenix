@@ -23,6 +23,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -37,6 +38,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,11 +52,36 @@ public class UpgradeUtil {
     private UpgradeUtil() {
     }
 
+    private static void preSplitSequenceTable(PhoenixConnection conn, int nSaltBuckets) throws SQLException {
+        HBaseAdmin admin = conn.getQueryServices().getAdmin();
+        try {
+            if (nSaltBuckets <= 0) {
+                return;
+            }
+            logger.warn("Pre-splitting SYSTEM.SEQUENCE table " + nSaltBuckets + "-ways");
+            for (int i = 0; i < nSaltBuckets; i++) {
+                logger.info("Pre-splitting SYSTEM.SEQUENCE table for salt bucket " + i);
+                admin.split(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES, new byte[] {(byte)i});
+            }
+            logger.warn("Completed pre-splitting SYSTEM.SEQUENCE table");
+        } catch (IOException e) {
+            throw new SQLException("Unable to pre-split SYSTEM.SEQUENCE table", e);
+        } catch (InterruptedException e) {
+            throw new SQLException("Unable to pre-split SYSTEM.SEQUENCE table", e);
+        } finally {
+            try {
+                admin.close();
+            } catch (IOException e) {
+                logger.warn("Exception while closing admin during pre-split", e);
+            }
+        }
+    }
+    
     @SuppressWarnings("deprecation")
-    public static boolean upgradeSequenceTable(PhoenixConnection conn, int nSaltBuckets) throws SQLException {
+    public static boolean upgradeSequenceTable(PhoenixConnection conn, int nSaltBuckets, PTable oldTable) throws SQLException {
         logger.info("Upgrading SYSTEM.SEQUENCE table");
 
-        byte[] seqTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.TYPE_SEQUENCE);
+        byte[] seqTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SEQUENCE_SCHEMA_NAME, PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME);
         HTableInterface sysTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         try {
             logger.info("Setting SALT_BUCKETS property of SYSTEM.SEQUENCE to " + SaltingUtil.MAX_BUCKET_NUM);
@@ -69,7 +96,29 @@ public class UpgradeUtil {
             if (!sysTable.checkAndPut(seqTableKey,
                     PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES, null, saltPut)) {
-
+                if (oldTable == null) { // Unexpected, but to be safe just run pre-split code
+                    preSplitSequenceTable(conn, nSaltBuckets);
+                    return true;
+                }
+                // We can detect upgrade from 4.2.0 -> 4.2.1 based on the timestamp of the table row
+                if (oldTable.getTimeStamp() == MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP-1) {
+                    byte[] oldSeqNum = PDataType.LONG.toBytes(oldTable.getSequenceNumber());
+                    KeyValue seqNumKV = KeyValueUtil.newKeyValue(seqTableKey, 
+                            PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                            PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES,
+                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
+                            PDataType.LONG.toBytes(oldTable.getSequenceNumber()+1));
+                    Put seqNumPut = new Put(seqTableKey);
+                    seqNumPut.add(seqNumKV);
+                    // Increment TABLE_SEQ_NUM in checkAndPut as semaphore so that only single client
+                    // pre-splits the sequence table.
+                    if (sysTable.checkAndPut(seqTableKey,
+                            PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                            PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, oldSeqNum, seqNumPut)) {
+                        preSplitSequenceTable(conn, nSaltBuckets);
+                        return true;
+                    }
+                }
                 logger.info("SYSTEM.SEQUENCE table has already been upgraded");
                 return false;
             }
@@ -85,7 +134,7 @@ public class UpgradeUtil {
             HTableInterface seqTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
             try {
                 boolean committed = false;
-               logger.info("Adding salt byte to all SYSTEM.SEQUENCE rows");
+                logger.info("Adding salt byte to all SYSTEM.SEQUENCE rows");
                 ResultScanner scanner = seqTable.getScanner(scan);
                 try {
                     Result result;
@@ -132,6 +181,7 @@ public class UpgradeUtil {
                         logger.info("Committing last bactch of SYSTEM.SEQUENCE rows");
                         seqTable.batch(mutations);
                     }
+                    preSplitSequenceTable(conn, nSaltBuckets);
                     logger.info("Successfully completed upgrade of SYSTEM.SEQUENCE");
                     success = true;
                     return true;
