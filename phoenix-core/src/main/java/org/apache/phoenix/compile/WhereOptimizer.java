@@ -106,6 +106,15 @@ public class WhereOptimizer {
         PName tenantId = context.getConnection().getTenantId();
         PTable table = context.getCurrentTable().getTable();
         boolean isEverything = (tenantId == null || !table.isMultiTenant()) && table.getViewIndexId() == null;
+
+    	Integer nBuckets = table.getBucketNum();
+    	boolean isSalted = nBuckets != null;
+    	RowKeySchema schema = table.getRowKeySchema();
+    	boolean isMultiTenant = tenantId != null && table.isMultiTenant();
+    	if (isMultiTenant) {
+    		tenantId = ScanUtil.padTenantIdIfNecessary(schema, isSalted, tenantId);
+    	}
+
         if (whereClause == null && isEverything) {
             context.setScanRanges(ScanRanges.EVERYTHING);
             return whereClause;
@@ -146,8 +155,6 @@ public class WhereOptimizer {
         int nPKColumns = table.getPKColumns().size();
         int[] slotSpan = new int[nPKColumns];
         List<Expression> removeFromExtractNodes = null;
-        Integer nBuckets = table.getBucketNum();
-        RowKeySchema schema = table.getRowKeySchema();
         List<List<KeyRange>> cnf = Lists.newArrayListWithExpectedSize(schema.getMaxFields());
         KeyRange minMaxRange = keySlots.getMinMaxRange();
         if (minMaxRange == null) {
@@ -156,8 +163,6 @@ public class WhereOptimizer {
         boolean hasMinMaxRange = (minMaxRange != KeyRange.EVERYTHING_RANGE);
         int minMaxRangeOffset = 0;
         byte[] minMaxRangePrefix = null;
-        boolean isSalted = nBuckets != null;
-        boolean isMultiTenant = tenantId != null && table.isMultiTenant();
         boolean hasViewIndex = table.getViewIndexId() != null;
         if (hasMinMaxRange) {
             int minMaxRangeSize = (isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0)
@@ -182,7 +187,6 @@ public class WhereOptimizer {
         
         // Add tenant data isolation for tenant-specific tables
         if (isMultiTenant) {
-            tenantId = ScanUtil.padTenantIdIfNecessary(schema, isSalted, tenantId);
             byte[] tenantIdBytes = tenantId.getBytes();
             KeyRange tenantIdKeyRange = KeyRange.getKeyRange(tenantIdBytes);
             cnf.add(singletonList(tenantIdKeyRange));
@@ -704,9 +708,11 @@ public class WhereOptimizer {
                     minMaxRange = minMaxRange.union(childSlot.getMinMaxRange());
                     thePosition = initialPos;
                     for (KeySlot slot : childSlot) {
-                        List<Expression> extractNodes = slot.getKeyPart().getExtractNodes();
-                        extractAll &= !extractNodes.isEmpty();
-                        slotExtractNodes.addAll(extractNodes);
+                    	if (slot != null) {
+                    		List<Expression> extractNodes = slot.getKeyPart().getExtractNodes();
+                    		extractAll &= !extractNodes.isEmpty();
+                    		slotExtractNodes.addAll(extractNodes);
+                    	}
                     }
                 } else {
                     // TODO: Do the same optimization that we do for IN if the childSlots specify a fully qualified row key

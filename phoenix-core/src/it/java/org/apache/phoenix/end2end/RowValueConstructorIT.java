@@ -1280,5 +1280,74 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
             conn.close();
         }
     }
+    
+    // query against non-multitenant table. Salted - yes 
+    @Test
+    public void testComparisonAgainstRVCCombinedWithOrAnd_1() throws Exception {
+    	String tableDDL = "CREATE TABLE RVC1 (tenantId char(15) NOT NULL, pk2 char(15) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3)) SALT_BUCKETS = 4";
+        createTestTable(getUrl(), tableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().executeUpdate("upsert into RVC1 (tenantId, pk2, pk3, c1) values ('ABC', 'helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into RVC1 (tenantId, pk2, pk3, c1) values ('ABC', 'helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into RVC1 (tenantId, pk2, pk3, c1) values ('DEF', 'helo3', 3, 3)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(getUrl());
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from RVC1 WHERE (tenantId = ? OR tenantId = ?) AND (tenantId, pk2, pk3) > (?, ?, ?) LIMIT 100");
+        stmt.setString(1, "ABC");
+        stmt.setString(2, "DEF");
+        
+        // give back all rows after row 1 - ABC|helo1|1
+        stmt.setString(3, "ABC");
+        stmt.setString(4, "helo1");
+        stmt.setInt(5, 1);
+        
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo2", rs.getString(1));
+        assertEquals(2, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertFalse(rs.next());
+    }
+    
+    // query against tenant specific view. Salted base table.
+    @Test
+    public void testComparisonAgainstRVCCombinedWithOrAnd_2() throws Exception {
+        String tenantId = "ABC";
+        String tenantSpecificUrl = getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId;
+        String baseTableDDL = "CREATE TABLE RVC2 (tenant_id char(15) NOT NULL, pk2 char(15) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenant_id,pk2,pk3)) MULTI_TENANT=true, SALT_BUCKETS = 4";
+        createTestTable(getUrl(), baseTableDDL, null, nextTimestamp());
+        String tenantTableDDL = "CREATE VIEW t_view AS SELECT * FROM RVC2";
+        createTestTable(tenantSpecificUrl, tenantTableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(tenantSpecificUrl);
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo3', 3, 3)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(tenantSpecificUrl);
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t_view WHERE (pk2 = ? OR pk2 = ?) AND (pk2, pk3) > (?, ?) LIMIT 100");
+        stmt.setString(1, "helo1");
+        stmt.setString(2, "helo3");
+        
+        // return rows after helo1|1 
+        stmt.setString(3, "helo1");
+        stmt.setInt(4, 1);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertFalse(rs.next());
+        conn.close();
+    }
+
+
 
 }
