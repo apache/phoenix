@@ -851,6 +851,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
             lowestClusterHBaseVersion = minHBaseVersion;
+        } catch (SQLException e) {
+            throw e;
         } catch (Throwable t) {
             // This is the case if the "phoenix.jar" is not on the classpath of HBase on the region server
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR).setRootCause(t)
