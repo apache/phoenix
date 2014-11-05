@@ -193,30 +193,12 @@ public class StatisticsCollector {
         }
     }
 
-    public InternalScanner createCompactionScanner(HRegion region, Store store,
-            List<? extends KeyValueScanner> scanners, ScanType scanType, long earliestPutTs, InternalScanner s) throws IOException {
+    public InternalScanner createCompactionScanner(HRegion region, Store store, InternalScanner s) throws IOException {
         // See if this is for Major compaction
-        InternalScanner internalScan = s;
-        if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
-            // this is the first CP accessed, so we need to just create a major
-            // compaction scanner, just
-            // like in the compactor
-            if (s == null) {
-                Scan scan = new Scan();
-                scan.setMaxVersions(store.getFamily().getMaxVersions());
-                long smallestReadPoint = store.getSmallestReadPoint();
-                internalScan = new StoreScanner(store, store.getScanInfo(), scan, scanners, scanType,
-                        smallestReadPoint, earliestPutTs);
-            }
-            if (logger.isDebugEnabled()) {
-                logger.debug("Compaction scanner created for stats");
-            }
-            InternalScanner scanner = getInternalScanner(region, store, internalScan, store.getColumnFamilyName());
-            if (scanner != null) {
-                internalScan = scanner;
-            }
+        if (logger.isDebugEnabled()) {
+            logger.debug("Compaction scanner created for stats");
         }
-        return internalScan;
+        return getInternalScanner(region, store, s, store.getColumnFamilyName());
     }
 
     public void collectStatsDuringSplit(Configuration conf, HRegion l, HRegion r,

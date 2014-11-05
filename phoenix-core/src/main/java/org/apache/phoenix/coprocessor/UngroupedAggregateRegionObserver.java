@@ -452,13 +452,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     }
     
     @Override
-    public InternalScanner preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
-            Store store, List<? extends KeyValueScanner> scanners, ScanType scanType,
-            long earliestPutTs, InternalScanner s) throws IOException {
-        InternalScanner internalScan = s;
+    public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c,
+        final Store store, InternalScanner scanner, final ScanType scanType)
+        throws IOException {
         TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-        if (!table.getNameAsString().equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)
-                && scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
+        InternalScanner internalScanner = scanner;
+        if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             try {
                 boolean useCurrentTime = 
                         c.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
@@ -468,8 +467,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                 // the cells and use that.
                 long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
                 StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table.getNameAsString(), clientTimeStamp);
-                internalScan =
-                        stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanners, scanType, earliestPutTs, s);
+                internalScanner = stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanner);
             } catch (IOException e) {
                 // If we can't reach the stats table, don't interrupt the normal
                 // compaction operation, just log a warning.
@@ -478,7 +476,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                 }
             }
         }
-        return internalScan;
+        return internalScanner;
     }
     
     
