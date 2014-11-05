@@ -24,11 +24,8 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
-import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
-import org.apache.hadoop.hbase.regionserver.StoreScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -178,31 +175,12 @@ public class StatisticsCollector {
         }
     }
 
-    public InternalScanner createCompactionScanner(HRegion region, Store store,
-            List<? extends KeyValueScanner> scanners, ScanType scanType, long earliestPutTs, InternalScanner s)
-            throws IOException {
+    public InternalScanner createCompactionScanner(HRegion region, Store store, InternalScanner s) throws IOException {
         // See if this is for Major compaction
-        InternalScanner internalScan = s;
-        if (scanType.equals(ScanType.MAJOR_COMPACT)) {
-            // this is the first CP accessed, so we need to just create a major
-            // compaction scanner, just
-            // like in the compactor
-            if (s == null) {
-                Scan scan = new Scan();
-                scan.setMaxVersions(store.getFamily().getMaxVersions());
-                long smallestReadPoint = store.getHRegion().getSmallestReadPoint();
-                internalScan = new StoreScanner(store, store.getScanInfo(), scan, scanners, scanType,
-                        smallestReadPoint, earliestPutTs);
-            }
-            if (logger.isDebugEnabled()) {
-                logger.debug("Compaction scanner created for stats");
-            }
-            InternalScanner scanner = getInternalScanner(region, store, internalScan, store.getColumnFamilyName());
-            if (scanner != null) {
-                internalScan = scanner;
-            }
+        if (logger.isDebugEnabled()) {
+            logger.debug("Compaction scanner created for stats");
         }
-        return internalScan;
+        return getInternalScanner(region, store, s, store.getColumnFamilyName());
     }
 
 
