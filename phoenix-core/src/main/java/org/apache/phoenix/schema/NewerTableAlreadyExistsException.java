@@ -30,6 +30,7 @@ public class NewerTableAlreadyExistsException extends TableAlreadyExistsExceptio
         this.table = table;
     }
 
+    @Override
     public PTable getTable() {
         return table;
     }
