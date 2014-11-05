@@ -47,11 +47,10 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
-import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.MultiVersionConsistencyControl;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
@@ -426,13 +425,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
     
     @Override
-    public InternalScanner preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
-            Store store, List<? extends KeyValueScanner> scanners, ScanType scanType,
-            long earliestPutTs, InternalScanner s) throws IOException {
-        InternalScanner internalScan = s;
-        String table = c.getEnvironment().getRegion().getRegionInfo().getTableNameAsString();
-        if (!table.equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)
-                && scanType.equals(ScanType.MAJOR_COMPACT)) {
+    public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c,
+        final Store store, final InternalScanner scanner, CompactionRequest request)
+        throws IOException {
+    String table = c.getEnvironment().getRegion().getRegionInfo().getTableNameAsString();
+        InternalScanner internalScanner = scanner;
+        if (request.isMajor()) {
             try {
                 boolean useCurrentTime = 
                         c.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
@@ -442,8 +440,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 // the cells and use that.
                 long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
                 StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table, clientTimeStamp);
-                internalScan =
-                        stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanners, scanType, earliestPutTs, s);
+                internalScanner = stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanner);
             } catch (IOException e) {
                 // If we can't reach the stats table, don't interrupt the normal
                 // compaction operation, just log a warning.
@@ -452,7 +449,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 }
             }
         }
-        return internalScan;
+        return internalScanner;
     }
     
     
