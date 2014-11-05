@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -58,15 +59,18 @@ public class UpgradeUtil {
             if (nSaltBuckets <= 0) {
                 return;
             }
-            logger.warn("Pre-splitting SYSTEM.SEQUENCE table " + nSaltBuckets + "-ways");
-            for (int i = 0; i < nSaltBuckets; i++) {
-                logger.info("Pre-splitting SYSTEM.SEQUENCE table for salt bucket " + i);
-                admin.split(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES, new byte[] {(byte)i});
-            }
+            logger.warn("Pre-splitting SYSTEM.SEQUENCE table " + nSaltBuckets + "-ways. This may take some time - please do not close window.");
+            HTableDescriptor desc = admin.getTableDescriptor(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+            admin.snapshot(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
+            admin.disableTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
+            admin.deleteTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
+            byte[][] splitPoints = SaltingUtil.getSalteByteSplitPoints(nSaltBuckets);
+            admin.createTable(desc, splitPoints);
+            admin.disableTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
+            admin.restoreSnapshot(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
+            admin.enableTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
             logger.warn("Completed pre-splitting SYSTEM.SEQUENCE table");
         } catch (IOException e) {
-            throw new SQLException("Unable to pre-split SYSTEM.SEQUENCE table", e);
-        } catch (InterruptedException e) {
             throw new SQLException("Unable to pre-split SYSTEM.SEQUENCE table", e);
         } finally {
             try {
