@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Bytes;
@@ -34,6 +35,8 @@ import com.google.common.collect.Lists;
  *  A simple POJO class that holds the information related to GuidePosts serDe.
  */
 public class GuidePostsInfo {
+	public static final GuidePostsInfo EMPTY_GUIDE_POSTS_INFO = new GuidePostsInfo(0L, Collections.<byte[]>emptyList());
+	
     private long byteCount; // Number of bytes traversed in the region
     private long keyByteSize; // Total number of bytes in keys stored in guidePosts
     private List<byte[]> guidePosts;

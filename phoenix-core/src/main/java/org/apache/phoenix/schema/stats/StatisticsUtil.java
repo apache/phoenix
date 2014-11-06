@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -56,6 +57,16 @@ public class StatisticsUtil {
         rowKey[offset++] = QueryConstants.SEPARATOR_BYTE;
         System.arraycopy(region, 0, rowKey, offset, region.length);
         return rowKey;
+    }
+    
+    public static Result readRegionStatistics(HTableInterface statsHTable, byte[] tableNameBytes, byte[] cf, byte[] regionName, long clientTimeStamp)
+            throws IOException {
+        byte[] prefix = StatisticsUtil.getRowKey(tableNameBytes, cf, regionName);
+        Get get = new Get(prefix);
+        get.setTimeRange(MetaDataProtocol.MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
+        get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
+        return statsHTable.get(get);
     }
     
     public static PTableStats readStatistics(HTableInterface statsHTable, byte[] tableNameBytes, long clientTimeStamp) throws IOException {
