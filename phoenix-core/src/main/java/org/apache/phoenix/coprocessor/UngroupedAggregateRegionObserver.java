@@ -242,8 +242,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         boolean hasMore;
         boolean hasAny = false;
         MultiKeyValueTuple result = new MultiKeyValueTuple();
-        if (logger.isInfoEnabled()) {
-        	logger.info(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
+        if (logger.isDebugEnabled()) {
+        	logger.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
         }
         long rowCount = 0;
         region.startRegionOperation();
@@ -394,8 +394,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             }
         }
         
-        if (logger.isInfoEnabled()) {
-        	logger.info(LogUtil.addCustomAnnotations("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan, ScanUtil.getCustomAnnotations(scan)));
+        if (logger.isDebugEnabled()) {
+        	logger.debug(LogUtil.addCustomAnnotations("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan, ScanUtil.getCustomAnnotations(scan)));
         }
 
         if (!mutations.isEmpty()) {
@@ -485,27 +485,24 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             throws IOException {
         HRegion region = e.getEnvironment().getRegion();
         TableName table = region.getRegionInfo().getTable();
-        if (!table.getNameAsString().equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
-            StatisticsCollector stats = null;
-            try {
-                boolean useCurrentTime = 
-                        e.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
-                                QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
-                // Provides a means of clients controlling their timestamps to not use current time
-                // when background tasks are updating stats. Instead we track the max timestamp of
-                // the cells and use that.
-                long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
-                stats = new StatisticsCollector(e.getEnvironment(), table.getNameAsString(), clientTimeStamp);
-                stats.collectStatsDuringSplit(e.getEnvironment().getConfiguration(), l, r, region);
-            } catch (IOException ioe) { 
-                if(logger.isWarnEnabled()) {
-                    logger.warn("Error while collecting stats during split for " + table,ioe);
-                }
-            } finally {
-                if (stats != null) stats.close();
+        StatisticsCollector stats = null;
+        try {
+            boolean useCurrentTime = 
+                    e.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
+                            QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
+            // Provides a means of clients controlling their timestamps to not use current time
+            // when background tasks are updating stats. Instead we track the max timestamp of
+            // the cells and use that.
+            long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
+            stats = new StatisticsCollector(e.getEnvironment(), table.getNameAsString(), clientTimeStamp);
+            stats.splitStats(region, l, r);
+        } catch (IOException ioe) { 
+            if(logger.isWarnEnabled()) {
+                logger.warn("Error while collecting stats during split for " + table,ioe);
             }
+        } finally {
+            if (stats != null) stats.close();
         }
-            
     }
 
     private HRegion getIndexRegion(RegionCoprocessorEnvironment environment) throws IOException {
