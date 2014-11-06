@@ -64,7 +64,6 @@ import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -194,8 +193,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         boolean hasMore;
         boolean hasAny = false;
         MultiKeyValueTuple result = new MultiKeyValueTuple();
-        if (logger.isInfoEnabled()) {
-        	logger.info("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo());
+        if (logger.isDebugEnabled()) {
+        	logger.debug("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo());
         }
         long rowCount = 0;
         MultiVersionConsistencyControl.setThreadReadPoint(innerScanner.getMvccReadPoint());
@@ -320,8 +319,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
         }
         
-        if (logger.isInfoEnabled()) {
-        	logger.info("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan);
+        if (logger.isDebugEnabled()) {
+        	logger.debug("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan);
         }
 
         if (!mutations.isEmpty()) {
@@ -458,27 +457,24 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             throws IOException {
         HRegion region = e.getEnvironment().getRegion();
         String table = region.getRegionInfo().getTableNameAsString();
-        if (!table.equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
-            StatisticsCollector stats = null;
-            try {
-                boolean useCurrentTime = 
-                        e.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
-                                QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
-                // Provides a means of clients controlling their timestamps to not use current time
-                // when background tasks are updating stats. Instead we track the max timestamp of
-                // the cells and use that.
-                long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
-                stats = new StatisticsCollector(e.getEnvironment(), table, clientTimeStamp);
-                stats.collectStatsDuringSplit(e.getEnvironment().getConfiguration(), l, r, region);
-            } catch (IOException ioe) { 
-                if(logger.isDebugEnabled()) {
-                    logger.debug("Error while collecting stats during split ",ioe);
-                }
-            } finally {
-                if (stats != null) stats.close();
+        StatisticsCollector stats = null;
+        try {
+            boolean useCurrentTime = 
+                    e.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
+                            QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
+            // Provides a means of clients controlling their timestamps to not use current time
+            // when background tasks are updating stats. Instead we track the max timestamp of
+            // the cells and use that.
+            long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
+            stats = new StatisticsCollector(e.getEnvironment(), table, clientTimeStamp);
+            stats.splitStats(region, l, r);
+        } catch (IOException ioe) { 
+            if(logger.isWarnEnabled()) {
+                logger.warn("Error while collecting stats during split for " + table,ioe);
             }
+        } finally {
+            if (stats != null) stats.close();
         }
-            
     }
 
     public static byte[] serialize(List<Expression> selectExpressions) {
