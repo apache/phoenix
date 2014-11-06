@@ -41,6 +41,8 @@ import java.text.Format;
 import java.util.Calendar;
 import java.util.Map;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.RowProjector;
@@ -56,7 +58,7 @@ import org.apache.phoenix.util.SQLCloseable;
 
 
 /**
- * 
+ *
  * JDBC ResultSet implementation of Phoenix.
  * Currently only the following data types are supported:
  * - String
@@ -77,31 +79,34 @@ import org.apache.phoenix.util.SQLCloseable;
  * - ResultSet.CONCUR_READ_ONLY
  * - ResultSet.TYPE_FORWARD_ONLY
  * - ResultSet.CLOSE_CURSORS_AT_COMMIT
- * 
- * 
+ *
+ *
  * @since 0.1
  */
 public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.phoenix.jdbc.Jdbc7Shim.ResultSet {
+
+    private static final Log LOG = LogFactory.getLog(PhoenixResultSet.class);
+
     private final static String STRING_FALSE = "0";
     private final static BigDecimal BIG_DECIMAL_FALSE = BigDecimal.valueOf(0);
     private final static Integer INTEGER_FALSE = Integer.valueOf(0);
     private final static Tuple BEFORE_FIRST = new ResultTuple();
-    
+
     private final ResultIterator scanner;
     private final RowProjector rowProjector;
     private final PhoenixStatement statement;
     private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-    
+
     private Tuple currentRow = BEFORE_FIRST;
     private boolean isClosed = false;
     private boolean wasNull = false;
-    
+
     public PhoenixResultSet(ResultIterator resultIterator, RowProjector rowProjector, PhoenixStatement statement) throws SQLException {
         this.rowProjector = rowProjector;
         this.scanner = resultIterator;
         this.statement = statement;
     }
-    
+
     @Override
     public boolean absolute(int row) throws SQLException {
         throw new SQLFeatureNotSupportedException();
@@ -726,7 +731,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     public Tuple getCurrentRow() {
         return currentRow;
     }
-    
+
     @Override
     public boolean next() throws SQLException {
         checkOpen();
@@ -782,7 +787,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
 
     @Override
     public void setFetchSize(int rows) throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        LOG.warn("Ignoring setFetchSize(" + rows + ")");
     }
 
     @Override
