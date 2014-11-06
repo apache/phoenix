@@ -31,16 +31,11 @@ import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
-import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
-import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
-import org.apache.hadoop.hbase.regionserver.StoreScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -71,7 +66,6 @@ public class StatisticsCollector {
     private Map<String, byte[]> minMap = Maps.newHashMap();
     private Map<String, byte[]> maxMap = Maps.newHashMap();
     private long guidepostDepth;
-    private boolean useCurrentTime;
     private long maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
     private Map<String, Pair<Long,GuidePostsInfo>> guidePostsMap = Maps.newHashMap();
     // Tracks the bytecount per family if it has reached the guidePostsDepth
@@ -81,9 +75,6 @@ public class StatisticsCollector {
     public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp) throws IOException {
         Configuration config = env.getConfiguration();
         HTableInterface statsHTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES));
-        useCurrentTime = 
-            config.getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
-                    QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
         int guidepostPerRegion = config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, 0);
         if (guidepostPerRegion > 0) {
             long maxFileSize = statsHTable.getTableDescriptor().getMaxFileSize();
@@ -151,35 +142,6 @@ public class StatisticsCollector {
         statsTable.commitStats(mutations);
     }
 
-    private void deleteStatsFromStatsTable(final HRegion region, List<Mutation> mutations, long currentTime) throws IOException {
-        try {
-            String regionName = region.getRegionInfo().getRegionNameAsString();
-            // update the statistics table
-            for (ImmutableBytesPtr fam : familyMap.keySet()) {
-                statsTable.deleteStats(regionName, this, Bytes.toString(fam.copyBytesIfNecessary()),
-                        mutations);
-            }
-        } catch (IOException e) {
-            logger.error("Failed to delete from statistics table!", e);
-            throw e;
-        }
-    }
-
-    private int scanRegion(RegionScanner scanner, int count) throws IOException {
-        List<Cell> results = new ArrayList<Cell>();
-        boolean hasMore = true;
-        while (hasMore) {
-            hasMore = scanner.next(results);
-            collectStatistics(results);
-            count += results.size();
-            results.clear();
-            while (!hasMore) {
-                break;
-            }
-        }
-        return count;
-    }
-
     /**
      * Update the current statistics based on the latest batch of key-values from the underlying scanner
      * 
@@ -201,65 +163,23 @@ public class StatisticsCollector {
         return getInternalScanner(region, store, s, store.getColumnFamilyName());
     }
 
-    public void collectStatsDuringSplit(Configuration conf, HRegion l, HRegion r,
-            HRegion region) {
+    public void splitStats(HRegion parent, HRegion left, HRegion right) {
         try {
-            // Create a delete operation on the parent region
-            // Then write the new guide posts for individual regions
+            if (logger.isDebugEnabled()) {
+                logger.debug("Collecting stats for split of " + parent.getRegionInfo() + " into " + left.getRegionInfo() + " and " + right.getRegionInfo());
+            }
             List<Mutation> mutations = Lists.newArrayListWithExpectedSize(3);
-            long currentTime = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : -1;
-            deleteStatsFromStatsTable(region, mutations, currentTime);
-            if (logger.isDebugEnabled()) {
-                logger.debug("Collecting stats for the daughter region " + l.getRegionInfo());
+            for (byte[] fam : parent.getStores().keySet()) {
+            	statsTable.splitStats(parent, left, right, this, Bytes.toString(fam), mutations);
             }
-            collectStatsForSplitRegions(conf, l, mutations, currentTime);
             if (logger.isDebugEnabled()) {
-                logger.debug("Collecting stats for the daughter region " + r.getRegionInfo());
-            }
-            collectStatsForSplitRegions(conf, r, mutations, currentTime);
-            if (logger.isDebugEnabled()) {
-                logger.debug("Committing stats for the daughter regions as part of split " + r.getRegionInfo());
+                logger.debug("Committing stats for the daughter regions as part of split " + parent.getRegionInfo());
             }
             commitStats(mutations);
         } catch (IOException e) {
             logger.error("Error while capturing stats after split of region "
-                    + region.getRegionInfo().getRegionNameAsString(), e);
+                    + parent.getRegionInfo().getRegionNameAsString(), e);
         }
-    }
-
-    private void collectStatsForSplitRegions(Configuration conf, HRegion daughter,
-            List<Mutation> mutations, long currentTime) throws IOException {
-        IOException toThrow = null;
-        clear();
-        Scan scan = createScan(conf);
-        RegionScanner scanner = null;
-        int count = 0;
-        try {
-            scanner = daughter.getScanner(scan);
-            count = scanRegion(scanner, count);
-            writeStatsToStatsTable(daughter, false, mutations, currentTime);
-        } catch (IOException e) {
-            logger.error("Unable to collects stats during split", e);
-            toThrow = e;
-        } finally {
-                try {
-                    if (scanner != null) scanner.close();
-                } catch (IOException e) {
-                    logger.error("Unable to close scanner after split", e);
-                    if (toThrow != null) toThrow = e;
-                } finally {
-                    if (toThrow != null) throw toThrow;
-                }
-        }
-    }
-
-    private Scan createScan(Configuration conf) {
-        Scan scan = new Scan();
-        scan.setCaching(
-                conf.getInt(QueryServices.SCAN_CACHE_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE));
-        // do not cache the blocks here
-        scan.setCacheBlocks(false);
-        return scan;
     }
 
     protected InternalScanner getInternalScanner(HRegion region, Store store,
@@ -276,6 +196,16 @@ public class StatisticsCollector {
         maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
     }
 
+    public void addGuidePost(String fam, GuidePostsInfo info, long byteSize, long timestamp) {
+    	Pair<Long,GuidePostsInfo> newInfo = new Pair<Long,GuidePostsInfo>(byteSize,info);
+    	Pair<Long,GuidePostsInfo> oldInfo = guidePostsMap.put(fam, newInfo);
+    	if (oldInfo != null) {
+    		info.combine(oldInfo.getSecond());
+    		newInfo.setFirst(oldInfo.getFirst() + newInfo.getFirst());
+    	}
+        maxTimeStamp = Math.max(maxTimeStamp, timestamp);
+    }
+    
     public void updateStatistic(KeyValue kv) {
         @SuppressWarnings("deprecation")
         byte[] cf = kv.getFamily();
