@@ -55,6 +55,7 @@ public class UpgradeUtil {
 
     private static void preSplitSequenceTable(PhoenixConnection conn, int nSaltBuckets) throws SQLException {
         HBaseAdmin admin = conn.getQueryServices().getAdmin();
+        boolean snapshotCreated = false;
         try {
             if (nSaltBuckets <= 0) {
                 return;
@@ -62,6 +63,7 @@ public class UpgradeUtil {
             logger.warn("Pre-splitting SYSTEM.SEQUENCE table " + nSaltBuckets + "-ways. This may take some time - please do not close window.");
             HTableDescriptor desc = admin.getTableDescriptor(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
             admin.snapshot(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
+            snapshotCreated = true;
             admin.disableTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
             admin.deleteTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
             byte[][] splitPoints = SaltingUtil.getSalteByteSplitPoints(nSaltBuckets);
@@ -74,9 +76,19 @@ public class UpgradeUtil {
             throw new SQLException("Unable to pre-split SYSTEM.SEQUENCE table", e);
         } finally {
             try {
-                admin.close();
-            } catch (IOException e) {
-                logger.warn("Exception while closing admin during pre-split", e);
+                if (snapshotCreated) {
+                    try {
+                        admin.deleteSnapshot(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
+                    } catch (IOException e) {
+                        logger.warn("Exception while deleting SYSTEM.SEQUENCE snapshot during pre-split", e);
+                    }
+                }
+            } finally {
+                try {
+                    admin.close();
+                } catch (IOException e) {
+                    logger.warn("Exception while closing admin during pre-split", e);
+                }
             }
         }
     }
