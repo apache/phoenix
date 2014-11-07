@@ -43,6 +43,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
@@ -61,6 +62,7 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+        props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -298,7 +300,7 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
             } while (nRegions == nRegionsNow && nTries < 10);
             // FIXME: I see the commit of the stats finishing before this with a lower timestamp that the scan timestamp,
             // yet without this sleep, the query finds the old data. Seems like an HBase bug and a potentially serious one.
-            Thread.sleep(2000);
+            Thread.sleep(3000);
         } finally {
             admin.close();
         }
@@ -320,15 +322,18 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         }
         conn.commit();
         
+        ResultSet rs;
         TestUtil.analyzeTable(conn, STATS_TEST_TABLE_NAME);
         List<KeyRange>keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
         assertEquals(nRows+1, keyRanges.size());
-        
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + STATS_TEST_TABLE_NAME);
+        assertEquals("CLIENT " + (nRows+1) + "-CHUNK " + "PARALLEL 1-WAY FULL SCAN OVER " + STATS_TEST_TABLE_NAME, QueryUtil.getExplainPlan(rs));
+
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         List<HRegionLocation> regions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES);
         assertEquals(1, regions.size());
  
-        ResultSet rs = conn.createStatement().executeQuery("SELECT GUIDE_POSTS_COUNT, REGION_NAME FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"+STATS_TEST_TABLE_NAME+"' AND REGION_NAME IS NOT NULL");
+        rs = conn.createStatement().executeQuery("SELECT GUIDE_POSTS_COUNT, REGION_NAME FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"+STATS_TEST_TABLE_NAME+"' AND REGION_NAME IS NOT NULL");
         assertTrue(rs.next());
         assertEquals(nRows, rs.getLong(1));
         assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
