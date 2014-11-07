@@ -55,9 +55,7 @@ import org.apache.phoenix.schema.PDataType;
  * @since 0.1
  */
 public class PhoenixResultSetMetaData implements ResultSetMetaData {
-    private static final int MIN_DISPLAY_WIDTH = 3;
-    private static final int MAX_DISPLAY_WIDTH = 40;
-    private static final int DEFAULT_DISPLAY_WIDTH = 10;
+    static final int DEFAULT_DISPLAY_WIDTH = 40;
     private final RowProjector rowProjector;
     private final PhoenixConnection connection;
     
@@ -85,21 +83,19 @@ public class PhoenixResultSetMetaData implements ResultSetMetaData {
     @Override
     public int getColumnDisplaySize(int column) throws SQLException {
         ColumnProjector projector = rowProjector.getColumnProjector(column-1);
-        int displaySize = Math.max(projector.getName().length(),MIN_DISPLAY_WIDTH);
         PDataType type = projector.getExpression().getDataType();
         if (type == null) {
-            return Math.min(Math.max(displaySize, QueryConstants.NULL_DISPLAY_TEXT.length()), MAX_DISPLAY_WIDTH);
+            return QueryConstants.NULL_DISPLAY_TEXT.length();
         }
         if (type.isCoercibleTo(PDataType.DATE)) {
-            return Math.min(Math.max(displaySize, connection.getDatePattern().length()), MAX_DISPLAY_WIDTH);
+            return connection.getDatePattern().length();
         }
-        if (type.isFixedWidth() && projector.getExpression().getMaxLength() != null) {
-            return Math.min(Math.max(displaySize, projector.getExpression().getMaxLength()), MAX_DISPLAY_WIDTH);
+        if (projector.getExpression().getMaxLength() != null) {
+            return projector.getExpression().getMaxLength();
         }
-        
-        return Math.min(Math.max(displaySize, DEFAULT_DISPLAY_WIDTH), MAX_DISPLAY_WIDTH);
+        return DEFAULT_DISPLAY_WIDTH;
     }
-
+    
     @Override
     public String getColumnLabel(int column) throws SQLException {
         return rowProjector.getColumnProjector(column-1).getName();
