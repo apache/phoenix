@@ -79,8 +79,8 @@ public class AndExpression extends AndOrExpression {
     }
 
     @Override
-    protected boolean getStopValue() {
-        return Boolean.FALSE;
+    protected boolean isStopValue(Boolean value) {
+        return !Boolean.TRUE.equals(value);
     }
 
     @Override
