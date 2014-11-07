@@ -56,6 +56,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
@@ -654,8 +655,11 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
 
     @Override
     public void explain(List<String> planSteps) {
+        boolean displayChunkCount = context.getConnection().getQueryServices().getProps().getBoolean(
+                QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB,
+                QueryServicesOptions.DEFAULT_EXPLAIN_CHUNK_COUNT);
         StringBuilder buf = new StringBuilder();
-        buf.append("CLIENT PARALLEL " + size() + "-WAY ");
+        buf.append("CLIENT " + (displayChunkCount ? (this.splits.size() + "-CHUNK ") : "") + "PARALLEL " + size() + "-WAY ");
         explain(buf.toString(),planSteps);
     }
 

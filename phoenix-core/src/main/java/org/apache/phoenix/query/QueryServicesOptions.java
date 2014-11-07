@@ -21,6 +21,7 @@ import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_PRODUCER_ATTRIB_
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_ROUND_ROBIN_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_MAX_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILL_FILES_ATTRIB;
@@ -161,6 +162,7 @@ public class QueryServicesOptions {
      * Default value for coprocessor priority is between SYSTEM and USER priority.
      */
     public static final int DEFAULT_COPROCESSOR_PRIORITY = Coprocessor.PRIORITY_SYSTEM/2 + Coprocessor.PRIORITY_USER/2; // Divide individually to prevent any overflow
+    public static final boolean DEFAULT_EXPLAIN_CHUNK_COUNT = true;
 
     private final Configuration config;
 
@@ -454,6 +456,11 @@ public class QueryServicesOptions {
     
     public QueryServicesOptions setSequenceSaltBuckets(int saltBuckets) {
         config.setInt(SEQUENCE_SALT_BUCKETS_ATTRIB, saltBuckets);
+        return this;
+    }
+    
+    public QueryServicesOptions setExplainChunkCount(boolean showChunkCount) {
+        config.setBoolean(EXPLAIN_CHUNK_COUNT_ATTRIB, showChunkCount);
         return this;
     }
     
