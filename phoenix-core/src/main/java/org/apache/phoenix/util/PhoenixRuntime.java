@@ -336,9 +336,9 @@ public class PhoenixRuntime {
                     ColumnInfo columnInfo = PhoenixRuntime.getColumnInfo(table, columnName);
                     columnInfoList.add(columnInfo);
                 } catch (ColumnNotFoundException cnfe) {
-                    unresolvedColumnNames.add(columnName.trim());
+                    unresolvedColumnNames.add(columnName);
                 } catch (AmbiguousColumnException ace) {
-                    unresolvedColumnNames.add(columnName.trim());
+                    unresolvedColumnNames.add(columnName);
                 }
             }
         }
@@ -379,7 +379,6 @@ public class PhoenixRuntime {
         if (columnName==null) {
             throw new SQLException("columnName must not be null.");
         }
-        columnName = columnName.trim().toUpperCase();
         PColumn pColumn = null;
         if (columnName.contains(QueryConstants.NAME_SEPARATOR)) {
             String[] tokens = columnName.split(QueryConstants.NAME_SEPARATOR_REGEX);
