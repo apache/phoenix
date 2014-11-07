@@ -127,6 +127,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String STATS_USE_CURRENT_TIME_ATTRIB = "phoenix.stats.useCurrentTime";
 
     public static final String SEQUENCE_SALT_BUCKETS_ATTRIB = "phoenix.sequence.saltBuckets";
+    public static final String COPROCESSOR_PRIORITY_ATTRIB = "phoenix.coprocessor.priority";
+    
     /**
      * Get executor service used for parallel scans
      */

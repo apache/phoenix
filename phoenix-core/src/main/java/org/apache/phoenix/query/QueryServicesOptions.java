@@ -60,6 +60,7 @@ import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.regionserver.wal.WALEditCodec;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.util.DateUtil;
@@ -141,6 +142,10 @@ public class QueryServicesOptions {
      * Use only first time SYSTEM.SEQUENCE table is created.
      */
     public static final int DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS = SaltingUtil.MAX_BUCKET_NUM;
+    /**
+     * Default value for coprocessor priority is between SYSTEM and USER priority.
+     */
+    public static final int DEFAULT_COPROCESSOR_PRIORITY = Coprocessor.PRIORITY_SYSTEM/2 + Coprocessor.PRIORITY_USER/2; // Divide individually to prevent any overflow
 
     private final Configuration config;
     

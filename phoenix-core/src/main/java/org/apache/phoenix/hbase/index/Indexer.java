@@ -32,7 +32,6 @@ import java.util.Map.Entry;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -639,17 +638,18 @@ public class Indexer extends BaseRegionObserver {
   /**
    * Enable indexing on the given table
    * @param desc {@link HTableDescriptor} for the table on which indexing should be enabled
-   * @param builder class to use when building the index for this table
-   * @param properties map of custom configuration options to make available to your
+ * @param builder class to use when building the index for this table
+ * @param properties map of custom configuration options to make available to your
    *          {@link IndexBuilder} on the server-side
+ * @param priority TODO
    * @throws IOException the Indexer coprocessor cannot be added
    */
   public static void enableIndexing(HTableDescriptor desc, Class<? extends IndexBuilder> builder,
-      Map<String, String> properties) throws IOException {
+      Map<String, String> properties, int priority) throws IOException {
     if (properties == null) {
       properties = new HashMap<String, String>();
     }
     properties.put(Indexer.INDEX_BUILDER_CONF_KEY, builder.getName());
-    desc.addCoprocessor(Indexer.class.getName(), null, Coprocessor.PRIORITY_USER, properties);
+    desc.addCoprocessor(Indexer.class.getName(), null, priority, properties);
   }
 }
