@@ -93,7 +93,7 @@ public class PhoenixPigConfigurationIT extends BaseHBaseManagedTimeIT {
                     "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary))\n";
             createTestTable(getUrl(), ddl);
             final PhoenixPigConfiguration configuration = newConfiguration (tableName);
-            configuration.setSelectColumns("a_binary");
+            configuration.setSelectColumns("A_BINARY");
             final String selectStatement = configuration.getSelectStatement();
             final String expectedSelectStatement = "SELECT \"A_BINARY\" FROM " + SchemaUtil.getEscapedArgument(tableName) ; 
             assertEquals(expectedSelectStatement, selectStatement);
