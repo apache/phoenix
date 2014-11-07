@@ -1063,4 +1063,47 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         }
         conn5.close();
     }
+    
+
+    @Test
+    public void testTableWithScemaMetadataScan() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        
+        conn.createStatement().execute("create table foo.bar(k varchar primary key)");
+        conn.createStatement().execute("create table bar(k varchar primary key)");       
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        
+        DatabaseMetaData metaData = conn.getMetaData();
+        ResultSet rs;
+        
+        // Tricky case that requires returning false for null AND true expression
+        rs = metaData.getTables(null, "FOO", "BAR", null);
+        assertTrue(rs.next());
+        assertEquals("FOO",rs.getString("TABLE_SCHEM"));
+        assertEquals("BAR", rs.getString("TABLE_NAME"));
+        assertFalse(rs.next());
+
+        // Tricky case that requires end key to maintain trailing nulls
+        rs = metaData.getTables("", "FOO", "BAR", null);
+        assertTrue(rs.next());
+        assertEquals("FOO",rs.getString("TABLE_SCHEM"));
+        assertEquals("BAR", rs.getString("TABLE_NAME"));
+        assertFalse(rs.next());
+
+        rs = metaData.getTables("", null, "BAR", null);
+        assertTrue(rs.next());
+        assertEquals(null,rs.getString("TABLE_SCHEM"));
+        assertEquals("BAR", rs.getString("TABLE_NAME"));
+        assertTrue(rs.next());
+        assertEquals("FOO",rs.getString("TABLE_SCHEM"));
+        assertEquals("BAR", rs.getString("TABLE_NAME"));
+        assertFalse(rs.next());
+    }
+
 }

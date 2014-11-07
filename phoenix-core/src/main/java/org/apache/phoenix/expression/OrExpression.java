@@ -38,8 +38,8 @@ public class OrExpression extends AndOrExpression {
     }
 
     @Override
-    protected boolean getStopValue() {
-        return Boolean.TRUE;
+    protected boolean isStopValue(Boolean value) {
+        return Boolean.TRUE.equals(value);
     }
 
     @Override
