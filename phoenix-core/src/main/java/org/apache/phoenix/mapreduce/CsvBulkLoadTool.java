@@ -29,6 +29,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -66,10 +69,6 @@ import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Splitter;
-import com.google.common.collect.Lists;
-
 /**
  * Base tool for running MapReduce-based ingests of data.
  */
@@ -85,6 +84,8 @@ public class CsvBulkLoadTool extends Configured implements Tool {
     static final Option TABLE_NAME_OPT = new Option("t", "table", true, "Phoenix table name (mandatory)");
     static final Option INDEX_TABLE_NAME_OPT = new Option("it", "index-table", true, "Phoenix index table name when just loading this particualar index table");
     static final Option DELIMITER_OPT = new Option("d", "delimiter", true, "Input delimiter, defaults to comma");
+    static final Option QUOTE_OPT = new Option("q", "quote", true, "Supply a custom phrase delimiter, defaults to double quote character");
+    static final Option ESCAPE_OPT = new Option("e", "escape", true, "Supply a custom escape character, default is a backslash");
     static final Option ARRAY_DELIMITER_OPT = new Option("a", "array-delimiter", true, "Array element delimiter (optional)");
     static final Option IMPORT_COLUMNS_OPT = new Option("c", "import-columns", true, "Comma-separated list of columns to be imported");
     static final Option IGNORE_ERRORS_OPT = new Option("g", "ignore-errors", false, "Ignore input errors");
@@ -144,6 +145,8 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         options.addOption(OUTPUT_PATH_OPT);
         options.addOption(SCHEMA_NAME_OPT);
         options.addOption(DELIMITER_OPT);
+        options.addOption(QUOTE_OPT);
+        options.addOption(ESCAPE_OPT);
         options.addOption(ARRAY_DELIMITER_OPT);
         options.addOption(IMPORT_COLUMNS_OPT);
         options.addOption(IGNORE_ERRORS_OPT);
@@ -323,6 +326,24 @@ public class CsvBulkLoadTool extends Configured implements Tool {
             delimiterChar = delimString.charAt(0);
         }
 
+        char quoteChar = '"';
+        if (cmdLine.hasOption(QUOTE_OPT.getOpt())) {
+            String quoteString = cmdLine.getOptionValue(QUOTE_OPT.getOpt());
+            if (quoteString.length() != 1) {
+                throw new IllegalArgumentException("Illegal quote character: " + quoteString);
+            }
+            quoteChar = quoteString.charAt(0);
+        }
+
+        char escapeChar = '\\';
+        if (cmdLine.hasOption(ESCAPE_OPT.getOpt())) {
+            String escapeString = cmdLine.getOptionValue(ESCAPE_OPT.getOpt());
+            if (escapeString.length() != 1) {
+                throw new IllegalArgumentException("Illegal escape character: " + escapeString);
+            }
+            escapeChar = escapeString.charAt(0);
+        }
+
         if (cmdLine.hasOption(ZK_QUORUM_OPT.getOpt())) {
             String zkQuorum = cmdLine.getOptionValue(ZK_QUORUM_OPT.getOpt());
             LOG.info("Configuring ZK quorum to {}", zkQuorum);
@@ -335,6 +356,8 @@ public class CsvBulkLoadTool extends Configured implements Tool {
                         cmdLine.getOptionValue(SCHEMA_NAME_OPT.getOpt()),
                         cmdLine.getOptionValue(TABLE_NAME_OPT.getOpt())),
                 delimiterChar,
+                quoteChar,
+                escapeChar,
                 cmdLine.getOptionValue(ARRAY_DELIMITER_OPT.getOpt()),
                 importColumns,
                 cmdLine.hasOption(IGNORE_ERRORS_OPT.getOpt()));

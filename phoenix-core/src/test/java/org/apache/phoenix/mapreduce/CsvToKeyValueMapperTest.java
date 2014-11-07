@@ -17,12 +17,8 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
-import java.io.IOException;
-import java.util.List;
-
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
@@ -31,18 +27,34 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ColumnInfo;
 import org.junit.Test;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import java.io.IOException;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class CsvToKeyValueMapperTest {
 
     @Test
     public void testCsvLineParser() throws IOException {
-        CsvToKeyValueMapper.CsvLineParser lineParser = new CsvToKeyValueMapper.CsvLineParser(';');
+        CsvToKeyValueMapper.CsvLineParser lineParser =
+                new CsvToKeyValueMapper.CsvLineParser(';', '"', '\\');
         CSVRecord parsed = lineParser.parse("one;two");
 
         assertEquals("one", parsed.get(0));
         assertEquals("two", parsed.get(1));
+        assertTrue(parsed.isConsistent());
+        assertEquals(1, parsed.getRecordNumber());
+    }
+
+    @Test
+    public void testCsvLineParserWithQuoting() throws IOException {
+        CsvToKeyValueMapper.CsvLineParser lineParser =
+                new CsvToKeyValueMapper.CsvLineParser(';', '"', '\\');
+        CSVRecord parsed = lineParser.parse("\"\\\"one\";\"\\;two\\\\\"");
+
+        assertEquals("\"one", parsed.get(0));
+        assertEquals(";two\\", parsed.get(1));
         assertTrue(parsed.isConsistent());
         assertEquals(1, parsed.getRecordNumber());
     }

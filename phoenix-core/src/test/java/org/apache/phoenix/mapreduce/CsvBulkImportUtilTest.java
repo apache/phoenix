@@ -17,18 +17,17 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-
-import java.util.List;
-
+import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ColumnInfo;
 import org.junit.Test;
 
-import com.google.common.collect.ImmutableList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 public class CsvBulkImportUtilTest {
 
@@ -38,12 +37,14 @@ public class CsvBulkImportUtilTest {
 
         String tableName = "SCHEMANAME.TABLENAME";
         char delimiter = '!';
+        char quote = '"';
+        char escape = '\\';
 
         List<ColumnInfo> columnInfoList = ImmutableList.of(
                 new ColumnInfo("MYCOL", PDataType.INTEGER.getSqlType()));
 
         CsvBulkImportUtil.initCsvImportJob(
-                conf, tableName, delimiter, null, columnInfoList, true);
+                conf, tableName, delimiter, quote, escape, null, columnInfoList, true);
 
         assertEquals(tableName, conf.get(CsvToKeyValueMapper.TABLE_NAME_CONFKEY));
         assertEquals("!", conf.get(CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY));
