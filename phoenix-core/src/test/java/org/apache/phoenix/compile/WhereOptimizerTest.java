@@ -45,6 +45,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.filter.RowKeyComparisonFilter;
 import org.apache.phoenix.filter.SingleKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
@@ -1734,4 +1735,50 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         return conn;
     }
     
+    @Test
+    public void testTrailingIsNull() throws Exception {
+        String baseTableDDL = "CREATE TABLE t(\n " + 
+                "  a VARCHAR,\n" + 
+                "  b VARCHAR,\n" + 
+                "  CONSTRAINT pk PRIMARY KEY (a, b))";
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(baseTableDDL);
+        conn.close();
+        
+        String query = "SELECT * FROM t WHERE a = 'a' and b is null";
+        StatementContext context = compileStatement(query, Collections.<Object>emptyList());
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
+        assertArrayEquals(Bytes.toBytes("a"), scan.getStartRow());
+        assertArrayEquals(ByteUtil.concat(Bytes.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+    }
+    
+    
+    @Test
+    public void testTrailingIsNullWithOr() throws Exception {
+        String baseTableDDL = "CREATE TABLE t(\n " + 
+                "  a VARCHAR,\n" + 
+                "  b VARCHAR,\n" + 
+                "  CONSTRAINT pk PRIMARY KEY (a, b))";
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(baseTableDDL);
+        conn.close();
+        
+        String query = "SELECT * FROM t WHERE a = 'a' and (b is null or b = 'b')";
+        StatementContext context = compileStatement(query, Collections.<Object>emptyList());
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertTrue(filter instanceof SkipScanFilter);
+        SkipScanFilter skipScan = (SkipScanFilter)filter;
+        List<List<KeyRange>>slots = skipScan.getSlots();
+        assertEquals(2,slots.size());
+        assertEquals(1,slots.get(0).size());
+        assertEquals(2,slots.get(1).size());
+        assertEquals(KeyRange.getKeyRange(Bytes.toBytes("a")), slots.get(0).get(0));
+        assertTrue(KeyRange.IS_NULL_RANGE == slots.get(1).get(0));
+        assertEquals(KeyRange.getKeyRange(Bytes.toBytes("b")), slots.get(1).get(1));
+        assertArrayEquals(Bytes.toBytes("a"), scan.getStartRow());
+        assertArrayEquals(ByteUtil.concat(Bytes.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+    }
 }

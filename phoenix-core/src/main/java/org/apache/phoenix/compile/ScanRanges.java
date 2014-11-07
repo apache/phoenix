@@ -440,9 +440,13 @@ public class ScanRanges {
         if (ScanUtil.getTotalSpan(ranges, slotSpan) < schema.getMaxFields()) {
             return false;
         }
-        for (List<KeyRange> orRanges : ranges) {
+        int lastIndex = ranges.size()-1;
+        for (int i = lastIndex; i >= 0; i--) {
+            List<KeyRange> orRanges = ranges.get(i);
             for (KeyRange keyRange : orRanges) {
-                if (!keyRange.isSingleKey()) {
+                // Special case for single trailing IS NULL. We cannot consider this as a point key because
+                // we strip trailing nulls when we form the key.
+                if (!keyRange.isSingleKey() || (i == lastIndex && keyRange == KeyRange.IS_NULL_RANGE)) {
                     return false;
                 }
             }

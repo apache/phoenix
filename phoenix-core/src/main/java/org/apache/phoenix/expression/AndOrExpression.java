@@ -21,7 +21,6 @@ import java.util.BitSet;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -45,11 +44,6 @@ public abstract class AndOrExpression extends BaseCompoundExpression {
     }
     
     @Override
-    public int hashCode() {
-        return 31 * super.hashCode() + Boolean.valueOf(this.getStopValue()).hashCode();
-    }
-
-    @Override
     public PDataType getDataType() {
         return PDataType.BOOLEAN;
     }
@@ -67,7 +61,6 @@ public abstract class AndOrExpression extends BaseCompoundExpression {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         boolean isNull = false;
-        boolean stopValue = getStopValue();
         for (int i = 0; i < children.size(); i++) {
             Expression child = children.get(i);
             // If partial state is available, then use that to know we've already evaluated this
@@ -77,7 +70,7 @@ public abstract class AndOrExpression extends BaseCompoundExpression {
                 // evaluate versus getValue code path.
                 if (child.evaluate(tuple, ptr)) {
                     // Short circuit if we see our stop value
-                    if (Boolean.valueOf(stopValue).equals(PDataType.BOOLEAN.toObject(ptr, child.getDataType()))) {
+                    if (isStopValue((Boolean)PDataType.BOOLEAN.toObject(ptr, child.getDataType()))) {
                         return true;
                     } else if (partialEvalState != null) {
                         partialEvalState.set(i);
@@ -93,5 +86,5 @@ public abstract class AndOrExpression extends BaseCompoundExpression {
         return true;
     }
 
-    protected abstract boolean getStopValue();
+    protected abstract boolean isStopValue(Boolean value);
 }
