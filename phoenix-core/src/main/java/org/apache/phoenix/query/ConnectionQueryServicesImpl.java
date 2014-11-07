@@ -530,18 +530,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void addCoprocessors(byte[] tableName, HTableDescriptor descriptor, PTableType tableType) throws SQLException {
         // The phoenix jar must be available on HBase classpath
+        int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
         try {
             if (!descriptor.hasCoprocessor(ScanRegionObserver.class.getName())) {
-                descriptor.addCoprocessor(ScanRegionObserver.class.getName(), null, 1, null);
+                descriptor.addCoprocessor(ScanRegionObserver.class.getName(), null, priority, null);
             }
             if (!descriptor.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
-                descriptor.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, 1, null);
+                descriptor.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, priority, null);
             }
             if (!descriptor.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
-                descriptor.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, 1, null);
+                descriptor.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, priority, null);
             }
             if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
-                descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, 1, null);
+                descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
             }
 
             // TODO: better encapsulation for this
@@ -554,25 +555,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     && !descriptor.hasCoprocessor(Indexer.class.getName())) {
                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                 opts.put(CoveredColumnsIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
-                Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts);
+                Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
             }
             if (SchemaUtil.isStatsTable(tableName) && !descriptor.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
                 descriptor.addCoprocessor(MultiRowMutationEndpoint.class.getName(),
-                        null, 1, null);
+                        null, priority, null);
             }
 
             // Setup split policy on Phoenix metadata table to ensure that the key values of a Phoenix table
             // stay on the same region.
             if (SchemaUtil.isMetaTable(tableName)) {
                 if (!descriptor.hasCoprocessor(MetaDataEndpointImpl.class.getName())) {
-                    descriptor.addCoprocessor(MetaDataEndpointImpl.class.getName(), null, 1, null);
+                    descriptor.addCoprocessor(MetaDataEndpointImpl.class.getName(), null, priority, null);
                 }
                 if (!descriptor.hasCoprocessor(MetaDataRegionObserver.class.getName())) {
-                    descriptor.addCoprocessor(MetaDataRegionObserver.class.getName(), null, 2, null);
+                    descriptor.addCoprocessor(MetaDataRegionObserver.class.getName(), null, priority + 1, null);
                 }
             } else if (SchemaUtil.isSequenceTable(tableName)) {
                 if (!descriptor.hasCoprocessor(SequenceRegionObserver.class.getName())) {
-                    descriptor.addCoprocessor(SequenceRegionObserver.class.getName(), null, 1, null);
+                    descriptor.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority, null);
                 }
             }
         } catch (IOException e) {
