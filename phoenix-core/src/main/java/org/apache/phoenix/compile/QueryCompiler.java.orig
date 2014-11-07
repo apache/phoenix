@@ -112,7 +112,6 @@ public class QueryCompiler {
         if (select.getHint().hasHint(Hint.NO_CACHE)) {
             scan.setCacheBlocks(false);
         }
-        scan.setCaching(statement.getFetchSize());
 
         this.originalScan = ScanUtil.newScan(scan);
     }

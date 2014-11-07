@@ -59,6 +59,7 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SaltingUtil;
@@ -926,5 +927,29 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = startRow;
         assertArrayEquals(ByteUtil.nextKey(stopRow), scan.getStopRow());
+    }
+
+    @Test
+    public void testScanCaching_Default() throws SQLException {
+        String query = "select * from atable where a_integer=0";
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        QueryPlan plan = pstmt.optimizeQuery();
+        Scan scan = plan.getContext().getScan();
+        assertEquals(QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE, pstmt.getFetchSize());
+        assertEquals(QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE, scan.getCaching());
+    }
+
+    @Test
+    public void testScanCaching_CustomFetchSizeOnStatement() throws SQLException {
+        String query = "select * from atable where a_integer=0";
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        final int FETCH_SIZE = 25;
+        pstmt.setFetchSize(FETCH_SIZE);
+        QueryPlan plan = pstmt.optimizeQuery();
+        Scan scan = plan.getContext().getScan();
+        assertEquals(FETCH_SIZE, pstmt.getFetchSize());
+        assertEquals(FETCH_SIZE, scan.getCaching());
     }
 }
