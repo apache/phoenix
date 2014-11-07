@@ -28,6 +28,14 @@ import java.util.Properties;
 
 import javax.annotation.Nullable;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -50,15 +58,6 @@ import org.apache.phoenix.util.csv.CsvUpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Function;
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-
 /**
  * MapReduce mapper that converts CSV input lines into KeyValues that can be written to HFiles.
  * <p/>
@@ -78,6 +77,12 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
 
     /** Configuration key for the field delimiter for input csv records */
     public static final String FIELD_DELIMITER_CONFKEY = "phoenix.mapreduce.import.fielddelimiter";
+
+    /** Configuration key for the quote char for input csv records */
+    public static final String QUOTE_CHAR_CONFKEY = "phoenix.mapreduce.import.quotechar";
+
+    /** Configuration key for the escape char for input csv records */
+    public static final String ESCAPE_CHAR_CONFKEY = "phoenix.mapreduce.import.escapechar";
 
     /** Configuration key for the array element delimiter for input arrays */
     public static final String ARRAY_DELIMITER_CONFKEY = "phoenix.mapreduce.import.arraydelimiter";
@@ -127,7 +132,8 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
         upsertListener = new MapperUpsertListener(
                 context, conf.getBoolean(IGNORE_INVALID_ROW_CONFKEY, true));
         csvUpsertExecutor = buildUpsertExecutor(conf);
-        csvLineParser = new CsvLineParser(conf.get(FIELD_DELIMITER_CONFKEY).charAt(0));
+        csvLineParser = new CsvLineParser(conf.get(FIELD_DELIMITER_CONFKEY).charAt(0), conf.get(QUOTE_CHAR_CONFKEY).charAt(0),
+                conf.get(ESCAPE_CHAR_CONFKEY).charAt(0));
 
         preUpdateProcessor = loadPreUpsertProcessor(conf);
         if(!conf.get(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY, "").isEmpty()){
@@ -298,11 +304,14 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
      */
     @VisibleForTesting
     static class CsvLineParser {
-
         private final CSVFormat csvFormat;
 
-        CsvLineParser(char fieldDelimiter) {
-            this.csvFormat = CSVFormat.newFormat(fieldDelimiter);
+        CsvLineParser(char fieldDelimiter, char quote, char escape) {
+            this.csvFormat = CSVFormat.DEFAULT
+                    .withIgnoreEmptyLines(true)
+                    .withDelimiter(fieldDelimiter)
+                    .withEscape(escape)
+                    .withQuote(quote);
         }
 
         public CSVRecord parse(String input) throws IOException {
