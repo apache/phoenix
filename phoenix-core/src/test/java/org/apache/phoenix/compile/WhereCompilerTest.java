@@ -59,6 +59,7 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SaltingUtil;
@@ -148,15 +149,15 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         PDataType.LONG.toBytes(1L, key, 1);
         key[0] = SaltingUtil.getSaltingByte(key, 1, PDataType.LONG.getByteSize(), 20);
         byte[] startKey1 = key;
-        
+
         key = new byte[PDataType.LONG.getByteSize() + 1];
         PDataType.LONG.toBytes(3L, key, 1);
         key[0] = SaltingUtil.getSaltingByte(key, 1, PDataType.LONG.getByteSize(), 20);
         byte[] startKey2 = key;
-        
+
         byte[] startKey = scan.getStartRow();
         byte[] stopKey = scan.getStopRow();
-        
+
         // Due to salting byte, the 1 key may be after the 3 key
         byte[] expectedStartKey;
         byte[] expectedEndKey;
@@ -224,14 +225,14 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id=? and a_integer=0 and a_string='foo'";
         List<Object> binds = Arrays.<Object>asList(tenantId);
-        
+
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
         bindParams(pstmt, binds);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
-        
+
         assertEquals(
             multiKVFilter(and(
                 constantComparison(
@@ -253,7 +254,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
-        
+
         Filter filter = scan.getFilter();
         assertEquals(
             singleKVFilter(constantComparison(
@@ -700,7 +701,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                 plan.getContext().getResolver().getTables().get(0).getTable().getRowKeySchema()),
             filter);
     }
-    
+
     @Test
     public void testInListWithAnd1Filter() throws SQLException {
         String tenantId1 = "000000000000001";
@@ -817,7 +818,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         assertArrayEquals(ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
         // TODO: validate scan ranges
     }
-    
+
     @Test
     public void testBetweenFilter() throws SQLException {
         String tenantId = "000000000000001";
@@ -839,7 +840,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                         10))),
                 filter);
     }
-    
+
     @Test
     public void testNotBetweenFilter() throws SQLException {
         String tenantId = "000000000000001";
@@ -861,7 +862,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                         10)))).toString(),
                 filter.toString());
     }
-    
+
     @Test
     public void testTenantConstraintsAddedToScan() throws SQLException {
         String tenantTypeId = "5678";
@@ -870,7 +871,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         createTestTable(getUrl(), "create table base_table_for_tenant_filter_test (tenant_id char(15) not null, type_id char(4) not null, " +
         		"id char(5) not null, a_integer integer, a_string varchar(100) constraint pk primary key (tenant_id, type_id, id)) multi_tenant=true");
         createTestTable(url, "create view tenant_filter_test (tenant_col integer) AS SELECT * FROM BASE_TABLE_FOR_TENANT_FILTER_TEST WHERE type_id= '" + tenantTypeId + "'");
-        
+
         String query = "select * from tenant_filter_test where a_integer=0 and a_string='foo'";
         PhoenixConnection pconn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
@@ -889,20 +890,20 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                     A_STRING,
                     "foo"))),
             filter);
-        
+
         byte[] startRow = PDataType.VARCHAR.toBytes(tenantId + tenantTypeId);
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = startRow;
         assertArrayEquals(ByteUtil.nextKey(stopRow), scan.getStopRow());
     }
-    
+
     @Test
     public void testTenantConstraintsAddedToScanWithNullTenantTypeId() throws SQLException {
         String tenantId = "000000000000123";
         createTestTable(getUrl(), "create table base_table_for_tenant_filter_test (tenant_id char(15) not null, " +
                 "id char(5) not null, a_integer integer, a_string varchar(100) constraint pk primary key (tenant_id, id)) multi_tenant=true");
         createTestTable(getUrl(tenantId), "create view tenant_filter_test (tenant_col integer) AS SELECT * FROM BASE_TABLE_FOR_TENANT_FILTER_TEST");
-        
+
         String query = "select * from tenant_filter_test where a_integer=0 and a_string='foo'";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(tenantId), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
@@ -921,10 +922,34 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                     A_STRING,
                     "foo"))),
             filter);
-        
+
         byte[] startRow = PDataType.VARCHAR.toBytes(tenantId);
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = startRow;
         assertArrayEquals(ByteUtil.nextKey(stopRow), scan.getStopRow());
+    }
+
+    @Test
+    public void testScanCaching_Default() throws SQLException {
+        String query = "select * from atable where a_integer=0";
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        QueryPlan plan = pstmt.optimizeQuery();
+        Scan scan = plan.getContext().getScan();
+        assertEquals(QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE, pstmt.getFetchSize());
+        assertEquals(QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE, scan.getCaching());
+    }
+
+    @Test
+    public void testScanCaching_CustomFetchSizeOnStatement() throws SQLException {
+        String query = "select * from atable where a_integer=0";
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        final int FETCH_SIZE = 25;
+        pstmt.setFetchSize(FETCH_SIZE);
+        QueryPlan plan = pstmt.optimizeQuery();
+        Scan scan = plan.getContext().getScan();
+        assertEquals(FETCH_SIZE, pstmt.getFetchSize());
+        assertEquals(FETCH_SIZE, scan.getCaching());
     }
 }

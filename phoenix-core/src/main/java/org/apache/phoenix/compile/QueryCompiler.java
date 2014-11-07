@@ -68,17 +68,17 @@ import com.google.common.collect.Lists;
 
 
 /**
- * 
+ *
  * Class used to build an executable query plan
  *
- * 
+ *
  * @since 0.1
  */
 public class QueryCompiler {
-    /* 
-     * Not using Scan.setLoadColumnFamiliesOnDemand(true) because we don't 
+    /*
+     * Not using Scan.setLoadColumnFamiliesOnDemand(true) because we don't
      * want to introduce a dependency on 0.94.5 (where this feature was
-     * introduced). This will do the same thing. Once we do have a 
+     * introduced). This will do the same thing. Once we do have a
      * dependency on 0.94.5 or above, switch this around.
      */
     private static final String LOAD_COLUMN_FAMILIES_ON_DEMAND_ATTR = "_ondemand_";
@@ -90,11 +90,11 @@ public class QueryCompiler {
     private final List<? extends PDatum> targetColumns;
     private final ParallelIteratorFactory parallelIteratorFactory;
     private final SequenceManager sequenceManager;
-    
+
     public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver) throws SQLException {
         this(statement, select, resolver, Collections.<PDatum>emptyList(), null, new SequenceManager(statement));
     }
-    
+
     public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, SequenceManager sequenceManager) throws SQLException {
         this.statement = statement;
         this.select = select;
@@ -109,6 +109,7 @@ public class QueryCompiler {
         if (select.getHint().hasHint(Hint.NO_CACHE)) {
             scan.setCacheBlocks(false);
         }
+        scan.setCaching(statement.getFetchSize());
 
         this.originalScan = ScanUtil.newScan(scan);
     }
@@ -139,7 +140,7 @@ public class QueryCompiler {
             return compileSingleQuery(context, select, binds, false, true);
         }
     }
-    
+
     @SuppressWarnings("unchecked")
     protected QueryPlan compileJoinQuery(StatementContext context, List<Object> binds, JoinTable joinTable, boolean asSubquery) throws SQLException {
         byte[] emptyByteArray = new byte[0];
@@ -160,7 +161,7 @@ public class QueryCompiler {
             context.setResolver(projectedTable.createColumnResolver());
             return new TupleProjectionPlan(plan, projectedTable.createTupleProjector(), table.compilePostFilterExpression(context));
         }
-        
+
         boolean[] starJoinVector = joinTable.getStarJoinVector();
         if (starJoinVector != null) {
             Table table = joinTable.getTable();
@@ -240,16 +241,16 @@ public class QueryCompiler {
             HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, joinExpressions, joinTypes, starJoinVector, tables, fieldPositions, postJoinFilterExpression, limit, forceProjection);
             return HashJoinPlan.create(joinTable.getStatement(), plan, joinInfo, subPlans);
         }
-        
+
         JoinSpec lastJoinSpec = joinSpecs.get(joinSpecs.size() - 1);
         JoinType type = lastJoinSpec.getType();
         if (type == JoinType.Full)
             throw new SQLFeatureNotSupportedException("Full joins not supported.");
-        
+
         if (type == JoinType.Right || type == JoinType.Inner) {
             if (!lastJoinSpec.getJoinTable().getJoinSpecs().isEmpty())
                 throw new SQLFeatureNotSupportedException("Right join followed by sub-join is not supported.");
-            
+
             JoinTable rhsJoinTable = lastJoinSpec.getJoinTable();
             Table rhsTable = rhsJoinTable.getTable();
             JoinTable lhsJoin = joinTable.getSubJoinTableWithoutPostFilters();
@@ -296,15 +297,15 @@ public class QueryCompiler {
             getKeyExpressionCombinations(keyRangeExpressions, context, rhsTableRef, type, joinExpressions, hashExpressions);
             return HashJoinPlan.create(joinTable.getStatement(), rhsPlan, joinInfo, new HashSubPlan[] {new HashSubPlan(0, lhsPlan, hashExpressions, false, keyRangeExpressions.getFirst(), keyRangeExpressions.getSecond(), lhsJoin.hasFilters())});
         }
-        
+
         // Do not support queries like "A right join B left join C" with hash-joins.
         throw new SQLFeatureNotSupportedException("Joins with pattern 'A right join B left join C' not supported.");
     }
-    
+
     private boolean getKeyExpressionCombinations(Pair<Expression, Expression> combination, StatementContext context, TableRef table, JoinType type, final List<Expression> joinExpressions, final List<Expression> hashExpressions) throws SQLException {
         if (type != JoinType.Inner && type != JoinType.Semi)
             return false;
-        
+
         Scan scanCopy = ScanUtil.newScan(context.getScan());
         StatementContext contextCopy = new StatementContext(statement, context.getResolver(), scanCopy, new SequenceManager(statement));
         contextCopy.setCurrentTable(table);
@@ -312,7 +313,7 @@ public class QueryCompiler {
         boolean complete = WhereOptimizer.getKeyExpressionCombination(lhsCombination, contextCopy, this.select, joinExpressions);
         if (lhsCombination.isEmpty())
             return false;
-        
+
         List<Expression> rhsCombination = Lists.newArrayListWithExpectedSize(lhsCombination.size());
         for (int i = 0; i < lhsCombination.size(); i++) {
             Expression lhs = lhsCombination.get(i);
@@ -323,7 +324,7 @@ public class QueryCompiler {
                 }
             }
         }
-        
+
         if (lhsCombination.size() == 1) {
             combination.setFirst(lhsCombination.get(0));
             combination.setSecond(rhsCombination.get(0));
@@ -331,10 +332,10 @@ public class QueryCompiler {
             combination.setFirst(new RowValueConstructorExpression(lhsCombination, false));
             combination.setSecond(new RowValueConstructorExpression(rhsCombination, false));
         }
-        
+
         return type == JoinType.Semi && complete;
     }
-    
+
     protected QueryPlan compileSubquery(SelectStatement subquery) throws SQLException {
         subquery = SubselectRewriter.flatten(subquery, this.statement.getConnection());
         ColumnResolver resolver = FromCompiler.getResolverForQuery(subquery, this.statement.getConnection());
@@ -347,17 +348,17 @@ public class QueryCompiler {
         QueryPlan plan = new QueryCompiler(this.statement, subquery, resolver).compile();
         return statement.getConnection().getQueryServices().getOptimizer().optimize(statement, plan);
     }
-    
+
     protected QueryPlan compileSingleQuery(StatementContext context, SelectStatement select, List<Object> binds, boolean asSubquery, boolean allowPageFilter) throws SQLException{
         PhoenixConnection connection = statement.getConnection();
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
-        
+
         // TODO PHOENIX-944. See DerivedTableIT for a list of unsupported cases.
         if (table.getType() == PTableType.SUBQUERY)
             throw new SQLFeatureNotSupportedException("Complex nested queries not supported.");
-        
+
         ParseNode viewWhere = null;
         if (table.getViewStatement() != null) {
             viewWhere = new SQLParser(table.getViewStatement()).parseQuery().getWhere();
@@ -374,9 +375,9 @@ public class QueryCompiler {
         context.setResolver(FromCompiler.getResolverForQuery(select, connection));
         Set<SubqueryParseNode> subqueries = WhereCompiler.compile(context, select, viewWhere);
         context.setResolver(resolver); // recover resolver
-        OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit); 
+        OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit);
         RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, asSubquery ? Collections.<PDatum>emptyList() : targetColumns);
-        
+
         // Final step is to build the query plan
         int maxRows = statement.getMaxRows();
         if (maxRows > 0) {
@@ -387,7 +388,7 @@ public class QueryCompiler {
             }
         }
         ParallelIteratorFactory parallelIteratorFactory = asSubquery ? null : this.parallelIteratorFactory;
-        QueryPlan plan = select.isAggregate() || select.isDistinct() ? 
+        QueryPlan plan = select.isAggregate() || select.isDistinct() ?
                   new AggregatePlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, groupBy, having)
                 : new ScanPlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, allowPageFilter);
         if (!subqueries.isEmpty()) {
@@ -400,7 +401,7 @@ public class QueryCompiler {
             }
             plan = HashJoinPlan.create(select, plan, null, subPlans);
         }
-        
+
         return plan;
     }
 }
