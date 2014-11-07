@@ -1,4 +1,21 @@
-Release Notes - Phoenix - Version 3.2
+Release Notes - Phoenix - Version 3.2.1
+
+** Bug
+    * [PHOENIX-1346] - Base exception gets wrapped as incompatible jar exception
+    * [PHOENIX-1397] - RVC combined with OR on first row key column results in NPE
+    * [PHOENIX-1401] - SYSTEM.SEQUENCE table is not pre-split as expected
+    * [PHOENIX-1402] - Don't recalculate stats on split
+    * [PHOENIX-1403] - Race condition can cause ConnectionQueryServicesImpl to be re-initialized
+    * [PHOENIX-1404] - PhoenixResultSet.setFetchSize throws SQLFeatureNotSupportedException
+    * [PHOENIX-1405] - Problem referencing lower-case column names with Phoenix / Pig / Spark
+    * [PHOENIX-1406] - Use preCompact hook instead of preCompactScannerOpen for stats collection
+    * [PHOENIX-1407] - PhoenixStatement.getFetchSize() appears to never be used
+    * [PHOENIX-1413] - Add Phoenix coprocessors with configurable priority
+    * [PHOENIX-1416] - Given a schema name, DatabaseMetadata.getTables and getColumns calls erroneously match tables without schema 
+    * [PHOENIX-1418] - Optionally display number of parallel chunks in explain plan
+    * [PHOENIX-1419] - Update eclipse preferences file with correct header information
+
+Release Notes - Phoenix - Version 3.2.0
 
 ** New Features and Sub-task
     * [PHOENIX-167] - Support semi/anti-joins
