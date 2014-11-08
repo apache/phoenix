@@ -2630,13 +2630,13 @@ public final class MetaDataProtos {
     com.google.protobuf.ByteString
         getTableTypeBytes();
 
-    // required bool cascade = 3;
+    // optional bool cascade = 3;
     /**
-     * <code>required bool cascade = 3;</code>
+     * <code>optional bool cascade = 3;</code>
      */
     boolean hasCascade();
     /**
-     * <code>required bool cascade = 3;</code>
+     * <code>optional bool cascade = 3;</code>
      */
     boolean getCascade();
   }
@@ -2818,17 +2818,17 @@ public final class MetaDataProtos {
       }
     }
 
-    // required bool cascade = 3;
+    // optional bool cascade = 3;
     public static final int CASCADE_FIELD_NUMBER = 3;
     private boolean cascade_;
     /**
-     * <code>required bool cascade = 3;</code>
+     * <code>optional bool cascade = 3;</code>
      */
     public boolean hasCascade() {
       return ((bitField0_ & 0x00000002) == 0x00000002);
     }
     /**
-     * <code>required bool cascade = 3;</code>
+     * <code>optional bool cascade = 3;</code>
      */
     public boolean getCascade() {
       return cascade_;
@@ -2845,10 +2845,6 @@ public final class MetaDataProtos {
       if (isInitialized != -1) return isInitialized == 1;
 
       if (!hasTableType()) {
-        memoizedIsInitialized = 0;
-        return false;
-      }
-      if (!hasCascade()) {
         memoizedIsInitialized = 0;
         return false;
       }
@@ -3153,10 +3149,6 @@ public final class MetaDataProtos {
           
           return false;
         }
-        if (!hasCascade()) {
-          
-          return false;
-        }
         return true;
       }
 
@@ -3325,22 +3317,22 @@ public final class MetaDataProtos {
         return this;
       }
 
-      // required bool cascade = 3;
+      // optional bool cascade = 3;
       private boolean cascade_ ;
       /**
-       * <code>required bool cascade = 3;</code>
+       * <code>optional bool cascade = 3;</code>
        */
       public boolean hasCascade() {
         return ((bitField0_ & 0x00000004) == 0x00000004);
       }
       /**
-       * <code>required bool cascade = 3;</code>
+       * <code>optional bool cascade = 3;</code>
        */
       public boolean getCascade() {
         return cascade_;
       }
       /**
-       * <code>required bool cascade = 3;</code>
+       * <code>optional bool cascade = 3;</code>
        */
       public Builder setCascade(boolean value) {
         bitField0_ |= 0x00000004;
@@ -3349,7 +3341,7 @@ public final class MetaDataProtos {
         return this;
       }
       /**
-       * <code>required bool cascade = 3;</code>
+       * <code>optional bool cascade = 3;</code>
        */
       public Builder clearCascade() {
         bitField0_ = (bitField0_ & ~0x00000004);
@@ -8284,7 +8276,7 @@ public final class MetaDataProtos {
       "mp\030\005 \002(\003\"4\n\022CreateTableRequest\022\036\n\026tableM" +
       "etadataMutations\030\001 \003(\014\"V\n\020DropTableReque",
       "st\022\036\n\026tableMetadataMutations\030\001 \003(\014\022\021\n\tta" +
-      "bleType\030\002 \002(\t\022\017\n\007cascade\030\003 \002(\010\"2\n\020AddCol" +
+      "bleType\030\002 \002(\t\022\017\n\007cascade\030\003 \001(\010\"2\n\020AddCol" +
       "umnRequest\022\036\n\026tableMetadataMutations\030\001 \003" +
       "(\014\"3\n\021DropColumnRequest\022\036\n\026tableMetadata" +
       "Mutations\030\001 \003(\014\"9\n\027UpdateIndexStateReque" +

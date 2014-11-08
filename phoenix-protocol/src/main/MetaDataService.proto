@@ -64,7 +64,7 @@ message CreateTableRequest {
 message DropTableRequest {
   repeated bytes tableMetadataMutations = 1;
   required string tableType = 2;
-  required bool cascade = 3;
+  optional bool cascade = 3;
 }
 
 message AddColumnRequest {
