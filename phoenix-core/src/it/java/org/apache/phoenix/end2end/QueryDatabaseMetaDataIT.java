@@ -168,8 +168,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         ResultSet rs;
         rs = dbmd.getSchemas(null, CUSTOM_ENTITY_DATA_SCHEMA_NAME);
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
-        assertEquals(rs.getString("TABLE_CATALOG"),null);
+        assertEquals(rs.getString(1),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
+        assertEquals(rs.getString(2),null);
         assertFalse(rs.next());
 
         rs = dbmd.getSchemas(null, null);
