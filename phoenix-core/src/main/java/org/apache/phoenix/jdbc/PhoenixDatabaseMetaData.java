@@ -877,8 +877,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     @Override
     public ResultSet getSchemas(String catalog, String schemaPattern) throws SQLException {
         StringBuilder buf = new StringBuilder("select distinct \n" +
-                TENANT_ID + " " + TABLE_CATALOG + "," + // no catalog for tables
-                TABLE_SCHEM +
+                TABLE_SCHEM + "," +
+                TENANT_ID + " " + TABLE_CATALOG +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                 " where " + COLUMN_NAME + " is null");
         this.addTenantIdFilter(buf, catalog);
