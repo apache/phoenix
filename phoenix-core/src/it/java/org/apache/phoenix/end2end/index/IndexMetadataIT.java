@@ -342,6 +342,39 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }
+    
+    @Test
+    public void testAlterIndexWithLowerCaseName() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        String indexName = "\"lowerCaseIndex\"";
+        try {
+            ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
+            String ddl = "CREATE INDEX " + indexName + " ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
+                    + " (char_col1 ASC, int_col2 ASC, long_col2 DESC)"
+                    + " INCLUDE (int_col1)";
+            PreparedStatement stmt = conn.prepareStatement(ddl);
+            stmt.execute();
+
+            ddl = "ALTER INDEX " + indexName + " ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + " UNUSABLE";
+            conn.createStatement().execute(ddl);
+            // Verify the metadata for index is correct.
+            ResultSet rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(INDEX_DATA_SCHEMA), "lowerCaseIndex", new String[] {PTableType.INDEX.toString()});
+            assertTrue(rs.next());
+            assertEquals("lowerCaseIndex", rs.getString(3));
+            
+            ddl = "DROP INDEX " + indexName + " ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
+            stmt = conn.prepareStatement(ddl);
+            stmt.execute();
+            
+            // Assert the rows for index table is completely removed.
+            rs = conn.getMetaData().getIndexInfo(null, INDEX_DATA_SCHEMA, INDEX_DATA_TABLE, false, false);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
 
     @Test
     public void testIndexDefinitionWithRepeatedColumns() throws Exception {
