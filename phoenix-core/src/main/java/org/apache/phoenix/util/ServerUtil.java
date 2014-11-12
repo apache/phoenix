@@ -35,6 +35,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 
 
+@SuppressWarnings("deprecation")
 public class ServerUtil {
     private static final int COPROCESSOR_SCAN_WORKS = VersionUtil.encodeVersion("0.98.6");
     
@@ -133,19 +134,34 @@ public class ServerUtil {
         return null;
     }
 
-    @SuppressWarnings("deprecation")
-    public static HTableInterface getHTableForCoprocessorScan (RegionCoprocessorEnvironment env, String tableName) throws IOException {
-        String versionString = env.getHBaseVersion();
-        int version = VersionUtil.encodeVersion(versionString);
-        if (version >= COPROCESSOR_SCAN_WORKS) {
-            // The following *should* work, but doesn't due to HBASE-11837 which was fixed in 0.98.6
-            return env.getTable(TableName.valueOf(tableName));
-        }
-        // This code works around HBASE-11837
+    private static boolean coprocessorScanWorks(RegionCoprocessorEnvironment env) {
+        return (VersionUtil.encodeVersion(env.getHBaseVersion()) >= COPROCESSOR_SCAN_WORKS);
+    }
+    
+    /*
+     * This code works around HBASE-11837 which causes HTableInterfaces retrieved from
+     * RegionCoprocessorEnvironment to not read local data.
+     */
+    private static HTableInterface getTableFromSingletonPool(RegionCoprocessorEnvironment env, byte[] tableName) {
         // It's ok to not ever do a pool.close() as we're storing a single
         // table only. The HTablePool holds no other resources that this table
         // which will be closed itself when it's no longer needed.
+        @SuppressWarnings("resource")
         HTablePool pool = new HTablePool(env.getConfiguration(),1);
         return pool.getTable(tableName);
+    }
+    
+    public static HTableInterface getHTableForCoprocessorScan (RegionCoprocessorEnvironment env, HTableInterface writerTable) throws IOException {
+        if (coprocessorScanWorks(env)) {
+            return writerTable;
+        }
+        return getTableFromSingletonPool(env, writerTable.getTableName());
+    }
+    
+    public static HTableInterface getHTableForCoprocessorScan (RegionCoprocessorEnvironment env, byte[] tableName) throws IOException {
+        if (coprocessorScanWorks(env)) {
+            return env.getTable(TableName.valueOf(tableName));
+        }
+        return getTableFromSingletonPool(env, tableName);
     }
 }
