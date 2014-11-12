@@ -24,9 +24,10 @@ import java.sql.SQLException;
 import java.util.*;
 
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.Test;
-
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.AssertResults;
@@ -68,6 +69,15 @@ public class ConcatResultIteratorTest {
             public void explain(List<String> planSteps) {
             }
             
+			@Override
+			public List<KeyRange> getSplits() {
+				return Collections.emptyList();
+			}
+
+			@Override
+			public List<List<Scan>> getScans() {
+				return Collections.emptyList();
+			}
         };
 
         Tuple[] expectedResults = new Tuple[] {
@@ -118,6 +128,15 @@ public class ConcatResultIteratorTest {
             public void explain(List<String> planSteps) {
             }
             
+			@Override
+			public List<KeyRange> getSplits() {
+				return Collections.emptyList();
+			}
+
+			@Override
+			public List<List<Scan>> getScans() {
+				return Collections.emptyList();
+			}
         };
         ResultIterator scanner = new MergeSortRowKeyResultIterator(iterators);
         AssertResults.assertResults(scanner, expectedResults);

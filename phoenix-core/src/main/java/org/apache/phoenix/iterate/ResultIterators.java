@@ -20,8 +20,13 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.query.KeyRange;
+
 public interface ResultIterators {
-    public List<PeekingResultIterator> getIterators() throws SQLException;
     public int size();
+    public List<KeyRange> getSplits();
+    public List<List<Scan>> getScans();
     public void explain(List<String> planSteps);
+    public List<PeekingResultIterator> getIterators() throws SQLException;
 }

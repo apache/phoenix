@@ -47,6 +47,7 @@ import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PLongColumn;
 import org.apache.phoenix.schema.PName;
@@ -150,6 +151,16 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
             @Override
             public void explain(List<String> planSteps) {
             }
+
+			@Override
+			public List<KeyRange> getSplits() {
+				return Collections.emptyList();
+			}
+
+			@Override
+			public List<List<Scan>> getScans() {
+				return Collections.emptyList();
+			}
             
         };
         ResultIterator scanner = new GroupedAggregatingResultIterator(new MergeSortRowKeyResultIterator(iterators), aggregationManager.getAggregators());
