@@ -22,8 +22,9 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.util.SQLCloseable;
 
-public interface ResultIterators {
+public interface ResultIterators extends SQLCloseable {
     public int size();
     public List<KeyRange> getSplits();
     public List<List<Scan>> getScans();
