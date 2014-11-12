@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
@@ -47,21 +48,21 @@ public class StatisticsUtil {
     /** Number of parts in our complex key */
     protected static final int NUM_KEY_PARTS = 3;
 
-    public static byte[] getRowKey(byte[] table, byte[] fam, byte[] region) {
+    public static byte[] getRowKey(byte[] table, ImmutableBytesPtr fam, byte[] region) {
         // always starts with the source table
-        byte[] rowKey = new byte[table.length + fam.length + region.length + 2];
+        byte[] rowKey = new byte[table.length + fam.getLength() + region.length + 2];
         int offset = 0;
         System.arraycopy(table, 0, rowKey, offset, table.length);
         offset += table.length;
         rowKey[offset++] = QueryConstants.SEPARATOR_BYTE;
-        System.arraycopy(fam, 0, rowKey, offset, fam.length);
-        offset += fam.length;
+        System.arraycopy(fam.get(), fam.getOffset(), rowKey, offset, fam.getLength());
+        offset += fam.getLength();
         rowKey[offset++] = QueryConstants.SEPARATOR_BYTE;
         System.arraycopy(region, 0, rowKey, offset, region.length);
         return rowKey;
     }
     
-    public static Result readRegionStatistics(HTableInterface statsHTable, byte[] tableNameBytes, byte[] cf, byte[] regionName, long clientTimeStamp)
+    public static Result readRegionStatistics(HTableInterface statsHTable, byte[] tableNameBytes, ImmutableBytesPtr cf, byte[] regionName, long clientTimeStamp)
             throws IOException {
         byte[] prefix = StatisticsUtil.getRowKey(tableNameBytes, cf, regionName);
         Get get = new Get(prefix);
