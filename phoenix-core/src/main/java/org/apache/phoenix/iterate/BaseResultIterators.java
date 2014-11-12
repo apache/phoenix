@@ -94,6 +94,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private final PTableStats tableStats;
     private final byte[] physicalTableName;
     private final QueryPlan plan;
+    // TODO: too much nesting here - breakup into new classes.
+    private final List<List<List<Pair<Scan,Future<PeekingResultIterator>>>>> allFutures;
+
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -122,8 +125,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return true;
     }
     
-    public BaseResultIterators(QueryPlan plan, Integer perScanLimit)
-            throws SQLException {
+    public BaseResultIterators(QueryPlan plan, Integer perScanLimit) throws SQLException {
         super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint());
         this.plan = plan;
         StatementContext context = plan.getContext();
@@ -178,6 +180,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
         }
         this.splits = ImmutableList.copyOf(splitRanges);
+        // If split detected, this will be more than one, but that's unlikely
+        this.allFutures = Lists.newArrayListWithExpectedSize(1);
     }
 
     private void doColumnProjectionOptimization(StatementContext context, Scan scan, PTable table, FilterableStatement statement) {
@@ -476,6 +480,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         int numSplits = size();
         List<PeekingResultIterator> iterators = new ArrayList<PeekingResultIterator>(numSplits);
         final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(numSplits);
+        allFutures.add(futures);
+        SQLException toThrow = null;
         // TODO: what purpose does this scanID serve?
         final UUID scanId = UUID.randomUUID();
         try {
@@ -507,6 +513,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             addIterator(iterators, concatIterators);
                             concatIterators = Collections.emptyList();
                             submitWork(scanId, newNestedScans, newFutures, newNestedScans.size());
+                            allFutures.add(newFutures);
                             for (List<Pair<Scan,Future<PeekingResultIterator>>> newFuture : reverseIfNecessary(newFutures, isReverse)) {
                                 for (Pair<Scan,Future<PeekingResultIterator>> newScanPair : reverseIfNecessary(newFuture, isReverse)) {
                                     // Immediate do a get (not catching exception again) and then add the iterators we
@@ -525,23 +532,59 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             success = true;
             return iterators;
         } catch (SQLException e) {
-            throw e;
+            toThrow = e;
         } catch (Exception e) {
-            throw ServerUtil.parseServerException(e);
+            toThrow = ServerUtil.parseServerException(e);
         } finally {
-            if (!success) {
-                SQLCloseables.closeAllQuietly(iterators);
-                // Don't call cancel on already started work, as it causes the HConnection
-                // to get into a funk. Instead, just cancel queued work.
-                for (List<Pair<Scan,Future<PeekingResultIterator>>> futureScans : futures) {
-                    for (Pair<Scan,Future<PeekingResultIterator>> futurePair : futureScans) {
-                        futurePair.getSecond().cancel(false);
+            try {
+                if (!success) {
+                    try {
+                        close();
+                    } catch (Exception e) {
+                        if (toThrow == null) {
+                            toThrow = ServerUtil.parseServerException(e);
+                        } else {
+                            toThrow.setNextException(ServerUtil.parseServerException(e));
+                        }
+                    } finally {
+                        try {
+                            SQLCloseables.closeAll(iterators);
+                        } catch (Exception e) {
+                            if (toThrow == null) {
+                                toThrow = ServerUtil.parseServerException(e);
+                            } else {
+                                toThrow.setNextException(ServerUtil.parseServerException(e));
+                            }
+                        }
                     }
+                }
+            } finally {
+                if (toThrow != null) {
+                    throw toThrow;
                 }
             }
         }
+        return null; // Not reachable
     }
     
+
+    @Override
+    public void close() throws SQLException {
+        // Don't call cancel on already started work, as it causes the HConnection
+        // to get into a funk. Instead, just cancel queued work.
+        boolean cancelledWork = false;
+        for (List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures : allFutures) {
+            for (List<Pair<Scan,Future<PeekingResultIterator>>> futureScans : futures) {
+                for (Pair<Scan,Future<PeekingResultIterator>> futurePair : futureScans) {
+                    cancelledWork |= futurePair.getSecond().cancel(false);
+                }
+            }
+        }
+        if (cancelledWork) {
+            context.getConnection().getQueryServices().getExecutor().purge();
+        }
+    }
+
     private void addIterator(List<PeekingResultIterator> parentIterators, List<PeekingResultIterator> childIterators) {
         if (!childIterators.isEmpty()) {
             parentIterators.add(ConcatResultIterator.newIterator(childIterators));
