@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.query;
 
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import org.apache.phoenix.job.JobManager;
 import org.apache.phoenix.memory.GlobalMemoryManager;
@@ -35,7 +35,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
  * @since 0.1
  */
 public abstract class BaseQueryServicesImpl implements QueryServices {
-    private final ExecutorService executor;
+    private final ThreadPoolExecutor executor;
     private final MemoryManager memoryManager;
     private final ReadOnlyProps props;
     private final QueryOptimizer queryOptimizer;
@@ -53,7 +53,7 @@ public abstract class BaseQueryServicesImpl implements QueryServices {
     }
     
     @Override
-    public ExecutorService getExecutor() {
+    public ThreadPoolExecutor getExecutor() {
         return executor;
     }
 

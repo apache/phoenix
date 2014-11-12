@@ -41,6 +41,7 @@ public class LimitingResultIterator extends DelegateResultIterator {
     @Override
     public Tuple next() throws SQLException {
         if (rowCount++ >= limit) {
+            close(); // Free resources early
             return null;
         }
         return super.next();
