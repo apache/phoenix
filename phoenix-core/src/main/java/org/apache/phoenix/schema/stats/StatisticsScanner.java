@@ -20,7 +20,7 @@ import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
  * The scanner that does the scanning to collect the stats during major compaction.{@link StatisticsCollector}
@@ -31,10 +31,10 @@ public class StatisticsScanner implements InternalScanner {
     private StatisticsWriter stats;
     private HRegion region;
     private StatisticsCollector tracker;
-    private byte[] family;
+    private ImmutableBytesPtr family;
 
     public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, HRegion region,
-            InternalScanner delegate, byte[] family) {
+            InternalScanner delegate, ImmutableBytesPtr family) {
         this.tracker = tracker;
         this.stats = stats;
         this.delegate = delegate;
@@ -83,12 +83,12 @@ public class StatisticsScanner implements InternalScanner {
                 LOG.debug("Deleting the stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
             }
-            stats.deleteStats(region.getRegionName(), this.tracker, Bytes.toString(family), mutations);
+            stats.deleteStats(region.getRegionName(), this.tracker, family, mutations);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Adding new stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
             }
-            stats.addStats(region.getRegionName(), this.tracker, Bytes.toString(family), mutations);
+            stats.addStats(region.getRegionName(), this.tracker, family, mutations);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Committing new stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
