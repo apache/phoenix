@@ -21,6 +21,7 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ServerUtil;
 
 
 /**
@@ -53,10 +54,33 @@ public class ConcatResultIterator implements PeekingResultIterator {
     
     @Override
     public void close() throws SQLException {
-        if (iterators != null) {
-            for (;index < iterators.size(); index++) {
-                PeekingResultIterator iterator = iterators.get(index);
-                iterator.close();
+        SQLException toThrow = null;
+        try {
+            if (resultIterators != null) {
+                resultIterators.close();
+            }
+        } catch (Exception e) {
+           toThrow = ServerUtil.parseServerException(e);
+        } finally {
+            try {
+                if (iterators != null) {
+                    for (;index < iterators.size(); index++) {
+                        PeekingResultIterator iterator = iterators.get(index);
+                        try {
+                            iterator.close();
+                        } catch (Exception e) {
+                            if (toThrow == null) {
+                                toThrow = ServerUtil.parseServerException(e);
+                            } else {
+                                toThrow.setNextException(ServerUtil.parseServerException(e));
+                            }
+                        }
+                    }
+                }
+            } finally {
+                if (toThrow != null) {
+                    throw toThrow;
+                }
             }
         }
     }
@@ -90,7 +114,11 @@ public class ConcatResultIterator implements PeekingResultIterator {
 
     @Override
     public Tuple next() throws SQLException {
-        return currentIterator().next();
+        Tuple next = currentIterator().next();
+        if (next == null) {
+            close(); // Close underlying ResultIterators to free resources sooner rather than later
+        }
+        return next;
     }
 
 	@Override
