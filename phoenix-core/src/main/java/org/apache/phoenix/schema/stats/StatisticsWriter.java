@@ -130,13 +130,13 @@ public class StatisticsWriter implements Closeable {
 	                GuidePostsInfo lguidePosts = new GuidePostsInfo(byteSize, guidePosts.getGuidePosts().subList(0, midEndIndex));
 	                tracker.clear();
 	                tracker.addGuidePost(fam, lguidePosts, byteSize, cell.getTimestamp());
-	                addStats(l.getRegionNameAsString(), tracker, fam, mutations);
+	                addStats(l.getRegionName(), tracker, fam, mutations);
 	            }
 	            if (midStartIndex < guidePosts.getGuidePosts().size()) {
 	                GuidePostsInfo rguidePosts = new GuidePostsInfo(byteSize, guidePosts.getGuidePosts().subList(midStartIndex, guidePosts.getGuidePosts().size()));
 	                tracker.clear();
 	                tracker.addGuidePost(fam, rguidePosts, byteSize, cell.getTimestamp());
-	                addStats(r.getRegionNameAsString(), tracker, fam, mutations);
+	                addStats(r.getRegionName(), tracker, fam, mutations);
 	            }
         	}
         }
@@ -157,7 +157,7 @@ public class StatisticsWriter implements Closeable {
      *             if we fail to do any of the puts. Any single failure will prevent any future attempts for the remaining list of stats to
      *             update
      */
-    public void addStats(String regionName, StatisticsCollector tracker, String fam, List<Mutation> mutations) throws IOException {
+    public void addStats(byte[] regionName, StatisticsCollector tracker, String fam, List<Mutation> mutations) throws IOException {
         if (tracker == null) { return; }
         boolean useMaxTimeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP;
         long timeStamp = clientTimeStamp;
@@ -166,7 +166,7 @@ public class StatisticsWriter implements Closeable {
             mutations.add(getLastStatsUpdatedTimePut(timeStamp));
         }
         byte[] prefix = StatisticsUtil.getRowKey(tableName, PDataType.VARCHAR.toBytes(fam),
-                PDataType.VARCHAR.toBytes(regionName));
+                regionName);
         Put put = new Put(prefix);
         GuidePostsInfo gp = tracker.getGuidePosts(fam);
         if (gp != null) {
@@ -238,11 +238,11 @@ public class StatisticsWriter implements Closeable {
         statisticsTable.put(put);
     }
     
-    public void deleteStats(String regionName, StatisticsCollector tracker, String fam, List<Mutation> mutations)
+    public void deleteStats(byte[] regionName, StatisticsCollector tracker, String fam, List<Mutation> mutations)
             throws IOException {
         long timeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP ? tracker.getMaxTimeStamp() : clientTimeStamp;
         byte[] prefix = StatisticsUtil.getRowKey(tableName, PDataType.VARCHAR.toBytes(fam),
-                PDataType.VARCHAR.toBytes(regionName));
+                regionName);
         mutations.add(new Delete(prefix, timeStamp - 1));
     }
 }
