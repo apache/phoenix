@@ -37,7 +37,9 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -51,7 +53,8 @@ public class KeyOnlyIT extends BaseOwnClusterClientManagedTimeIT {
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
-        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(50));
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(100));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
@@ -79,7 +82,7 @@ public class KeyOnlyIT extends BaseOwnClusterClientManagedTimeIT {
         assertEquals(4, rs.getInt(2));
         assertFalse(rs.next());
         List<KeyRange> splits = getAllSplits(conn5, "KEYONLY");
-        assertEquals(3, splits.size());
+        assertEquals(2, splits.size());
         conn5.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+60));
@@ -159,6 +162,31 @@ public class KeyOnlyIT extends BaseOwnClusterClientManagedTimeIT {
         conn5.close();
     }
         
+    @Test
+    public void testQueryWithLimitAndStats() throws Exception {
+        long ts = nextTimestamp();
+        ensureTableCreated(getUrl(),KEYONLY_NAME,null, ts);
+        initTableValues(ts+1, 100);
+        
+        TestUtil.analyzeTable(getUrl(), ts+10, KEYONLY_NAME);
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+50));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String query = "SELECT i1 FROM KEYONLY LIMIT 1";
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals(0, rs.getInt(1));
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        assertEquals("CLIENT SERIAL 1-WAY FULL SCAN OVER KEYONLY\n" + 
+                "    SERVER FILTER BY PageFilter 1\n" + 
+                "    SERVER 1 ROW LIMIT\n" + 
+                "CLIENT 1 ROW LIMIT", QueryUtil.getExplainPlan(rs));
+        conn.close();
+    }
+    
     protected static void initTableValues(long ts) throws Exception {
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -173,6 +201,23 @@ public class KeyOnlyIT extends BaseOwnClusterClientManagedTimeIT {
         stmt.setInt(1, 3);
         stmt.setInt(2, 4);
         stmt.execute();
+        
+        conn.commit();
+        conn.close();
+    }
+
+    protected static void initTableValues(long ts, int nRows) throws Exception {
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        PreparedStatement stmt = conn.prepareStatement(
+            "upsert into " +
+            "KEYONLY VALUES (?, ?)");
+        for (int i = 0; i < nRows; i++) {
+	        stmt.setInt(1, i);
+	        stmt.setInt(2, i+1);
+	        stmt.execute();
+        }
         
         conn.commit();
         conn.close();

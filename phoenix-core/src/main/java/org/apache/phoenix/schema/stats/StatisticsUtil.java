@@ -24,6 +24,8 @@ import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -109,5 +111,20 @@ public class StatisticsUtil {
             return new PTableStatsImpl(guidePostsPerCf, timeStamp);
         }
         return PTableStats.EMPTY_STATS;
+    }
+    
+    public static long getGuidePostDepth(int guidepostPerRegion, long guidepostWidth, HTableDescriptor tableDesc) {
+        if (guidepostPerRegion > 0) {
+            long maxFileSize = HConstants.DEFAULT_MAX_FILE_SIZE;
+            if (tableDesc != null) {
+                long tableMaxFileSize = tableDesc.getMaxFileSize();
+                if (tableMaxFileSize >= 0) {
+                    maxFileSize = tableMaxFileSize;
+                }
+            }
+            return maxFileSize / guidepostPerRegion;
+        } else {
+            return guidepostWidth;
+        }
     }
 }

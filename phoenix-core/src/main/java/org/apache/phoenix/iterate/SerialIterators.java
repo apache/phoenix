@@ -27,6 +27,7 @@ import java.util.concurrent.Future;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.LogUtil;
@@ -34,6 +35,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
 
@@ -45,15 +47,18 @@ import com.google.common.collect.Lists;
  * 
  * @since 0.1
  */
-public class ParallelIterators extends BaseResultIterators {
-	private static final Logger logger = LoggerFactory.getLogger(ParallelIterators.class);
-	private static final String NAME = "PARALLEL";
+public class SerialIterators extends BaseResultIterators {
+	private static final Logger logger = LoggerFactory.getLogger(SerialIterators.class);
+	private static final String NAME = "SERIAL";
     private final ParallelIteratorFactory iteratorFactory;
+    private final int limit;
     
-    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory)
+    public SerialIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory)
             throws SQLException {
         super(plan, perScanLimit);
+        Preconditions.checkArgument(perScanLimit != null); // must be a limit specified
         this.iteratorFactory = iteratorFactory;
+        this.limit = perScanLimit;
     }
 
     @Override
@@ -65,32 +70,27 @@ public class ParallelIterators extends BaseResultIterators {
         // will spray the scans across machines as opposed to targeting a
         // single one since the scans are in row key order.
         ExecutorService executor = context.getConnection().getQueryServices().getExecutor();
-        List<ScanLocator> scanLocations = Lists.newArrayListWithExpectedSize(estFlattenedSize);
-        for (int i = 0; i < nestedScans.size(); i++) {
-            List<Scan> scans = nestedScans.get(i);
-            List<Pair<Scan,Future<PeekingResultIterator>>> futures = Lists.newArrayListWithExpectedSize(scans.size());
-            nestedFutures.add(futures);
-            for (int j = 0; j < scans.size(); j++) {
-            	Scan scan = nestedScans.get(i).get(j);
-                scanLocations.add(new ScanLocator(scan, i, j));
-                futures.add(null); // placeholder
-            }
-        }
-        // Shuffle so that we start execution across many machines
-        // before we fill up the thread pool
-        Collections.shuffle(scanLocations);
-        for (ScanLocator scanLocation : scanLocations) {
-            final Scan scan = scanLocation.getScan();
+        
+        for (final List<Scan> scans : nestedScans) {
+            Scan firstScan = scans.get(0);
+            Scan lastScan = scans.get(scans.size()-1);
+            final Scan overallScan = ScanUtil.newScan(firstScan);
+            overallScan.setStopRow(lastScan.getStopRow());
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
 
                 @Override
                 public PeekingResultIterator call() throws Exception {
-                    long startTime = System.currentTimeMillis();
-                    ResultIterator scanner = new TableResultIterator(context, tableRef, scan);
-                    if (logger.isDebugEnabled()) {
-                        logger.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
-                    }
-                    return iteratorFactory.newIterator(context, scanner, scan);
+                	List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(scans.size());
+                	for (final Scan scan : scans) {
+	                    long startTime = System.currentTimeMillis();
+	                    ResultIterator scanner = new TableResultIterator(context, tableRef, scan);
+	                    if (logger.isDebugEnabled()) {
+	                        logger.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
+	                    }
+	                    concatIterators.add(iteratorFactory.newIterator(context, scanner, scan));
+                	}
+                	PeekingResultIterator concatIterator = ConcatResultIterator.newIterator(concatIterators);
+                	return new LimitingPeekingResultIterator(concatIterator, limit);
                 }
 
                 /**
@@ -100,12 +100,11 @@ public class ParallelIterators extends BaseResultIterators {
                  */
                 @Override
                 public Object getJobId() {
-                    return ParallelIterators.this;
+                    return SerialIterators.this;
                 }
             }, "Parallel scanner for table: " + tableRef.getTable().getName().getString()));
-            // Add our future in the right place so that we can concatenate the
-            // results of the inner futures versus merge sorting across all of them.
-            nestedFutures.get(scanLocation.getOuterListIndex()).set(scanLocation.getInnerListIndex(), new Pair<Scan,Future<PeekingResultIterator>>(scan,future));
+            // Add our singleton Future which will execute serially
+            nestedFutures.add(Collections.singletonList(new Pair<Scan,Future<PeekingResultIterator>>(overallScan,future)));
         }
     }
 

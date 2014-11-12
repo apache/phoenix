@@ -18,35 +18,10 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
-import java.util.List;
 
-import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.compile.StatementContext;
 
-
-public class DelegateResultIterator implements ResultIterator {
-    private final ResultIterator delegate;
-    
-    public DelegateResultIterator(ResultIterator delegate) {
-        this.delegate = delegate;
-    }
-    
-    protected ResultIterator getDelegate() {
-    	return delegate;
-    }
-    
-    @Override
-    public void close() throws SQLException {
-        delegate.close();
-    }
-
-    @Override
-    public Tuple next() throws SQLException {
-        return delegate.next();
-    }
-
-    @Override
-    public void explain(List<String> planSteps) {
-        delegate.explain(planSteps);
-    }
-
+public interface ParallelIteratorFactory {
+    PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException;
 }

@@ -606,7 +606,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         if (tenantId == null) {
             HTableInterface statsHTable = null;
             try {
-                statsHTable = ServerUtil.getHTableForCoprocessorScan(env, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
+                statsHTable = ServerUtil.getHTableForCoprocessorScan(env, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
                 stats = StatisticsUtil.readStatistics(statsHTable, physicalTableName.getBytes(), clientTimeStamp);
                 timeStamp = Math.max(timeStamp, stats.getTimestamp()); 
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
@@ -839,7 +839,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // TableName systemCatalogTableName = region.getTableDesc().getTableName();
         // HTableInterface hTable = env.getTable(systemCatalogTableName);
         // These deprecated calls work around the issue
-        HTableInterface hTable = ServerUtil.getHTableForCoprocessorScan(env, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+        HTableInterface hTable = ServerUtil.getHTableForCoprocessorScan(env, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         try {
             boolean allViewsInCurrentRegion = true;
             int numOfChildViews = 0;

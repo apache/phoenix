@@ -33,6 +33,7 @@ import java.util.Properties;
 
 import javax.annotation.Nullable;
 
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -69,6 +70,7 @@ import com.google.common.base.Preconditions;
  */
 public class SchemaUtil {
     private static final int VAR_LENGTH_ESTIMATE = 10;
+    private static final int VAR_KV_LENGTH_ESTIMATE = 50;
     public static final String ESCAPE_CHARACTER = "\"";
     public static final DataBlockEncoding DEFAULT_DATA_BLOCK_ENCODING = DataBlockEncoding.FAST_DIFF;
     public static final PDatum VAR_BINARY_DATUM = new PDatum() {
@@ -109,6 +111,28 @@ public class SchemaUtil {
 
     public static boolean isPKColumn(PColumn column) {
         return column.getFamilyName() == null;
+    }
+  
+    /**
+     * Imperfect estimate of row size given a PTable
+     * TODO: keep row count in stats table and use total size / row count instead
+     * @param table
+     * @return estimate of size in bytes of a row
+     */
+    public static long estimateRowSize(PTable table) {
+    	int keyLength = estimateKeyLength(table);
+    	long rowSize = 0;
+    	for (PColumn column : table.getColumns()) {
+    		if (!SchemaUtil.isPKColumn(column)) {
+                PDataType type = column.getDataType();
+                Integer maxLength = column.getMaxLength();
+                int valueLength = !type.isFixedWidth() ? VAR_KV_LENGTH_ESTIMATE : maxLength == null ? type.getByteSize() : maxLength;
+    			rowSize += KeyValue.getKeyValueDataStructureSize(keyLength, column.getFamilyName().getBytes().length, column.getName().getBytes().length, valueLength);
+    		}
+    	}
+    	// Empty key value
+    	rowSize += KeyValue.getKeyValueDataStructureSize(keyLength, getEmptyColumnFamily(table).length, QueryConstants.EMPTY_COLUMN_BYTES.length, 0);
+    	return rowSize;
     }
     
     /**
