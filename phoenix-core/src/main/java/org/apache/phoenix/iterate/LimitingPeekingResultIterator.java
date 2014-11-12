@@ -18,35 +18,30 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
-import java.util.List;
 
 import org.apache.phoenix.schema.tuple.Tuple;
 
+/**
+ * 
+ * Iterates through tuples up to a limit
+ *
+ * 
+ * @since 1.2
+ */
+public class LimitingPeekingResultIterator extends LimitingResultIterator implements PeekingResultIterator {
+    
+    public LimitingPeekingResultIterator(PeekingResultIterator delegate, int limit) {
+        super(delegate, limit);
+    }
 
-public class DelegateResultIterator implements ResultIterator {
-    private final ResultIterator delegate;
-    
-    public DelegateResultIterator(ResultIterator delegate) {
-        this.delegate = delegate;
-    }
-    
-    protected ResultIterator getDelegate() {
-    	return delegate;
-    }
     
     @Override
-    public void close() throws SQLException {
-        delegate.close();
+    protected PeekingResultIterator getDelegate() {
+    	return (PeekingResultIterator) super.getDelegate();
     }
-
-    @Override
-    public Tuple next() throws SQLException {
-        return delegate.next();
-    }
-
-    @Override
-    public void explain(List<String> planSteps) {
-        delegate.explain(planSteps);
-    }
-
+    
+	@Override
+	public Tuple peek() throws SQLException {
+		return getDelegate().peek();
+	}
 }

@@ -25,6 +25,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Properties;
 
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
@@ -182,6 +183,56 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 conn.close();
             }
         }
+    }
+    
+    @Test
+    public void testTenantSpecificConnWithLimit() throws Exception {
+        String baseTableDDL = "CREATE TABLE BASE_MULTI_TENANT_TABLE(\n " + 
+                "  tenant_id VARCHAR(5) NOT NULL,\n" + 
+                "  userid INTEGER NOT NULL,\n" + 
+                "  username VARCHAR NOT NULL,\n" +
+                "  col VARCHAR\n " + 
+                "  CONSTRAINT pk PRIMARY KEY (tenant_id, userid, username)) MULTI_TENANT=true";
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(baseTableDDL);
+        conn.close();
+        
+        String tenantId = "tenantId";
+        String tenantViewDDL = "CREATE VIEW TENANT_VIEW AS SELECT * FROM BASE_MULTI_TENANT_TABLE";
+        Properties tenantProps = new Properties();
+        tenantProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        conn = DriverManager.getConnection(getUrl(), tenantProps);
+        conn.createStatement().execute(tenantViewDDL);
+        
+        String query = "EXPLAIN SELECT * FROM TENANT_VIEW LIMIT 1";
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        assertEquals("CLIENT SERIAL 1-WAY RANGE SCAN OVER BASE_MULTI_TENANT_TABLE ['tenantId']\n" + 
+                "    SERVER FILTER BY PageFilter 1\n" + 
+                "    SERVER 1 ROW LIMIT\n" + 
+                "CLIENT 1 ROW LIMIT", QueryUtil.getExplainPlan(rs));
+        query = "EXPLAIN SELECT * FROM TENANT_VIEW LIMIT " + Integer.MAX_VALUE;
+        rs = conn.createStatement().executeQuery(query);
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER BASE_MULTI_TENANT_TABLE ['tenantId']\n" + 
+                "    SERVER FILTER BY PageFilter " + Integer.MAX_VALUE + "\n" + 
+                "    SERVER " + Integer.MAX_VALUE + " ROW LIMIT\n" + 
+                "CLIENT " + Integer.MAX_VALUE + " ROW LIMIT", QueryUtil.getExplainPlan(rs));
+        query = "EXPLAIN SELECT * FROM TENANT_VIEW WHERE username = 'Joe' LIMIT 1";
+        rs = conn.createStatement().executeQuery(query);
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER BASE_MULTI_TENANT_TABLE ['tenantId']\n" + 
+                "    SERVER FILTER BY USERNAME = 'Joe'\n" + 
+                "    SERVER 1 ROW LIMIT\n" + 
+                "CLIENT 1 ROW LIMIT", QueryUtil.getExplainPlan(rs));
+        query = "EXPLAIN SELECT * FROM TENANT_VIEW WHERE col = 'Joe' LIMIT 1";
+        rs = conn.createStatement().executeQuery(query);
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER BASE_MULTI_TENANT_TABLE ['tenantId']\n" + 
+                "    SERVER FILTER BY COL = 'Joe'\n" + 
+                "    SERVER 1 ROW LIMIT\n" + 
+                "CLIENT 1 ROW LIMIT", QueryUtil.getExplainPlan(rs));
+    }
+    
+    @Test
+    public void testLimitOnTenantSpecific() throws Exception {
+        
     }
 
 }

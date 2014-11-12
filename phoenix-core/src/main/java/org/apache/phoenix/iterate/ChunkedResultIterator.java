@@ -44,7 +44,7 @@ import com.google.common.base.Preconditions;
 public class ChunkedResultIterator implements PeekingResultIterator {
     private static final Logger logger = LoggerFactory.getLogger(ChunkedResultIterator.class);
 
-    private final ParallelIterators.ParallelIteratorFactory delegateIteratorFactory;
+    private final ParallelIteratorFactory delegateIteratorFactory;
     private ImmutableBytesWritable lastKey = new ImmutableBytesWritable();
     private final StatementContext context;
     private final TableRef tableRef;
@@ -52,12 +52,12 @@ public class ChunkedResultIterator implements PeekingResultIterator {
     private final long chunkSize;
     private PeekingResultIterator resultIterator;
 
-    public static class ChunkedResultIteratorFactory implements ParallelIterators.ParallelIteratorFactory {
+    public static class ChunkedResultIteratorFactory implements ParallelIteratorFactory {
 
-        private final ParallelIterators.ParallelIteratorFactory delegateFactory;
+        private final ParallelIteratorFactory delegateFactory;
         private final TableRef tableRef;
 
-        public ChunkedResultIteratorFactory(ParallelIterators.ParallelIteratorFactory
+        public ChunkedResultIteratorFactory(ParallelIteratorFactory
                 delegateFactory, TableRef tableRef) {
             this.delegateFactory = delegateFactory;
             this.tableRef = tableRef;
@@ -74,7 +74,7 @@ public class ChunkedResultIterator implements PeekingResultIterator {
         }
     }
 
-    public ChunkedResultIterator(ParallelIterators.ParallelIteratorFactory delegateIteratorFactory,
+    public ChunkedResultIterator(ParallelIteratorFactory delegateIteratorFactory,
             StatementContext context, TableRef tableRef, Scan scan, long chunkSize) throws SQLException {
         this.delegateIteratorFactory = delegateIteratorFactory;
         this.context = context;

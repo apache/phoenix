@@ -149,6 +149,7 @@ public class QueryServicesOptions {
     public static final double DEFAULT_TRACING_PROBABILITY_THRESHOLD = 0.05;
 
     public static final int DEFAULT_STATS_UPDATE_FREQ_MS = 15 * 60000; // 15min
+    public static final int DEFAULT_STATS_GUIDEPOST_PER_REGION = 0; // Uses guidepost width by default
     public static final long DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES = 100 * 1024 *1024; // 100MB
     public static final boolean DEFAULT_STATS_USE_CURRENT_TIME = true;
 
