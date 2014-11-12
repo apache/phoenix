@@ -64,6 +64,12 @@ public abstract class MergeSortResultIterator implements PeekingResultIterator {
                 if (iterators != null) {
                     SQLCloseables.closeAll(iterators);
                 }
+            } catch (Exception e) {
+                if (toThrow == null) {
+                    toThrow = ServerUtil.parseServerException(e);
+                } else {
+                    toThrow.setNextException(ServerUtil.parseServerException(e));
+                }
             } finally {
                 if (toThrow != null) {
                     throw toThrow;
