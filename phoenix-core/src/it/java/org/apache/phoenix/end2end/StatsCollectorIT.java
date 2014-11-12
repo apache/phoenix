@@ -22,6 +22,7 @@ import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Array;
@@ -171,7 +172,6 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         stmt.setArray(3, array);
         stmt.execute();
         conn.commit();
-        flush(tableName);
         stmt = upsertStmt(conn, tableName);
         stmt.setString(1, "b");
         s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
@@ -182,7 +182,6 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         stmt.setArray(3, array);
         stmt.execute();
         conn.commit();
-        flush(tableName);
         stmt = upsertStmt(conn, tableName);
         stmt.setString(1, "c");
         s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
@@ -193,7 +192,6 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         stmt.setArray(3, array);
         stmt.execute();
         conn.commit();
-        flush(tableName);
         stmt = upsertStmt(conn, tableName);
         stmt.setString(1, "d");
         s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
@@ -204,7 +202,6 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         stmt.setArray(3, array);
         stmt.execute();
         conn.commit();
-        flush(tableName);
         stmt = upsertStmt(conn, tableName);
         stmt.setString(1, "b");
         s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
@@ -215,7 +212,6 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         stmt.setArray(3, array);
         stmt.execute();
         conn.commit();
-        flush(tableName);
         stmt = upsertStmt(conn, tableName);
         stmt.setString(1, "e");
         s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
@@ -226,12 +222,7 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         stmt.setArray(3, array);
         stmt.execute();
         conn.commit();
-        flush(tableName);
         return conn;
-    }
-
-    private void flush(String tableName) throws IOException, InterruptedException {
-        //utility.getHBaseAdmin().flush(tableName.toUpperCase());
     }
 
     private PreparedStatement upsertStmt(Connection conn, String tableName) throws SQLException {
@@ -301,12 +292,11 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
                 nTries++;
             } while (nRegions == nRegionsNow && nTries < 10);
             if (nRegions == nRegionsNow) {
-                throw new IOException("Failed to complete split within alloted time");
+                fail();
             }
             // FIXME: I see the commit of the stats finishing before this with a lower timestamp that the scan timestamp,
             // yet without this sleep, the query finds the old data. Seems like an HBase bug and a potentially serious one.
-
-            Thread.sleep(5000);
+            Thread.sleep(8000);
         } finally {
             admin.close();
         }

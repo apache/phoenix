@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.MultiRowMutationProtocol;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -44,25 +45,43 @@ import org.apache.phoenix.util.TimeKeeper;
  * Wrapper to access the statistics table SYSTEM.STATS using the HTable.
  */
 public class StatisticsWriter implements Closeable {
-    public static StatisticsWriter newWriter(HTableInterface hTable, String tableName, long clientTimeStamp)
-            throws IOException {
+    /**
+     * @param tableName TODO
+     * @param clientTimeStamp TODO
+     * @param guidepostDepth 
+     * @param Configuration
+     *            Configruation to update the stats table.
+     * @param primaryTableName
+     *            name of the primary table on which we should collect stats
+     * @return the {@link StatisticsWriter} for the given primary table.
+     * @throws IOException
+     *             if the table cannot be created due to an underlying HTable creation error
+     */
+    public static StatisticsWriter newWriter(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp) throws IOException {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
             clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
         }
-        StatisticsWriter statsTable = new StatisticsWriter(hTable, tableName, clientTimeStamp);
+        HTableInterface statsWriterTable = env.getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+        HTableInterface statsReaderTable = statsWriterTable;
+        StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName, clientTimeStamp);
         if (clientTimeStamp != StatisticsCollector.NO_TIMESTAMP) { // Otherwise we do this later as we don't know the ts yet
             statsTable.commitLastStatsUpdatedTime();
         }
         return statsTable;
     }
 
-    private final HTableInterface statisticsTable;
+    private final HTableInterface statsWriterTable;
+    // In HBase 0.98.4 or above, the reader and writer will be the same.
+    // In pre HBase 0.98.4, there was a bug in using the HTable returned
+    // from a coprocessor for scans, so in that case it'll be different.
+    private final HTableInterface statsReaderTable;
     private final byte[] tableName;
     private final long clientTimeStamp;
 
-    private StatisticsWriter(HTableInterface statsTable, String tableName, long clientTimeStamp) {
-        this.statisticsTable = statsTable;
-        this.tableName = PDataType.VARCHAR.toBytes(tableName);
+    private StatisticsWriter(HTableInterface statsReaderTable, HTableInterface statsWriterTable, String tableName, long clientTimeStamp) {
+        this.statsReaderTable = statsReaderTable;
+        this.statsWriterTable = statsWriterTable;
+        this.tableName = Bytes.toBytes(tableName);
         this.clientTimeStamp = clientTimeStamp;
     }
 
@@ -71,7 +90,7 @@ public class StatisticsWriter implements Closeable {
      */
     @Override
     public void close() throws IOException {
-        statisticsTable.close();
+        statsWriterTable.close();
     }
 
     public void splitStats(HRegion p, HRegion l, HRegion r, StatisticsCollector tracker, String fam, List<Mutation> mutations) throws IOException {
@@ -82,7 +101,7 @@ public class StatisticsWriter implements Closeable {
         }
         long readTimeStamp = useMaxTimeStamp ? HConstants.LATEST_TIMESTAMP : clientTimeStamp;
         byte[] famBytes = PDataType.VARCHAR.toBytes(fam);
-        Result result = StatisticsUtil.readRegionStatistics(statisticsTable, tableName, famBytes, p.getRegionName(), readTimeStamp);
+        Result result = StatisticsUtil.readRegionStatistics(statsReaderTable, tableName, famBytes, p.getRegionName(), readTimeStamp);
         if (result != null && !result.isEmpty()) {
         	KeyValue cell = result.getColumnLatest(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
 
@@ -178,7 +197,7 @@ public class StatisticsWriter implements Closeable {
     public void commitStats(List<Mutation> mutations) throws IOException {
         if (mutations.size() > 0) {
             byte[] row = mutations.get(0).getRow();
-            HTableInterface stats = this.statisticsTable;
+            HTableInterface stats = this.statsWriterTable;
             MultiRowMutationProtocol protocol = stats.coprocessorProxy(MultiRowMutationProtocol.class, row);
             protocol.mutateRows(mutations);
         }
@@ -197,7 +216,7 @@ public class StatisticsWriter implements Closeable {
         // Always use wallclock time for this, as it's a mechanism to prevent
         // stats from being collected too often.
         Put put = getLastStatsUpdatedTimePut(clientTimeStamp);
-        statisticsTable.put(put);
+        statsWriterTable.put(put);
     }
     
     public void deleteStats(byte[] regionName, StatisticsCollector tracker, String fam, List<Mutation> mutations)

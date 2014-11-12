@@ -105,7 +105,7 @@ public final class PhoenixRecordReader extends RecordReader<NullWritable,Phoenix
                 PeekingResultIterator peekingResultIterator = LookAheadResultIterator.wrap(tableResultIterator);
                 iterators.add(peekingResultIterator);
             }
-            ResultIterator iterator = ConcatResultIterator.newConcatResultIterator(iterators);
+            ResultIterator iterator = ConcatResultIterator.newIterator(iterators);
             if(queryPlan.getContext().getSequenceManager().getSequenceCount() > 0) {
                 iterator = new SequenceResultIterator(iterator, queryPlan.getContext().getSequenceManager());
             }

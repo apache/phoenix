@@ -21,6 +21,7 @@ package org.apache.phoenix.execute;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -33,12 +34,15 @@ import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.MergeSortRowKeyResultIterator;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
+import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelIterators;
-import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.ResultIterators;
 import org.apache.phoenix.iterate.SequenceResultIterator;
+import org.apache.phoenix.iterate.SerialIterators;
 import org.apache.phoenix.iterate.SpoolingResultIterator;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -46,7 +50,10 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
 
 
 
@@ -105,7 +112,8 @@ public class ScanPlan extends BaseQueryPlan {
     @Override
     protected ResultIterator newIterator() throws SQLException {
         // Set any scan attributes before creating the scanner, as it will be too late afterwards
-        context.getScan().setAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY, QueryConstants.TRUE);
+        Scan scan = context.getScan();
+        scan.setAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY, QueryConstants.TRUE);
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
             ScanUtil.setReversed(context.getScan());
         }
@@ -117,7 +125,40 @@ public class ScanPlan extends BaseQueryPlan {
          * limit is provided, run query serially.
          */
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
-        ParallelIterators iterators = new ParallelIterators(this, !allowPageFilter || isOrdered ? null : limit, parallelIteratorFactory);
+        boolean isSerial = false;
+        Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
+        /*
+         * If a limit is provided and we have no filter, run the scan serially when we estimate that
+         * the limit's worth of data will fit into a single region.
+         */
+        if (perScanLimit != null && scan.getFilter() == null) {
+        	GuidePostsInfo gpsInfo = table.getTableStats().getGuidePosts().get(SchemaUtil.getEmptyColumnFamily(table));
+            long estRowSize = SchemaUtil.estimateRowSize(table);
+        	long estRegionSize;
+        	if (gpsInfo == null) {
+        	    // Use guidepost depth as minimum size
+        	    ConnectionQueryServices services = context.getConnection().getQueryServices();
+        	    HTableDescriptor desc = services.getTableDescriptor(table.getName().getBytes());
+                int guidepostPerRegion = services.getProps().getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
+                        QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION);
+                long guidepostWidth = services.getProps().getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES);
+        	    estRegionSize = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth, desc);
+        	} else {
+        		// Region size estimated based on total number of bytes divided by number of regions
+        	    estRegionSize = gpsInfo.getByteCount() / (gpsInfo.getGuidePosts().size()+1);
+        	}
+            // TODO: configurable number of bytes?
+            if (perScanLimit * estRowSize < estRegionSize) {
+                isSerial = true;
+            }
+        }
+        ResultIterators iterators;
+        if (isSerial) {
+        	iterators = new SerialIterators(this, perScanLimit, parallelIteratorFactory);
+        } else {
+        	iterators = new ParallelIterators(this, perScanLimit, parallelIteratorFactory);
+        }
         splits = iterators.getSplits();
         scans = iterators.getScans();
         if (isOrdered) {
