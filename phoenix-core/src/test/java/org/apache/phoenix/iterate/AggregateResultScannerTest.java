@@ -151,6 +151,10 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
 			public List<List<Scan>> getScans() {
 				return Collections.emptyList();
 			}
+
+            @Override
+            public void close() throws SQLException {
+            }
             
         };
         ResultIterator scanner = new GroupedAggregatingResultIterator(new MergeSortRowKeyResultIterator(iterators), aggregationManager.getAggregators());

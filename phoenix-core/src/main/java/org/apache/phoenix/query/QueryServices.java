@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.query;
 
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import org.apache.http.annotation.Immutable;
 import org.apache.phoenix.iterate.SpoolTooBigToDiskException;
@@ -145,7 +145,7 @@ public interface QueryServices extends SQLCloseable {
     /**
      * Get executor service used for parallel scans
      */
-    public ExecutorService getExecutor();
+    public ThreadPoolExecutor getExecutor();
     /**
      * Get the memory manager used to track memory usage
      */

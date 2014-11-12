@@ -21,9 +21,9 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SQLCloseables;
+import org.apache.phoenix.util.ServerUtil;
 
 
 /**
@@ -52,6 +52,24 @@ public abstract class MergeSortResultIterator implements PeekingResultIterator {
     
     @Override
     public void close() throws SQLException {
+        SQLException toThrow = null;
+        try {
+            if (resultIterators != null) {
+                resultIterators.close();
+            }
+        } catch (Exception e) {
+           toThrow = ServerUtil.parseServerException(e);
+        } finally {
+            try {
+                if (iterators != null) {
+                    SQLCloseables.closeAll(iterators);
+                }
+            } finally {
+                if (toThrow != null) {
+                    throw toThrow;
+                }
+            }
+        }
         if (iterators != null) {
             SQLCloseables.closeAll(iterators);
         }

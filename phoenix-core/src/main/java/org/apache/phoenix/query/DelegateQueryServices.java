@@ -18,7 +18,7 @@
 package org.apache.phoenix.query;
 
 import java.sql.SQLException;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.optimize.QueryOptimizer;
@@ -46,7 +46,7 @@ public class DelegateQueryServices implements QueryServices {
     }
     
     @Override
-    public ExecutorService getExecutor() {
+    public ThreadPoolExecutor getExecutor() {
         return parent.getExecutor();
     }
 
