@@ -70,9 +70,6 @@ public abstract class MergeSortResultIterator implements PeekingResultIterator {
                 }
             }
         }
-        if (iterators != null) {
-            SQLCloseables.closeAll(iterators);
-        }
     }
 
     abstract protected int compare(Tuple t1, Tuple t2);
