@@ -83,12 +83,12 @@ public class StatisticsScanner implements InternalScanner {
                 LOG.debug("Deleting the stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
             }
-            stats.deleteStats(region.getRegionNameAsString(), this.tracker, Bytes.toString(family), mutations);
+            stats.deleteStats(region.getRegionName(), this.tracker, Bytes.toString(family), mutations);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Adding new stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
             }
-            stats.addStats(region.getRegionNameAsString(), this.tracker, Bytes.toString(family), mutations);
+            stats.addStats(region.getRegionName(), this.tracker, Bytes.toString(family), mutations);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Committing new stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");

@@ -123,13 +123,13 @@ public class StatisticsCollector {
                     if(logger.isDebugEnabled()) {
                         logger.debug("Deleting the stats for the region "+region.getRegionInfo());
                     }
-                    statsTable.deleteStats(region.getRegionInfo().getRegionNameAsString(), this, Bytes.toString(fam.copyBytesIfNecessary()),
+                    statsTable.deleteStats(region.getRegionInfo().getRegionName(), this, Bytes.toString(fam.copyBytesIfNecessary()),
                             mutations);
                 }
                 if(logger.isDebugEnabled()) {
                     logger.debug("Adding new stats for the region "+region.getRegionInfo());
                 }
-                statsTable.addStats((region.getRegionInfo().getRegionNameAsString()), this, Bytes.toString(fam.copyBytesIfNecessary()),
+                statsTable.addStats((region.getRegionInfo().getRegionName()), this, Bytes.toString(fam.copyBytesIfNecessary()),
                         mutations);
             }
         } catch (IOException e) {
