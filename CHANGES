@@ -14,6 +14,18 @@ Release Notes - Phoenix - Version 3.2.1
     * [PHOENIX-1416] - Given a schema name, DatabaseMetadata.getTables and getColumns calls erroneously match tables without schema 
     * [PHOENIX-1418] - Optionally display number of parallel chunks in explain plan
     * [PHOENIX-1419] - Update eclipse preferences file with correct header information
+    * [PHOENIX-1420] - DatabaseMetaData.getschemas returns incorrect column order
+    * [PHOENIX-1427] - Reduce work in StatsCollector
+    * [PHOENIX-1429] - Cancel queued threads when limit reached
+    * [PHOENIX-1432] - Run limit query that has only leading PK column filter serially
+    * [PHOENIX-1434] - Stats are not maintained correctly through splits
+    * [PHOENIX-1442] - Alter Index double normalize Index Table Name
+    * [PHOENIX-1445] - Add unit test for stats not being maintained correctly through splits
+    * [PHOENIX-1446] - Add/fix logging for LIMIT optimization
+    * [PHOENIX-1447] - Increase guidepost width default to take into account FAST_DIFF compression
+    * [PHOENIX-1448] - Fix resource leak when work rejected by thread executor
+    * [PHOENIX-1449] - Fix potential NPE in delete
+    * [PHOENIX-1451] - Queries with limit against tenant views is broken
 
 Release Notes - Phoenix - Version 3.2.0
 
