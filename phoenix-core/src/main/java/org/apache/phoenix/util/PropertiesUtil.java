@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.util;
 
-import java.util.Map.Entry;
 import java.util.Properties;
 
 public class PropertiesUtil {
@@ -32,10 +31,8 @@ public class PropertiesUtil {
      */
     public static Properties deepCopy(Properties properties) {
         Properties newProperties = new Properties();
-        for (Entry<Object, Object> entry : properties.entrySet()) {
-            String key = entry.getKey().toString();
-            String value = entry.getValue().toString();
-            newProperties.put(key, value);
+        for (String pName : properties.stringPropertyNames()) {
+            newProperties.setProperty(pName, properties.getProperty(pName));
         }
         return newProperties;
     }
