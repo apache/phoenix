@@ -25,6 +25,8 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import org.apache.phoenix.iterate.ResultIterator;
+
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
@@ -155,6 +157,20 @@ public final class QueryUtil {
         StringBuilder buf = new StringBuilder();
         while (rs.next()) {
             buf.append(rs.getString(1));
+            buf.append('\n');
+        }
+        if (buf.length() > 0) {
+            buf.setLength(buf.length()-1);
+        }
+        return buf.toString();
+    }
+
+    public static String getExplainPlan(ResultIterator iterator) throws SQLException {
+        List<String> steps = Lists.newArrayList();
+        iterator.explain(steps);
+        StringBuilder buf = new StringBuilder();
+        for (String step : steps) {
+            buf.append(step);
             buf.append('\n');
         }
         if (buf.length() > 0) {

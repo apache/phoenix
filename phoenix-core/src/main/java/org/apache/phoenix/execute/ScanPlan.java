@@ -54,6 +54,8 @@ import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 
@@ -65,6 +67,7 @@ import org.apache.phoenix.util.SchemaUtil;
  * @since 0.1
  */
 public class ScanPlan extends BaseQueryPlan {
+    private static final Logger logger = LoggerFactory.getLogger(ScanPlan.class);
     private List<KeyRange> splits;
     private List<List<Scan>> scans;
     private boolean allowPageFilter;
@@ -152,6 +155,10 @@ public class ScanPlan extends BaseQueryPlan {
             if (perScanLimit * estRowSize < estRegionSize) {
                 isSerial = true;
             }
+            if (logger.isDebugEnabled()) logger.debug("With LIMIT=" + perScanLimit 
+                    + ", estimated row size=" + estRowSize 
+                    + ", estimated region size=" + estRegionSize + " (" + (gpsInfo == null ? "without " : "with ") + "stats)" 
+                    + ": " + (isSerial ? "SERIAL" : "PARALLEL") + " execution");
         }
         ResultIterators iterators;
         if (isSerial) {
