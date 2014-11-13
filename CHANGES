@@ -17,6 +17,8 @@ Release Notes - Phoenix - Version 4.2.1
     * [PHOENIX-1416] - Given a schema name, DatabaseMetadata.getTables and getColumns calls erroneously match tables without schema 
     * [PHOENIX-1418] - Optionally display number of parallel chunks in explain plan
     * [PHOENIX-1419] - Update eclipse preferences file with correct header information
+    * [PHOENIX-1431] - DELETE using Subqueries
+    * [PHOENIX-1442] - Alter Index double normalize Index Table Name
 
 Release Notes - Phoenix - Version 4.2.0
 
