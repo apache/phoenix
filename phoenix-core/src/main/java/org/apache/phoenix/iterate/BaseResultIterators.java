@@ -504,13 +504,17 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         boolean isLocalIndex = getTable().getIndexType() == IndexType.LOCAL;
         final ConnectionQueryServices services = context.getConnection().getQueryServices();
         ReadOnlyProps props = services.getProps();
-        int numSplits = size();
-        List<PeekingResultIterator> iterators = new ArrayList<PeekingResultIterator>(numSplits);
-        final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(numSplits);
+        int numScans = size();
+        // Capture all iterators so that if something goes wrong, we close them all
+        // The iterators list is based on the submission of work, so it may not
+        // contain them all (for example if work was rejected from the queue)
+        List<PeekingResultIterator> allIterators = Lists.newArrayListWithExpectedSize(this.splits.size());
+        List<PeekingResultIterator> iterators = new ArrayList<PeekingResultIterator>(numScans);
+        final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(numScans);
         allFutures.add(futures);
         SQLException toThrow = null;
         try {
-            submitWork(scans, futures, splits.size());
+            submitWork(scans, futures, allIterators, splits.size());
             int timeoutMs = props.getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, DEFAULT_THREAD_TIMEOUT_MS);
             boolean clearedCache = false;
             for (List<Pair<Scan,Future<PeekingResultIterator>>> future : reverseIfNecessary(futures,isReverse)) {
@@ -540,7 +544,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             // as we need these to be in order
                             addIterator(iterators, concatIterators);
                             concatIterators = Collections.emptyList();
-                            submitWork(newNestedScans, newFutures, newNestedScans.size());
+                            submitWork(newNestedScans, newFutures, allIterators, newNestedScans.size());
                             allFutures.add(newFutures);
                             for (List<Pair<Scan,Future<PeekingResultIterator>>> newFuture : reverseIfNecessary(newFutures, isReverse)) {
                                 for (Pair<Scan,Future<PeekingResultIterator>> newScanPair : reverseIfNecessary(newFuture, isReverse)) {
@@ -576,7 +580,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         }
                     } finally {
                         try {
-                            SQLCloseables.closeAll(iterators);
+                            SQLCloseables.closeAll(allIterators);
                         } catch (Exception e) {
                             if (toThrow == null) {
                                 toThrow = ServerUtil.parseServerException(e);
@@ -604,7 +608,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         for (List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures : allFutures) {
             for (List<Pair<Scan,Future<PeekingResultIterator>>> futureScans : futures) {
                 for (Pair<Scan,Future<PeekingResultIterator>> futurePair : futureScans) {
-                    if (futurePair != null) { // FIXME: null check should not be necessary
+                    // When work is rejected, we may have null futurePair entries, because
+                    // we randomize these and set them as they're submitted.
+                    if (futurePair != null) {
                         Future<PeekingResultIterator> future = futurePair.getSecond();
                         if (future != null) {
                             cancelledWork |= future.cancel(false);
@@ -648,7 +654,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     abstract protected String getName();    
     abstract protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
-            int estFlattenedSize);
+            List<PeekingResultIterator> allIterators, int estFlattenedSize);
 
     @Override
     public int size() {

@@ -57,7 +57,7 @@ public class ParallelIterators extends BaseResultIterators {
 
     @Override
     protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
-            int estFlattenedSize) {
+            final List<PeekingResultIterator> allIterators, int estFlattenedSize) {
         // Pre-populate nestedFutures lists so that we can shuffle the scans
         // and add the future to the right nested list. By shuffling the scans
         // we get better utilization of the cluster since our thread executor
@@ -89,7 +89,9 @@ public class ParallelIterators extends BaseResultIterators {
                     if (logger.isDebugEnabled()) {
                         logger.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
                     }
-                    return iteratorFactory.newIterator(context, scanner, scan);
+                    PeekingResultIterator iterator = iteratorFactory.newIterator(context, scanner, scan);
+                    allIterators.add(iterator);
+                    return iterator;
                 }
 
                 /**
