@@ -135,7 +135,10 @@ public class QueryServicesOptions {
     public static final long DEFAULT_STATS_HISTOGRAM_DEPTH_BYTE = 1024 * 1024 * 30;
     public static final int DEFAULT_STATS_UPDATE_FREQ_MS = 15 * 60000; // 15min
     public static final int DEFAULT_STATS_GUIDEPOST_PER_REGION = 0; // Uses guidepost width by default
-    public static final long DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES = 100 * 1024 *1024; // 100MB
+    // Since we're not taking into account the compression done by FAST_DIFF in our
+    // counting of the bytes, default guidepost width to 100MB * 3 (where 3 is the
+    // compression we're getting)
+    public static final long DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES = 3* 100 * 1024 *1024;
     public static final boolean DEFAULT_STATS_USE_CURRENT_TIME = true;
 
     public static final boolean DEFAULT_USE_REVERSE_SCAN = true;
