@@ -138,7 +138,7 @@ public class ScanPlan extends BaseQueryPlan {
         	if (gpsInfo == null) {
         	    // Use guidepost depth as minimum size
         	    ConnectionQueryServices services = context.getConnection().getQueryServices();
-        	    HTableDescriptor desc = services.getTableDescriptor(table.getName().getBytes());
+        	    HTableDescriptor desc = services.getTableDescriptor(table.getPhysicalName().getBytes());
                 int guidepostPerRegion = services.getProps().getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
                         QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION);
                 long guidepostWidth = services.getProps().getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
