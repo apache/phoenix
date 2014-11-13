@@ -61,7 +61,7 @@ public class SerialIterators extends BaseResultIterators {
 
     @Override
     protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
-            int estFlattenedSize) {
+            final List<PeekingResultIterator> allIterators, int estFlattenedSize) {
         // Pre-populate nestedFutures lists so that we can shuffle the scans
         // and add the future to the right nested list. By shuffling the scans
         // we get better utilization of the cluster since our thread executor
@@ -88,7 +88,9 @@ public class SerialIterators extends BaseResultIterators {
 	                    concatIterators.add(iteratorFactory.newIterator(context, scanner, scan));
                 	}
                 	PeekingResultIterator concatIterator = ConcatResultIterator.newIterator(concatIterators);
-                	return new LimitingPeekingResultIterator(concatIterator, limit);
+                	PeekingResultIterator iterator = new LimitingPeekingResultIterator(concatIterator, limit);
+                    allIterators.add(iterator);
+                    return iterator;
                 }
 
                 /**
