@@ -117,10 +117,14 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ServerUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.ListMultimap;
@@ -146,6 +150,8 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class PhoenixStatement implements Statement, SQLCloseable, org.apache.phoenix.jdbc.Jdbc7Shim.Statement {
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixStatement.class);
+    
     public enum Operation {
         QUERY("queried", false),
         DELETE("deleted", true),
@@ -217,7 +223,12 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                                 PhoenixStatement.this, plan);
                          // this will create its own trace internally, so we don't wrap this
                          // whole thing in tracing
-                        PhoenixResultSet rs = newResultSet(plan.iterator(), plan.getProjector());
+                        ResultIterator resultIterator = plan.iterator();
+                        if (logger.isDebugEnabled()) {
+                            String explainPlan = QueryUtil.getExplainPlan(resultIterator);
+                            logger.debug(LogUtil.addCustomAnnotations("Explain plan: " + explainPlan, connection));
+                        }
+                        PhoenixResultSet rs = newResultSet(resultIterator, plan.getProjector());
                         resultSets.add(rs);
                         setLastQueryPlan(plan);
                         setLastResultSet(rs);
@@ -1000,12 +1011,18 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     }
 
     public MutationPlan compileMutation(String sql) throws SQLException {
+        if (logger.isDebugEnabled()) {
+            logger.debug(LogUtil.addCustomAnnotations("Execute update: " + sql, connection));
+        }
         CompilableStatement stmt = parseStatement(sql);
         return compileMutation(stmt, sql);
     }
 
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
+        if (logger.isDebugEnabled()) {
+            logger.debug(LogUtil.addCustomAnnotations("Execute query: " + sql, connection));
+        }
         CompilableStatement stmt = parseStatement(sql);
         if (stmt.getOperation().isMutation()) {
             throw new ExecuteQueryNotApplicableException(sql);

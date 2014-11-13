@@ -34,18 +34,17 @@ import javax.annotation.Nullable;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Addressing;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
+import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.QueryServices;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import org.apache.phoenix.query.QueryServices;
 
 public final class QueryUtil {
 
@@ -178,6 +177,20 @@ public final class QueryUtil {
         StringBuilder buf = new StringBuilder();
         while (rs.next()) {
             buf.append(rs.getString(1));
+            buf.append('\n');
+        }
+        if (buf.length() > 0) {
+            buf.setLength(buf.length()-1);
+        }
+        return buf.toString();
+    }
+
+    public static String getExplainPlan(ResultIterator iterator) throws SQLException {
+        List<String> steps = Lists.newArrayList();
+        iterator.explain(steps);
+        StringBuilder buf = new StringBuilder();
+        for (String step : steps) {
+            buf.append(step);
             buf.append('\n');
         }
         if (buf.length() > 0) {
