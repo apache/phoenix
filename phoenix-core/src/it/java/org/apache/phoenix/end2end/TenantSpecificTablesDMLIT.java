@@ -41,7 +41,14 @@ import org.junit.experimental.categories.Category;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
-
+	
+	@Test
+	public void testSelectWithLimit() throws Exception {
+		Connection conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + TENANT_TABLE_NAME + " LIMIT 100");
+		while(rs.next()) {}
+	}
+	
     @Test
     public void testBasicUpsertSelect() throws Exception {
         Connection conn = nextConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
