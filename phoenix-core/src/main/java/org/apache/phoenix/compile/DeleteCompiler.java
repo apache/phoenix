@@ -166,7 +166,9 @@ public class DeleteCompiler {
                     }
                     connection.commit();
                     mutations.clear();
-                    indexMutations.clear();
+                    if (indexMutations != null) {
+                        indexMutations.clear();
+                    }
                 }
             }
 
