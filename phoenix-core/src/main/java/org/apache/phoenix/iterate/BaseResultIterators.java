@@ -97,6 +97,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private final PTableStats tableStats;
     private final byte[] physicalTableName;
     private final QueryPlan plan;
+    protected final String scanId;
     // TODO: too much nesting here - breakup into new classes.
     private final List<List<List<Pair<Scan,Future<PeekingResultIterator>>>>> allFutures;
 
@@ -139,6 +140,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         physicalTableName = table.getPhysicalName().getBytes();
         tableStats = useStats() ? new MetaDataClient(context.getConnection()).getTableStats(table) : PTableStats.EMPTY_STATS;
         Scan scan = context.getScan();
+        // Used to tie all the scans together during logging
+        scanId = UUID.randomUUID().toString();
         if (projector.isProjectEmptyKeyValue()) {
             Map<byte [], NavigableSet<byte []>> familyMap = scan.getFamilyMap();
             // If nothing projected into scan and we only have one column family, just allow everything
@@ -475,10 +478,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (!scans.isEmpty()) { // Add any remaining scans
             parallelScans.add(scans);
         }
-        if (logger.isDebugEnabled()) {
-            logger.debug(LogUtil.addCustomAnnotations("The parallelScans: " + parallelScans,
-                    ScanUtil.getCustomAnnotations(scan)));
-        }
         return parallelScans;
     }
 
@@ -495,8 +494,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      */
     @Override
     public List<PeekingResultIterator> getIterators() throws SQLException {
+        Scan scan = context.getScan();
+        if (logger.isDebugEnabled()) {
+            logger.debug(LogUtil.addCustomAnnotations("Getting iterators for " + this,
+                    ScanUtil.getCustomAnnotations(scan)));
+        }
         boolean success = false;
-        boolean isReverse = ScanUtil.isReversed(context.getScan());
+        boolean isReverse = ScanUtil.isReversed(scan);
         boolean isLocalIndex = getTable().getIndexType() == IndexType.LOCAL;
         final ConnectionQueryServices services = context.getConnection().getQueryServices();
         ReadOnlyProps props = services.getProps();
@@ -505,10 +509,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(numSplits);
         allFutures.add(futures);
         SQLException toThrow = null;
-        // TODO: what purpose does this scanID serve?
-        final UUID scanId = UUID.randomUUID();
         try {
-            submitWork(scanId, scans, futures, splits.size());
+            submitWork(scans, futures, splits.size());
             int timeoutMs = props.getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, DEFAULT_THREAD_TIMEOUT_MS);
             boolean clearedCache = false;
             for (List<Pair<Scan,Future<PeekingResultIterator>>> future : reverseIfNecessary(futures,isReverse)) {
@@ -538,7 +540,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             // as we need these to be in order
                             addIterator(iterators, concatIterators);
                             concatIterators = Collections.emptyList();
-                            submitWork(scanId, newNestedScans, newFutures, newNestedScans.size());
+                            submitWork(newNestedScans, newFutures, newNestedScans.size());
                             allFutures.add(newFutures);
                             for (List<Pair<Scan,Future<PeekingResultIterator>>> newFuture : reverseIfNecessary(newFutures, isReverse)) {
                                 for (Pair<Scan,Future<PeekingResultIterator>> newScanPair : reverseIfNecessary(newFuture, isReverse)) {
@@ -602,7 +604,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         for (List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures : allFutures) {
             for (List<Pair<Scan,Future<PeekingResultIterator>>> futureScans : futures) {
                 for (Pair<Scan,Future<PeekingResultIterator>> futurePair : futureScans) {
-                    cancelledWork |= futurePair.getSecond().cancel(false);
+                    if (futurePair != null) { // FIXME: null check should not be necessary
+                        Future<PeekingResultIterator> future = futurePair.getSecond();
+                        if (future != null) {
+                            cancelledWork |= future.cancel(false);
+                        }
+                    }
                 }
             }
         }
@@ -640,8 +647,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     
 
     abstract protected String getName();    
-    abstract protected void submitWork(final UUID scanId, List<List<Scan>> nestedScans,
-            List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures, int estFlattenedSize);
+    abstract protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
+            int estFlattenedSize);
 
     @Override
     public int size() {
@@ -660,6 +667,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
 	@Override
 	public String toString() {
-		return "ResultIterators [name=" + getName() + ",scans=" + scans + "]";
+		return "ResultIterators [name=" + getName() + ",id=" + scanId + ",scans=" + scans + "]";
 	}
 }
