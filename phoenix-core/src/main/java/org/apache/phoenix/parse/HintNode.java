@@ -82,7 +82,11 @@ public class HintNode {
         */
        NO_CACHE,
        /**
-        * Avoid using star-join optimization.
+        * Use sort-merge join algorithm instead of broadcast join (hash join) algorithm.
+        */
+       USE_SORT_MERGE_JOIN,
+       /**
+        * Avoid using star-join optimization. Used for broadcast join (hash join) only.
         */
        NO_STAR_JOIN,
        /**

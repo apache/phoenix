@@ -139,7 +139,9 @@ public class WhereCompiler {
             expression = AndExpression.create(filters);
         }
         
-        expression = WhereOptimizer.pushKeyExpressionsToScan(context, statement, expression, extractedNodes);
+        if (context.getCurrentTable().getTable().getType() != PTableType.JOIN && context.getCurrentTable().getTable().getType() != PTableType.SUBQUERY) {
+            expression = WhereOptimizer.pushKeyExpressionsToScan(context, statement, expression, extractedNodes);
+        }
         setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily, hashJoinOptimization);
 
         return expression;

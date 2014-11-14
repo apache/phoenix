@@ -58,6 +58,13 @@ public class SubselectRewriter extends ParseNodeRewriter {
         return statement.getLimit() == null && (!statement.isAggregate() || !statement.getGroupBy().isEmpty());        
     }
     
+    public static SelectStatement applyOrderBy(SelectStatement statement, List<OrderByNode> orderBy, String subqueryAlias) throws SQLException {
+        if (orderBy == null)
+            return statement;
+        
+        return new SubselectRewriter(null, statement.getSelect(), subqueryAlias).applyOrderBy(statement, orderBy);
+    }
+    
     public static SelectStatement flatten(SelectStatement select, PhoenixConnection connection) throws SQLException {
         TableNode from = select.getFrom();
         while (from != null && from instanceof DerivedTableNode) {
@@ -209,16 +216,24 @@ public class SubselectRewriter extends ParseNodeRewriter {
             if (where != null) {
                 postFiltersRewrite.add(where);
             }
-            return NODE_FACTORY.select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(), combine(postFiltersRewrite), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(),
-                    statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
+            return NODE_FACTORY.select(statement, combine(postFiltersRewrite));
         }
         
         ParseNode having = statement.getHaving();
         if (having != null) {
             postFiltersRewrite.add(having);
         }
-        return NODE_FACTORY.select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(), statement.getWhere(), statement.getGroupBy(), combine(postFiltersRewrite), statement.getOrderBy(), statement.getLimit(),
-                statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
+        return NODE_FACTORY.select(statement, statement.getWhere(), combine(postFiltersRewrite));
+    }
+    
+    private SelectStatement applyOrderBy(SelectStatement statement, List<OrderByNode> orderBy) throws SQLException {
+        List<OrderByNode> orderByRewrite = Lists.<OrderByNode> newArrayListWithExpectedSize(orderBy.size());
+        for (OrderByNode orderByNode : orderBy) {
+            ParseNode node = orderByNode.getNode();
+            orderByRewrite.add(NODE_FACTORY.orderBy(node.accept(this), orderByNode.isNullsLast(), orderByNode.isAscending()));
+        }
+        
+        return NODE_FACTORY.select(statement, orderByRewrite);
     }
     
     @Override

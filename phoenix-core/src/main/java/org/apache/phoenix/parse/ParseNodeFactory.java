@@ -589,6 +589,11 @@ public class ParseNodeFactory {
         return new DeleteStatement(table, hint, node, orderBy, limit, bindCount);
     }
 
+    public SelectStatement select(SelectStatement statement, ParseNode where) {
+        return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(), where, statement.getGroupBy(), statement.getHaving(),
+                statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
+    }
+
     public SelectStatement select(SelectStatement statement, ParseNode where, ParseNode having) {
         return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(), where, statement.getGroupBy(), having,
                 statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
@@ -622,6 +627,12 @@ public class ParseNodeFactory {
         return select(statement.getFrom(), statement.getHint(), isDistinct, select, where, groupBy,
                 statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), isAggregate,
                 statement.hasSequence());
+    }
+
+    public SelectStatement select(SelectStatement statement, List<OrderByNode> orderBy) {
+        return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(),
+                statement.getWhere(), statement.getGroupBy(), statement.getHaving(), orderBy, statement.getLimit(),
+                statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
     }
 
     public SelectStatement select(SelectStatement statement, HintNode hint) {

@@ -20,7 +20,6 @@ package org.apache.phoenix.compile;
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
 
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -293,6 +292,10 @@ public class JoinCompiler {
             return columnRefs;
         }
         
+        public ParseNode getPostFiltersCombined() {
+            return combine(postFilters);
+        }
+        
         public void addFilter(ParseNode filter) throws SQLException {
             if (joinSpecs.isEmpty()) {
                 table.addFilter(filter);
@@ -320,7 +323,7 @@ public class JoinCompiler {
             for (JoinSpec joinSpec : joinSpecs) {
                 JoinTable joinTable = joinSpec.getJoinTable();
                 boolean hasSubJoin = !joinTable.getJoinSpecs().isEmpty();
-                for (ComparisonParseNode node : joinSpec.getOnConditions()) {
+                for (EqualParseNode node : joinSpec.getOnConditions()) {
                     node.getLHS().accept(generalRefVisitor);
                     if (hasSubJoin) {
                         node.getRHS().accept(generalRefVisitor);
@@ -384,13 +387,12 @@ public class JoinCompiler {
         }
         
         public SelectStatement getAsSingleSubquery(SelectStatement query, boolean asSubquery) throws SQLException {
-            if (!isFlat(query))
-                throw new SQLFeatureNotSupportedException("Complex subqueries not supported as left join table.");
+            assert (isFlat(query));
             
             if (asSubquery)
                 return query;
             
-            return NODE_FACTORY.select(query.getFrom(), select.getHint(), select.isDistinct(), select.getSelect(), query.getWhere(), select.getGroupBy(), select.getHaving(), select.getOrderBy(), select.getLimit(), select.getBindCount(), select.isAggregate(), select.hasSequence());            
+            return NODE_FACTORY.select(select, query.getFrom(), query.getWhere());            
         }
         
         public boolean hasPostReference() {
@@ -427,7 +429,7 @@ public class JoinCompiler {
     
     public static class JoinSpec {
         private final JoinType type;
-        private final List<ComparisonParseNode> onConditions;
+        private final List<EqualParseNode> onConditions;
         private final JoinTable joinTable;
         private final boolean singleValueOnly;
         private Set<TableRef> dependencies;
@@ -436,7 +438,7 @@ public class JoinCompiler {
         private JoinSpec(JoinType type, ParseNode onNode, JoinTable joinTable, 
                 boolean singleValueOnly, ColumnResolver resolver) throws SQLException {
             this.type = type;
-            this.onConditions = new ArrayList<ComparisonParseNode>();
+            this.onConditions = new ArrayList<EqualParseNode>();
             this.joinTable = joinTable;
             this.singleValueOnly = singleValueOnly;
             this.dependencies = new HashSet<TableRef>();
@@ -454,7 +456,7 @@ public class JoinCompiler {
             return type;
         }
         
-        public List<ComparisonParseNode> getOnConditions() {
+        public List<EqualParseNode> getOnConditions() {
             return onConditions;
         }
         
@@ -470,75 +472,63 @@ public class JoinCompiler {
             return dependencies;
         }
         
-        public Pair<List<Expression>, List<Expression>> compileJoinConditions(StatementContext context, ColumnResolver leftResolver, ColumnResolver rightResolver) throws SQLException {
+        public Pair<List<Expression>, List<Expression>> compileJoinConditions(StatementContext lhsCtx, StatementContext rhsCtx, boolean sortExpressions) throws SQLException {
             if (onConditions.isEmpty()) {
                 return new Pair<List<Expression>, List<Expression>>(
                         Collections.<Expression> singletonList(LiteralExpression.newConstant(1)), 
                         Collections.<Expression> singletonList(LiteralExpression.newConstant(1)));
             }
             
-            ColumnResolver resolver = context.getResolver();
-            List<Pair<Expression, Expression>> compiled = new ArrayList<Pair<Expression, Expression>>(onConditions.size());
-            context.setResolver(leftResolver);
-            ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
-            for (ParseNode condition : onConditions) {
-                assert (condition instanceof EqualParseNode);
-                EqualParseNode equalNode = (EqualParseNode) condition;
-                expressionCompiler.reset();
-                Expression left = equalNode.getLHS().accept(expressionCompiler);
-                compiled.add(new Pair<Expression, Expression>(left, null));
-            }
-            context.setResolver(rightResolver);
-            expressionCompiler = new ExpressionCompiler(context);
-            Iterator<Pair<Expression, Expression>> iter = compiled.iterator();
-            for (ParseNode condition : onConditions) {
-                Pair<Expression, Expression> p = iter.next();
-                EqualParseNode equalNode = (EqualParseNode) condition;
-                expressionCompiler.reset();
-                Expression right = equalNode.getRHS().accept(expressionCompiler);
-                Expression left = p.getFirst();
+            List<Pair<Expression, Expression>> compiled = Lists.<Pair<Expression, Expression>> newArrayListWithExpectedSize(onConditions.size());
+            ExpressionCompiler lhsCompiler = new ExpressionCompiler(lhsCtx);
+            ExpressionCompiler rhsCompiler = new ExpressionCompiler(rhsCtx);
+            for (EqualParseNode condition : onConditions) {
+                lhsCompiler.reset();
+                Expression left = condition.getLHS().accept(lhsCompiler);
+                rhsCompiler.reset();
+                Expression right = condition.getRHS().accept(rhsCompiler);
                 PDataType toType = getCommonType(left.getDataType(), right.getDataType());
                 if (left.getDataType() != toType) {
                     left = CoerceExpression.create(left, toType);
-                    p.setFirst(left);
                 }
                 if (right.getDataType() != toType) {
                     right = CoerceExpression.create(right, toType);
                 }
-                p.setSecond(right);
+                compiled.add(new Pair<Expression, Expression>(left, right));
             }
-            context.setResolver(resolver); // recover the resolver
-            Collections.sort(compiled, new Comparator<Pair<Expression, Expression>>() {
-                @Override
-                public int compare(Pair<Expression, Expression> o1, Pair<Expression, Expression> o2) {
-                    Expression e1 = o1.getFirst();
-                    Expression e2 = o2.getFirst();
-                    boolean isFixed1 = e1.getDataType().isFixedWidth();
-                    boolean isFixed2 = e2.getDataType().isFixedWidth();
-                    boolean isFixedNullable1 = e1.isNullable() &&isFixed1;
-                    boolean isFixedNullable2 = e2.isNullable() && isFixed2;
-                    if (isFixedNullable1 == isFixedNullable2) {
-                        if (isFixed1 == isFixed2) {
-                            return 0;
-                        } else if (isFixed1) {
-                            return -1;
-                        } else {
+            if (sortExpressions) {
+                Collections.sort(compiled, new Comparator<Pair<Expression, Expression>>() {
+                    @Override
+                    public int compare(Pair<Expression, Expression> o1, Pair<Expression, Expression> o2) {
+                        Expression e1 = o1.getFirst();
+                        Expression e2 = o2.getFirst();
+                        boolean isFixed1 = e1.getDataType().isFixedWidth();
+                        boolean isFixed2 = e2.getDataType().isFixedWidth();
+                        boolean isFixedNullable1 = e1.isNullable() &&isFixed1;
+                        boolean isFixedNullable2 = e2.isNullable() && isFixed2;
+                        if (isFixedNullable1 == isFixedNullable2) {
+                            if (isFixed1 == isFixed2) {
+                                return 0;
+                            } else if (isFixed1) {
+                                return -1;
+                            } else {
+                                return 1;
+                            }
+                        } else if (isFixedNullable1) {
                             return 1;
+                        } else {
+                            return -1;
                         }
-                    } else if (isFixedNullable1) {
-                        return 1;
-                    } else {
-                        return -1;
                     }
-                }
-            });
-            List<Expression> lConditions = new ArrayList<Expression>(compiled.size());
-            List<Expression> rConditions = new ArrayList<Expression>(compiled.size());
+                });
+            }
+            List<Expression> lConditions = Lists.<Expression> newArrayListWithExpectedSize(compiled.size());
+            List<Expression> rConditions = Lists.<Expression> newArrayListWithExpectedSize(compiled.size());
             for (Pair<Expression, Expression> pair : compiled) {
                 lConditions.add(pair.getFirst());
                 rConditions.add(pair.getSecond());
             }
-            
+
             return new Pair<List<Expression>, List<Expression>>(lConditions, rConditions);
         }
         
@@ -683,11 +673,11 @@ public class JoinCompiler {
             return JoinCompiler.compilePostFilterExpression(context, postFilters);
         }
         
-        public SelectStatement getAsSubquery() throws SQLException {
+        public SelectStatement getAsSubquery(List<OrderByNode> orderBy) throws SQLException {
             if (isSubselect())
-                return SubselectRewriter.applyPostFilters(subselect, preFilters, tableNode.getAlias());
+                return SubselectRewriter.applyOrderBy(SubselectRewriter.applyPostFilters(subselect, preFilters, tableNode.getAlias()), orderBy, tableNode.getAlias());
             
-            return NODE_FACTORY.select(tableNode, select.getHint(), false, selectNodes, getPreFiltersCombined(), null, null, null, null, 0, false, select.hasSequence());
+            return NODE_FACTORY.select(tableNode, select.getHint(), false, selectNodes, getPreFiltersCombined(), null, null, orderBy, null, 0, false, select.hasSequence());
         }
         
         public boolean hasFilters() {
@@ -912,12 +902,12 @@ public class JoinCompiler {
     }
     
     private static class OnNodeVisitor extends BooleanParseNodeVisitor<Void> {
-        private List<ComparisonParseNode> onConditions;
+        private List<EqualParseNode> onConditions;
         private Set<TableRef> dependencies;
         private JoinTable joinTable;
         private ColumnRefParseNodeVisitor columnRefVisitor;
         
-        public OnNodeVisitor(ColumnResolver resolver, List<ComparisonParseNode> onConditions, 
+        public OnNodeVisitor(ColumnResolver resolver, List<EqualParseNode> onConditions, 
                 Set<TableRef> dependencies, JoinTable joinTable) {
             this.onConditions = onConditions;
             this.dependencies = dependencies;
@@ -981,7 +971,7 @@ public class JoinCompiler {
                 joinTable.addFilter(node);
             } else if (lhsType == ColumnRefParseNodeVisitor.ColumnRefType.FOREIGN_ONLY
                     && rhsType == ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY) {
-                onConditions.add(node);
+                onConditions.add((EqualParseNode) node);
                 dependencies.addAll(lhsTableRefSet);
             } else if (rhsType == ColumnRefParseNodeVisitor.ColumnRefType.FOREIGN_ONLY
                     && lhsType == ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY) {
@@ -1069,9 +1059,9 @@ public class JoinCompiler {
         }
     }
     
-    private static String PROJECTED_TABLE_SCHEMA = ".";
+    private static final String PROJECTED_TABLE_SCHEMA = ".";
     // for creation of new statements
-    private static ParseNodeFactory NODE_FACTORY = new ParseNodeFactory();
+    private static final ParseNodeFactory NODE_FACTORY = new ParseNodeFactory();
     
     private static boolean isFlat(SelectStatement select) {
         return !select.isJoin() 
@@ -1167,7 +1157,7 @@ public class JoinCompiler {
             QueryCompiler compiler = new QueryCompiler(statement, select, resolver);
             List<Object> binds = statement.getParameters();
             StatementContext ctx = new StatementContext(statement, resolver, new Scan(), new SequenceManager(statement));
-            QueryPlan plan = compiler.compileJoinQuery(ctx, binds, join, false);
+            QueryPlan plan = compiler.compileJoinQuery(ctx, binds, join, false, false, null);
             TableRef table = plan.getTableRef();
             if (groupByTableRef != null && !groupByTableRef.equals(table)) {
                 groupByTableRef = null;
@@ -1303,17 +1293,30 @@ public class JoinCompiler {
             return new JoinedTableColumnResolver(this, origResolver);
         }
         
-        public PTableWrapper mergeProjectedTables(PTableWrapper rWrapper, boolean innerJoin) throws SQLException {
+        public PTableWrapper mergeProjectedTables(PTableWrapper rWrapper, JoinType type) throws SQLException {
             PTable left = this.getTable();
             PTable right = rWrapper.getTable();
-            List<PColumn> merged = new ArrayList<PColumn>();
-            merged.addAll(left.getColumns());
+            List<PColumn> merged = Lists.<PColumn> newArrayList();
+            if (type != JoinType.Full) {
+                merged.addAll(left.getColumns());
+            } else {
+                for (PColumn c : left.getColumns()) {
+                    if (SchemaUtil.isPKColumn(c)) {
+                        merged.add(c);
+                    } else {
+                        PColumnImpl column = new PColumnImpl(c.getName(), c.getFamilyName(), c.getDataType(), 
+                                c.getMaxLength(), c.getScale(), true, c.getPosition(), 
+                                c.getSortOrder(), c.getArraySize(), c.getViewConstant(), c.isViewReferenced());
+                        merged.add(column);
+                    }
+                }
+            }
             int position = merged.size();
             for (PColumn c : right.getColumns()) {
                 if (!SchemaUtil.isPKColumn(c)) {
                     PColumnImpl column = new PColumnImpl(c.getName(), 
                             PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY), c.getDataType(), 
-                            c.getMaxLength(), c.getScale(), innerJoin ? c.isNullable() : true, position++, 
+                            c.getMaxLength(), c.getScale(), type == JoinType.Inner ? c.isNullable() : true, position++, 
                             c.getSortOrder(), c.getArraySize(), c.getViewConstant(), c.isViewReferenced());
                     merged.add(column);
                 }
@@ -1358,11 +1361,15 @@ public class JoinCompiler {
     	private JoinedTableColumnResolver(PTableWrapper table, ColumnResolver tableResolver) {
     		this.table = table;
     		this.tableResolver = tableResolver;
-            this.tableRef = new TableRef(null, table.getTable(), 0, false);
+            this.tableRef = new TableRef(ParseNodeFactory.createTempAlias(), table.getTable(), 0, false);
     	}
         
         public PTableWrapper getPTableWrapper() {
             return table;
+        }
+        
+        public TableRef getTableRef() {
+            return tableRef;
         }
 
 		@Override

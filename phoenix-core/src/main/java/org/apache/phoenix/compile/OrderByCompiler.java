@@ -32,6 +32,7 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.query.ConnectionQueryServices.Feature;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 
 import com.google.common.collect.ImmutableList;
@@ -76,7 +77,8 @@ public class OrderByCompiler {
      */
     public static OrderBy compile(StatementContext context,
                                   FilterableStatement statement,
-                                  GroupBy groupBy, Integer limit) throws SQLException {
+                                  GroupBy groupBy, Integer limit, 
+                                  boolean isInRowKeyOrder) throws SQLException {
         List<OrderByNode> orderByNodes = statement.getOrderBy();
         if (orderByNodes.isEmpty()) {
             return OrderBy.EMPTY_ORDER_BY;
@@ -114,9 +116,12 @@ public class OrderByCompiler {
             return OrderBy.EMPTY_ORDER_BY;
         }
         // If we're ordering by the order returned by the scan, we don't need an order by
-        if (visitor.isOrderPreserving()) {
+        if (isInRowKeyOrder && visitor.isOrderPreserving()) {
             if (visitor.isReverse()) {
-                if (context.getConnection().getQueryServices().supportsFeature(Feature.REVERSE_SCAN)) {
+                // REV_ROW_KEY_ORDER_BY scan would not take effect for a projected table, so don't return it for such table types.
+                if (context.getConnection().getQueryServices().supportsFeature(Feature.REVERSE_SCAN)
+                        && context.getCurrentTable().getTable().getType() != PTableType.JOIN
+                        && context.getCurrentTable().getTable().getType() != PTableType.SUBQUERY) {
                     return OrderBy.REV_ROW_KEY_ORDER_BY;
                 }
             } else {
