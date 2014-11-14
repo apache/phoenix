@@ -154,7 +154,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                 for (int i = 0; i < count; i++) {
                     boolean earlyEvaluation = joinInfo.earlyEvaluation()[i];
                     JoinType type = joinInfo.getJoinTypes()[i];
-                    if (earlyEvaluation && (tempTuples[i] == null || type == JoinType.Semi))
+                    if (earlyEvaluation && (type == JoinType.Semi || type == JoinType.Anti))
                         continue;
                     int j = resultQueue.size();
                     while (j-- > 0) {
@@ -163,11 +163,22 @@ public class HashJoinRegionScanner implements RegionScanner {
                             ImmutableBytesPtr key = TupleUtil.getConcatenatedValue(lhs, joinInfo.getJoinExpressions()[i]);
                             tempTuples[i] = hashCaches[i].get(key);                        	
                             if (tempTuples[i] == null) {
-                                if (type != JoinType.Inner && type != JoinType.Semi) {
+                                if (type == JoinType.Inner || type == JoinType.Semi) {
+                                    continue;
+                                } else if (type == JoinType.Anti) {
                                     resultQueue.offer(lhs);
+                                    continue;
                                 }
-                                continue;
                             }
+                        }
+                        if (tempTuples[i] == null) {
+                            Tuple joined = tempSrcBitSet[i] == ValueBitSet.EMPTY_VALUE_BITSET ?
+                                    lhs : TupleProjector.mergeProjectedValue(
+                                            (ProjectedValueTuple) lhs, schema, tempDestBitSet,
+                                            null, joinInfo.getSchemas()[i], tempSrcBitSet[i], 
+                                            joinInfo.getFieldPositions()[i]);
+                            resultQueue.offer(joined);
+                            continue;
                         }
                         for (Tuple t : tempTuples[i]) {
                             Tuple joined = tempSrcBitSet[i] == ValueBitSet.EMPTY_VALUE_BITSET ?

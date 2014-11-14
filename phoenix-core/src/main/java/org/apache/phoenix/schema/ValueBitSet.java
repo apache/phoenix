@@ -145,10 +145,14 @@ public class ValueBitSet {
     }
     
     public void or(ImmutableBytesWritable ptr) {
-        if (schema == null) {
+        or(ptr, isVarLength() ? Bytes.SIZEOF_SHORT + 1 : Bytes.SIZEOF_SHORT);
+    }
+    
+    public void or(ImmutableBytesWritable ptr, int length) {
+        if (schema == null || length == 0) {
             return;
         }
-        if (isVarLength()) {
+        if (length > Bytes.SIZEOF_SHORT) {
             int offset = ptr.getOffset() + ptr.getLength() - Bytes.SIZEOF_SHORT;
             short nLongs = Bytes.toShort(ptr.get(), offset);
             offset -= nLongs * Bytes.SIZEOF_LONG;
@@ -160,7 +164,7 @@ public class ValueBitSet {
         } else {
             long l = Bytes.toShort(ptr.get(), ptr.getOffset() + ptr.getLength() - Bytes.SIZEOF_SHORT);
             bits[0] |= l;
-            maxSetBit = Math.max(maxSetBit, BITS_PER_SHORT - 1);
+            maxSetBit = Math.max(maxSetBit, (bits[0] == 0 ? 0 : BITS_PER_SHORT) - 1);
         }
         
     }
@@ -196,3 +200,4 @@ public class ValueBitSet {
         maxSetBit = Math.max(maxSetBit, isSet.maxSetBit);
     }
 }
+

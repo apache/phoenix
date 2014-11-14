@@ -59,7 +59,8 @@ public class FilterResultIterator  extends LookAheadResultIterator {
         Tuple next;
         do {
             next = delegate.next();
-        } while (next != null && expression.evaluate(next, ptr) && Boolean.FALSE.equals(expression.getDataType().toObject(ptr)));
+            expression.reset();
+        } while (next != null && (!expression.evaluate(next, ptr) || Boolean.FALSE.equals(expression.getDataType().toObject(ptr))));
         return next;
     }
     
