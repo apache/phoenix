@@ -52,7 +52,7 @@ public class SelectStatementRewriter extends ParseNodeRewriter {
         SelectStatementRewriter rewriter = new SelectStatementRewriter(removeNodes);
         where = where.accept(rewriter);
         // Return new SELECT statement with updated WHERE clause
-        return NODE_FACTORY.select(statement, where, statement.getHaving());
+        return NODE_FACTORY.select(statement, where);
     }
     
     /**

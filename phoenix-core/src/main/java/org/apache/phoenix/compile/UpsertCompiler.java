@@ -419,6 +419,11 @@ public class UpsertCompiler {
                     try {
                         QueryCompiler compiler = new QueryCompiler(statement, select, selectResolver, targetColumns, parallelIteratorFactoryToBe, new SequenceManager(statement));
                         queryPlanToBe = compiler.compile();
+                        // This is post-fix: if the tableRef is a projected table, this means there are post-processing 
+                        // steps and parallelIteratorFactory did not take effect.
+                        if (queryPlanToBe.getTableRef().getTable().getType() == PTableType.JOIN || queryPlanToBe.getTableRef().getTable().getType() == PTableType.SUBQUERY) {
+                            parallelIteratorFactoryToBe = null;
+                        }
                     } catch (MetaDataEntityNotFoundException e) {
                         retryOnce = false; // don't retry if select clause has meta data entities that aren't found, as we already updated the cache
                         throw e;

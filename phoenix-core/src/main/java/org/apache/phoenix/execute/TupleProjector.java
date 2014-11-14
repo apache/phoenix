@@ -152,14 +152,21 @@ public class TupleProjector {
     public static class ProjectedValueTuple extends BaseTuple {
         private ImmutableBytesWritable keyPtr = new ImmutableBytesWritable();
         private long timestamp;
-        private byte[] projectedValue;
+        private ImmutableBytesWritable projectedValue = new ImmutableBytesWritable();
         private int bitSetLen;
         private KeyValue keyValue;
 
-        private ProjectedValueTuple(byte[] keyBuffer, int keyOffset, int keyLength, long timestamp, byte[] projectedValue, int bitSetLen) {
+        public ProjectedValueTuple(Tuple keyBase, long timestamp, byte[] projectedValue, int valueOffset, int valueLength, int bitSetLen) {
+            keyBase.getKey(this.keyPtr);
+            this.timestamp = timestamp;
+            this.projectedValue.set(projectedValue, valueOffset, valueLength);
+            this.bitSetLen = bitSetLen;
+        }
+
+        public ProjectedValueTuple(byte[] keyBuffer, int keyOffset, int keyLength, long timestamp, byte[] projectedValue, int valueOffset, int valueLength, int bitSetLen) {
             this.keyPtr.set(keyBuffer, keyOffset, keyLength);
             this.timestamp = timestamp;
-            this.projectedValue = projectedValue;
+            this.projectedValue.set(projectedValue, valueOffset, valueLength);
             this.bitSetLen = bitSetLen;
         }
         
@@ -171,7 +178,7 @@ public class TupleProjector {
             return timestamp;
         }
         
-        public byte[] getProjectedValue() {
+        public ImmutableBytesWritable getProjectedValue() {
             return projectedValue;
         }
         
@@ -196,7 +203,7 @@ public class TupleProjector {
         public KeyValue getValue(byte[] family, byte[] qualifier) {
             if (keyValue == null) {
                 keyValue = KeyValueUtil.newKeyValue(keyPtr.get(), keyPtr.getOffset(), keyPtr.getLength(), 
-                        VALUE_COLUMN_FAMILY, VALUE_COLUMN_QUALIFIER, timestamp, projectedValue, 0, projectedValue.length);
+                        VALUE_COLUMN_FAMILY, VALUE_COLUMN_QUALIFIER, timestamp, projectedValue.get(), projectedValue.getOffset(), projectedValue.getLength());
             }
             return keyValue;
         }
@@ -204,7 +211,7 @@ public class TupleProjector {
         @Override
         public boolean getValue(byte[] family, byte[] qualifier,
                 ImmutableBytesWritable ptr) {
-            ptr.set(projectedValue);
+            ptr.set(projectedValue.get(), projectedValue.getOffset(), projectedValue.getLength());
             return true;
         }
 
@@ -222,7 +229,7 @@ public class TupleProjector {
     public ProjectedValueTuple projectResults(Tuple tuple) {
     	byte[] bytesValue = schema.toBytes(tuple, getExpressions(), valueSet, ptr);
     	Cell base = tuple.getValue(0);
-        return new ProjectedValueTuple(base.getRowArray(), base.getRowOffset(), base.getRowLength(), base.getTimestamp(), bytesValue, valueSet.getEstimatedLength());
+        return new ProjectedValueTuple(base.getRowArray(), base.getRowOffset(), base.getRowLength(), base.getTimestamp(), bytesValue, 0, bytesValue.length, valueSet.getEstimatedLength());
     }
     
     public static void decodeProjectedValue(Tuple tuple, ImmutableBytesWritable ptr) throws IOException {
@@ -233,27 +240,33 @@ public class TupleProjector {
     
     public static ProjectedValueTuple mergeProjectedValue(ProjectedValueTuple dest, KeyValueSchema destSchema, ValueBitSet destBitSet,
     		Tuple src, KeyValueSchema srcSchema, ValueBitSet srcBitSet, int offset) throws IOException {
-    	ImmutableBytesWritable destValue = new ImmutableBytesWritable(dest.getProjectedValue());
+    	ImmutableBytesWritable destValue = dest.getProjectedValue();
+        int origDestBitSetLen = dest.getBitSetLength();
     	destBitSet.clear();
-    	destBitSet.or(destValue);
-    	int origDestBitSetLen = dest.getBitSetLength();
-    	ImmutableBytesWritable srcValue = new ImmutableBytesWritable();
-    	decodeProjectedValue(src, srcValue);
-    	srcBitSet.clear();
-    	srcBitSet.or(srcValue);
-    	int origSrcBitSetLen = srcBitSet.getEstimatedLength();
-    	for (int i = 0; i < srcBitSet.getMaxSetBit(); i++) {
-    		if (srcBitSet.get(i)) {
-    			destBitSet.set(offset + i);
-    		}
+    	destBitSet.or(destValue, origDestBitSetLen);
+    	ImmutableBytesWritable srcValue = null;
+    	int srcValueLen = 0;
+    	if (src != null) {
+    	    srcValue = new ImmutableBytesWritable();
+    	    decodeProjectedValue(src, srcValue);
+    	    srcBitSet.clear();
+    	    srcBitSet.or(srcValue);
+    	    int origSrcBitSetLen = srcBitSet.getEstimatedLength();
+    	    for (int i = 0; i <= srcBitSet.getMaxSetBit(); i++) {
+    	        if (srcBitSet.get(i)) {
+    	            destBitSet.set(offset + i);
+    	        }
+    	    }
+    	    srcValueLen = srcValue.getLength() - origSrcBitSetLen;
     	}
     	int destBitSetLen = destBitSet.getEstimatedLength();
-    	byte[] merged = new byte[destValue.getLength() - origDestBitSetLen + srcValue.getLength() - origSrcBitSetLen + destBitSetLen];
+    	byte[] merged = new byte[destValue.getLength() - origDestBitSetLen + srcValueLen + destBitSetLen];
     	int o = Bytes.putBytes(merged, 0, destValue.get(), destValue.getOffset(), destValue.getLength() - origDestBitSetLen);
-    	o = Bytes.putBytes(merged, o, srcValue.get(), srcValue.getOffset(), srcValue.getLength() - origSrcBitSetLen);
+    	if (src != null) {
+    	    o = Bytes.putBytes(merged, o, srcValue.get(), srcValue.getOffset(), srcValueLen);
+    	}
     	destBitSet.toBytes(merged, o);
-    	ImmutableBytesWritable keyPtr = dest.getKeyPtr();
-        return new ProjectedValueTuple(keyPtr.get(), keyPtr.getOffset(), keyPtr.getLength(), dest.getTimestamp(), merged, destBitSetLen);
+        return new ProjectedValueTuple(dest, dest.getTimestamp(), merged, 0, merged.length, destBitSetLen);
     }
 
     public KeyValueSchema getSchema() {

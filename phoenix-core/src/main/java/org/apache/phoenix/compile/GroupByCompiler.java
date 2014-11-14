@@ -136,7 +136,7 @@ public class GroupByCompiler {
      * @throws ColumnNotFoundException if column name could not be resolved
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */
-    public static GroupBy compile(StatementContext context, SelectStatement statement, TupleProjector tupleProjector) throws SQLException {
+    public static GroupBy compile(StatementContext context, SelectStatement statement, TupleProjector tupleProjector, boolean isInRowKeyOrder) throws SQLException {
         List<ParseNode> groupByNodes = statement.getGroupBy();
         /**
          * Distinct can use an aggregate plan if there's no group by.
@@ -179,7 +179,7 @@ public class GroupByCompiler {
             return GroupBy.EMPTY_GROUP_BY;
         }
         
-        boolean isRowKeyOrderedGrouping = groupByVisitor.isOrderPreserving();
+        boolean isRowKeyOrderedGrouping = isInRowKeyOrder && groupByVisitor.isOrderPreserving();
         List<Expression> expressions = Lists.newArrayListWithCapacity(groupByEntries.size());
         List<Expression> keyExpressions = expressions;
         String groupExprAttribName;
