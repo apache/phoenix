@@ -82,6 +82,7 @@ public class MappedByteBufferSortedQueue extends MappedByteBufferQueue<ResultEnt
             return sizeof(e.sortKeys) + sizeof(toKeyValues(e));
         }
 
+        @SuppressWarnings("deprecation")
         @Override
         protected void writeToBuffer(MappedByteBuffer buffer, ResultEntry e) {
             int totalLen = 0;
