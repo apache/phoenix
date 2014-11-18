@@ -35,6 +35,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.iq80.snappy.Snappy;
 
 /**
  * Client side Aggregator which will aggregate data and find distinct values with number of occurrences for each.
@@ -59,14 +60,20 @@ public abstract class DistinctValueWithCountClientAggregator extends BaseAggrega
             PDataType resultDataType = getResultDataType();
             cachedResult = resultDataType.toObject(ptr, resultDataType, sortOrder);
         } else {
-            InputStream is = new ByteArrayInputStream(ptr.get(), ptr.getOffset() + 1, ptr.getLength() - 1);
+            InputStream is;
             try {
                 if (Bytes.equals(ptr.get(), ptr.getOffset(), 1, DistinctValueWithCountServerAggregator.COMPRESS_MARKER,
                         0, 1)) {
-                    InputStream decompressionStream = DistinctValueWithCountServerAggregator.COMPRESS_ALGO
-                            .createDecompressionStream(is,
-                                    DistinctValueWithCountServerAggregator.COMPRESS_ALGO.getDecompressor(), 0);
-                    is = decompressionStream;
+                    // This reads the uncompressed length from the front of the compressed input
+                    int uncompressedLength = Snappy.getUncompressedLength(ptr.get(), ptr.getOffset() + 1);
+                    byte[] uncompressed = new byte[uncompressedLength];
+                    // This will throw CorruptionException, a RuntimeException if the snappy data is invalid.
+                    // We're making a RuntimeException out of a checked IOException below so assume it's ok
+                    // to let any CorruptionException escape.
+                    Snappy.uncompress(ptr.get(), ptr.getOffset() + 1, ptr.getLength() - 1, uncompressed, 0);
+                    is = new ByteArrayInputStream(uncompressed, 0, uncompressedLength);
+                } else {
+                    is = new ByteArrayInputStream(ptr.get(), ptr.getOffset() + 1, ptr.getLength() - 1);
                 }
                 DataInputStream in = new DataInputStream(is);
                 int mapSize = WritableUtils.readVInt(in);
