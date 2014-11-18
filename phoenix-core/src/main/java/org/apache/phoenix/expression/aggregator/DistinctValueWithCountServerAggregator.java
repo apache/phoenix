@@ -24,9 +24,6 @@ import java.util.Map.Entry;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -35,7 +32,6 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SizedUtil;
-
 import org.iq80.snappy.Snappy;
 
 /**
@@ -45,7 +41,6 @@ import org.iq80.snappy.Snappy;
  * @since 1.2.1
  */
 public class DistinctValueWithCountServerAggregator extends BaseAggregator {
-    private static final Logger LOG = LoggerFactory.getLogger(DistinctValueWithCountServerAggregator.class);
     public static final int DEFAULT_ESTIMATED_DISTINCT_VALUES = 10000;
     public static final byte[] COMPRESS_MARKER = new byte[] { (byte)1 };
 

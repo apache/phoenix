@@ -23,5 +23,12 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.StatementContext;
 
 public interface ParallelIteratorFactory {
+    public static ParallelIteratorFactory NOOP_FACTORY = new ParallelIteratorFactory() {
+        @Override
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan)
+                throws SQLException {
+            return LookAheadResultIterator.wrap(scanner);
+        }
+    };
     PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException;
 }

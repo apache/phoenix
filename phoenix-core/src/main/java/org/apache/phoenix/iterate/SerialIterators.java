@@ -49,14 +49,12 @@ public class SerialIterators extends BaseResultIterators {
 	private static final Logger logger = LoggerFactory.getLogger(SerialIterators.class);
 	private static final String NAME = "SERIAL";
     private final ParallelIteratorFactory iteratorFactory;
-    private final int limit;
     
     public SerialIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory)
             throws SQLException {
         super(plan, perScanLimit);
         Preconditions.checkArgument(perScanLimit != null); // must be a limit specified
         this.iteratorFactory = iteratorFactory;
-        this.limit = perScanLimit;
     }
 
     @Override
@@ -88,9 +86,8 @@ public class SerialIterators extends BaseResultIterators {
 	                    concatIterators.add(iteratorFactory.newIterator(context, scanner, scan));
                 	}
                 	PeekingResultIterator concatIterator = ConcatResultIterator.newIterator(concatIterators);
-                	PeekingResultIterator iterator = new LimitingPeekingResultIterator(concatIterator, limit);
-                    allIterators.add(iterator);
-                    return iterator;
+                    allIterators.add(concatIterator);
+                    return concatIterator;
                 }
 
                 /**
@@ -102,7 +99,7 @@ public class SerialIterators extends BaseResultIterators {
                 public Object getJobId() {
                     return SerialIterators.this;
                 }
-            }, "Parallel scanner for table: " + tableRef.getTable().getName().getString()));
+            }, "Serial scanner for table: " + tableRef.getTable().getName().getString()));
             // Add our singleton Future which will execute serially
             nestedFutures.add(Collections.singletonList(new Pair<Scan,Future<PeekingResultIterator>>(overallScan,future)));
         }
