@@ -26,7 +26,7 @@ import net.jcip.annotations.Immutable;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-import org.xerial.snappy.Snappy;
+
 import org.apache.phoenix.cache.HashCache;
 import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -38,6 +38,9 @@ import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.*;
+
+import org.iq80.snappy.CorruptionException;
+import org.iq80.snappy.Snappy;
 
 public class HashCacheFactory implements ServerCacheFactory {
 
@@ -55,11 +58,13 @@ public class HashCacheFactory implements ServerCacheFactory {
     @Override
     public Closeable newCache(ImmutableBytesWritable cachePtr, MemoryChunk chunk) throws SQLException {
         try {
-            int size = Snappy.uncompressedLength(cachePtr.get());
-            byte[] uncompressed = new byte[size];
-            Snappy.uncompress(cachePtr.get(), 0, cachePtr.getLength(), uncompressed, 0);
+            // This reads the uncompressed length from the front of the compressed input
+            int uncompressedLen = Snappy.getUncompressedLength(cachePtr.get(), cachePtr.getOffset());
+            byte[] uncompressed = new byte[uncompressedLen];
+            Snappy.uncompress(cachePtr.get(), cachePtr.getOffset(), cachePtr.getLength(),
+                uncompressed, 0);
             return new HashCacheImpl(uncompressed, chunk);
-        } catch (IOException e) {
+        } catch (CorruptionException e) {
             throw ServerUtil.parseServerException(e);
         }
     }
