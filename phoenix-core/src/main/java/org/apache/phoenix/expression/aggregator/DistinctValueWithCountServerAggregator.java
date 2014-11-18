@@ -17,16 +17,12 @@
  */
 package org.apache.phoenix.expression.aggregator;
 
-import java.io.ByteArrayOutputStream;
-import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.io.hfile.Compression;
-import org.apache.hadoop.hbase.io.hfile.Compression.Algorithm;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +36,8 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SizedUtil;
 
+import org.iq80.snappy.Snappy;
+
 /**
  * Server side Aggregator which will aggregate data and find distinct values with number of occurrences for each.
  * 
@@ -50,7 +48,6 @@ public class DistinctValueWithCountServerAggregator extends BaseAggregator {
     private static final Logger LOG = LoggerFactory.getLogger(DistinctValueWithCountServerAggregator.class);
     public static final int DEFAULT_ESTIMATED_DISTINCT_VALUES = 10000;
     public static final byte[] COMPRESS_MARKER = new byte[] { (byte)1 };
-    public static final Algorithm COMPRESS_ALGO = Compression.Algorithm.SNAPPY;
 
     private int compressThreshold;
     private byte[] buffer = null;
@@ -101,18 +98,11 @@ public class DistinctValueWithCountServerAggregator extends BaseAggregator {
         }
         if (serializationSize > compressThreshold) {
             // The size for the map serialization is above the threshold. We will do the Snappy compression here.
-            ByteArrayOutputStream compressedByteStream = new ByteArrayOutputStream();
-            try {
-                compressedByteStream.write(COMPRESS_MARKER);
-                OutputStream compressionStream = COMPRESS_ALGO.createCompressionStream(compressedByteStream,
-                        COMPRESS_ALGO.getCompressor(), 0);
-                compressionStream.write(buffer, 1, buffer.length - 1);
-                compressionStream.flush();
-                ptr.set(compressedByteStream.toByteArray(), 0, compressedByteStream.size());
-                return true;
-            } catch (Exception e) {
-                LOG.error("Exception while Snappy compression of data.", e);
-            }
+            byte[] compressed = new byte[COMPRESS_MARKER.length + Snappy.maxCompressedLength(buffer.length)];
+            System.arraycopy(COMPRESS_MARKER, 0, compressed, 0, COMPRESS_MARKER.length);
+            int compressedLen = Snappy.compress(buffer, 1, buffer.length - 1, compressed, COMPRESS_MARKER.length);
+            ptr.set(compressed, 0, compressedLen + 1);
+            return true;
         }
         ptr.set(buffer, 0, offset);
         return true;
