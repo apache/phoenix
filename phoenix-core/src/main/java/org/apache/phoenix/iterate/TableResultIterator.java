@@ -23,7 +23,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
-
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -40,28 +39,48 @@ import org.apache.phoenix.util.ServerUtil;
  * @since 0.1
  */
 public class TableResultIterator extends ExplainTable implements ResultIterator {
+    private final Scan scan;
     private final HTableInterface htable;
-    private final ResultIterator delegate;
+    private volatile ResultIterator delegate;
 
     public TableResultIterator(StatementContext context, TableRef tableRef) throws SQLException {
         this(context, tableRef, context.getScan());
     }
 
+    /*
+     * Delay the creation of the underlying HBase ResultScanner if creationMode is DELAYED.
+     * Though no rows are returned when the scanner is created, it still makes several RPCs
+     * to open the scanner. In queries run serially (i.e. SELECT ... LIMIT 1), we do not
+     * want to be hit with this cost when it's likely we'll never execute those scanners.
+     */
+    private ResultIterator getDelegate(boolean isClosing) throws SQLException {
+        ResultIterator delegate = this.delegate;
+        if (delegate == null) {
+            synchronized (this) {
+                delegate = this.delegate;
+                if (delegate == null) {
+                    try {
+                        this.delegate = delegate = isClosing ? ResultIterator.EMPTY_ITERATOR : new ScanningResultIterator(htable.getScanner(scan));
+                    } catch (IOException e) {
+                        Closeables.closeQuietly(htable);
+                        throw ServerUtil.parseServerException(e);
+                    }
+                }
+            }
+        }
+        return delegate;
+    }
+    
     public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan) throws SQLException {
         super(context, tableRef);
+        this.scan = scan;
         htable = context.getConnection().getQueryServices().getTable(tableRef.getTable().getPhysicalName().getBytes());
-        try {
-            delegate = new ScanningResultIterator(htable.getScanner(scan));
-        } catch (IOException e) {
-            Closeables.closeQuietly(htable);
-            throw ServerUtil.parseServerException(e);
-        }
     }
 
     @Override
     public void close() throws SQLException {
         try {
-            delegate.close();
+            getDelegate(true).close();
         } finally {
             try {
                 htable.close();
@@ -73,7 +92,7 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
 
     @Override
     public Tuple next() throws SQLException {
-        return delegate.next();
+        return getDelegate(false).next();
     }
 
     @Override
@@ -84,7 +103,6 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
 
 	@Override
 	public String toString() {
-		return "TableResultIterator [htable=" + htable + ", delegate="
-				+ delegate + "]";
+		return "TableResultIterator [htable=" + htable + ", scan=" + scan  + "]";
 	}
 }
