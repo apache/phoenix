@@ -46,6 +46,7 @@
         <include>jline:jline</include>
         <include>sqlline:sqlline</include>
         <include>org.apache.hbase:hbase*</include>
+        <include>org.iq80.snappy:snappy</include>
       </includes>
     </dependencySet>
 
