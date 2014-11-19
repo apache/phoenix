@@ -105,14 +105,12 @@ public class SpoolingResultIterator implements PeekingResultIterator {
             final long maxBytesAllowed = maxSpoolToDisk == -1 ?
             		Long.MAX_VALUE : thresholdBytes + maxSpoolToDisk;
             long bytesWritten = 0L;
-            int maxSize = 0;
             for (Tuple result = scanner.next(); result != null; result = scanner.next()) {
                 int length = TupleUtil.write(result, out);
                 bytesWritten += length;
                 if(bytesWritten > maxBytesAllowed){
                 		throw new SpoolTooBigToDiskException("result too big, max allowed(bytes): " + maxBytesAllowed);
                 }
-                maxSize = Math.max(length, maxSize);
             }
             spoolTo.close();
             if (spoolTo.isInMemory()) {
@@ -120,7 +118,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 chunk.resize(data.length);
                 spoolFrom = new InMemoryResultIterator(data, chunk);
             } else {
-                spoolFrom = new OnDiskResultIterator(maxSize, spoolTo.getFile());
+                spoolFrom = new OnDiskResultIterator(spoolTo.getFile());
                 usedOnDiskIterator = true;
             }
             success = true;
@@ -222,22 +220,15 @@ public class SpoolingResultIterator implements PeekingResultIterator {
         private final File file;
         private DataInputStream spoolFrom;
         private Tuple next;
-        private int maxSize;
-        private int bufferIndex;
-        private byte[][] buffers = new byte[2][];
         private boolean isClosed;
 
-        private OnDiskResultIterator (int maxSize, File file) {
+        private OnDiskResultIterator (File file) {
             this.file = file;
-            this.maxSize = maxSize;
         }
 
         private synchronized void init() throws IOException {
             if (spoolFrom == null) {
                 spoolFrom = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
-                // We need two so that we can have a current and a next without them stomping on each other
-                buffers[0] = new byte[maxSize];
-                buffers[1] = new byte[maxSize];
                 advance();
             }
         }
@@ -267,9 +258,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
             }
             int totalBytesRead = 0;
             int offset = 0;
-            // Alternate between buffers so that the current one is not affected by advancing
-            bufferIndex = (bufferIndex + 1) % 2;
-            byte[] buffer = buffers [bufferIndex];
+            byte[] buffer = new byte[length];
             while(totalBytesRead < length) {
                 int bytesRead = spoolFrom.read(buffer, offset, length);
                 if (bytesRead == -1) {
