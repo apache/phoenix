@@ -49,6 +49,7 @@
         <include>org.cloudera.htrace:htrace-core</include>
         <include>io.netty:netty</include>
         <include>commons-codec:commons-codec</include>
+        <include>org.iq80.snappy:snappy</include>
       </includes>
     </dependencySet>
 
