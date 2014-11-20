@@ -73,8 +73,7 @@ public class SaltingUtil {
     // Generate the bucket byte given a byte array and the number of buckets.
     public static byte getSaltingByte(byte[] value, int offset, int length, int bucketNum) {
         int hash = calculateHashCode(value, offset, length);
-        byte bucketByte = (byte) ((Math.abs(hash) % bucketNum));
-        return bucketByte;
+        return (byte) Math.abs(hash % bucketNum);
     }
 
     private static int calculateHashCode(byte a[], int offset, int length) {
@@ -98,7 +97,7 @@ public class SaltingUtil {
         }
         byte[] upperRange = minMaxRange.getUpperRange();
 
-        if(!minMaxRange.upperUnbound()) { 
+        if(!minMaxRange.upperUnbound()) {
             byte[] newUpperRange = new byte[upperRange.length + 1];
             newUpperRange[0] = saltByte;
             System.arraycopy(upperRange, 0, newUpperRange, 1, upperRange.length);
