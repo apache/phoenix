@@ -33,6 +33,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -45,6 +46,8 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.parse.FilterableStatement;
@@ -490,20 +493,26 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(numScans);
         allFutures.add(futures);
         SQLException toThrow = null;
+        int queryTimeOut = props.getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, DEFAULT_THREAD_TIMEOUT_MS);
+        long maxQueryEndTime = System.currentTimeMillis() + queryTimeOut;
         try {
             submitWork(scans, futures, allIterators, splits.size());
-            int timeoutMs = props.getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, DEFAULT_THREAD_TIMEOUT_MS);
             boolean clearedCache = false;
             for (List<Pair<Scan,Future<PeekingResultIterator>>> future : reverseIfNecessary(futures,isReverse)) {
                 List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(future.size());
                 for (Pair<Scan,Future<PeekingResultIterator>> scanPair : reverseIfNecessary(future,isReverse)) {
                     try {
-                        PeekingResultIterator iterator = scanPair.getSecond().get(timeoutMs, TimeUnit.MILLISECONDS);
+                        long timeOutForScan = maxQueryEndTime - System.currentTimeMillis();
+                        if (timeOutForScan < 0) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms").build().buildException(); 
+                        }
+                        PeekingResultIterator iterator = scanPair.getSecond().get(timeOutForScan, TimeUnit.MILLISECONDS);
                         concatIterators.add(iterator);
                     } catch (ExecutionException e) {
                         try { // Rethrow as SQLException
                             throw ServerUtil.parseServerException(e);
-                        } catch (StaleRegionBoundaryCacheException e2) { // Catch only to try to recover from region boundary cache being out of date
+                        } catch (StaleRegionBoundaryCacheException e2) { 
+                            // Catch only to try to recover from region boundary cache being out of date
                             List<List<Pair<Scan,Future<PeekingResultIterator>>>> newFutures = Lists.newArrayListWithExpectedSize(2);
                             if (!clearedCache) { // Clear cache once so that we rejigger job based on new boundaries
                                 services.clearTableRegionCache(physicalTableName);
@@ -525,7 +534,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                                     // Immediate do a get (not catching exception again) and then add the iterators we
                                     // get back immediately. They'll be sorted as expected, since they're replacing the
                                     // original one.
-                                    PeekingResultIterator iterator = newScanPair.getSecond().get(timeoutMs, TimeUnit.MILLISECONDS);
+                                    long timeOutForScan = maxQueryEndTime - System.currentTimeMillis();
+                                    if (timeOutForScan < 0) {
+                                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms").build().buildException(); 
+                                    }
+                                    PeekingResultIterator iterator = newScanPair.getSecond().get(timeOutForScan, TimeUnit.MILLISECONDS);
                                     iterators.add(iterator);
                                 }
                             }
@@ -537,6 +550,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
             success = true;
             return iterators;
+        } catch (TimeoutException e) {
+            // thrown when a thread times out waiting for the future.get() call to return
+            toThrow = new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT)
+                    .setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms")
+                    .setRootCause(e).build().buildException();
         } catch (SQLException e) {
             toThrow = e;
         } catch (Exception e) {
@@ -579,22 +597,25 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         // Don't call cancel on already started work, as it causes the HConnection
         // to get into a funk. Instead, just cancel queued work.
         boolean cancelledWork = false;
-        for (List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures : allFutures) {
-            for (List<Pair<Scan,Future<PeekingResultIterator>>> futureScans : futures) {
-                for (Pair<Scan,Future<PeekingResultIterator>> futurePair : futureScans) {
-                    // When work is rejected, we may have null futurePair entries, because
-                    // we randomize these and set them as they're submitted.
-                    if (futurePair != null) {
-                        Future<PeekingResultIterator> future = futurePair.getSecond();
-                        if (future != null) {
-                            cancelledWork |= future.cancel(false);
+        try {
+            for (List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures : allFutures) {
+                for (List<Pair<Scan,Future<PeekingResultIterator>>> futureScans : futures) {
+                    for (Pair<Scan,Future<PeekingResultIterator>> futurePair : futureScans) {
+                        // When work is rejected, we may have null futurePair entries, because
+                        // we randomize these and set them as they're submitted.
+                        if (futurePair != null) {
+                            Future<PeekingResultIterator> future = futurePair.getSecond();
+                            if (future != null) {
+                                cancelledWork |= future.cancel(false);
+                            }
                         }
                     }
                 }
             }
-        }
-        if (cancelledWork) {
-            context.getConnection().getQueryServices().getExecutor().purge();
+        } finally {
+            if (cancelledWork) {
+                context.getConnection().getQueryServices().getExecutor().purge();
+            }
         }
     }
 
