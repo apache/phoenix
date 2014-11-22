@@ -331,9 +331,6 @@ public class QueryOptimizer {
                     // indexed columns then give first priority to the local index.
                     if (!bothLocalIndexes && table1.getIndexType() == IndexType.LOCAL
                             && plan1.getContext().getScanRanges().getRanges().isEmpty()) c--;
-                    // if both tables are index tables then select plan below based on number of
-                    // columns and type of index.
-                    if(table1.getType()==PTableType.INDEX && table2.getType()==PTableType.INDEX && !bothLocalIndexes) c=0;
                 }
                 if (c != 0) return c;
                 if (plan1.getGroupBy()!=null && plan2.getGroupBy()!=null) {

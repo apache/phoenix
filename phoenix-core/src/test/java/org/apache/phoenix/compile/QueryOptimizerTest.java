@@ -25,6 +25,7 @@ import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,6 +39,7 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
@@ -368,6 +370,19 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     // Multi-tenant = false; Query uses index = true; Salted = false
     public void testAssertQueryPlanDetails8() throws Exception {
         testAssertQueryPlanDetails(false, true, false);
+    }
+
+    @Test
+    public void testQueryOptimizerShouldSelectThePlanWithMoreNumberOfPKColumns() throws Exception {
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        Connection conn2 = DriverManager.getConnection(getUrl());
+        conn1.createStatement().execute("create table index_test_table (a varchar not null,b varchar not null,c varchar not null,d varchar,e varchar, f varchar constraint pk primary key(a,b,c))");
+        conn1.createStatement().execute(
+            "create index INDEX_TEST_TABLE_INDEX_D on INDEX_TEST_TABLE(A,D) include(B,C,E,F)");
+        conn1.createStatement().execute(
+            "create index INDEX_TEST_TABLE_INDEX_F on INDEX_TEST_TABLE(A,F) include(B,C,D,E)");
+        ResultSet rs = conn2.createStatement().executeQuery("explain select * from INDEX_TEST_TABLE where A in ('1','2','3','4','5') and F in ('1111','2222','3333')");
+        assertEquals("CLIENT PARALLEL 1-WAY SKIP SCAN ON 15 KEYS OVER INDEX_TEST_TABLE_INDEX_F ['1','1111'] - ['5','3333']", QueryUtil.getExplainPlan(rs));
     }
 
     private void testAssertQueryPlanDetails(boolean multitenant, boolean useIndex, boolean salted) throws Exception {
