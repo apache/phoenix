@@ -26,6 +26,7 @@ import java.util.concurrent.Future;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.iterate.TableResultIterator.ScannerCreation;
 import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.LogUtil;
@@ -79,7 +80,7 @@ public class SerialIterators extends BaseResultIterators {
                 	List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(scans.size());
                 	for (final Scan scan : scans) {
 	                    long startTime = System.currentTimeMillis();
-	                    ResultIterator scanner = new TableResultIterator(context, tableRef, scan);
+	                    ResultIterator scanner = new TableResultIterator(context, tableRef, scan, ScannerCreation.DELAYED);
 	                    if (logger.isDebugEnabled()) {
 	                        logger.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
 	                    }
