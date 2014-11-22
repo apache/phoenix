@@ -39,6 +39,8 @@ import org.apache.phoenix.util.ServerUtil;
  * @since 0.1
  */
 public class TableResultIterator extends ExplainTable implements ResultIterator {
+	public enum ScannerCreation {IMMEDIATE, DELAYED};
+	
     private final Scan scan;
     private final HTableInterface htable;
     private volatile ResultIterator delegate;
@@ -72,9 +74,16 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
     }
     
     public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan) throws SQLException {
+        this(context, tableRef, scan, ScannerCreation.IMMEDIATE);
+    }
+
+    public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan, ScannerCreation creationMode) throws SQLException {
         super(context, tableRef);
         this.scan = scan;
         htable = context.getConnection().getQueryServices().getTable(tableRef.getTable().getPhysicalName().getBytes());
+        if (creationMode == ScannerCreation.IMMEDIATE) {
+        	getDelegate(false);
+        }
     }
 
     @Override
