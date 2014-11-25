@@ -20,9 +20,8 @@
 package org.apache.phoenix.end2end;
 
 import org.junit.After;
-import org.junit.experimental.categories.Category;
 
-@Category(NeedsOwnMiniClusterTest.class)
+
 public class BaseOwnClusterClientManagedTimeIT extends BaseOwnClusterIT {
     @After
     public void cleanUpAfterTest() throws Exception {

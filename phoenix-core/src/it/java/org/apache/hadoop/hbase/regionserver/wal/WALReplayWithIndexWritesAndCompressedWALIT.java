@@ -47,18 +47,19 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionServerAccounting;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.mockito.Mockito;
-
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.covered.example.ColumnGroup;
 import org.apache.phoenix.hbase.index.covered.example.CoveredColumn;
 import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexSpecifierBuilder;
 import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexer;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
+import org.mockito.Mockito;
 
 /**
  * For pre-0.94.9 instances, this class tests correctly deserializing WALEdits w/o compression. Post
@@ -72,6 +73,7 @@ import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexer;
  * This test should only have a single test - otherwise we will start/stop the minicluster multiple
  * times, which is probably not what you want to do (mostly because its so much effort).
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class WALReplayWithIndexWritesAndCompressedWALIT {
 
   public static final Log LOG = LogFactory.getLog(TestWALReplay.class);

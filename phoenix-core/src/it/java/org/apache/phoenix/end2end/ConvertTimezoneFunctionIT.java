@@ -24,13 +24,12 @@ import java.sql.ResultSet;
 
 import org.apache.phoenix.schema.IllegalDataException;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 /**
  * CONVERT_TZ(date, 'from_timezone', 'to_timezone') tests
  *
  */
-@Category(HBaseManagedTimeTest.class)
+
 public class ConvertTimezoneFunctionIT extends BaseHBaseManagedTimeIT {
 
     @Test

@@ -40,9 +40,8 @@ import java.util.Properties;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(ClientManagedTimeTest.class)
+
 public class TopNIT extends BaseClientManagedTimeIT {
 
     @Test

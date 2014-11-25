@@ -31,9 +31,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.PDataType;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(HBaseManagedTimeTest.class)
+
 public class DecodeFunctionIT extends BaseHBaseManagedTimeIT {
 
 	@Test

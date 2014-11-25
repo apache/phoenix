@@ -63,7 +63,6 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 
 
@@ -75,7 +74,7 @@ import org.junit.experimental.categories.Category;
  * @since 0.1
  */
 
-@Category(ClientManagedTimeTest.class)
+
 public class QueryIT extends BaseQueryIT {
     
     public QueryIT(String indexDDL) {
