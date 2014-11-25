@@ -32,9 +32,8 @@ import java.sql.SQLException;
 import java.sql.Types;
 
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(HBaseManagedTimeTest.class)
+
 public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
 
     private void initTable(Connection conn, String val) throws SQLException {

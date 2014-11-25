@@ -34,7 +34,6 @@ import java.util.Properties;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 
 
@@ -43,7 +42,7 @@ import org.junit.experimental.categories.Category;
  * Extended tests for Phoenix JDBC implementation
  * 
  */
-@Category(ClientManagedTimeTest.class)
+
 public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
 
     @Test

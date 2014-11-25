@@ -38,9 +38,8 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(ClientManagedTimeTest.class)
+
 public class CreateTableIT extends BaseClientManagedTimeIT {
     
     @Test

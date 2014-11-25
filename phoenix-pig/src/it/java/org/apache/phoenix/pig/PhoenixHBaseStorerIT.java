@@ -21,9 +21,9 @@ package org.apache.phoenix.pig;
 
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.TestUtil.LOCALHOST;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.assertArrayEquals;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -33,7 +33,6 @@ import java.util.Collection;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
-import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.pig.ExecType;
 import org.apache.pig.PigServer;
 import org.apache.pig.backend.executionengine.ExecJob.JOB_STATUS;
@@ -48,11 +47,10 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Lists;
 
-@Category(HBaseManagedTimeTest.class)
+
 public class PhoenixHBaseStorerIT extends BaseHBaseManagedTimeIT {
 
     private static TupleFactory tupleFactory;

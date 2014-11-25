@@ -38,7 +38,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
@@ -47,7 +46,7 @@ import com.google.common.collect.Maps;
  * and we wouldn't want that to be set for other tests sharing the same
  * cluster.
  */
-@Category(NeedsOwnMiniClusterTest.class)
+
 public class SpillableGroupByIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     private static final int NUM_ROWS_INSERTED = 1000;

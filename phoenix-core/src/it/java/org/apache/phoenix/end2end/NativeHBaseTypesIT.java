@@ -53,7 +53,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 
 /**
@@ -65,7 +64,7 @@ import org.junit.experimental.categories.Category;
  * 
  * @since 0.1
  */
-@Category(ClientManagedTimeTest.class)
+
 public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     private static final byte[] HBASE_NATIVE_BYTES = SchemaUtil.getTableNameAsBytes(HBASE_NATIVE_SCHEMA_NAME, HBASE_NATIVE);
     private static final byte[] FAMILY_NAME = Bytes.toBytes(SchemaUtil.normalizeIdentifier("1"));

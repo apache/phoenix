@@ -38,11 +38,10 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(NeedsOwnMiniClusterTest.class)
+
 public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     private static final String STABLE_INDEX = "STABLE_INDEX";

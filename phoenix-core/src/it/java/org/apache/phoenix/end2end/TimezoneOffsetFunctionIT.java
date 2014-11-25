@@ -17,17 +17,18 @@
  */
 package org.apache.phoenix.end2end;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import org.apache.phoenix.schema.IllegalDataException;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(HBaseManagedTimeTest.class)
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+
+import org.apache.phoenix.schema.IllegalDataException;
+import org.junit.Test;
+
+
 public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeIT {
 
 	@Test
