@@ -311,13 +311,12 @@ public class QueryOptimizer {
             public int compare(QueryPlan plan1, QueryPlan plan2) {
                 PTable table1 = plan1.getTableRef().getTable();
                 PTable table2 = plan2.getTableRef().getTable();
-                int c = plan2.getContext().getScanRanges().getRanges().size() - plan1.getContext().getScanRanges().getRanges().size();
-                // Account for potential view constants which are always bound
-                if (plan1 == dataPlan) { // plan2 is index plan. Ignore the viewIndexId if present
-                    c += boundRanges - (table2.getViewIndexId() == null ? 0 : 1);
-                } else { // plan1 is index plan. Ignore the viewIndexId if present
-                    c -= boundRanges - (table1.getViewIndexId() == null ? 0 : 1);
-                }
+
+                // For shared indexes (i.e. indexes on views and local indexes),
+                // a) add back any view constants as these won't be in the index, and
+                // b) ignore the viewIndexId which will be part of the row key columns.
+                int c = (plan2.getContext().getScanRanges().getRanges().size() + (table2.getViewIndexId() == null ? 0 : (boundRanges - 1))) - 
+                        (plan1.getContext().getScanRanges().getRanges().size() + (table1.getViewIndexId() == null ? 0 : (boundRanges - 1)));
                 if (c != 0) return c;
                 if (plan1.getGroupBy()!=null && plan2.getGroupBy()!=null) {
                     if (plan1.getGroupBy().isOrderPreserving() != plan2.getGroupBy().isOrderPreserving()) {
@@ -328,6 +327,7 @@ public class QueryOptimizer {
                 c = (table1.getColumns().size() - table1.getPKColumns().size()) - (table2.getColumns().size() - table2.getPKColumns().size());
                 if (c != 0) return c;
                 
+
                 // All things being equal, just use the table based on the Hint.USE_DATA_OVER_INDEX_TABLE
                 if (plan1.getTableRef().getTable().getType() == PTableType.INDEX) {
                     return comparisonOfDataVersusIndexTable;
