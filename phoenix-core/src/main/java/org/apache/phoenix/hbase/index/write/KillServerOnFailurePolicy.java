@@ -17,18 +17,15 @@
  */
 package org.apache.phoenix.hbase.index.write;
 
-import java.io.IOException;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 
 import com.google.common.collect.Multimap;
-
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 
 /**
  * Naive failure policy - kills the server on which it resides

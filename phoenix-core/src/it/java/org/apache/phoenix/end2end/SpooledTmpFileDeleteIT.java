@@ -8,10 +8,10 @@
  * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  * for the specific language governing permissions and limitations under the License.
  */
-package org.apache.phoenix.iterate;
+package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.FileFilter;
@@ -25,16 +25,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
-import org.apache.phoenix.end2end.ClientManagedTimeTest;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 
-@Category(ClientManagedTimeTest.class)
-public class SpooledTmpFileDeleteTest extends BaseClientManagedTimeIT {
+
+public class SpooledTmpFileDeleteIT extends BaseClientManagedTimeIT {
 	private Connection conn = null;
 	private Properties props = null;
 

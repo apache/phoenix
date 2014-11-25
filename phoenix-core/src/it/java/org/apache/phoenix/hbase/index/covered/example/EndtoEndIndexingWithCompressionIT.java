@@ -23,17 +23,15 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.junit.BeforeClass;
-import org.junit.experimental.categories.Category;
 
 /**
  * Test secondary indexing from an end-to-end perspective (client to server to index table).
  */
 
-@Category(NeedsOwnMiniClusterTest.class)
+
 public class EndtoEndIndexingWithCompressionIT extends EndToEndCoveredIndexingIT {
 
   @BeforeClass

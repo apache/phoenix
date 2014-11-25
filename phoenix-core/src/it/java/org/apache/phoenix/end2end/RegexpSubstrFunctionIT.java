@@ -31,9 +31,8 @@ import java.sql.Statement;
 
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(HBaseManagedTimeTest.class)
+
 public class RegexpSubstrFunctionIT extends BaseHBaseManagedTimeIT {
 
     private int id;

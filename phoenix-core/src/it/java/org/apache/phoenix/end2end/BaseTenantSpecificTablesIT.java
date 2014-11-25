@@ -26,11 +26,10 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(NeedsOwnMiniClusterTest.class)
+
 public abstract class BaseTenantSpecificTablesIT extends BaseOwnClusterClientManagedTimeIT {
     protected static final String TENANT_ID = "ZZTop";
     protected static final String TENANT_TYPE_ID = "abc";

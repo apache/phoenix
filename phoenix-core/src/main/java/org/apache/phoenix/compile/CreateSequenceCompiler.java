@@ -23,7 +23,6 @@ import java.util.Collections;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -31,14 +30,13 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.SortOrder;
-
 import org.apache.phoenix.util.SequenceUtil;
 
 public class CreateSequenceCompiler {

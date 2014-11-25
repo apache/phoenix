@@ -41,7 +41,6 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 /**
  * Tests for the TO_NUMBER built-in function.
@@ -50,7 +49,7 @@ import org.junit.experimental.categories.Category;
  * 
  * @since 0.1
  */
-@Category(ClientManagedTimeTest.class)
+
 public class ToNumberFunctionIT extends BaseClientManagedTimeIT {
 
     // This test changes to locale to en_US, and saves the previous locale here

@@ -26,9 +26,8 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(HBaseManagedTimeTest.class)
+
 public class LastValueFunctionIT extends BaseHBaseManagedTimeIT {
 
     @Test

@@ -56,7 +56,6 @@ import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.TableName;
@@ -72,7 +71,6 @@ import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Multimap;
 
@@ -81,7 +79,7 @@ import com.google.common.collect.Multimap;
  * region was present on the same server, we have to make a best effort to not kill the server for
  * not succeeding on index writes while the index region is coming up.
  */
-@Category(NeedsOwnMiniClusterTest.class)
+
 public class TestWALRecoveryCaching {
 
   private static final Log LOG = LogFactory.getLog(TestWALRecoveryCaching.class);

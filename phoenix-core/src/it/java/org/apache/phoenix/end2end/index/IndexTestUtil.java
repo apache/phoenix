@@ -133,6 +133,7 @@ public class IndexTestUtil {
                 for (Map.Entry<byte[],List<Cell>> entry : dataMutation.getFamilyCellMap().entrySet()) {
                     PColumnFamily family = dataTable.getColumnFamily(entry.getKey());
                     for (Cell kv : entry.getValue()) {
+                        @SuppressWarnings("deprecation")
                         byte[] cq = kv.getQualifier();
                         if (Bytes.compareTo(QueryConstants.EMPTY_COLUMN_BYTES, cq) != 0) {
                             try {

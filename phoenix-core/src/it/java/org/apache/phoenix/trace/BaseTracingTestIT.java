@@ -37,7 +37,6 @@ import org.apache.hadoop.metrics2.impl.ExposedMetricCounterLong;
 import org.apache.hadoop.metrics2.impl.ExposedMetricsRecordImpl;
 import org.apache.hadoop.metrics2.lib.ExposedMetricsInfoImpl;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
-import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -46,13 +45,12 @@ import org.apache.phoenix.trace.util.Tracing.Frequency;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
-import org.junit.experimental.categories.Category;
 
 /**
  * Base test for tracing tests - helps manage getting tracing/non-tracing
  * connections, as well as any supporting utils.
  */
-@Category(HBaseManagedTimeTest.class)
+
 public class BaseTracingTestIT extends BaseHBaseManagedTimeIT {
     @Before
     public void resetTracingTableIfExists() throws Exception {

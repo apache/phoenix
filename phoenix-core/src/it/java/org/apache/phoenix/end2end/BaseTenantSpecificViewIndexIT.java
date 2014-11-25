@@ -136,6 +136,7 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
         return DriverManager.getConnection(getUrl(), props);
     }
     
+    @SuppressWarnings("unchecked")
     private void verifyViewData(Connection conn, String valuePrefix) throws SQLException {
         String query = "SELECT k1, k2, v2 FROM v WHERE v2='" + valuePrefix + "v2-1'";
         ResultSet rs = conn.createStatement().executeQuery(query);

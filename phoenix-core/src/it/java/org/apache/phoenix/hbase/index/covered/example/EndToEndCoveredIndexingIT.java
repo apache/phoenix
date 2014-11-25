@@ -43,7 +43,6 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.TableName;
@@ -52,14 +51,13 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 /**
  * Test Covered Column indexing in an 'end-to-end' manner on a minicluster. This covers cases where
  * we manage custom timestamped updates that arrive in and out of order as well as just using the
  * generically timestamped updates.
  */
-@Category(NeedsOwnMiniClusterTest.class)
+
 public class EndToEndCoveredIndexingIT {
   private static final Log LOG = LogFactory.getLog(EndToEndCoveredIndexingIT.class);
   protected static final HBaseTestingUtility UTIL = new HBaseTestingUtility();
@@ -857,6 +855,7 @@ public class EndToEndCoveredIndexingIT {
 
     // setup the primary table
     String indexedTableName = Bytes.toString(TestTable.getTableName());
+    @SuppressWarnings("deprecation")
     HTableDescriptor pTable = new HTableDescriptor(indexedTableName);
     pTable.addFamily(new HColumnDescriptor(FAM));
     pTable.addFamily(new HColumnDescriptor(FAM2));

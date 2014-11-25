@@ -30,14 +30,13 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 
 /**
  * End-to-End tests on various statement hints.
  */
 
-@Category(HBaseManagedTimeTest.class)
+
 public class StatementHintsIT extends BaseHBaseManagedTimeIT {
 
     private static void initTableValues() throws Exception {
