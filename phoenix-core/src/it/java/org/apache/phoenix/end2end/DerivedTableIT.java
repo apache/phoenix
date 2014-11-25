@@ -50,13 +50,14 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
 
-
+@Category(ClientManagedTimeTest.class)
 @RunWith(Parameterized.class)
 public class DerivedTableIT extends BaseClientManagedTimeIT {
     private static final String tenantId = getOrganizationId();

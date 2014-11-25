@@ -53,8 +53,9 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(ClientManagedTimeTest.class)
 public class PercentileIT extends BaseClientManagedTimeIT {
 
     @Test

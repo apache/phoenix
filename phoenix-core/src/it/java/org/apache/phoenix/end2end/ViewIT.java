@@ -35,8 +35,9 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(NeedsOwnMiniClusterTest.class)
 public class ViewIT extends BaseViewIT {
     
     @Test

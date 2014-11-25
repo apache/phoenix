@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -40,10 +41,11 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-
+@Category(HBaseManagedTimeTest.class)
 public class DropViewIT extends BaseMutableIndexIT {
     private static final byte[] HBASE_NATIVE_BYTES = SchemaUtil.getTableNameAsBytes(HBASE_NATIVE_SCHEMA_NAME, HBASE_NATIVE);
     private static final byte[] FAMILY_NAME = Bytes.toBytes(SchemaUtil.normalizeIdentifier("1"));
@@ -67,7 +69,6 @@ public class DropViewIT extends BaseMutableIndexIT {
                 admin.deleteTable(HBASE_NATIVE_BYTES);
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
             }
-            @SuppressWarnings("deprecation")
             HTableDescriptor descriptor = new HTableDescriptor(HBASE_NATIVE_BYTES);
             HColumnDescriptor columnDescriptor =  new HColumnDescriptor(FAMILY_NAME);
             columnDescriptor.setKeepDeletedCells(true);

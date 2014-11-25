@@ -35,10 +35,11 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-
+@Category(NeedsOwnMiniClusterTest.class)
 public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     @BeforeClass

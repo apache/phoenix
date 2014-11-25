@@ -40,10 +40,11 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-
+@Category(NeedsOwnMiniClusterTest.class)
 public class MultiCfQueryExecIT extends BaseOwnClusterClientManagedTimeIT {
     private static final String MULTI_CF = "MULTI_CF";
     

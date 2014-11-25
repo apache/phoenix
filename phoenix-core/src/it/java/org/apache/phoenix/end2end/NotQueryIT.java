@@ -43,6 +43,7 @@ import java.util.Properties;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -50,7 +51,7 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Floats;
 
-
+@Category(ClientManagedTimeTest.class)
 @RunWith(Parameterized.class)
 public class NotQueryIT extends BaseQueryIT {
 

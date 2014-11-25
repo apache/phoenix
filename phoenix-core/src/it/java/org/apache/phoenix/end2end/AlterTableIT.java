@@ -51,8 +51,9 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(HBaseManagedTimeTest.class)
 public class AlterTableIT extends BaseHBaseManagedTimeIT {
     public static final String SCHEMA_NAME = "";
     public static final String DATA_TABLE_NAME = "T";

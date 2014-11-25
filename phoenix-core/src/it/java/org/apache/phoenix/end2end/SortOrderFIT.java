@@ -35,6 +35,7 @@ import org.apache.commons.lang.ArrayUtils;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Lists;
 
@@ -42,7 +43,7 @@ import com.google.common.collect.Lists;
  * @since 1.2
  */
 
-
+@Category(HBaseManagedTimeTest.class)
 public class SortOrderFIT extends BaseHBaseManagedTimeIT {
     
     private static final String TABLE = "DescColumnSortOrderTest";

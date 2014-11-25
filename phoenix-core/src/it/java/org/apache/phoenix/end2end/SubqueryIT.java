@@ -57,13 +57,14 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-
+@Category(HBaseManagedTimeTest.class)
 @RunWith(Parameterized.class)
 public class SubqueryIT extends BaseHBaseManagedTimeIT {
     

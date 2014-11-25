@@ -36,6 +36,7 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Basic tests for Phoenix dynamic upserting
@@ -44,7 +45,7 @@ import org.junit.Test;
  * @since 1.3
  */
 
-
+@Category(ClientManagedTimeTest.class)
 public class DynamicUpsertIT extends BaseClientManagedTimeIT {
 
     private static final String TABLE = "DynamicUpserts";

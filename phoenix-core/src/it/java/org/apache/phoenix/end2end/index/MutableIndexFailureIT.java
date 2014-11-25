@@ -82,7 +82,6 @@ import org.junit.experimental.categories.Category;
  * 
  * @since 2.1
  */
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class MutableIndexFailureIT extends BaseTest {
     private static final int NUM_SLAVES = 4;

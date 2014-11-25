@@ -34,10 +34,11 @@ import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Lists;
 
-
+@Category(HBaseManagedTimeTest.class)
 public class QueryMoreIT extends BaseHBaseManagedTimeIT {
     
     private String dataTableName;

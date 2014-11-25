@@ -30,8 +30,9 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(HBaseManagedTimeTest.class)
 public class EvaluationOfORIT extends BaseHBaseManagedTimeIT{
 		
 	@Test

@@ -18,8 +18,9 @@
 package org.apache.phoenix.end2end;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(NeedsOwnMiniClusterTest.class)
 public class SaltedViewIT extends BaseViewIT {
     
     /**

@@ -27,8 +27,9 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(HBaseManagedTimeTest.class)
 public class NthValueFunctionIT extends BaseHBaseManagedTimeIT {
 
     @Test

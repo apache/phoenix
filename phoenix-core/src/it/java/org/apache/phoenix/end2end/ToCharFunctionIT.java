@@ -41,6 +41,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Tests for the TO_CHAR built-in function.
@@ -49,7 +50,7 @@ import org.junit.Test;
  * 
  * @since 0.1
  */
-
+@Category(ClientManagedTimeTest.class)
 public class ToCharFunctionIT extends BaseClientManagedTimeIT {
     
     public static final String TO_CHAR_TABLE_NAME = "TO_CHAR_TABLE";

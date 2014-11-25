@@ -17,23 +17,12 @@
  */
 package org.apache.phoenix.trace;
 
-import static org.apache.phoenix.metrics.MetricInfo.ANNOTATION;
-import static org.apache.phoenix.metrics.MetricInfo.DESCRIPTION;
-import static org.apache.phoenix.metrics.MetricInfo.END;
-import static org.apache.phoenix.metrics.MetricInfo.HOSTNAME;
-import static org.apache.phoenix.metrics.MetricInfo.PARENT;
-import static org.apache.phoenix.metrics.MetricInfo.SPAN;
-import static org.apache.phoenix.metrics.MetricInfo.START;
-import static org.apache.phoenix.metrics.MetricInfo.TAG;
-import static org.apache.phoenix.metrics.MetricInfo.TRACE;
-
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Properties;
-
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Iterators;
+import org.apache.commons.configuration.Configuration;
 import org.apache.commons.configuration.SubsetConfiguration;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -42,15 +31,20 @@ import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hadoop.metrics2.MetricsRecord;
 import org.apache.hadoop.metrics2.MetricsSink;
 import org.apache.hadoop.metrics2.MetricsTag;
-import org.apache.phoenix.metrics.MetricInfo;
-import org.apache.phoenix.metrics.Metrics;
+import org.apache.phoenix.metrics.*;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.QueryUtil;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Joiner;
+import javax.annotation.Nullable;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.*;
+
+import static org.apache.phoenix.metrics.MetricInfo.*;
+import static org.apache.phoenix.metrics.MetricInfo.HOSTNAME;
 
 /**
  * Write the metrics to a phoenix table.

@@ -72,7 +72,6 @@ import com.google.common.collect.Maps;
  * HBase 0.98.5
  * </p>
  */
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class MutableIndexReplicationIT extends BaseTest {
 

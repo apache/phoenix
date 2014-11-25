@@ -32,10 +32,11 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-
+@Category(NeedsOwnMiniClusterTest.class)
 public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
     private static final String STATS_TEST_TABLE_NAME = "S";
     private static final byte[] STATS_TEST_TABLE_BYTES = Bytes.toBytes(STATS_TEST_TABLE_NAME);

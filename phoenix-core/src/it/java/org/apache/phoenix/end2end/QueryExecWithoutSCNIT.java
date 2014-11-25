@@ -30,8 +30,9 @@ import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(HBaseManagedTimeTest.class)
 public class QueryExecWithoutSCNIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testScanNoSCN() throws Exception {

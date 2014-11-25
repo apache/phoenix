@@ -45,6 +45,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdge;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.TableName;
@@ -55,12 +56,13 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * End-to-End test of just the {@link CoveredColumnsIndexBuilder}, but with a simple
  * {@link IndexCodec} and BatchCache implementation.
  */
-
+@Category(NeedsOwnMiniClusterTest.class)
 public class EndToEndCoveredColumnsIndexBuilderIT {
 
   public class TestState {
@@ -293,7 +295,6 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
    */
   private TestState setupTest(String tableName) throws IOException {
     byte[] tableNameBytes = Bytes.toBytes(tableName);
-    @SuppressWarnings("deprecation")
     HTableDescriptor desc = new HTableDescriptor(tableNameBytes);
     desc.addFamily(FAM1);
     // add the necessary simple options to create the builder

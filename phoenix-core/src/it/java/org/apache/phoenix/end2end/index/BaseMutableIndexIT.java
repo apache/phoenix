@@ -27,10 +27,12 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.experimental.categories.Category;
 
-
+@Category(HBaseManagedTimeTest.class)
 public class BaseMutableIndexIT extends BaseIndexIT {
     public BaseMutableIndexIT() {
     }

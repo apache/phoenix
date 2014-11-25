@@ -34,8 +34,9 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(ClientManagedTimeTest.class)
 public class FunkyNamesIT extends BaseClientManagedTimeIT {
 
     protected static void initTableValues(byte[][] splits, long ts) throws Exception {

@@ -51,13 +51,14 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
 
-
+@Category(ClientManagedTimeTest.class)
 @RunWith(Parameterized.class)
 public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
 

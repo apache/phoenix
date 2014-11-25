@@ -22,8 +22,9 @@ import java.util.Map;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
+import org.junit.experimental.categories.Category;
 
-
+@Category(ClientManagedTimeTest.class)
 public class InMemoryOrderByIT extends OrderByIT {
 
     public InMemoryOrderByIT() {

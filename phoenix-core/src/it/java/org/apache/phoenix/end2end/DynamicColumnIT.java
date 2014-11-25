@@ -46,6 +46,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Basic tests for Phoenix dynamic upserting
@@ -54,7 +55,7 @@ import org.junit.Test;
  * @since 1.3
  */
 
-
+@Category(ClientManagedTimeTest.class)
 public class DynamicColumnIT extends BaseClientManagedTimeIT {
     private static final byte[] HBASE_DYNAMIC_COLUMNS_BYTES = SchemaUtil.getTableNameAsBytes(null, HBASE_DYNAMIC_COLUMNS);
     private static final byte[] FAMILY_NAME = Bytes.toBytes(SchemaUtil.normalizeIdentifier("A"));
@@ -75,7 +76,6 @@ public class DynamicColumnIT extends BaseClientManagedTimeIT {
         }
     }
 
-    @SuppressWarnings("deprecation")
     private static void initTableValues() throws Exception {
         ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         HTableInterface hTable = services.getTable(SchemaUtil.getTableNameAsBytes(HBASE_DYNAMIC_COLUMNS_SCHEMA_NAME,HBASE_DYNAMIC_COLUMNS));
