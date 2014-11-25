@@ -47,10 +47,9 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 
-@Category(ClientManagedTimeTest.class)
+
 public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     private static Format format = DateUtil.getDateParser(DateUtil.DEFAULT_DATE_FORMAT);
     private static final String DS1 = "1970-01-01 00:58:00";

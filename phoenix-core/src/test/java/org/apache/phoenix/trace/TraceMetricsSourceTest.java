@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.trace;
 
+import static org.junit.Assert.assertTrue;
+
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
@@ -27,9 +29,6 @@ import org.cloudera.htrace.impl.MilliSpan;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 /**
  * Test that the @{link TraceMetricSource} correctly handles different kinds of traces

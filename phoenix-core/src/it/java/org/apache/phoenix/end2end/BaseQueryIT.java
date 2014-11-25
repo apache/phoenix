@@ -42,7 +42,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -59,7 +58,6 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 
-@Category(ClientManagedTimeTest.class)
 @RunWith(Parameterized.class)
 public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     protected static final String tenantId = getOrganizationId();

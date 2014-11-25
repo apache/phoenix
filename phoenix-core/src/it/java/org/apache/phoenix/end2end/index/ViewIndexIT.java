@@ -27,7 +27,6 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -35,11 +34,10 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(HBaseManagedTimeTest.class)
+
 public class ViewIndexIT extends BaseIndexIT {
 
     private String VIEW_NAME = "MY_VIEW";

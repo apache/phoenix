@@ -28,9 +28,8 @@ import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(HBaseManagedTimeTest.class)
+
 public class UpsertBigValuesIT extends BaseHBaseManagedTimeIT {
 
     private static final long INTEGER_MIN_MINUS_ONE = (long)Integer.MIN_VALUE - 1;

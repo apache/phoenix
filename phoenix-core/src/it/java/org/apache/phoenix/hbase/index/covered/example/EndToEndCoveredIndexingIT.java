@@ -858,6 +858,7 @@ private HTable createSetupTables(ColumnGroup... groups) throws IOException {
 
     // setup the primary table
     String indexedTableName = Bytes.toString(TestTable.getTableName());
+    @SuppressWarnings("deprecation")
     HTableDescriptor pTable = new HTableDescriptor(indexedTableName);
     pTable.addFamily(new HColumnDescriptor(FAM));
     pTable.addFamily(new HColumnDescriptor(FAM2));

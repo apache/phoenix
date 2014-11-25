@@ -56,9 +56,8 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(ClientManagedTimeTest.class)
+
 public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     
     @Test

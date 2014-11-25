@@ -17,32 +17,35 @@
  */
 package org.apache.phoenix.trace;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Properties;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hadoop.metrics2.MetricsRecord;
 import org.apache.hadoop.metrics2.MetricsTag;
-import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
 import org.cloudera.htrace.Span;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.util.*;
-
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
 
 /**
  * Test that the {@link TraceReader} will correctly read traces written by the
  * {@link org.apache.phoenix.trace.PhoenixMetricsSink}
  */
-@Category(HBaseManagedTimeTest.class)
+
 public class PhoenixTraceReaderIT extends BaseTracingTestIT {
 
     private static final Log LOG = LogFactory.getLog(PhoenixTraceReaderIT.class);

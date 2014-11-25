@@ -39,11 +39,10 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(HBaseManagedTimeTest.class)
+
 public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
 
     private static final int BATCH_SIZE = 25;

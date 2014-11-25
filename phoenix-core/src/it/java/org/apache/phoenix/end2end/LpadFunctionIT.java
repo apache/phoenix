@@ -29,14 +29,13 @@ import java.util.List;
 
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Lists;
 
 /**
  * Tests for the LPAD built-in function.
  */
-@Category(HBaseManagedTimeTest.class)
+
 public class LpadFunctionIT extends BaseHBaseManagedTimeIT {
     
     /**

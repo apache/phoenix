@@ -36,13 +36,12 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 
-@Category(HBaseManagedTimeTest.class)
+
 public class InListIT extends BaseHBaseManagedTimeIT {
 
     @Test
@@ -221,7 +220,6 @@ public class InListIT extends BaseHBaseManagedTimeIT {
         }
     }
     
-    @SuppressWarnings("unchecked")
     List<List<Object>> DEFAULT_UPSERTS = Arrays.asList(Arrays.<Object>asList(1, 2, 4, 5, 6, "row1"),
                                                        Arrays.<Object>asList(2, 3, 4, 5, 6, "row2"),
                                                        Arrays.<Object>asList(2, 3, 6, 4, 5, "row3"),
