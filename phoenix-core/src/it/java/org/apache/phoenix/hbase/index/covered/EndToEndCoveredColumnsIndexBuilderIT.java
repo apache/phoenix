@@ -295,6 +295,7 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
    */
   private TestState setupTest(String tableName) throws IOException {
     byte[] tableNameBytes = Bytes.toBytes(tableName);
+    @SuppressWarnings("deprecation")
     HTableDescriptor desc = new HTableDescriptor(tableNameBytes);
     desc.addFamily(FAM1);
     // add the necessary simple options to create the builder

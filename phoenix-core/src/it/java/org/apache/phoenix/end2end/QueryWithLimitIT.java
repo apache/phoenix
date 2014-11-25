@@ -41,11 +41,10 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(NeedsOwnMiniClusterTest.class)
+
 public class QueryWithLimitIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     @BeforeClass

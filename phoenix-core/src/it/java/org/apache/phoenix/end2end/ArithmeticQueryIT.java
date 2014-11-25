@@ -35,12 +35,11 @@ import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Floats;
 
-@Category(HBaseManagedTimeTest.class)
+
 public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
 
     @Test

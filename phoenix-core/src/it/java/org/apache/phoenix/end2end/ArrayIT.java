@@ -45,11 +45,9 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.primitives.Floats;
 
-@Category(ClientManagedTimeTest.class)
 public class ArrayIT extends BaseClientManagedTimeIT {
 
 	private static final String SIMPLE_TABLE_WITH_ARRAY = "SIMPLE_TABLE_WITH_ARRAY";

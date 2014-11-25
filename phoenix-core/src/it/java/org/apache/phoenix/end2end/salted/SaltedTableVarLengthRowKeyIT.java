@@ -30,12 +30,10 @@ import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
-import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(HBaseManagedTimeTest.class)
+
 public class SaltedTableVarLengthRowKeyIT extends BaseHBaseManagedTimeIT {
 
     private static void initTableValues() throws Exception {

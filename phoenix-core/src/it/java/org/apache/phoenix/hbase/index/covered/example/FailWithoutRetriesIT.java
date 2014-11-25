@@ -49,6 +49,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+
 /**
  * If {@link DoNotRetryIOException} is not subclassed correctly (with the {@link String}
  * constructor), {@link MultiResponse#readFields(java.io.DataInput)} will not correctly deserialize
@@ -121,6 +122,7 @@ public class FailWithoutRetriesIT {
 
     // setup the primary table
     String primaryTable = Bytes.toString(table.getTableName());
+    @SuppressWarnings("deprecation")
     HTableDescriptor pTable = new HTableDescriptor(primaryTable);
     pTable.addFamily(new HColumnDescriptor(family));
     // override the codec so we can use our test one

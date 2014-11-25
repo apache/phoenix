@@ -17,21 +17,9 @@
  */
 package org.apache.phoenix.trace;
 
-import com.google.common.collect.ImmutableMap;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.metrics2.MetricsSource;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.end2end.HBaseManagedTimeTest;
-import org.apache.phoenix.metrics.Metrics;
-import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.trace.TraceReader.SpanInfo;
-import org.apache.phoenix.trace.TraceReader.TraceHolder;
-import org.cloudera.htrace.*;
-import org.junit.After;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -41,14 +29,29 @@ import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.metrics2.MetricsSource;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.metrics.Metrics;
+import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.trace.TraceReader.SpanInfo;
+import org.apache.phoenix.trace.TraceReader.TraceHolder;
+import org.cloudera.htrace.Sampler;
+import org.cloudera.htrace.Span;
+import org.cloudera.htrace.SpanReceiver;
+import org.cloudera.htrace.Trace;
+import org.cloudera.htrace.TraceScope;
+import org.junit.After;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import com.google.common.collect.ImmutableMap;
 
 /**
  * Test that the logging sink stores the expected metrics/stats
  */
-@Category(HBaseManagedTimeTest.class)
+
 public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
     private static final Log LOG = LogFactory.getLog(PhoenixTracingEndToEndIT.class);

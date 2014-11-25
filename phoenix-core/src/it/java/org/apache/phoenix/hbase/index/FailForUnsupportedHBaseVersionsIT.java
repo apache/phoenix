@@ -122,6 +122,7 @@ public class FailForUnsupportedHBaseVersionsIT {
 
         try {
             // setup the primary table
+            @SuppressWarnings("deprecation")
             HTableDescriptor desc = new HTableDescriptor(
                     "testDoesNotStartRegionServerForUnsupportedCompressionAndVersion");
             byte[] family = Bytes.toBytes("f");
