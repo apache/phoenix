@@ -19,6 +19,7 @@ package org.apache.phoenix.expression.function;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;

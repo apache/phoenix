@@ -18,6 +18,12 @@
 
 package org.apache.phoenix.cache.aggcache;
 
+import com.google.common.collect.Maps;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.util.Closeables;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
@@ -27,12 +33,6 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
 import java.util.Map;
 import java.util.UUID;
-
-import org.apache.phoenix.util.Closeables;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.collect.Maps;
 
 /**
  * This class abstracts a SpillFile It is a accessible on a per page basis

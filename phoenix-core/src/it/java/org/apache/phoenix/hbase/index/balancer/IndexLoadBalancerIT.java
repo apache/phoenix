@@ -47,6 +47,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.hadoop.hbase.zookeeper.ZKAssign;
 import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
@@ -54,8 +55,9 @@ import org.apache.phoenix.util.ConfigUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(NeedsOwnMiniClusterTest.class)
 public class IndexLoadBalancerIT {
 
     private static HBaseTestingUtility UTIL = new HBaseTestingUtility();

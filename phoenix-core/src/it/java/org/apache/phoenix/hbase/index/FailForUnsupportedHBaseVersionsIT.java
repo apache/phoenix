@@ -34,15 +34,17 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.covered.example.ColumnGroup;
 import org.apache.phoenix.hbase.index.covered.example.CoveredColumn;
 import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexSpecifierBuilder;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Test that we correctly fail for versions of HBase that don't support current properties
  */
-
+@Category(NeedsOwnMiniClusterTest.class)
 public class FailForUnsupportedHBaseVersionsIT {
     private static final Log LOG = LogFactory.getLog(FailForUnsupportedHBaseVersionsIT.class);
 

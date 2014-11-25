@@ -130,45 +130,44 @@ public class UpsertCompiler {
             int rowCount = 0;
             Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutation = Maps.newHashMapWithExpectedSize(batchSize);
             PTable table = tableRef.getTable();
-            try (ResultSet rs = new PhoenixResultSet(iterator, projector, statement)) {
-                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                while (rs.next()) {
-                    for (int i = 0; i < values.length; i++) {
-                        PColumn column = table.getColumns().get(columnIndexes[i]);
-                        byte[] bytes = rs.getBytes(i+1);
-                        ptr.set(bytes == null ? ByteUtil.EMPTY_BYTE_ARRAY : bytes);
-                        Object value = rs.getObject(i+1);
-                        int rsPrecision = rs.getMetaData().getPrecision(i+1);
-                        Integer precision = rsPrecision == 0 ? null : rsPrecision;
-                        int rsScale = rs.getMetaData().getScale(i+1);
-                        Integer scale = rsScale == 0 ? null : rsScale;
-                        // We are guaranteed that the two column will have compatible types,
-                        // as we checked that before.
-                        if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(),
-                                precision, scale,
-                                column.getMaxLength(),column.getScale())) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY)
+            ResultSet rs = new PhoenixResultSet(iterator, projector, statement);
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+            while (rs.next()) {
+                for (int i = 0; i < values.length; i++) {
+                    PColumn column = table.getColumns().get(columnIndexes[i]);
+                    byte[] bytes = rs.getBytes(i+1);
+                    ptr.set(bytes == null ? ByteUtil.EMPTY_BYTE_ARRAY : bytes);
+                    Object value = rs.getObject(i+1);
+                    int rsPrecision = rs.getMetaData().getPrecision(i+1);
+                    Integer precision = rsPrecision == 0 ? null : rsPrecision;
+                    int rsScale = rs.getMetaData().getScale(i+1);
+                    Integer scale = rsScale == 0 ? null : rsScale;
+                    // We are guaranteed that the two column will have compatible types,
+                    // as we checked that before.
+                    if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(),
+                            precision, scale,
+                            column.getMaxLength(),column.getScale())) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY)
                             .setColumnName(column.getName().getString())
                             .setMessage("value=" + column.getDataType().toStringLiteral(ptr, null)).build().buildException();
-                        }
-                        column.getDataType().coerceBytes(ptr, value, column.getDataType(),
-                                precision, scale, SortOrder.getDefault(),
-                                column.getMaxLength(), column.getScale(), column.getSortOrder());
-                        values[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                     }
-                    setValues(values, pkSlotIndexes, columnIndexes, table, mutation);
-                    rowCount++;
-                    // Commit a batch if auto commit is true and we're at our batch size
-                    if (isAutoCommit && rowCount % batchSize == 0) {
-                        MutationState state = new MutationState(tableRef, mutation, 0, maxSize, connection);
-                        connection.getMutationState().join(state);
-                        connection.commit();
-                        mutation.clear();
-                    }
+                    column.getDataType().coerceBytes(ptr, value, column.getDataType(),
+                            precision, scale, SortOrder.getDefault(),
+                            column.getMaxLength(), column.getScale(), column.getSortOrder());
+                    values[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 }
-                // If auto commit is true, this last batch will be committed upon return
-                return new MutationState(tableRef, mutation, rowCount / batchSize * batchSize, maxSize, connection);
+                setValues(values, pkSlotIndexes, columnIndexes, table, mutation);
+                rowCount++;
+                // Commit a batch if auto commit is true and we're at our batch size
+                if (isAutoCommit && rowCount % batchSize == 0) {
+                    MutationState state = new MutationState(tableRef, mutation, 0, maxSize, connection);
+                    connection.getMutationState().join(state);
+                    connection.commit();
+                    mutation.clear();
+                }
             }
+            // If auto commit is true, this last batch will be committed upon return
+            return new MutationState(tableRef, mutation, rowCount / batchSize * batchSize, maxSize, connection);
         } finally {
             iterator.close();
         }

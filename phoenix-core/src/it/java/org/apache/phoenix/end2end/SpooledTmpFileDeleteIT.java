@@ -31,7 +31,7 @@ import org.junit.Test;
 
 
 
-public class SpooledTmpFileDeleteIT extends BaseClientManagedTimeIT {
+public class SpooledTmpFileDeleteIT extends BaseHBaseManagedTimeIT {
 	private Connection conn = null;
 	private Properties props = null;
 
