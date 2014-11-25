@@ -21,9 +21,8 @@ package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.junit.After;
-import org.junit.experimental.categories.Category;
 
-@Category(NeedsOwnMiniClusterTest.class)
+
 public class BaseOwnClusterHBaseManagedTimeIT extends BaseOwnClusterIT {
     @After
     public void cleanUpAfterTest() throws Exception {

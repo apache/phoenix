@@ -48,11 +48,10 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Lists;
 
-@Category(ClientManagedTimeTest.class)
+
 public class SequenceIT extends BaseClientManagedTimeIT {
     private static final String NEXT_VAL_SQL = "SELECT NEXT VALUE FOR foo.bar FROM SYSTEM.\"SEQUENCE\"";
     private static final long BATCH_SIZE = 3;

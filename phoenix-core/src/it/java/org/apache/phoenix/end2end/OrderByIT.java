@@ -41,9 +41,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(ClientManagedTimeTest.class)
 public class OrderByIT extends BaseClientManagedTimeIT {
 
     @Test

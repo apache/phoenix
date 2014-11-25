@@ -32,9 +32,8 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(HBaseManagedTimeTest.class)
+
 public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
 	
     @Test

@@ -29,9 +29,8 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(ClientManagedTimeTest.class)
+
 public class CompareDecimalToLongIT extends BaseClientManagedTimeIT {
     protected static void initTableValues(byte[][] splits, long ts) throws Exception {
         ensureTableCreated(getUrl(),"LongInKeyTest",splits, ts-2);

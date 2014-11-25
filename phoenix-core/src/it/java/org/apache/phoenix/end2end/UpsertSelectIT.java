@@ -53,9 +53,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(ClientManagedTimeTest.class)
+
 public class UpsertSelectIT extends BaseClientManagedTimeIT {
 	
 	
