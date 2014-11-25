@@ -1311,6 +1311,21 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         assertEquals("helo3", rs.getString(1));
         assertEquals(3, rs.getInt(2));
         assertFalse(rs.next());
+        
+        stmt = conn.prepareStatement("select pk2, pk3 from RVC1 WHERE tenantId = ? AND (tenantId, pk2, pk3) BETWEEN (?, ?, ?) AND (?, ?, ?) LIMIT 100");
+        stmt.setString(1, "ABC");
+        stmt.setString(2, "ABC");
+        stmt.setString(3, "helo2");
+        stmt.setInt(4, 2);
+        stmt.setString(5, "DEF");
+        stmt.setString(6, "helo3");
+        stmt.setInt(7, 3);
+        
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo2", rs.getString(1));
+        assertEquals(2, rs.getInt(2));
+        assertFalse(rs.next());
     }
     
     // query against tenant specific view. Salted base table.
