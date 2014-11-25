@@ -645,7 +645,9 @@ public class WhereOptimizer {
                     // with our minMaxRange, since it spans columns and this would mess up our skip scan.
                     minMaxRange = minMaxRange.intersect(childSlot.getMinMaxRange());
                     for (KeySlot slot : childSlot) {
-                        minMaxExtractNodes.addAll(slot.getKeyPart().getExtractNodes());
+                        if (slot != null) {
+                    	    minMaxExtractNodes.addAll(slot.getKeyPart().getExtractNodes());
+                        }
                     }
                 } else {
                     for (KeySlot slot : childSlot) {
