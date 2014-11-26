@@ -488,7 +488,7 @@ public class QueryServicesOptions {
     }
     
     public QueryServicesOptions setDelayInMillisForSchemaChangeCheck(long delayInMillis) {
-        config.setLong(NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK, delayInMillis);
+        config.setLong(DELAY_FOR_SCHEMA_UPDATE_CHECK, delayInMillis);
         return this;
     }
     
