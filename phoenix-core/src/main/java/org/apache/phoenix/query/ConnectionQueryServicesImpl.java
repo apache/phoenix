@@ -34,6 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -141,6 +142,7 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -476,6 +478,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                     latestMetaDataLock.wait(waitTime);
                 } catch (InterruptedException e) {
+                    // restore the interrupt status
+                    Thread.currentThread().interrupt();
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
                         .setRootCause(e).build().buildException(); // FIXME
                 }
@@ -675,11 +679,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             admin = new HBaseAdmin(config);
             try {
-                HTableDescriptor existingDesc = admin.getTableDescriptor(tableName);
-                HColumnDescriptor oldDescriptor = existingDesc.getFamily(family.getFirst());
-                HColumnDescriptor columnDescriptor = null;
+                HTableDescriptor existingTableDesc = admin.getTableDescriptor(tableName);
+                HColumnDescriptor oldColumnDesc = existingTableDesc.getFamily(family.getFirst());
+                HColumnDescriptor newColumnDesc = null;
 
-                if (oldDescriptor == null) {
+                if (oldColumnDesc == null) {
                     if (tableType == PTableType.VIEW) {
                         String fullTableName = Bytes.toString(tableName);
                         throw new ReadOnlyTableException(
@@ -688,30 +692,30 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 SchemaUtil.getTableNameFromFullName(fullTableName),
                                 Bytes.toString(family.getFirst()));
                     }
-                    columnDescriptor = generateColumnFamilyDescriptor(family, tableType );
+                    newColumnDesc = generateColumnFamilyDescriptor(family, tableType );
                 } else {
-                    columnDescriptor = new HColumnDescriptor(oldDescriptor);
+                    newColumnDesc = new HColumnDescriptor(oldColumnDesc);
                     // Don't attempt to make any metadata changes for a VIEW
                     if (tableType == PTableType.VIEW) {
                         return;
                     }
-                    modifyColumnFamilyDescriptor(columnDescriptor, family);
+                    modifyColumnFamilyDescriptor(newColumnDesc, family);
                 }
                 
-                if (columnDescriptor.equals(oldDescriptor)) {
+                if (newColumnDesc.equals(oldColumnDesc)) {
                     // Table already has family and it's the same.
                     return;
                 }
-                admin.disableTable(tableName);
-                if (oldDescriptor == null) {
-                    admin.addColumn(tableName, columnDescriptor);
-                } else {
-                    admin.modifyColumn(tableName, columnDescriptor);
-                }
-                admin.enableTable(tableName);
+                addOrModifyColumnDescriptor(tableName, admin, oldColumnDesc, newColumnDesc);
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.TABLE_UNDEFINED).setRootCause(e).build().buildException();
-            }
+            } catch (InterruptedException e) {
+                // restore the interrupt status
+                Thread.currentThread().interrupt();
+                sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build().buildException();
+            } catch (TimeoutException e) {
+                sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setRootCause(e.getCause() != null ? e.getCause() : e).build().buildException();
+            } 
         } catch (IOException e) {
             sqlE = ServerUtil.parseServerException(e);
         } finally {
@@ -729,6 +733,117 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (sqlE != null) {
                     throw sqlE;
                 }
+            }
+        }
+    }
+    
+    private void addOrModifyColumnDescriptor(byte[] tableName, HBaseAdmin admin, HColumnDescriptor oldColumnDesc,
+            HColumnDescriptor newColumnDesc) throws IOException, org.apache.hadoop.hbase.TableNotFoundException,
+            InterruptedException, TimeoutException {
+        boolean isOnlineSchemaUpgradeEnabled = ConnectionQueryServicesImpl.this.props.getBoolean(
+                QueryServices.ALLOW_ONLINE_TABLE_SCHEMA_UPDATE,
+                QueryServicesOptions.DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE);
+        if (!isOnlineSchemaUpgradeEnabled) {
+            admin.disableTable(tableName);
+            if (oldColumnDesc == null) {
+                admin.addColumn(tableName, newColumnDesc);
+            } else {
+                admin.modifyColumn(tableName, newColumnDesc);
+            }
+        } else {
+            if (oldColumnDesc == null) {
+                admin.addColumn(tableName, newColumnDesc);
+            } else {
+                admin.modifyColumn(tableName, newColumnDesc);
+            }
+            pollForUpdatedColumnDescriptor(admin, tableName, newColumnDesc);
+        }
+    }
+    
+    private static interface RetriableOperation {
+        boolean checkForCompletion() throws TimeoutException, org.apache.hadoop.hbase.TableNotFoundException, IOException;
+        String getOperatioName();
+    }
+    
+    private void pollForUpdatedTableDescriptor(final HBaseAdmin admin, final HTableDescriptor newTableDescriptor,
+            final byte[] tableName) throws InterruptedException, TimeoutException {
+        checkAndRetry(new RetriableOperation() {
+
+            @Override
+            public String getOperatioName() {
+                return "UpdateOrNewTableDescriptor";
+            }
+
+            @Override
+            public boolean checkForCompletion() throws TimeoutException,
+                    org.apache.hadoop.hbase.TableNotFoundException, IOException {
+                HTableDescriptor tableDesc = admin.getTableDescriptor(tableName);
+                return newTableDescriptor.equals(tableDesc);
+            }
+        });
+    }
+    
+    private void pollForUpdatedColumnDescriptor(final HBaseAdmin admin, final byte[] tableName,
+            final HColumnDescriptor columnFamilyDesc) throws InterruptedException, TimeoutException {
+        checkAndRetry(new RetriableOperation() {
+
+            @Override
+            public String getOperatioName() {
+                return "UpdateOrNewColumnDescriptor";
+            }
+
+            @Override
+            public boolean checkForCompletion() throws TimeoutException,
+                    org.apache.hadoop.hbase.TableNotFoundException, IOException {
+                HTableDescriptor newTableDesc = admin.getTableDescriptor(tableName);
+                return newTableDesc.getFamilies().contains(columnFamilyDesc);
+            }
+        });
+    }
+    
+    private void checkAndRetry(RetriableOperation op) throws InterruptedException, TimeoutException {
+        int maxRetries = ConnectionQueryServicesImpl.this.props.getInt(
+                QueryServices.NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK,
+                QueryServicesOptions.DEFAULT_RETRIES_FOR_SCHEMA_UPDATE_CHECK);
+        long sleepInterval = ConnectionQueryServicesImpl.this.props
+                .getLong(QueryServices.DELAY_FOR_SCHEMA_UPDATE_CHECK,
+                        QueryServicesOptions.DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK);
+        boolean success = false;
+        int numTries = 1;
+        Stopwatch watch = new Stopwatch();
+        watch.start();
+        do {
+            try {
+                success = op.checkForCompletion();
+            } catch (Exception ex) {
+                // If we encounter any exception on the first or last try, propagate the exception and fail.
+                // Else, we swallow the exception and retry till we reach maxRetries.
+                if (numTries == 1 || numTries == maxRetries) {
+                    watch.stop();
+                    TimeoutException toThrow = new TimeoutException("Operation " + op.getOperatioName()
+                            + " didn't complete because of exception. Time elapsed: " + watch.elapsedMillis());
+                    toThrow.initCause(ex);
+                    throw toThrow;
+                }
+            }
+            numTries++;
+            Thread.sleep(sleepInterval);
+        } while (numTries < maxRetries && !success);
+        
+        watch.stop();
+        
+        if (!success) {
+            throw new TimeoutException("Operation  " + op.getOperatioName() + " didn't complete within "
+                    + watch.elapsedMillis() + " ms "
+                    + (numTries > 1 ? ("after retrying " + numTries + (numTries > 1 ? "times." : "time.")) : ""));
+        } else {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Operation "
+                        + op.getOperatioName()
+                        + " completed within "
+                        + watch.elapsedMillis()
+                        + "ms "
+                        + (numTries > 1 ? ("after retrying " + numTries + (numTries > 1 ? "times." : "time.")) : ""));
             }
         }
     }
@@ -794,16 +909,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return existingDesc;
                 }
 
-                // TODO: Take advantage of online schema change ability by setting "hbase.online.schema.update.enable" to true
-                admin.disableTable(tableName);
-                admin.modifyTable(tableName, newDesc);
-                admin.enableTable(tableName);
-                
+                modifyTable(tableName, admin, newDesc);
                 return newDesc;
             }
 
         } catch (IOException e) {
             sqlE = ServerUtil.parseServerException(e);
+        } catch (InterruptedException e) {
+            // restore the interrupt status
+            Thread.currentThread().interrupt();
+            sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build().buildException();
+        } catch (TimeoutException e) {
+            sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setRootCause(e.getCause() != null ? e.getCause() : e).build().buildException();
         } finally {
             try {
                 if (admin != null) {
@@ -822,6 +939,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
         return null; // will never make it here
+    }
+    
+    private void modifyTable(byte[] tableName, HBaseAdmin admin, HTableDescriptor newDesc) throws IOException,
+            org.apache.hadoop.hbase.TableNotFoundException, InterruptedException, TimeoutException {
+        boolean isOnlineSchemaUpgradeEnabled = ConnectionQueryServicesImpl.this.props.getBoolean(
+                QueryServices.ALLOW_ONLINE_TABLE_SCHEMA_UPDATE,
+                QueryServicesOptions.DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE);
+        if (!isOnlineSchemaUpgradeEnabled) {
+            admin.disableTable(tableName);
+            admin.modifyTable(tableName, newDesc);
+            admin.enableTable(tableName);
+        } else {
+            admin.modifyTable(tableName, newDesc);
+            pollForUpdatedTableDescriptor(admin, newDesc, tableName);
+        }
     }
 
     private static boolean isInvalidMutableIndexConfig(Long serverVersion) {
@@ -1671,6 +1803,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (IOException e) {
             throw new PhoenixIOException(e);
         } catch (InterruptedException e) {
+            // restore the interrupt status
+            Thread.currentThread().interrupt();
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build()
                     .buildException();
         } finally {
@@ -1858,9 +1992,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             SQLException sqlE = null;
             try {
                 resultObjects= hTable.batch(incrementBatch);
-            } catch (IOException e){
+            } catch (IOException e) {
                 sqlE = ServerUtil.parseServerException(e);
-            } catch (InterruptedException e){
+            } catch (InterruptedException e) {
+                // restore the interrupt status
+                Thread.currentThread().interrupt();
                 sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
                 .setRootCause(e).build().buildException(); // FIXME ?
             } finally {
@@ -1980,6 +2116,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (IOException e){
                 sqlE = ServerUtil.parseServerException(e);
             } catch (InterruptedException e){
+                // restore the interrupt status
+                Thread.currentThread().interrupt();
                 sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
                 .setRootCause(e).build().buildException(); // FIXME ?
             } finally {
@@ -2027,9 +2165,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         SQLException sqlE = null;
         try {
             hTable.batch(mutations);
-        } catch (IOException e){
+        } catch (IOException e) {
             sqlE = ServerUtil.parseServerException(e);
-        } catch (InterruptedException e){
+        } catch (InterruptedException e) {
+            // restore the interrupt status
+            Thread.currentThread().interrupt();
             sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
             .setRootCause(e).build().buildException(); // FIXME ?
         } finally {
