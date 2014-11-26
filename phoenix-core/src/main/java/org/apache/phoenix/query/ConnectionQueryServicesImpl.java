@@ -108,6 +108,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.schema.EmptySequenceCacheException;
+import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -738,8 +739,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     private void addOrModifyColumnDescriptor(byte[] tableName, HBaseAdmin admin, HColumnDescriptor oldColumnDesc,
-            HColumnDescriptor newColumnDesc) throws IOException, org.apache.hadoop.hbase.TableNotFoundException,
-            InterruptedException, TimeoutException {
+            HColumnDescriptor newColumnDesc) throws IOException, InterruptedException, TimeoutException {
         boolean isOnlineSchemaUpgradeEnabled = ConnectionQueryServicesImpl.this.props.getBoolean(
                 QueryServices.ALLOW_ONLINE_TABLE_SCHEMA_UPDATE,
                 QueryServicesOptions.DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE);
@@ -761,7 +761,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     private static interface RetriableOperation {
-        boolean checkForCompletion() throws TimeoutException, org.apache.hadoop.hbase.TableNotFoundException, IOException;
+        boolean checkForCompletion() throws TimeoutException, IOException;
         String getOperatioName();
     }
     
@@ -775,8 +775,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
 
             @Override
-            public boolean checkForCompletion() throws TimeoutException,
-                    org.apache.hadoop.hbase.TableNotFoundException, IOException {
+            public boolean checkForCompletion() throws TimeoutException, IOException {
                 HTableDescriptor tableDesc = admin.getTableDescriptor(tableName);
                 return newTableDescriptor.equals(tableDesc);
             }
@@ -793,8 +792,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
 
             @Override
-            public boolean checkForCompletion() throws TimeoutException,
-                    org.apache.hadoop.hbase.TableNotFoundException, IOException {
+            public boolean checkForCompletion() throws TimeoutException, IOException {
                 HTableDescriptor newTableDesc = admin.getTableDescriptor(tableName);
                 return newTableDesc.getFamilies().contains(columnFamilyDesc);
             }
@@ -847,6 +845,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
     }
+
+    private boolean allowOnlineTableSchemaUpdate() {
+        return props.getBoolean(
+                QueryServices.ALLOW_ONLINE_TABLE_SCHEMA_UPDATE,
+                QueryServicesOptions.DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE);    
+    }
     
     /**
      * 
@@ -885,6 +889,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
                     newDesc.setValue(HTableDescriptor.SPLIT_POLICY, IndexRegionSplitPolicy.class.getName());
                 }
+                // Remove the splitPolicy attribute to prevent HBASE-12570
+                if (isMetaTable) {
+                    newDesc.remove(HTableDescriptor.SPLIT_POLICY);
+                }
                 try {
                     if (splits == null) {
                         admin.createTable(newDesc);
@@ -898,6 +906,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 if (isMetaTable) {
                     checkClientServerCompatibility();
+                    /*
+                     * Now we modify the table to add the split policy, since we know that the client and
+                     * server and compatible. This works around HBASE-12570 which causes the cluster to be
+                     * brought down.
+                     */
+                    newDesc.setValue(HTableDescriptor.SPLIT_POLICY, MetaDataSplitPolicy.class.getName());
+                    if (allowOnlineTableSchemaUpdate()) {
+                        // No need to wait/poll for this update
+                        admin.modifyTable(tableName, newDesc);
+                    } else {
+                        admin.disableTable(tableName);
+                        admin.modifyTable(tableName, newDesc);
+                        admin.enableTable(tableName);
+                    }
                 }
                 return null;
             } else {
@@ -942,11 +964,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     private void modifyTable(byte[] tableName, HBaseAdmin admin, HTableDescriptor newDesc) throws IOException,
-            org.apache.hadoop.hbase.TableNotFoundException, InterruptedException, TimeoutException {
-        boolean isOnlineSchemaUpgradeEnabled = ConnectionQueryServicesImpl.this.props.getBoolean(
-                QueryServices.ALLOW_ONLINE_TABLE_SCHEMA_UPDATE,
-                QueryServicesOptions.DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE);
-        if (!isOnlineSchemaUpgradeEnabled) {
+            InterruptedException, TimeoutException {
+        if (!allowOnlineTableSchemaUpdate()) {
             admin.disableTable(tableName);
             admin.modifyTable(tableName, newDesc);
             admin.enableTable(tableName);
