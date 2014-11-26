@@ -37,6 +37,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
+import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -323,6 +324,11 @@ public class DeleteCompiler {
                         delete.getOrderBy(), delete.getLimit(),
                         delete.getBindCount(), false, false);
                 select = StatementNormalizer.normalize(select, resolver);
+                SelectStatement transformedSelect = SubqueryRewriter.transform(select, resolver, connection);
+                if (transformedSelect != select) {
+                    resolver = FromCompiler.getResolverForQuery(transformedSelect, connection);
+                    select = StatementNormalizer.normalize(transformedSelect, resolver);
+                }
                 parallelIteratorFactory = hasLimit ? null : new DeletingParallelIteratorFactory(connection);
                 QueryOptimizer optimizer = new QueryOptimizer(services);
                 queryPlans = Lists.newArrayList(mayHaveImmutableIndexes
@@ -395,7 +401,7 @@ public class DeleteCompiler {
         for (int i = 0; i < tableRefs.length; i++) {
             final TableRef tableRef = tableRefs[i];
             final QueryPlan plan = queryPlans.get(i);
-            if (!plan.getTableRef().equals(tableRef)) {
+            if (!plan.getTableRef().equals(tableRef) || !(plan instanceof BaseQueryPlan)) {
                 runOnServer = false;
                 noQueryReqd = false; // FIXME: why set this to false in this case?
             }
