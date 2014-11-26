@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.query;
 
+import static org.apache.phoenix.query.QueryServices.ALLOW_ONLINE_TABLE_SCHEMA_UPDATE;
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_PRODUCER_ATTRIB_NAME;
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_ROUND_ROBIN_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
@@ -167,7 +168,8 @@ public class QueryServicesOptions {
      */
     public static final int DEFAULT_COPROCESSOR_PRIORITY = Coprocessor.PRIORITY_SYSTEM/2 + Coprocessor.PRIORITY_USER/2; // Divide individually to prevent any overflow
     public static final boolean DEFAULT_EXPLAIN_CHUNK_COUNT = true;
-
+    public static final boolean DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE = true;
+    
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
@@ -215,6 +217,7 @@ public class QueryServicesOptions {
             .setIfUnset(GROUPBY_SPILL_FILES_ATTRIB, DEFAULT_GROUPBY_SPILL_FILES)
             .setIfUnset(SEQUENCE_CACHE_SIZE_ATTRIB, DEFAULT_SEQUENCE_CACHE_SIZE)
             .setIfUnset(SCAN_RESULT_CHUNK_SIZE, DEFAULT_SCAN_RESULT_CHUNK_SIZE)
+            .setIfUnset(ALLOW_ONLINE_TABLE_SCHEMA_UPDATE, DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE)
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
@@ -413,7 +416,7 @@ public class QueryServicesOptions {
     public int getSpillableGroupByNumSpillFiles() {
         return config.getInt(GROUPBY_SPILL_FILES_ATTRIB, DEFAULT_GROUPBY_SPILL_FILES);
     }
-
+    
     public QueryServicesOptions setMaxServerCacheTTLMs(int ttl) {
         return set(MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, ttl);
     }
@@ -465,6 +468,11 @@ public class QueryServicesOptions {
     
     public QueryServicesOptions setExplainChunkCount(boolean showChunkCount) {
         config.setBoolean(EXPLAIN_CHUNK_COUNT_ATTRIB, showChunkCount);
+        return this;
+    }
+    
+    public QueryServicesOptions setAllowOnlineSchemaUpdate(boolean allow) {
+        config.setBoolean(ALLOW_ONLINE_TABLE_SCHEMA_UPDATE, allow);
         return this;
     }
     

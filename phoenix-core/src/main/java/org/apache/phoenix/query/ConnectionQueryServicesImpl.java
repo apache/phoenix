@@ -107,6 +107,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.schema.EmptySequenceCacheException;
+import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -476,6 +477,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                     latestMetaDataLock.wait(waitTime);
                 } catch (InterruptedException e) {
+                    // restore the interrupt status
+                    Thread.currentThread().interrupt();
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
                         .setRootCause(e).build().buildException(); // FIXME
                 }
@@ -733,6 +736,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
     
+    private boolean allowOnlineTableSchemaUpdate() {
+        return props.getBoolean(
+                QueryServices.ALLOW_ONLINE_TABLE_SCHEMA_UPDATE,
+                QueryServicesOptions.DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE);    
+    }
+    
     /**
      * 
      * @param tableName
@@ -770,6 +779,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
                     newDesc.setValue(HTableDescriptor.SPLIT_POLICY, IndexRegionSplitPolicy.class.getName());
                 }
+                // Remove the splitPolicy attribute to prevent HBASE-12570
+                if (isMetaTable) {
+                    newDesc.remove(HTableDescriptor.SPLIT_POLICY);
+                }
                 try {
                     if (splits == null) {
                         admin.createTable(newDesc);
@@ -783,6 +796,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 if (isMetaTable) {
                     checkClientServerCompatibility();
+                    /*
+                     * Now we modify the table to add the split policy, since we know that the client and
+                     * server and compatible. This works around HBASE-12570 which causes the cluster to be
+                     * brought down.
+                     */
+                    newDesc.setValue(HTableDescriptor.SPLIT_POLICY, MetaDataSplitPolicy.class.getName());
+                    if (allowOnlineTableSchemaUpdate()) {
+                        // No need to wait/poll for this update
+                        admin.modifyTable(tableName, newDesc);
+                    } else {
+                        admin.disableTable(tableName);
+                        admin.modifyTable(tableName, newDesc);
+                        admin.enableTable(tableName);
+                    }
                 }
                 return null;
             } else {
@@ -798,7 +825,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 admin.disableTable(tableName);
                 admin.modifyTable(tableName, newDesc);
                 admin.enableTable(tableName);
-                
                 return newDesc;
             }
 
@@ -823,7 +849,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         return null; // will never make it here
     }
-
+    
     private static boolean isInvalidMutableIndexConfig(Long serverVersion) {
         if (serverVersion == null) {
             return false;
@@ -1671,6 +1697,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (IOException e) {
             throw new PhoenixIOException(e);
         } catch (InterruptedException e) {
+            // restore the interrupt status
+            Thread.currentThread().interrupt();
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build()
                     .buildException();
         } finally {
@@ -1861,6 +1889,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (IOException e){
                 sqlE = ServerUtil.parseServerException(e);
             } catch (InterruptedException e){
+                // restore the interrupt status
+                Thread.currentThread().interrupt();
                 sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
                 .setRootCause(e).build().buildException(); // FIXME ?
             } finally {
@@ -1980,6 +2010,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (IOException e){
                 sqlE = ServerUtil.parseServerException(e);
             } catch (InterruptedException e){
+                // restore the interrupt status
+                Thread.currentThread().interrupt();
                 sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
                 .setRootCause(e).build().buildException(); // FIXME ?
             } finally {
@@ -2030,6 +2062,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (IOException e){
             sqlE = ServerUtil.parseServerException(e);
         } catch (InterruptedException e){
+            // restore the interrupt status
+            Thread.currentThread().interrupt();
             sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
             .setRootCause(e).build().buildException(); // FIXME ?
         } finally {

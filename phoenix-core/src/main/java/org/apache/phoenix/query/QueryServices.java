@@ -141,6 +141,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String SEQUENCE_SALT_BUCKETS_ATTRIB = "phoenix.sequence.saltBuckets";
     public static final String COPROCESSOR_PRIORITY_ATTRIB = "phoenix.coprocessor.priority";
     public static final String EXPLAIN_CHUNK_COUNT_ATTRIB = "phoenix.explain.displayChunkCount";
+    public static final String ALLOW_ONLINE_TABLE_SCHEMA_UPDATE = "hbase.online.schema.update.enable";
     
     /**
      * Get executor service used for parallel scans
