@@ -26,20 +26,25 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.query.QueryServices;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+
+import com.google.common.io.Files;
 
 
 
 public class SpooledTmpFileDeleteIT extends BaseHBaseManagedTimeIT {
 	private Connection conn = null;
 	private Properties props = null;
+	private File spoolDir;
 
 	@Before 
 	public void setup() throws SQLException {
 		props = new Properties();
-		props.put(QueryServices.SPOOL_DIRECTORY, "/tmp"); 
-		props.setProperty(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
+		spoolDir =  Files.createTempDir();
+		props.put(QueryServices.SPOOL_DIRECTORY, spoolDir.getPath());
+        props.setProperty(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
 		conn = DriverManager.getConnection(getUrl(), props);
 		Statement stmt = conn.createStatement();
 		stmt.execute("CREATE TABLE test (ID varchar NOT NULL PRIMARY KEY) SPLIT ON ('EA','EZ')");
@@ -49,10 +54,17 @@ public class SpooledTmpFileDeleteIT extends BaseHBaseManagedTimeIT {
 		stmt.close();
 		conn.commit();
 	}
+	
+	@After
+	public void tearDown() throws Exception {
+	    if (spoolDir != null) {
+	        spoolDir.delete();
+	    }
+	}
 
 	@Test
 	public void testDeleteAllSpooledTmpFiles() throws SQLException, Throwable {
-		File dir = new File("/tmp");
+		File dir = new File(spoolDir.getPath());
 		File[] files = null; 
 
 		class FilenameFilter implements FileFilter {
