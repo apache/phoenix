@@ -22,6 +22,7 @@ import java.text.Format;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -46,7 +47,7 @@ import com.google.common.collect.Maps;
  * Class that keeps common state used across processing the various clauses in a
  * top level JDBC statement such as SELECT, UPSERT, DELETE, etc.
  *
- * 
+ *
  * @since 0.1
  */
 public class StatementContext {
@@ -56,26 +57,26 @@ public class StatementContext {
     private final ExpressionManager expressions;
     private final AggregationManager aggregates;
     private final String dateFormat;
+    private final TimeZone dateFormatTimeZone;
     private final Format dateFormatter;
-    private final Format dateParser;
     private final String numberFormat;
     private final ImmutableBytesWritable tempPtr;
     private final PhoenixStatement statement;
-    
+
     private long currentTime = QueryConstants.UNSET_TIMESTAMP;
     private ScanRanges scanRanges = ScanRanges.EVERYTHING;
-    private final SequenceManager sequences; 
+    private final SequenceManager sequences;
 
     private TableRef currentTable;
     private List<Pair<byte[], byte[]>> whereConditionColumns;
     private TimeRange scanTimeRange = null;
-    
+
     private Map<SelectStatement, Object> subqueryResults;
-    
+
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
     }
-    
+
     public StatementContext(PhoenixStatement statement, Scan scan) {
         this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan(), new SequenceManager(statement));
     }
@@ -94,8 +95,9 @@ public class StatementContext {
         this.expressions = new ExpressionManager();
         PhoenixConnection connection = statement.getConnection();
         this.dateFormat = connection.getQueryServices().getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
+        this.dateFormatTimeZone = TimeZone.getTimeZone(
+                connection.getQueryServices().getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, DateUtil.DEFAULT_TIME_ZONE_ID));
         this.dateFormatter = DateUtil.getDateFormatter(dateFormat);
-        this.dateParser = DateUtil.getDateParser(dateFormat);
         this.numberFormat = connection.getQueryServices().getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;
@@ -107,18 +109,18 @@ public class StatementContext {
         return dateFormat;
     }
 
+    public TimeZone getDateFormatTimeZone() {
+        return dateFormatTimeZone;
+    }
+
     public Format getDateFormatter() {
         return dateFormatter;
     }
 
-    public Format getDateParser() {
-        return dateParser;
-    }
-    
     public String getNumberFormat() {
         return numberFormat;
     }
-    
+
     public Scan getScan() {
         return scan;
     }
@@ -126,11 +128,11 @@ public class StatementContext {
     public BindManager getBindManager() {
         return binds;
     }
-    
+
     public TableRef getCurrentTable() {
         return currentTable;
     }
-    
+
     public void setCurrentTable(TableRef table) {
         this.currentTable = table;
     }
@@ -159,12 +161,12 @@ public class StatementContext {
     public ScanRanges getScanRanges() {
         return this.scanRanges;
     }
-    
+
     public void setScanRanges(ScanRanges scanRanges) {
         this.scanRanges = scanRanges;
         scanRanges.initializeScan(scan);
     }
-    
+
     public PhoenixConnection getConnection() {
         return statement.getConnection();
     }
@@ -209,11 +211,11 @@ public class StatementContext {
     public void setScanTimeRange(TimeRange value){
     	this.scanTimeRange = value;
     }
-    
+
     public TimeRange getScanTimeRange() {
     	return this.scanTimeRange;
     }
-    
+
     public boolean isSubqueryResultAvailable(SelectStatement select) {
         return subqueryResults.containsKey(select);
     }
@@ -221,7 +223,7 @@ public class StatementContext {
     public Object getSubqueryResult(SelectStatement select) {
         return subqueryResults.get(select);
     }
-    
+
     public void setSubqueryResult(SelectStatement select, Object result) {
         subqueryResults.put(select, result);
     }
