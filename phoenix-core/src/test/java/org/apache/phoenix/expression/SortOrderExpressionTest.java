@@ -26,6 +26,7 @@ import java.sql.Date;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.List;
+import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -322,7 +323,7 @@ public class SortOrderExpressionTest {
         cal.set(Calendar.MINUTE, 0);
         cal.set(Calendar.SECOND, 0);
         cal.set(Calendar.MILLISECOND, 0);
-        cal.setTimeZone(DateUtil.DATE_TIME_ZONE);
+        cal.setTimeZone(TimeZone.getTimeZone(DateUtil.DEFAULT_TIME_ZONE_ID));
         Date d = new Date(cal.getTimeInMillis()); 
         return d;
     }    

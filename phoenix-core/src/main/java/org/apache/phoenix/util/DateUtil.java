@@ -35,17 +35,20 @@ import org.apache.phoenix.schema.IllegalDataException;
 
 @SuppressWarnings("serial")
 public class DateUtil {
-    public static final TimeZone DATE_TIME_ZONE = TimeZone.getTimeZone("GMT");
+    public static final String DEFAULT_TIME_ZONE_ID = "GMT";
+    private static final TimeZone DEFAULT_TIME_ZONE = TimeZone.getTimeZone(DEFAULT_TIME_ZONE_ID);
     public static final String DEFAULT_DATE_FORMAT = "yyyy-MM-dd HH:mm:ss"; // This is the format the app sets in NLS settings for every connection.
-    public static final Format DEFAULT_DATE_FORMATTER = FastDateFormat.getInstance(DEFAULT_DATE_FORMAT, DATE_TIME_ZONE);
+    public static final Format DEFAULT_DATE_FORMATTER = FastDateFormat.getInstance(
+            DEFAULT_DATE_FORMAT, TimeZone.getTimeZone(DEFAULT_TIME_ZONE_ID));
 
     public static final String DEFAULT_MS_DATE_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
-    public static final Format DEFAULT_MS_DATE_FORMATTER = FastDateFormat.getInstance(DEFAULT_MS_DATE_FORMAT, DATE_TIME_ZONE);
+    public static final Format DEFAULT_MS_DATE_FORMATTER = FastDateFormat.getInstance(
+            DEFAULT_MS_DATE_FORMAT, TimeZone.getTimeZone(DEFAULT_TIME_ZONE_ID));
 
     private DateUtil() {
     }
 
-    public static Format getDateParser(String pattern) {
+    public static Format getDateParser(String pattern, TimeZone timeZone) {
         SimpleDateFormat format = new SimpleDateFormat(pattern) {
             @Override
             public java.util.Date parseObject(String source) throws ParseException {
@@ -53,11 +56,15 @@ public class DateUtil {
                 return new java.sql.Date(date.getTime());
             }
         };
-        format.setTimeZone(DateUtil.DATE_TIME_ZONE);
+        format.setTimeZone(timeZone);
         return format;
     }
 
-    public static Format getTimeParser(String pattern) {
+    public static Format getDateParser(String pattern) {
+        return getDateParser(pattern, DEFAULT_TIME_ZONE);
+    }
+
+    public static Format getTimeParser(String pattern, TimeZone timeZone) {
         SimpleDateFormat format = new SimpleDateFormat(pattern) {
             @Override
             public java.util.Date parseObject(String source) throws ParseException {
@@ -65,11 +72,15 @@ public class DateUtil {
                 return new java.sql.Time(date.getTime());
             }
         };
-        format.setTimeZone(DateUtil.DATE_TIME_ZONE);
+        format.setTimeZone(timeZone);
         return format;
     }
 
-    public static Format getTimestampParser(String pattern) {
+    public static Format getTimeParser(String pattern) {
+        return getTimeParser(pattern, DEFAULT_TIME_ZONE);
+    }
+
+    public static Format getTimestampParser(String pattern, TimeZone timeZone) {
         SimpleDateFormat format = new SimpleDateFormat(pattern) {
             @Override
             public java.util.Date parseObject(String source) throws ParseException {
@@ -77,12 +88,18 @@ public class DateUtil {
                 return new java.sql.Timestamp(date.getTime());
             }
         };
-        format.setTimeZone(DateUtil.DATE_TIME_ZONE);
+        format.setTimeZone(timeZone);
         return format;
     }
 
+    public static Format getTimestampParser(String pattern) {
+        return getTimestampParser(pattern, DEFAULT_TIME_ZONE);
+    }
+
     public static Format getDateFormatter(String pattern) {
-        return DateUtil.DEFAULT_DATE_FORMAT.equals(pattern) ? DateUtil.DEFAULT_DATE_FORMATTER : FastDateFormat.getInstance(pattern, DateUtil.DATE_TIME_ZONE);
+        return DateUtil.DEFAULT_DATE_FORMAT.equals(pattern)
+                ? DateUtil.DEFAULT_DATE_FORMATTER
+                : FastDateFormat.getInstance(pattern, DateUtil.DEFAULT_TIME_ZONE);
     }
 
     private static ThreadLocal<Format> dateFormat =
