@@ -34,6 +34,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 
@@ -362,4 +363,40 @@ public class ViewIT extends BaseViewIT {
         	//Expected
         }
 	}
+	
+	@Test
+    public void testViewUsesTableIndex() throws Exception {
+        ResultSet rs;
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))";
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute("CREATE INDEX i1 ON t(k3, k2) INCLUDE(s1, s2)");
+        conn.createStatement().execute("CREATE INDEX i2 ON t(k3, k2, s2)");
+        
+        ddl = "CREATE VIEW v AS SELECT * FROM t WHERE s1 = 'foo'";
+        conn.createStatement().execute(ddl);
+        String[] s1Values = {"foo","bar"};
+        for (int i = 0; i < 10; i++) {
+            conn.createStatement().execute("UPSERT INTO t VALUES(" + (i % 4) + "," + (i+100) + "," + (i > 5 ? 2 : 1) + ",'" + s1Values[i%2] + "','bas')");
+        }
+        conn.commit();
+        
+        rs = conn.createStatement().executeQuery("SELECT count(*) FROM v");
+        assertTrue(rs.next());
+        assertEquals(5, rs.getLong(1));
+        assertFalse(rs.next());
+
+        conn.createStatement().execute("CREATE INDEX vi1 on v(k2)");
+        
+        String query = "SELECT k2 FROM v WHERE k2 IN (100,109) AND k3 IN (1,2) AND s2='bas'";
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals(100, rs.getInt(1));
+        assertFalse(rs.next());
+        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        String queryPlan = QueryUtil.getExplainPlan(rs);
+        assertEquals(
+                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER I1 [1,100] - [2,109]\n" + 
+                "    SERVER FILTER BY (S2 = 'bas' AND S1 = 'foo')", queryPlan);
+    }
 }

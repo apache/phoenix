@@ -80,6 +80,11 @@ public class WhereCompiler {
     public static Expression compile(StatementContext context, FilterableStatement statement) throws SQLException {
         return compile(context, statement, null, null);
     }
+
+    public static Expression compile(StatementContext context, ParseNode whereNode) throws SQLException {
+        WhereExpressionCompiler viewWhereCompiler = new WhereExpressionCompiler(context, true);
+        return whereNode.accept(viewWhereCompiler);
+    }
     
     /**
      * Pushes where clause filter expressions into scan by building and setting a filter.

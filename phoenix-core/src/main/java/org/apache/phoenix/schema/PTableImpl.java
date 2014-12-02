@@ -174,14 +174,18 @@ public class PTableImpl implements PTable {
     }
     
     public static PTableImpl makePTable(PTable table, long timeStamp, List<PTable> indexes) throws SQLException {
-        return makePTable(table, timeStamp, indexes, table.getSchemaName());
+        return makePTable(table, timeStamp, indexes, table.getSchemaName(), table.getViewStatement());
     }
 
-    public static PTableImpl makePTable(PTable table, long timeStamp, List<PTable> indexes, PName parentSchemaName) throws SQLException {
+    public static PTable makePTable(PTable table, String viewStatement) throws SQLException {
+        return Objects.equal(viewStatement, table.getViewStatement()) ? table : makePTable(table, table.getTimeStamp(), table.getIndexes(), table.getSchemaName(), viewStatement);
+    }
+
+    public static PTableImpl makePTable(PTable table, long timeStamp, List<PTable> indexes, PName parentSchemaName, String viewStatement) throws SQLException {
         return new PTableImpl(
                 table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timeStamp, 
                 table.getSequenceNumber() + 1, table.getPKName(), table.getBucketNum(), getColumnsToClone(table), parentSchemaName, table.getParentTableName(),
-                indexes, table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
+                indexes, table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), viewStatement,
                 table.isWALDisabled(), table.isMultiTenant(), table.getViewType(), table.getViewIndexId(), table.getIndexType(), table.getTableStats());
     }
 
