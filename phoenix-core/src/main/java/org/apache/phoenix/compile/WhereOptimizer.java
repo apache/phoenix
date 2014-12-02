@@ -419,7 +419,7 @@ public class WhereOptimizer {
 
         @Override
         public Expression visitLeave(AndExpression node, List<Expression> l) {
-            if (l.size() != node.getChildren().size()) {
+            if (!l.equals(node.getChildren())) {
                 if (l.isEmpty()) {
                     // Don't return null here, because then our defaultReturn will kick in
                     return LiteralExpression.newConstant(true, Determinism.ALWAYS);

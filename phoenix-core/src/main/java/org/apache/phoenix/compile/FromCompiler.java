@@ -191,6 +191,12 @@ public class FromCompiler {
         return new SingleTableColumnResolver(connection, new TableRef(tableRef.getTableAlias(), t, tableRef.getLowerBoundTimeStamp(), tableRef.hasDynamicCols()));
     }
 
+    public static ColumnResolver getResolver(TableRef tableRef)
+            throws SQLException {
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(tableRef);
+        return visitor;
+    }
+
     public static ColumnResolver getResolverForMutation(DMLStatement statement, PhoenixConnection connection)
             throws SQLException {
         /*
@@ -233,6 +239,12 @@ public class FromCompiler {
         
         public SingleTableColumnResolver(PhoenixConnection connection, TableRef tableRef) {
             super(connection, 0);
+            alias = tableRef.getTableAlias();
+            tableRefs = ImmutableList.of(tableRef);
+        }
+
+        public SingleTableColumnResolver(TableRef tableRef) throws SQLException {
+            super(null, 0);
             alias = tableRef.getTableAlias();
             tableRefs = ImmutableList.of(tableRef);
         }
@@ -305,7 +317,7 @@ public class FromCompiler {
         
         private BaseColumnResolver(PhoenixConnection connection, int tsAddition) {
         	this.connection = connection;
-            this.client = new MetaDataClient(connection);
+            this.client = connection == null ? null : new MetaDataClient(connection);
             this.tsAddition = tsAddition;
         }
 
