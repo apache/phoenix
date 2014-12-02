@@ -17,21 +17,26 @@
  */
 package org.apache.phoenix.util;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
+import java.sql.Date;
+import java.sql.Time;
 import java.sql.Timestamp;
+import java.text.ParseException;
+import java.util.TimeZone;
 
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 /**
- * 
  * Test class for {@link DateUtil}
  *
- * 
  * @since 2.1.3
  */
 public class DateUtilTest {
+
+    private static final long ONE_HOUR_IN_MILLIS = 1000L * 60L * 60L;
     
     @Test
     public void testDemonstrateSetNanosOnTimestampLosingMillis() {
@@ -58,5 +63,68 @@ public class DateUtilTest {
         ts2 = DateUtil.getTimestamp(120100, 60);
         assertFalse(ts1.equals(ts2));
         assertTrue(ts2.after(ts1));
+    }
+
+    @Test
+    public void testGetDateParser_DefaultTimeZone() throws ParseException {
+        Date date = (Date) DateUtil.getDateParser("yyyy-MM-dd").parseObject("1970-01-01");
+        assertEquals(0, date.getTime());
+    }
+
+    @Test
+    public void testGetDateParser_CustomTimeZone() throws ParseException {
+        Date date = (Date) DateUtil.getDateParser(
+                "yyyy-MM-dd", TimeZone.getTimeZone("GMT+1")).parseObject("1970-01-01");
+        assertEquals(-ONE_HOUR_IN_MILLIS, date.getTime());
+    }
+
+    @Test
+    public void testGetDateParser_LocalTimeZone() throws ParseException {
+        Date date = (Date) DateUtil.getDateParser(
+                "yyyy-MM-dd", TimeZone.getDefault()).parseObject("1970-01-01");
+        assertEquals(Date.valueOf("1970-01-01"), date);
+    }
+
+    @Test
+    public void testGetTimestampParser_DefaultTimeZone() throws ParseException {
+        Timestamp ts = (Timestamp) DateUtil.getTimestampParser("yyyy-MM-dd HH:mm:ss")
+                .parseObject("1970-01-01 00:00:00");
+        assertEquals(0, ts.getTime());
+    }
+
+    @Test
+    public void testGetTimestampParser_CustomTimeZone() throws ParseException {
+        Timestamp ts = (Timestamp) DateUtil.getTimestampParser("yyyy-MM-dd HH:mm:ss", TimeZone.getTimeZone("GMT+1"))
+                .parseObject("1970-01-01 00:00:00");
+        assertEquals(-ONE_HOUR_IN_MILLIS, ts.getTime());
+    }
+
+    @Test
+    public void testGetTimestampParser_LocalTimeZone() throws ParseException {
+        Timestamp ts = (Timestamp) DateUtil.getTimestampParser(
+                "yyyy-MM-dd HH:mm:ss",
+                TimeZone.getDefault()).parseObject("1970-01-01 00:00:00");
+        assertEquals(Timestamp.valueOf("1970-01-01 00:00:00"), ts);
+    }
+
+    @Test
+    public void testGetTimeParser_DefaultTimeZone() throws ParseException {
+        Time time = (Time) DateUtil.getTimeParser("HH:mm:ss").parseObject("00:00:00");
+        assertEquals(0, time.getTime());
+    }
+
+    @Test
+    public void testGetTimeParser_CustomTimeZone() throws ParseException {
+        Time time = (Time) DateUtil.getTimeParser(
+                "HH:mm:ss",
+                TimeZone.getTimeZone("GMT+1")).parseObject("00:00:00");
+        assertEquals(-ONE_HOUR_IN_MILLIS, time.getTime());
+    }
+
+    @Test
+    public void testGetTimeParser_LocalTimeZone() throws ParseException {
+        Time time = (Time) DateUtil.getTimeParser(
+                "HH:mm:ss", TimeZone.getDefault()).parseObject("00:00:00");
+        assertEquals(Time.valueOf("00:00:00"), time);
     }
 }
