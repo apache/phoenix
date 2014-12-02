@@ -40,7 +40,6 @@ public class StatisticsScanner implements InternalScanner {
         this.delegate = delegate;
         this.region = region;
         this.family = family;
-        this.tracker.clear();
     }
 
     @Override
