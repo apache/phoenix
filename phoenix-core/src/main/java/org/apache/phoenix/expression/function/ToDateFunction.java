@@ -36,15 +36,19 @@ import org.apache.phoenix.util.DateUtil;
 
 
 /**
- * 
- * Implementation of the TO_DATE(<string>,[<format-string>]) built-in function.
- * The second argument is optional and defaults to the phoenix.query.dateFormat value
- * from the HBase config. If present it must be a constant string.
  *
- * 
+ * Implementation of the {@code TO_DATE(<string>,[<format-string>,[<timezone-string>]])} built-in function.
+ * The second argument is optional and defaults to the phoenix.query.dateFormat value
+ * from the HBase config. If present it must be a constant string. The third argument is either a
+ * valid (constant) timezone id, or the string "local". The third argument is also optional, and
+ * it defaults to GMT.
+ *
  * @since 0.1
  */
-@BuiltInFunction(name=ToDateFunction.NAME, nodeClass=ToDateParseNode.class, args= {@Argument(allowedTypes={PDataType.VARCHAR}),@Argument(allowedTypes={PDataType.VARCHAR},isConstant=true,defaultValue="null")} )
+@BuiltInFunction(name=ToDateFunction.NAME, nodeClass=ToDateParseNode.class,
+        args={@Argument(allowedTypes={PDataType.VARCHAR}),
+                @Argument(allowedTypes={PDataType.VARCHAR},isConstant=true,defaultValue="null"),
+                @Argument(allowedTypes={PDataType.VARCHAR}, isConstant=true, defaultValue = "null") } )
 public class ToDateFunction extends ScalarFunction {
     public static final String NAME = "TO_DATE";
     private Format dateParser;
@@ -58,7 +62,7 @@ public class ToDateFunction extends ScalarFunction {
         this.dateFormat = dateFormat;
         this.dateParser = dateParser;
     }
-    
+
     @Override
     public int hashCode() {
         final int prime = 31;
