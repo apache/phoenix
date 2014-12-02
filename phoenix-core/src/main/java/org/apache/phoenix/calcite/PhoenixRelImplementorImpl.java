@@ -82,10 +82,14 @@ class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
 
 	@Override
 	public QueryPlan makePlan() {
+            try {
 		Integer limit = null;
 		OrderBy orderBy = OrderBy.EMPTY_ORDER_BY;
 		ParallelIteratorFactory iteratorFactory = null;
-        return new ScanPlan(context, select, tableRef, projector, limit, orderBy, iteratorFactory, true);
+                return new ScanPlan(context, select, tableRef, projector, limit, orderBy, iteratorFactory, true);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
 	}
 
 }
