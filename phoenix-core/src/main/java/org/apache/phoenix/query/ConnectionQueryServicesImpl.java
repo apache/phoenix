@@ -1553,6 +1553,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 // Ignore, as this will happen if the SYSTEM.CATALOG already exists at this fixed timestamp.
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                             } catch (TableAlreadyExistsException ignore) {
+                                // This will occur if we have an older SYSTEM.CATALOG and we need to update it to include
+                                // any new columns we've added.
+                                metaConnection = addColumnsIfNotExists(metaConnection,
+                                  PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                                  MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
+                                  PhoenixDatabaseMetaData.INDEX_TYPE + " " + PDataType.UNSIGNED_TINYINT.getSqlTypeName() +
+                                  ", " + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " " + PDataType.LONG.getSqlTypeName());
                             }
                             int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                                     QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
