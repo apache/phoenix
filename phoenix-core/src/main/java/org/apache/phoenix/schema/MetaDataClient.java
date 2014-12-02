@@ -350,7 +350,7 @@ public class MetaDataClient {
                 // which is not really necessary unless you want to filter or add
                 // columns
                 addIndexesFromPhysicalTable(result);
-                connection.addTable(resultTable);
+                connection.addTable(result.getTable());
                 return result;
             } else {
                 // if (result.getMutationCode() == MutationCode.NEWER_TABLE_FOUND) {
@@ -363,7 +363,9 @@ public class MetaDataClient {
                 if (table != null) {
                     result.setTable(table);
                     if (code == MutationCode.TABLE_ALREADY_EXISTS) {
-                        addIndexesFromPhysicalTable(result);
+                        if (addIndexesFromPhysicalTable(result)) {
+                            connection.addTable(result.getTable());
+                        }
                         return result;
                     }
                     if (code == MutationCode.TABLE_NOT_FOUND && tryCount + 1 == maxTryCount) {
@@ -418,11 +420,39 @@ public class MetaDataClient {
             }
         }
         for (PTable index : indexes) {
-            for (PColumn pkColumn : index.getPKColumns()) {
-                try {
-                    IndexUtil.getDataColumn(table, pkColumn.getName().getString());
+            if (index.getViewIndexId() == null) {
+                boolean containsAllReqdCols = true;
+                // Ensure that all indexed columns from index on physical table
+                // exist in the view too (since view columns may be removed)
+                List<PColumn> pkColumns = index.getPKColumns();
+                for (int i = index.getBucketNum() == null ? 0 : 1; i < pkColumns.size(); i++) {
+                    try {
+                        PColumn pkColumn = pkColumns.get(i);
+                        IndexUtil.getDataColumn(table, pkColumn.getName().getString());
+                    } catch (IllegalArgumentException e) { // Ignore this index and continue with others
+                        containsAllReqdCols = false;
+                        break;
+                    }
+                }
+                // Ensure that constant columns (i.e. columns matched in the view WHERE clause)
+                // all exist in the index on the physical table.
+                for (PColumn col : table.getColumns()) {
+                    if (col.getViewConstant() != null) {
+                        try {
+                            // TODO: it'd be possible to use a local index that doesn't have all view constants
+                            String indexColumnName = IndexUtil.getIndexColumnName(col);
+                            index.getColumn(indexColumnName);
+                        } catch (ColumnNotFoundException e) { // Ignore this index and continue with others
+                            containsAllReqdCols = false;
+                            break;
+                        }
+                    }
+                }
+                if (containsAllReqdCols) {
+                    // Tack on view statement to index to get proper filtering for view
+                    String viewStatement = IndexUtil.rewriteViewStatement(connection, index, physicalTable, table.getViewStatement());
+                    index = PTableImpl.makePTable(index, viewStatement);
                     allIndexes.add(index);
-                } catch (IllegalArgumentException e) { // Ignore, and continue, as column was not found
                 }
             }
         }
@@ -1442,6 +1472,11 @@ public class MetaDataClient {
                         dataTableName == null ? null : newSchemaName, dataTableName == null ? null : PNameFactory.newName(dataTableName), Collections.<PTable>emptyList(), isImmutableRows, physicalNames,
                         defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, viewType, viewIndexId);
                 connection.addTable(table);
+                if (tableType == PTableType.VIEW) {
+                    // Set wasUpdated to true to force attempt to add
+                    // indexes from physical table to view.
+                    addIndexesFromPhysicalTable(new MetaDataMutationResult(code, result.getMutationTime(), table, true));
+                }
                 return table;
             }
         } finally {

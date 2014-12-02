@@ -25,7 +25,9 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.parse.WildcardParseNode;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
@@ -55,6 +57,10 @@ public final class QueryUtil {
      * DatabaseMetaData#getColumns(String, String, String, String)}.
      */
     public static final int DATA_TYPE_NAME_POSITION = 6;
+
+    private static final String SELECT = "SELECT";
+    private static final String FROM = "FROM";
+    private static final String WHERE = "WHERE";
     
     /**
      * Private constructor.
@@ -177,5 +183,13 @@ public final class QueryUtil {
             buf.setLength(buf.length()-1);
         }
         return buf.toString();
+    }
+    
+    public static String getViewStatement(String schemaName, String tableName, Expression whereClause) {
+        // Only form we currently support for VIEWs: SELECT * FROM t WHERE ...
+        return SELECT + " " + WildcardParseNode.NAME + " " + FROM + " " +
+                (schemaName == null || schemaName.length() == 0 ? "" : ("\"" + schemaName + "\".")) +
+                ("\"" + tableName + "\" ") +
+                (WHERE + " " + whereClause.toString());
     }
 }
