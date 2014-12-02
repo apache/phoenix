@@ -48,16 +48,16 @@ import org.apache.phoenix.util.SchemaUtil;
 
 
 /**
- * 
+ *
  * Node representing a function expression in SQL
  *
- * 
+ *
  * @since 0.1
  */
 public class FunctionParseNode extends CompoundParseNode {
     private final String name;
     private final BuiltInFunctionInfo info;
-    
+
     FunctionParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
         super(children);
         this.name = SchemaUtil.normalizeIdentifier(name);
@@ -67,7 +67,7 @@ public class FunctionParseNode extends CompoundParseNode {
     public BuiltInFunctionInfo getInfo() {
         return info;
     }
-    
+
     public String getName() {
         return name;
     }
@@ -80,7 +80,7 @@ public class FunctionParseNode extends CompoundParseNode {
         }
         return visitor.visitLeave(this, l);
     }
-    
+
     @Override
     public String toString() {
         StringBuilder buf = new StringBuilder(name + "(");
@@ -96,7 +96,7 @@ public class FunctionParseNode extends CompoundParseNode {
     public boolean isAggregate() {
         return getInfo().isAggregate();
     }
-    
+
     /**
      * Determines whether or not we can collapse a function expression to null if a required
      * parameter is null.
@@ -109,7 +109,7 @@ public class FunctionParseNode extends CompoundParseNode {
     public boolean evalToNullIfParamIsNull(StatementContext context, int index) throws SQLException {
         return true;
     }
-    
+
 
     private static Constructor<? extends FunctionParseNode> getParseNodeCtor(Class<? extends FunctionParseNode> clazz) {
         Constructor<? extends FunctionParseNode> ctor;
@@ -121,7 +121,7 @@ public class FunctionParseNode extends CompoundParseNode {
         ctor.setAccessible(true);
         return ctor;
     }
-    
+
     private static Constructor<? extends FunctionExpression> getExpressionCtor(Class<? extends FunctionExpression> clazz) {
         Constructor<? extends FunctionExpression> ctor;
         try {
@@ -132,7 +132,7 @@ public class FunctionParseNode extends CompoundParseNode {
         ctor.setAccessible(true);
         return ctor;
     }
-    
+
     public List<Expression> validate(List<Expression> children, StatementContext context) throws SQLException {
         BuiltInFunctionInfo info = this.getInfo();
         BuiltInFunctionArgInfo[] args = info.getArgs();
@@ -221,7 +221,7 @@ public class FunctionParseNode extends CompoundParseNode {
         }
         return children;
     }
-    
+
     /**
      * Entry point for parser to instantiate compiled representation of built-in function
      * @param children Compiled expressions for child nodes
@@ -245,7 +245,7 @@ public class FunctionParseNode extends CompoundParseNode {
             throw new SQLException(e);
         }
     }
-    
+
     /**
      * Marker used to indicate that a class should be used by DirectFunctionExpressionExec below
      */
@@ -269,7 +269,7 @@ public class FunctionParseNode extends CompoundParseNode {
         String minValue() default "";
         String maxValue() default "";
     }
-    
+
     /**
      * Structure used to hold parse-time information about Function implementation classes
      */
@@ -290,8 +290,8 @@ public class FunctionParseNode extends CompoundParseNode {
             int requiredArgCount = 0;
             for (int i = 0; i < args.length; i++) {
                 this.args[i] = new BuiltInFunctionArgInfo(d.args()[i]);
-                if (requiredArgCount < i && this.args[i].getDefaultValue() != null) {
-                    requiredArgCount = i;
+                if (this.args[i].getDefaultValue() == null) {
+                    requiredArgCount = i + 1;
                 }
             }
             this.requiredArgCount = requiredArgCount;
@@ -301,7 +301,7 @@ public class FunctionParseNode extends CompoundParseNode {
         public int getRequiredArgCount() {
             return requiredArgCount;
         }
-        
+
         public String getName() {
             return name;
         }
@@ -317,12 +317,12 @@ public class FunctionParseNode extends CompoundParseNode {
         public boolean isAggregate() {
             return isAggregate;
         }
-        
+
         public BuiltInFunctionArgInfo[] getArgs() {
             return args;
         }
     }
-    
+
     @Immutable
     public static class BuiltInFunctionArgInfo {
         private static final PDataType[] ENUMERATION_TYPES = new PDataType[] {PDataType.VARCHAR};
@@ -332,10 +332,10 @@ public class FunctionParseNode extends CompoundParseNode {
         private final LiteralExpression defaultValue;
         private final LiteralExpression minValue;
         private final LiteralExpression maxValue;
-        
+
         @SuppressWarnings({ "unchecked", "rawtypes" })
         BuiltInFunctionArgInfo(Argument argument) {
-            
+
             if (argument.enumeration().length() > 0) {
                 this.isConstant = true;
                 this.defaultValue = null;
@@ -394,7 +394,7 @@ public class FunctionParseNode extends CompoundParseNode {
             }
             return exp;
         }
-        
+
         public boolean isConstant() {
             return isConstant;
         }
@@ -406,17 +406,17 @@ public class FunctionParseNode extends CompoundParseNode {
         public LiteralExpression getMinValue() {
             return minValue;
         }
-        
+
         public LiteralExpression getMaxValue() {
             return maxValue;
         }
-        
+
         public PDataType[] getAllowedTypes() {
             return allowedTypes;
         }
-        
+
         public Set<String> getAllowedValues() {
             return allowedValues;
         }
-    }    
+    }
 }
