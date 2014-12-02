@@ -290,8 +290,8 @@ public class FunctionParseNode extends CompoundParseNode {
             int requiredArgCount = 0;
             for (int i = 0; i < args.length; i++) {
                 this.args[i] = new BuiltInFunctionArgInfo(d.args()[i]);
-                if (requiredArgCount < i && this.args[i].getDefaultValue() != null) {
-                    requiredArgCount = i;
+                if (this.args[i].getDefaultValue() == null) {
+                    requiredArgCount = i + 1;
                 }
             }
             this.requiredArgCount = requiredArgCount;
