@@ -438,7 +438,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 // when background tasks are updating stats. Instead we track the max timestamp of
                 // the cells and use that.
                 long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
-                StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table, clientTimeStamp);
+                StatisticsCollector stats = new StatisticsCollector(
+                        c.getEnvironment(), table,
+                        clientTimeStamp, store.getFamily().getName());
                 internalScanner = stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanner);
             } catch (IOException e) {
                 // If we can't reach the stats table, don't interrupt the normal
