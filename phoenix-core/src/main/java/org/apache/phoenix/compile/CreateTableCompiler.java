@@ -47,7 +47,6 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.MetaDataClient;
@@ -57,15 +56,12 @@ import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.QueryUtil;
 
 import com.google.common.collect.Iterators;
 
 
 public class CreateTableCompiler {
-    private static final String SELECT = "SELECT";
-    private static final String FROM = "FROM";
-    private static final String WHERE = "WHERE";
-    
     private final PhoenixStatement statement;
     
     public CreateTableCompiler(PhoenixStatement statement) {
@@ -110,12 +106,7 @@ public class CreateTableCompiler {
                 Expression where = whereNode.accept(expressionCompiler);
                 if (where != null && !LiteralExpression.isTrue(where)) {
                     TableName baseTableName = create.getBaseTableName();
-                    String schemaName = baseTableName.getSchemaName();
-                    // Only form we currently support for VIEWs: SELECT * FROM t WHERE ...
-                    viewStatementToBe = SELECT + " " + WildcardParseNode.NAME + " " + FROM + " " +
-                            (schemaName == null ? "" : "\"" + schemaName + "\".") +
-                            ("\"" + baseTableName.getTableName() + "\" ") +
-                            (WHERE + " " + where.toString());
+                    viewStatementToBe = QueryUtil.getViewStatement(baseTableName.getSchemaName(), baseTableName.getTableName(), where);
                 }
                 if (viewTypeToBe != ViewType.MAPPED) {
                     Long scn = connection.getSCN();
