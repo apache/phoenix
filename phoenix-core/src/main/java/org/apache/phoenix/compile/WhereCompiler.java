@@ -41,7 +41,6 @@ import org.apache.phoenix.filter.SingleCFCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SingleCQKeyValueComparisonFilter;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FilterableStatement;
-import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SelectStatement;
@@ -76,6 +75,11 @@ public class WhereCompiler {
     protected static final ParseNodeFactory NODE_FACTORY = new ParseNodeFactory();
 
     private WhereCompiler() {
+    }
+
+    public static Expression compile(StatementContext context, ParseNode whereNode) throws SQLException {
+        WhereExpressionCompiler viewWhereCompiler = new WhereExpressionCompiler(context, true);
+        return whereNode.accept(viewWhereCompiler);
     }
 
     public static Set<SubqueryParseNode> compile(StatementContext context, FilterableStatement statement) throws SQLException {

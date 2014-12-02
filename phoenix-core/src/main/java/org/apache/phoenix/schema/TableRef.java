@@ -18,10 +18,14 @@
 package org.apache.phoenix.schema;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.SchemaUtil;
 
 
 
-public final class TableRef {
+public class TableRef {
     private PTable table;
     private final String alias;
     private final long upperBoundTimeStamp;
@@ -65,6 +69,33 @@ public final class TableRef {
         return alias;
     }
 
+    public String getColumnDisplayName(ColumnRef ref) {
+        PColumn column = ref.getColumn();
+        if (table.getType() == PTableType.JOIN) {
+            return column.getName().getString();
+        }
+        boolean isIndex = table.getType() == PTableType.INDEX;
+        if (SchemaUtil.isPKColumn(column)) {
+            String name = column.getName().getString();
+            if (isIndex) {
+                return IndexUtil.getDataColumnName(name);
+            }
+            return name;
+        }
+        
+        if (isIndex) {
+            // Translate to the data table column name
+            String indexColumnName = column.getName().getString();
+            String dataFamilyName = IndexUtil.getDataColumnFamilyName(indexColumnName);
+            String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
+            String defaultFamilyName = table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : table.getDefaultFamilyName().getString();
+            return SchemaUtil.getColumnDisplayName(defaultFamilyName.equals(dataFamilyName) ? null : dataFamilyName, dataColumnName);
+        }
+        byte[] defaultFamily = table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes();
+        String displayName = SchemaUtil.getColumnDisplayName(Bytes.compareTo(defaultFamily, column.getFamilyName().getBytes()) == 0  ? null : column.getFamilyName().getBytes(), column.getName().getBytes());
+        return displayName;
+    }
+    
     @Override
     public int hashCode() {
         final int prime = 31;

@@ -38,6 +38,11 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.IndexStatementRewriter;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -51,17 +56,22 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.join.TupleProjector;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -373,6 +383,35 @@ public class IndexUtil {
             return new TupleProjector(keyValueSchema, keyValueColumns);
         }
         return null;
+    }
+    
+    /**
+     * Rewrite a view statement to be valid against an index
+     * @param conn
+     * @param index
+     * @param table
+     * @return
+     * @throws SQLException
+     */
+    public static String rewriteViewStatement(PhoenixConnection conn, PTable index, PTable table, String viewStatement) throws SQLException {
+        if (viewStatement == null) {
+            return null;
+        }
+        SelectStatement select = new SQLParser(viewStatement).parseQuery();
+        ColumnResolver resolver = FromCompiler.getResolver(new TableRef(table));
+        SelectStatement translatedSelect = IndexStatementRewriter.translate(select, resolver);
+        ParseNode whereNode = translatedSelect.getWhere();
+        PhoenixStatement statement = new PhoenixStatement(conn);
+        TableRef indexTableRef = new TableRef(index) {
+            @Override
+            public String getColumnDisplayName(ColumnRef ref) {
+                return '"' + ref.getColumn().getName().getString() + '"';
+            }
+        };
+        ColumnResolver indexResolver = FromCompiler.getResolver(indexTableRef);
+        StatementContext context = new StatementContext(statement, indexResolver);
+        Expression whereClause = WhereCompiler.compile(context, whereNode);
+        return QueryUtil.getViewStatement(index.getSchemaName().getString(), index.getTableName().getString(), whereClause);
     }
     
     public static void wrapResultUsingOffset(List<Cell> result, final int offset,

@@ -176,6 +176,12 @@ public class FromCompiler {
         return visitor;
     }
 
+    public static ColumnResolver getResolver(TableRef tableRef)
+            throws SQLException {
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(tableRef);
+        return visitor;
+    }
+
     public static ColumnResolver getResolverForMutation(DMLStatement statement, PhoenixConnection connection)
             throws SQLException {
         /*
@@ -213,6 +219,12 @@ public class FromCompiler {
             super(connection, tsAddition);
             alias = tableNode.getAlias();
             TableRef tableRef = createTableRef(tableNode, updateCacheImmediately);
+            tableRefs = ImmutableList.of(tableRef);
+        }
+
+        public SingleTableColumnResolver(TableRef tableRef) throws SQLException {
+            super(null, 0);
+            alias = tableRef.getTableAlias();
             tableRefs = ImmutableList.of(tableRef);
         }
 
@@ -284,7 +296,7 @@ public class FromCompiler {
         
         private BaseColumnResolver(PhoenixConnection connection, int tsAddition) {
         	this.connection = connection;
-            this.client = new MetaDataClient(connection);
+            this.client = connection == null ? null : new MetaDataClient(connection);
             this.tsAddition = tsAddition;
         }
 

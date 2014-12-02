@@ -84,6 +84,10 @@ public class StatementContext {
         this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan(), new SequenceManager(statement));
     }
 
+    public StatementContext(PhoenixStatement statement, ColumnResolver resolver) {
+        this (statement, resolver, new Scan(), new SequenceManager(statement));
+    }
+
     public StatementContext(PhoenixStatement statement, ColumnResolver resolver, Scan scan, SequenceManager seqManager) {
         this.statement = statement;
         this.resolver = resolver;
