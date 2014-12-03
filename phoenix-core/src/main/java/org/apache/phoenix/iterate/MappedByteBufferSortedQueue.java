@@ -34,11 +34,11 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.MinMaxPriorityQueue;
 import org.apache.phoenix.iterate.OrderedResultIterator.ResultEntry;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+
+import com.google.common.collect.MinMaxPriorityQueue;
 
 public class MappedByteBufferSortedQueue extends AbstractQueue<ResultEntry> {
     private Comparator<ResultEntry> comparator;
@@ -175,7 +175,7 @@ public class MappedByteBufferSortedQueue extends AbstractQueue<ResultEntry> {
     }
 
     private static class MappedByteBufferPriorityQueue {
-    	// at least create 128 KB MappedByteBuffers
+        // at least create 128 KB MappedByteBuffers
         private static final long DEFAULT_MAPPING_SIZE = 128 * 1024;
         
         private final int limit;

@@ -63,7 +63,6 @@ import com.google.common.collect.Maps;
 public class ParseNodeFactory {
     private static final String ARRAY_ELEM = "ARRAY_ELEM";
 	// TODO: Use Google's Reflection library instead to find aggregate functions
-    @SuppressWarnings("unchecked")
     private static final List<Class<? extends FunctionExpression>> CLIENT_SIDE_BUILT_IN_FUNCTIONS = Arrays.<Class<? extends FunctionExpression>>asList(
         CurrentDateFunction.class,
         CurrentTimeFunction.class,

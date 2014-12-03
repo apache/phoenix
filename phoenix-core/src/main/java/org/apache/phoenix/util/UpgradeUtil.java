@@ -86,7 +86,6 @@ public class UpgradeUtil {
         }
     }
 
-    @SuppressWarnings("deprecation")
     private static void copyTable(PhoenixConnection conn, byte[] sourceName, byte[] targetName) throws SQLException {
         int batchSizeBytes = 100 * 1024; // 100K chunks
         int sizeBytes = 0;

@@ -907,7 +907,7 @@ public class MetaDataClient {
                 }
                 // Set DEFAULT_COLUMN_FAMILY_NAME of index to match data table
                 // We need this in the props so that the correct column family is created
-                if (dataTable.getDefaultFamilyName() != null && dataTable.getType() != PTableType.VIEW) {
+                if (dataTable.getDefaultFamilyName() != null && dataTable.getType() != PTableType.VIEW && viewIndexId == null) {
                     statement.getProps().put("", new Pair<String,Object>(DEFAULT_COLUMN_FAMILY_NAME,dataTable.getDefaultFamilyName().getString()));
                 }
                 CreateTableStatement tableStatement = FACTORY.createTable(indexTableName, statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX, statement.ifNotExists(), null, null, statement.getBindCount());
@@ -1100,11 +1100,10 @@ public class MetaDataClient {
             }
             
             boolean removedProp = false;
-            // Can't set MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an index
+            // Can't set MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an INDEX or a non mapped VIEW
             if (tableType != PTableType.INDEX && (tableType != PTableType.VIEW || viewType == ViewType.MAPPED)) {
                 Boolean multiTenantProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.MULTI_TENANT);
                 multiTenant = Boolean.TRUE.equals(multiTenantProp);
-                // Remove, but add back after our check below
                 defaultFamilyName = (String)tableProps.remove(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);  
                 removedProp = (defaultFamilyName != null);
             }

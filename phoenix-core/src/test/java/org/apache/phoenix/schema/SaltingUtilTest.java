@@ -17,15 +17,16 @@
  */
 package org.apache.phoenix.schema;
 
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Sets;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.util.Set;
 
-import static org.junit.Assert.*;
-import static org.junit.Assert.assertEquals;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.junit.Test;
+
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 
 public class SaltingUtilTest {
 
