@@ -29,6 +29,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -665,6 +666,24 @@ public class LocalIndexIT extends BaseIndexIT {
             assertTrue(rs.next());
             assertEquals("b", rs.getString("t_id"));
             assertFalse(rs.next());
+       } finally {
+            conn1.close();
+        }
+    }
+
+    @Test
+    public void testLocalIndexCreationWithDefaultFamilyOption() throws Exception {
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try{
+            Statement statement = conn1.createStatement();
+            statement.execute("create table example (id integer not null,fn varchar,"
+                    + "ln varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
+            statement.execute("upsert into example values(1,'fn','ln')");
+            statement
+                    .execute("create local index my_idx on example (fn)");
+            statement.execute("upsert into example values(2,'fn1','ln1')");
+            ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM my_idx");
+            assertTrue(rs.next());
        } finally {
             conn1.close();
         }
