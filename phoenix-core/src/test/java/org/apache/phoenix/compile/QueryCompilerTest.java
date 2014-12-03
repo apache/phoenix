@@ -1452,4 +1452,24 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertFalse("Did not expected to find GROUP BY limit optimization in: " + query, QueryUtil.getExplainPlan(rs).contains(" LIMIT 3 GROUPS"));
         }
     }
+    
+    @Test
+    public void testLocalIndexCreationWithDefaultFamilyOption() throws Exception {
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try{
+            Statement statement = conn1.createStatement();
+            statement.execute("create table example (id integer not null,fn varchar,"
+                    + "ln varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
+            try {
+                statement.execute("create local index my_idx on example (fn) DEFAULT_COLUMN_FAMILY='F'");
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(),e.getErrorCode());
+            }
+            statement.execute("create local index my_idx on example (fn)");
+       } finally {
+            conn1.close();
+        }
+    }
+
 }
