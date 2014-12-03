@@ -50,11 +50,11 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueBitSet;
-import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SchemaUtil;
@@ -598,7 +598,6 @@ public class SortMergeJoinPlan implements QueryPlan {
                 return Bytes.SIZEOF_INT * 2 + kv.getLength();
             }
 
-            @SuppressWarnings("deprecation")
             @Override
             protected void writeToBuffer(MappedByteBuffer buffer, Tuple e) {
                 KeyValue kv = e.getValue(0);

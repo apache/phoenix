@@ -32,10 +32,6 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SizedUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-
 import org.iq80.snappy.Snappy;
 
 /**
@@ -45,7 +41,6 @@ import org.iq80.snappy.Snappy;
  * @since 1.2.1
  */
 public class DistinctValueWithCountServerAggregator extends BaseAggregator {
-    private static final Logger LOG = LoggerFactory.getLogger(DistinctValueWithCountServerAggregator.class);
     public static final int DEFAULT_ESTIMATED_DISTINCT_VALUES = 10000;
     public static final byte[] COMPRESS_MARKER = new byte[] { (byte)1 };
 

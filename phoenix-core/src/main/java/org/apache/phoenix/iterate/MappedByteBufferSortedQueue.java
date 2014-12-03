@@ -23,15 +23,16 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Queue;
+
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.MinMaxPriorityQueue;
 import org.apache.phoenix.iterate.OrderedResultIterator.ResultEntry;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+
+import com.google.common.collect.MinMaxPriorityQueue;
 
 public class MappedByteBufferSortedQueue extends MappedByteBufferQueue<ResultEntry> {
     private Comparator<ResultEntry> comparator;
@@ -81,7 +82,6 @@ public class MappedByteBufferSortedQueue extends MappedByteBufferQueue<ResultEnt
             return sizeof(e.sortKeys) + sizeof(toKeyValues(e));
         }
 
-        @SuppressWarnings("deprecation")
         @Override
         protected void writeToBuffer(MappedByteBuffer buffer, ResultEntry e) {
             int totalLen = 0;
