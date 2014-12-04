@@ -74,6 +74,7 @@
               <descriptors>
                 <descriptor>src/build/all.xml</descriptor>
               </descriptors>
+              <tarLongFileMode>posix</tarLongFileMode>
             </configuration>
           </execution>
           <execution>
