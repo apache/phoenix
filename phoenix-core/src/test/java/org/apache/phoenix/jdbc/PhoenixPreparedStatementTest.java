@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.jdbc;
 
-import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -26,7 +26,9 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import static org.junit.Assert.fail;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.junit.Test;
 
 public class PhoenixPreparedStatementTest extends BaseConnectionlessQueryTest {
 
@@ -55,6 +57,32 @@ public class PhoenixPreparedStatementTest extends BaseConnectionlessQueryTest {
             fail("Setting a value for a column that doesn't exist should throw SQLException");
         } catch (SQLException e) {
             // Expected exception
+        }
+    }
+    
+    @Test
+    public void testMutationUsingExecuteQueryShouldFail() throws Exception {
+        Properties connectionProperties = new Properties();
+        Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
+        PreparedStatement stmt = connection.prepareStatement("DELETE FROM " + ATABLE);
+        try {
+            stmt.executeQuery();
+            fail();
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.EXECUTE_QUERY_NOT_APPLICABLE.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    @Test
+    public void testQueriesUsingExecuteUpdateShouldFail() throws Exception {
+        Properties connectionProperties = new Properties();
+        Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
+        PreparedStatement stmt = connection.prepareStatement("SELECT * FROM " + ATABLE);
+        try {
+            stmt.executeUpdate();
+            fail();
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.EXECUTE_UPDATE_NOT_APPLICABLE.getErrorCode(), e.getErrorCode());
         }
     }
 

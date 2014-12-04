@@ -1368,7 +1368,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
         conn.close();
         try {
-            PreparedStatement stmt = conn.prepareStatement("SELECT * FROM atable");
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO atable VALUES('000000000000000','000000000000000')");
             stmt.addBatch();
             stmt.executeUpdate();
             fail();
