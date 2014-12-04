@@ -21,10 +21,15 @@ import java.sql.SQLException;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 
 public class ExecuteUpdateNotApplicableException extends SQLException {
     private static final long serialVersionUID = 1L;
-    private static SQLExceptionCode code = SQLExceptionCode.EXECUTE_QUERY_NOT_APPLICABLE;
+    private static SQLExceptionCode code = SQLExceptionCode.EXECUTE_UPDATE_NOT_APPLICABLE;
+    
+    public ExecuteUpdateNotApplicableException(Operation op) {
+        super(new SQLExceptionInfo.Builder(code).setMessage("Disallowed operation: " + op.name()).build().toString(), code.getSQLState(), code.getErrorCode());
+    }
 
     public ExecuteUpdateNotApplicableException(String query) {
         super(new SQLExceptionInfo.Builder(code).setMessage("Query: " + query).build().toString(), code.getSQLState(), code.getErrorCode());

@@ -52,6 +52,8 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
+import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.util.DateUtil;
@@ -180,12 +182,18 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     @Override
     public ResultSet executeQuery() throws SQLException {
         throwIfUnboundParameters();
+        if (statement.getOperation().isMutation()) {
+            throw new ExecuteQueryNotApplicableException(statement.getOperation());
+        }
         return executeQuery(statement);
     }
 
     @Override
     public int executeUpdate() throws SQLException {
         throwIfUnboundParameters();
+        if (!statement.getOperation().isMutation()) {
+            throw new ExecuteUpdateNotApplicableException(statement.getOperation());
+        }
         if (!batch.isEmpty()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
             .build().buildException();

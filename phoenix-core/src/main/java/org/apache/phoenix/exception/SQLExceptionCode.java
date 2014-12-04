@@ -263,11 +263,11 @@ public enum SQLExceptionCode {
     RESULTSET_CLOSED(1101, "XCL01", "ResultSet is closed."),
     GET_TABLE_REGIONS_FAIL(1102, "XCL02", "Cannot get all table regions"),
     EXECUTE_QUERY_NOT_APPLICABLE(1103, "XCL03", "executeQuery may not be used."),
-    EXECUTE_UPDATE_NOT_APPLICABLE(1104, "XCL03", "executeUpdate may not be used."),
-    SPLIT_POINT_NOT_CONSTANT(1105, "XCL04", "Split points must be constants."),
-    BATCH_EXCEPTION(1106, "XCL05", "Exception while executing batch."),
-    EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH(1107, "XCL06", "An executeUpdate is prohibited when the batch is not empty. Use clearBatch to empty the batch first."),
-    STALE_REGION_BOUNDARY_CACHE(1108, "XCL07", "Cache of region boundaries are out of date.", new Factory() {
+    EXECUTE_UPDATE_NOT_APPLICABLE(1104, "XCL04", "executeUpdate may not be used."),
+    SPLIT_POINT_NOT_CONSTANT(1105, "XCL05", "Split points must be constants."),
+    BATCH_EXCEPTION(1106, "XCL06", "Exception while executing batch."),
+    EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH(1107, "XCL07", "An executeUpdate is prohibited when the batch is not empty. Use clearBatch to empty the batch first."),
+    STALE_REGION_BOUNDARY_CACHE(1108, "XCL08", "Cache of region boundaries are out of date.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
             return new StaleRegionBoundaryCacheException(info.getSchemaName(), info.getTableName());
