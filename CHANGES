@@ -1,3 +1,23 @@
+Release Notes - Phoenix - Version 3.2.2
+
+** Bug
+    * [PHOENIX-1431] - DELETE using Subqueries
+    * [PHOENIX-1436] - the choice of index by phoneix is not correct where do querying
+    * [PHOENIX-1456] - Incorrect query results caused by reusing buffers in SpoolingResultIterator
+    * [PHOENIX-1463] - phoenix.query.timeoutMs doesn't work as expected
+    * [PHOENIX-1466] - Prevent multiple scans when query run serially
+    * [PHOENIX-1472] - SaltingUtil calculates wrong salt key for Integer.MIN_VALUE hash code
+    * [PHOENIX-1474] - NPE when RVC between combined with key part comparison
+    * [PHOENIX-1476] - Immediately open scanner for parallel queries
+    * [PHOENIX-1480] - Incorrect query results may occur when VIEW uses indexes from physical table
+    * [PHOENIX-1484] - Index creation failed due to specifying DEFAULT_COLUMN_FAMILY option
+    * [PHOENIX-1485] - Date columns should be displayed without timezone offset
+    * [PHOENIX-1500] - Disallow mutations and queries using PhoenixPreparedStatement.executeQuery() and executeUpdate() respectively.
+    * [PHOENIX-1503] - Compilation on Mac OS fails on maven-assembly-plugin
+
+** Improvement
+    * [PHOENIX-1467] - Upgrade to 4.12 Junit and update tests by removing @Category annotation
+
 Release Notes - Phoenix - Version 3.2.1
 
 ** Bug
