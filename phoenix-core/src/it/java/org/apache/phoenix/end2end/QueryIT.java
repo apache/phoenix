@@ -48,6 +48,7 @@ import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.TableName;
@@ -58,13 +59,17 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
+
+import com.google.common.collect.Maps;
 
 
 
@@ -81,6 +86,14 @@ public class QueryIT extends BaseQueryIT {
     
     public QueryIT(String indexDDL) {
         super(indexDDL);
+    }
+    
+    @BeforeClass
+    @Shadower(classBeingShadowed = BaseQueryIT.class)
+    public static void doSetup() throws Exception {
+    	Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+    	props.put(QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB, "true");
+    	BaseQueryIT.doSetup(props);
     }
     
     @Test

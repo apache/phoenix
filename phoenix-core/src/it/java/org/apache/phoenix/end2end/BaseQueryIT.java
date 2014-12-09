@@ -67,7 +67,14 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     @BeforeClass
     @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
+        doSetup(null);
+    }
+    
+    protected static void doSetup(Map<String,String> customProps) throws Exception {
         Map<String,String> props = getDefaultProps();
+        if(customProps != null) {
+        	props.putAll(customProps);
+        }
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(5000));
         props.put(IndexWriterUtils.HTABLE_THREAD_KEY, Integer.toString(100));
         // Make a small batch size to test multiple calls to reserve sequences

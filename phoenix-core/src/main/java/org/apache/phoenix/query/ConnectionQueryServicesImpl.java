@@ -546,7 +546,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private HColumnDescriptor generateColumnFamilyDescriptor(Pair<byte[],Map<String,Object>> family, PTableType tableType) throws SQLException {
         HColumnDescriptor columnDesc = new HColumnDescriptor(family.getFirst());
         if (tableType != PTableType.VIEW) {
-            columnDesc.setKeepDeletedCells(true);
+            if(props.get(QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB) != null){
+                columnDesc.setKeepDeletedCells(props.getBoolean(
+                    QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_KEEP_DELETED_CELLS));
+            }
             columnDesc.setDataBlockEncoding(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING);
             for (Entry<String,Object> entry : family.getSecond().entrySet()) {
                 String key = entry.getKey();
