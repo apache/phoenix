@@ -62,6 +62,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
     // Incremented from 3 to 4 to salt the sequence table in 3.2/4.2
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_TABLE_TIMESTAMP + 5;
     public static final int DEFAULT_MAX_META_DATA_VERSIONS = 1000;
+    public static final int DEFAULT_MAX_STAT_DATA_VERSIONS = 3;
+    public static final boolean DEFAULT_META_DATA_KEEP_DELETED_CELLS = true;
 
     // TODO: pare this down to minimum, as we don't need duplicates for both table and column errors, nor should we need
     // a different code for every type of error.
