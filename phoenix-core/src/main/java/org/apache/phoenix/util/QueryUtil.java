@@ -145,29 +145,33 @@ public final class QueryUtil {
      * 
      * @param fullTableName name of the table for which the select statement needs to be created.
      * @param columnInfos  list of columns to be projected in the select statement.
+     * @param conditions   The condition clause to be added to the WHERE condition
      * @return Select Query 
      */
-    public static String constructSelectStatement(String fullTableName, List<ColumnInfo> columnInfos) {
+    public static String constructSelectStatement(String fullTableName, List<ColumnInfo> columnInfos,final String conditions) {
         Preconditions.checkNotNull(fullTableName,"Table name cannot be null");
         if(columnInfos == null || columnInfos.isEmpty()) {
              throw new IllegalArgumentException("At least one column must be provided");
         }
         // escape the table name to ensure it is case sensitive.
         final String escapedFullTableName = SchemaUtil.getEscapedFullTableName(fullTableName);
-        StringBuilder sb = new StringBuilder();
-        sb.append("SELECT ");
+        StringBuilder query = new StringBuilder();
+        query.append("SELECT ");
         for (ColumnInfo cinfo : columnInfos) {
             if (cinfo != null) {
                 String fullColumnName = getEscapedFullColumnName(cinfo.getColumnName());
-                sb.append(fullColumnName);
-                sb.append(",");
+                query.append(fullColumnName);
+                query.append(",");
              }
          }
         // Remove the trailing comma
-        sb.setLength(sb.length() - 1);
-        sb.append(" FROM ");
-        sb.append(escapedFullTableName);
-        return sb.toString();
+        query.setLength(query.length() - 1);
+        query.append(" FROM ");
+        query.append(escapedFullTableName);
+        if(conditions != null && conditions.length() > 0) {
+            query.append(" WHERE (").append(conditions).append(")");
+        }
+        return query.toString();
     }
 
     public static String getUrl(String server) {

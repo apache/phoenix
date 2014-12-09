@@ -325,8 +325,8 @@ public class PhoenixRuntime {
         if (columns == null) {
             // use all columns in the table
             for(PColumn pColumn : table.getColumns()) {
-               int sqlType = pColumn.getDataType().getResultSetSqlType();
-               columnInfoList.add(new ColumnInfo(pColumn.toString(), sqlType));
+               int sqlType = pColumn.getDataType().getSqlType();
+               columnInfoList.add(new ColumnInfo(pColumn.toString(), sqlType)); 
             }
         } else {
             // Leave "null" as indication to skip b/c it doesn't exist
@@ -405,7 +405,7 @@ public class PhoenixRuntime {
         if (pColumn==null) {
             throw new SQLException("pColumn must not be null.");
         }
-        int sqlType = pColumn.getDataType().getResultSetSqlType();
+        int sqlType = pColumn.getDataType().getSqlType();
         ColumnInfo columnInfo = new ColumnInfo(pColumn.toString(),sqlType);
         return columnInfo;
     }
