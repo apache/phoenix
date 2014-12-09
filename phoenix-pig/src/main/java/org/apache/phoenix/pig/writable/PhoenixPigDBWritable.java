@@ -15,12 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.phoenix.pig.writable;
 
-package org.apache.phoenix.pig.hadoop;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -28,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.pig.util.TypeUtil;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ColumnInfo;
@@ -42,34 +39,23 @@ import com.google.common.base.Preconditions;
  * b) reads the column values from the {@link ResultSet}
  * 
  */
-public class PhoenixRecord implements Writable {
-	
-	private final List<Object> values;
-	private final ResourceFieldSchema[] fieldSchemas;
-	
-	public PhoenixRecord() {
-	    this(null);
-	}
-	
-	public PhoenixRecord(ResourceFieldSchema[] fieldSchemas) {
-		this.values = new ArrayList<Object>();
-		this.fieldSchemas = fieldSchemas;
-	}
-	
-	@Override
-	public void readFields(DataInput in) throws IOException {		
-	}
-
-	@Override
-	public void write(DataOutput out) throws IOException {		
-	}
-	
-	public void write(PreparedStatement statement, List<ColumnInfo> columnMetadataList) throws SQLException {
-		for (int i = 0; i < columnMetadataList.size(); i++) {
-			Object o = values.get(i);
-			ColumnInfo columnInfo = columnMetadataList.get(i);
-			byte type = (fieldSchemas == null) ? DataType.findType(o) : fieldSchemas[i].getType();
-			try {
+public class PhoenixPigDBWritable implements DBWritable {
+    
+    private final List<Object> values;
+    private ResourceFieldSchema[] fieldSchemas;
+    private List<ColumnInfo> columnMetadataList;
+  
+    public PhoenixPigDBWritable() {
+        this.values = new ArrayList<Object>();
+    }
+    
+    @Override
+    public void write(PreparedStatement statement) throws SQLException {
+        for (int i = 0; i < columnMetadataList.size(); i++) {
+            Object o = values.get(i);
+            ColumnInfo columnInfo = columnMetadataList.get(i);
+            byte type = (fieldSchemas == null) ? DataType.findType(o) : fieldSchemas[i].getType();
+            try {
                 Object upsertValue = convertTypeSpecificValue(o, type, columnInfo.getSqlType());
                 if (upsertValue != null) {
                     statement.setObject(i + 1, upsertValue, columnInfo.getSqlType());
@@ -81,32 +67,55 @@ public class PhoenixRecord implements Writable {
                         ,columnInfo.toString(),re.getMessage()),re);
                 
             }
-		}
-		
-		statement.execute();
-	}
-	
-	public void read(final ResultSet rs, final int noOfColumns) throws SQLException {
-	    Preconditions.checkNotNull(rs);
-        Preconditions.checkArgument(noOfColumns > 0, "No of arguments passed is <= 0");
+        }
+    }
+    
+    public void add(Object value) {
+        values.add(value);
+    }
+
+    private Object convertTypeSpecificValue(Object o, byte type, Integer sqlType) {
+        PDataType pDataType = PDataType.fromTypeId(sqlType);
+        return TypeUtil.castPigTypeToPhoenix(o, type, pDataType);
+    }
+
+    public List<Object> getValues() {
+        return values;
+    }
+
+    @Override
+    public void readFields(final ResultSet rs) throws SQLException {
+        Preconditions.checkNotNull(rs);
+        final int noOfColumns = rs.getMetaData().getColumnCount();
         values.clear();
         for(int i = 1 ; i <= noOfColumns ; i++) {
             Object obj = rs.getObject(i);
             values.add(obj);
         }
-	}
-	
-	public void add(Object value) {
-		values.add(value);
-	}
-
-	private Object convertTypeSpecificValue(Object o, byte type, Integer sqlType) {
-		PDataType pDataType = PDataType.fromTypeId(sqlType);
-
-		return TypeUtil.castPigTypeToPhoenix(o, type, pDataType);
-	}
-
-    public List<Object> getValues() {
-        return values;
     }
+
+    public ResourceFieldSchema[] getFieldSchemas() {
+        return fieldSchemas;
+    }
+
+    public void setFieldSchemas(ResourceFieldSchema[] fieldSchemas) {
+        this.fieldSchemas = fieldSchemas;
+    }
+
+    public List<ColumnInfo> getColumnMetadataList() {
+        return columnMetadataList;
+    }
+
+    public void setColumnMetadataList(List<ColumnInfo> columnMetadataList) {
+        this.columnMetadataList = columnMetadataList;
+    }
+
+    public static PhoenixPigDBWritable newInstance(final ResourceFieldSchema[] fieldSchemas,
+            final List<ColumnInfo> columnMetadataList) {
+        final PhoenixPigDBWritable dbWritable = new PhoenixPigDBWritable ();
+        dbWritable.setFieldSchemas(fieldSchemas);
+        dbWritable.setColumnMetadataList(columnMetadataList);
+        return dbWritable;
+    }
+
 }
