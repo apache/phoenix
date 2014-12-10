@@ -123,8 +123,7 @@ public class OrderByCompiler {
                 // REV_ROW_KEY_ORDER_BY scan would not take effect for a projected table, so don't return it for such table types.
                 if (context.getConnection().getQueryServices().getProps().getBoolean(QueryServices.USE_REVERSE_SCAN_ATTRIB, QueryServicesOptions.DEFAULT_USE_REVERSE_SCAN)
                         && !context.getScanRanges().useSkipScanFilter()
-                        && context.getCurrentTable().getTable().getType() != PTableType.JOIN
-                        && context.getCurrentTable().getTable().getType() != PTableType.SUBQUERY) {
+                        && context.getCurrentTable().getTable().getType() != PTableType.PROJECTED) {
                     return OrderBy.REV_ROW_KEY_ORDER_BY;
                 }
             } else {

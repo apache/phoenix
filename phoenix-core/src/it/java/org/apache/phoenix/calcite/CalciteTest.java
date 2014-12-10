@@ -182,7 +182,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
             new PhoenixSchema(phoenixConnection));
         calciteConnection.setSchema("phoenix");
         final Statement statement = calciteConnection.createStatement();
-        final ResultSet resultSet = statement.executeQuery("select * from aTable where a_string = 'a'");
+        final ResultSet resultSet = statement.executeQuery("select organization_id, entity_id, a_string from aTable where a_string = 'a'");
         while (resultSet.next()) {
             System.out.println("org_id=" + resultSet.getObject(1) + ",entity_id=" + resultSet.getObject(2) + ",a_string=" + resultSet.getObject("A_STRING"));
         }

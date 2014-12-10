@@ -27,8 +27,7 @@ public enum PTableType {
     TABLE("u", "TABLE"),
     VIEW("v", "VIEW"),
     INDEX("i", "INDEX"),
-    JOIN("j", "JOIN"),
-    SUBQUERY("q", "SUBQUERY"); 
+    PROJECTED("p", "PROJECTED"); 
 
     private final PName value;
     private final String serializedValue;

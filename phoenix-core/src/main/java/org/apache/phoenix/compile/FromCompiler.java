@@ -24,7 +24,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
-import com.google.common.base.Preconditions;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -318,7 +317,7 @@ public class FromCompiler {
         private final int tsAddition;
         
         private BaseColumnResolver(PhoenixConnection connection, int tsAddition) {
-            this.connection = Preconditions.checkNotNull(connection);
+            this.connection = connection;
             this.client = connection == null ? null : new MetaDataClient(connection);
             this.tsAddition = tsAddition;
         }
@@ -474,7 +473,7 @@ public class FromCompiler {
                 columns.add(column);
             }
             PTable t = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME, 
-                    PTableType.SUBQUERY, null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM, 
+                    PTableType.PROJECTED, null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM, 
                     null, null, columns, null, null, Collections.<PTable>emptyList(), 
                     false, Collections.<PName>emptyList(), null, null, false, false, null, null, null);
             

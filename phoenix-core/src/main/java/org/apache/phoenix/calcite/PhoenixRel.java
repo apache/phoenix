@@ -1,5 +1,7 @@
 package org.apache.phoenix.calcite;
 
+import java.util.List;
+
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rex.RexNode;
@@ -34,6 +36,7 @@ public interface PhoenixRel extends RelNode {
     void visitInput(int i, PhoenixRel input);
     ColumnExpression newColumnExpression(int index);
     void setContext(PhoenixConnection conn, PTable pTable, RexNode filter);
+    void setProjects(List<? extends RexNode> projects);
     QueryPlan makePlan();
   }
 }

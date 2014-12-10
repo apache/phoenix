@@ -71,7 +71,7 @@ public class TableRef {
 
     public String getColumnDisplayName(ColumnRef ref) {
         PColumn column = ref.getColumn();
-        if (table.getType() == PTableType.JOIN || table.getType() == PTableType.SUBQUERY) {
+        if (table.getType() == PTableType.PROJECTED) {
             return column.getName().getString();
         }
         boolean isIndex = table.getType() == PTableType.INDEX;

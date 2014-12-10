@@ -177,7 +177,7 @@ public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
     }
     
     private int getColumnPKPosition(ColumnRef ref) {
-        if (tupleProjector != null && ref.getTable().getType() == PTableType.SUBQUERY) {
+        if (tupleProjector != null && ref.getTable().getType() == PTableType.PROJECTED) {
             Expression expression = tupleProjector.getExpressions()[ref.getColumnPosition()];
             if (expression instanceof RowKeyColumnExpression) {
                 return ((RowKeyColumnExpression) expression).getPosition();

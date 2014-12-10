@@ -34,7 +34,7 @@ public class PhoenixProject extends Project implements PhoenixRel {
 
     @Override
     public void implement(Implementor implementor, PhoenixConnection conn) {
+    	implementor.setProjects(getProjects());
         implementor.visitInput(0, (PhoenixRel) getInput());
-        throw new UnsupportedOperationException();
     }
 }

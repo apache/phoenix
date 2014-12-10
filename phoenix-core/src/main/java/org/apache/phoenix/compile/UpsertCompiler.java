@@ -421,7 +421,7 @@ public class UpsertCompiler {
                         queryPlanToBe = compiler.compile();
                         // This is post-fix: if the tableRef is a projected table, this means there are post-processing 
                         // steps and parallelIteratorFactory did not take effect.
-                        if (queryPlanToBe.getTableRef().getTable().getType() == PTableType.JOIN || queryPlanToBe.getTableRef().getTable().getType() == PTableType.SUBQUERY) {
+                        if (queryPlanToBe.getTableRef().getTable().getType() == PTableType.PROJECTED) {
                             parallelIteratorFactoryToBe = null;
                         }
                     } catch (MetaDataEntityNotFoundException e) {
