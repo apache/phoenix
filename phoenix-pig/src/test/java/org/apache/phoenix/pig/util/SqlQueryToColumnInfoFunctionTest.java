@@ -19,16 +19,14 @@
  */
 package org.apache.phoenix.pig.util;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.List;
 
-import org.apache.phoenix.pig.PhoenixPigConfiguration;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.ColumnInfo;
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -38,16 +36,14 @@ import com.google.common.collect.ImmutableList;
 
 public class SqlQueryToColumnInfoFunctionTest  extends BaseConnectionlessQueryTest {
 
-    private PhoenixPigConfiguration phoenixConfiguration;
-    private Connection conn;
+    private Configuration configuration;
     private SqlQueryToColumnInfoFunction function;
     
     @Before
     public void setUp() throws SQLException {
-        phoenixConfiguration = Mockito.mock(PhoenixPigConfiguration.class);
-        conn = DriverManager.getConnection(getUrl());
-        Mockito.when(phoenixConfiguration.getConnection()).thenReturn(conn);
-        function = new SqlQueryToColumnInfoFunction(phoenixConfiguration);
+        configuration = Mockito.mock(Configuration.class);
+        Mockito.when(configuration.get(HConstants.ZOOKEEPER_QUORUM)).thenReturn(getUrl());
+        function = new SqlQueryToColumnInfoFunction(configuration);
     }
     
     @Test
@@ -65,11 +61,6 @@ public class SqlQueryToColumnInfoFunctionTest  extends BaseConnectionlessQueryTe
         final List<ColumnInfo> actualColumnInfos = function.apply(selectQuery);
         Assert.assertEquals(expectedColumnInfos, actualColumnInfos);
         
-    }
-    
-    @After
-    public void tearDown() throws SQLException {
-        conn.close();
     }
 
 }

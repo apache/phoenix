@@ -28,18 +28,21 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.RecordReader;
-import org.apache.phoenix.pig.PhoenixPigConfiguration.SchemaType;
-import org.apache.phoenix.pig.hadoop.PhoenixInputFormat;
-import org.apache.phoenix.pig.hadoop.PhoenixRecord;
+import org.apache.phoenix.mapreduce.PhoenixInputFormat;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.pig.util.PhoenixPigSchemaUtil;
 import org.apache.phoenix.pig.util.QuerySchemaParserFunction;
 import org.apache.phoenix.pig.util.TableSchemaParserFunction;
 import org.apache.phoenix.pig.util.TypeUtil;
+import org.apache.phoenix.pig.writable.PhoenixPigDBWritable;
 import org.apache.pig.Expression;
 import org.apache.pig.LoadFunc;
 import org.apache.pig.LoadMetadata;
@@ -83,12 +86,12 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
     private static final String PHOENIX_QUERY_SCHEME      = "hbase://query/";
     private static final String RESOURCE_SCHEMA_SIGNATURE = "phoenix.pig.schema";
    
-    private PhoenixPigConfiguration config;
+    private Configuration config;
     private String tableName;
     private String selectQuery;
     private String zkQuorum ;
-    private PhoenixInputFormat inputFormat;
-    private RecordReader<NullWritable, PhoenixRecord> reader;
+    private PhoenixInputFormat<PhoenixPigDBWritable> inputFormat;
+    private RecordReader<NullWritable,PhoenixPigDBWritable> reader;
     private String contextSignature;
     private ResourceSchema schema;
        
@@ -107,6 +110,8 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
         final Configuration configuration = job.getConfiguration();
         //explicitly turning off combining splits. 
         configuration.setBoolean("pig.noSplitCombination", true);
+        //to have phoenix working on a secured cluster
+        TableMapReduceUtil.initCredentials(job);
         this.initializePhoenixPigConfiguration(location, configuration);
     }
 
@@ -120,21 +125,22 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
         if(this.config != null) {
             return;
         }
-        this.config = new PhoenixPigConfiguration(configuration);
-        this.config.setServerName(this.zkQuorum);
+        this.config = configuration;
+        this.config.set(HConstants.ZOOKEEPER_QUORUM,this.zkQuorum);
+        PhoenixConfigurationUtil.setInputClass(this.config, PhoenixPigDBWritable.class);
         Pair<String,String> pair = null;
         try {
             if (location.startsWith(PHOENIX_TABLE_NAME_SCHEME)) {
                 String tableSchema = location.substring(PHOENIX_TABLE_NAME_SCHEME.length());
                 final TableSchemaParserFunction parseFunction = new TableSchemaParserFunction();
                 pair =  parseFunction.apply(tableSchema);
-				this.config.setSchemaType(SchemaType.TABLE);
+                PhoenixConfigurationUtil.setSchemaType(this.config, SchemaType.TABLE);
              } else if (location.startsWith(PHOENIX_QUERY_SCHEME)) {
                 this.selectQuery = location.substring(PHOENIX_QUERY_SCHEME.length());
                 final QuerySchemaParserFunction queryParseFunction = new QuerySchemaParserFunction(this.config);
                 pair = queryParseFunction.apply(this.selectQuery);
-                config.setSelectStatement(this.selectQuery);
-				this.config.setSchemaType(SchemaType.QUERY);
+                PhoenixConfigurationUtil.setInputQuery(this.config, this.selectQuery);
+                PhoenixConfigurationUtil.setSchemaType(this.config, SchemaType.QUERY);
             }
             this.tableName = pair.getFirst();
             final String selectedColumns = pair.getSecond();
@@ -142,9 +148,9 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
             if(isEmpty(this.tableName) && isEmpty(this.selectQuery)) {
                 printUsage(location);
             }
-            this.config.setTableName(this.tableName);
+            PhoenixConfigurationUtil.setInputTableName(this.config, this.tableName);
             if(!isEmpty(selectedColumns)) {
-                this.config.setSelectColumns(selectedColumns);    
+                PhoenixConfigurationUtil.setSelectColumnNames(this.config, selectedColumns);   
             }
         } catch(IllegalArgumentException iae) {
             printUsage(location);
@@ -160,7 +166,8 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
     @Override
     public InputFormat getInputFormat() throws IOException {
         if(inputFormat == null) {
-            inputFormat = new PhoenixInputFormat();
+            inputFormat = new PhoenixInputFormat<PhoenixPigDBWritable>();
+            PhoenixConfigurationUtil.setInputClass(this.config,PhoenixPigDBWritable.class);
         }
         return inputFormat;
     }
@@ -188,13 +195,13 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
     public Tuple getNext() throws IOException {
         try {
             if(!reader.nextKeyValue()) {
-               return null; 
-            }
-            final PhoenixRecord phoenixRecord = reader.getCurrentValue();
-            if(phoenixRecord == null) {
+                return null; 
+             }
+             final PhoenixPigDBWritable record = reader.getCurrentValue();
+            if(record == null) {
                 return null;
             }
-            final Tuple tuple = TypeUtil.transformToTuple(phoenixRecord,schema.getFields());
+            final Tuple tuple = TypeUtil.transformToTuple(record,schema.getFields());
             return tuple;
        } catch (InterruptedException e) {
             int errCode = 6018;

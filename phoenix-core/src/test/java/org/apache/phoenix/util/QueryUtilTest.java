@@ -59,6 +59,6 @@ public class QueryUtilTest {
     public void testConstructSelectStatement() {
         assertEquals(
                 "SELECT \"ID\",\"NAME\" FROM \"MYTAB\"",
-                QueryUtil.constructSelectStatement("MYTAB", ImmutableList.of(ID_COLUMN,NAME_COLUMN)));
+                QueryUtil.constructSelectStatement("MYTAB", ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
     }
 }

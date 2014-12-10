@@ -20,6 +20,8 @@ package org.apache.phoenix.pig;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.sql.SQLException;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.cli.CommandLine;
@@ -28,13 +30,17 @@ import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.OutputFormat;
 import org.apache.hadoop.mapreduce.RecordWriter;
-import org.apache.phoenix.pig.hadoop.PhoenixOutputFormat;
-import org.apache.phoenix.pig.hadoop.PhoenixRecord;
+import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.pig.writable.PhoenixPigDBWritable;
+import org.apache.phoenix.util.ColumnInfo;
 import org.apache.pig.ResourceSchema;
 import org.apache.pig.ResourceSchema.ResourceFieldSchema;
 import org.apache.pig.StoreFuncInterface;
@@ -71,74 +77,76 @@ import org.apache.pig.impl.util.UDFContext;
 @SuppressWarnings("rawtypes")
 public class PhoenixHBaseStorage implements StoreFuncInterface {
 
-	private PhoenixPigConfiguration config;
-	private RecordWriter<NullWritable, PhoenixRecord> writer;
-	private String contextSignature = null;
-	private ResourceSchema schema;	
-	private long batchSize;
-	private final PhoenixOutputFormat outputFormat = new PhoenixOutputFormat();
+	private Configuration config;
+    private RecordWriter<NullWritable, PhoenixPigDBWritable> writer;
+    private List<ColumnInfo> columnInfo = null;
+    private String contextSignature = null;
+    private ResourceSchema schema;  
+    private long batchSize;
+    private final PhoenixOutputFormat outputFormat = new PhoenixOutputFormat();
 
-	// Set of options permitted
-	private final static Options validOptions = new Options();
-	private final static CommandLineParser parser = new GnuParser();
-	private final static String SCHEMA = "_schema";
+    // Set of options permitted
+    private final static Options validOptions = new Options();
+    private final static CommandLineParser parser = new GnuParser();
+    private final static String SCHEMA = "_schema";
 
-	private final CommandLine configuredOptions;
-	private final String server;
+    private final CommandLine configuredOptions;
+    private final String server;
 
-	public PhoenixHBaseStorage(String server) throws ParseException {
-		this(server, null);
-	}
+    public PhoenixHBaseStorage(String server) throws ParseException {
+        this(server, null);
+    }
 
-	public PhoenixHBaseStorage(String server, String optString)
-			throws ParseException {
-		populateValidOptions();
-		this.server = server;
+    public PhoenixHBaseStorage(String server, String optString)
+            throws ParseException {
+        populateValidOptions();
+        this.server = server;
 
-		String[] optsArr = optString == null ? new String[0] : optString.split(" ");
-		try {
-			configuredOptions = parser.parse(validOptions, optsArr);
-		} catch (ParseException e) {
-			HelpFormatter formatter = new HelpFormatter();
-			formatter.printHelp("[-batchSize]", validOptions);
-			throw e;
-		}
+        String[] optsArr = optString == null ? new String[0] : optString.split(" ");
+        try {
+            configuredOptions = parser.parse(validOptions, optsArr);
+        } catch (ParseException e) {
+            HelpFormatter formatter = new HelpFormatter();
+            formatter.printHelp("[-batchSize]", validOptions);
+            throw e;
+        }
+        batchSize = Long.parseLong(configuredOptions.getOptionValue("batchSize"));
+    }
 
-		batchSize = Long.parseLong(configuredOptions.getOptionValue("batchSize"));
-	}
+    private static void populateValidOptions() {
+        validOptions.addOption("batchSize", true, "Specify upsert batch size");
+    }
 
-	private static void populateValidOptions() {
-		validOptions.addOption("batchSize", true, "Specify upsert batch size");
-	}
+    /**
+     * Returns UDFProperties based on <code>contextSignature</code>.
+     */
+    private Properties getUDFProperties() {
+        return UDFContext.getUDFContext().getUDFProperties(this.getClass(), new String[] { contextSignature });
+    }
 
-	/**
-	 * Returns UDFProperties based on <code>contextSignature</code>.
-	 */
-	private Properties getUDFProperties() {
-		return UDFContext.getUDFContext().getUDFProperties(this.getClass(), new String[] { contextSignature });
-	}
-
-	
-	/**
-	 * Parse the HBase table name and configure job
-	 */
-	@Override
-	public void setStoreLocation(String location, Job job) throws IOException {
-	    URI locationURI;
+    
+    /**
+     * Parse the HBase table name and configure job
+     */
+    @Override
+    public void setStoreLocation(String location, Job job) throws IOException {
+        URI locationURI;
         try {
             locationURI = new URI(location);
             if (!"hbase".equals(locationURI.getScheme())) {
                 throw new IOException(String.format("Location must use the hbase protocol, hbase://tableName[/columnList]. Supplied location=%s",location));
             }
+            config = job.getConfiguration();
+            config.set(HConstants.ZOOKEEPER_QUORUM, server);
             String tableName = locationURI.getAuthority();
             // strip off the leading path token '/'
             String columns = null;
             if(!locationURI.getPath().isEmpty()) {
                 columns = locationURI.getPath().substring(1);
+                PhoenixConfigurationUtil.setUpsertColumnNames(config, columns);
             }
-            config = new PhoenixPigConfiguration(job.getConfiguration());
-            config.configure(server, tableName, batchSize, columns);
-            
+            PhoenixConfigurationUtil.setOutputTableName(config,tableName);
+            PhoenixConfigurationUtil.setBatchSize(config,batchSize);
             String serializedSchema = getUDFProperties().getProperty(contextSignature + SCHEMA);
             if (serializedSchema != null) {
                 schema = (ResourceSchema) ObjectSerializer.deserialize(serializedSchema);
@@ -146,59 +154,61 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
         } catch (URISyntaxException e) {
             throw new IOException(String.format("Location must use the hbase protocol, hbase://tableName[/columnList]. Supplied location=%s",location),e);
         }
-	}
+    }
 
-	@SuppressWarnings("unchecked")
+    @SuppressWarnings("unchecked")
     @Override
-	public void prepareToWrite(RecordWriter writer) throws IOException {
-		this.writer =writer;
-	}
+    public void prepareToWrite(RecordWriter writer) throws IOException {
+        this.writer = writer;
+        try {
+            this.columnInfo = PhoenixConfigurationUtil.getUpsertColumnMetadataList(this.config);
+        } catch(SQLException sqle) {
+            throw new IOException(sqle);
+        }
+    }
 
-	@Override
-	public void putNext(Tuple t) throws IOException {
+    @Override
+    public void putNext(Tuple t) throws IOException {
         ResourceFieldSchema[] fieldSchemas = (schema == null) ? null : schema.getFields();      
-        
-        PhoenixRecord record = new PhoenixRecord(fieldSchemas);
-        
+        PhoenixPigDBWritable record = PhoenixPigDBWritable.newInstance(fieldSchemas,this.columnInfo);
         for(int i=0; i<t.size(); i++) {
-        	record.add(t.get(i));
+            record.add(t.get(i));
+        }
+        try {
+            this.writer.write(null, record);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
         
-		try {
-			writer.write(null, record);
-		} catch (InterruptedException e) {
-			throw new RuntimeException(e);
-		}
-        
-	}
+    }
 
-	@Override
-	public void setStoreFuncUDFContextSignature(String signature) {
+    @Override
+    public void setStoreFuncUDFContextSignature(String signature) {
         this.contextSignature = signature;
-	}
+    }
 
-	@Override
-	public void cleanupOnFailure(String location, Job job) throws IOException {
-	}
+    @Override
+    public void cleanupOnFailure(String location, Job job) throws IOException {
+    }
 
-	@Override
-	public void cleanupOnSuccess(String location, Job job) throws IOException {
-	}
+    @Override
+    public void cleanupOnSuccess(String location, Job job) throws IOException {
+    }
 
-	@Override
-	public String relToAbsPathForStoreLocation(String location, Path curDir) throws IOException {
-		return location;
-	}
+    @Override
+    public String relToAbsPathForStoreLocation(String location, Path curDir) throws IOException {
+        return location;
+    }
 
-	@Override
-	public OutputFormat getOutputFormat() throws IOException {
-		return outputFormat;
-	}
+    @Override
+    public OutputFormat getOutputFormat() throws IOException {
+        return outputFormat;
+    }
 
-	@Override
-	public void checkSchema(ResourceSchema s) throws IOException {
-		schema = s;
-		getUDFProperties().setProperty(contextSignature + SCHEMA, ObjectSerializer.serialize(schema));
-	}
+    @Override
+    public void checkSchema(ResourceSchema s) throws IOException {
+        schema = s;
+        getUDFProperties().setProperty(contextSignature + SCHEMA, ObjectSerializer.serialize(schema));
+    }
 
 }

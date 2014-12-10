@@ -27,7 +27,7 @@ import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.phoenix.pig.hadoop.PhoenixRecord;
+import org.apache.phoenix.pig.writable.PhoenixPigDBWritable;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.pig.PigException;
 import org.apache.pig.ResourceSchema.ResourceFieldSchema;
@@ -47,16 +47,16 @@ public final class TypeUtil {
 	
     private static final Log LOG = LogFactory.getLog(TypeUtil.class);
     private static final HBaseBinaryConverter binaryConverter = new HBaseBinaryConverter ();
-	private static final ImmutableMap<PDataType,Byte> phoenixTypeToPigDataType = init();	
-	
-	private TypeUtil(){
-	}
-	
-	/**
-	 * A map of Phoenix to Pig data types.
-	 * @return
-	 */
-	private static ImmutableMap<PDataType, Byte> init() {
+    private static final ImmutableMap<PDataType,Byte> phoenixTypeToPigDataType = init();    
+    
+    private TypeUtil(){
+    }
+    
+    /**
+     * A map of Phoenix to Pig data types.
+     * @return
+     */
+    private static ImmutableMap<PDataType, Byte> init() {
         final ImmutableMap.Builder<PDataType,Byte> builder = new Builder<PDataType,Byte> ();
         builder.put(PDataType.LONG,DataType.LONG);
         builder.put(PDataType.VARBINARY,DataType.BYTEARRAY);
@@ -84,121 +84,121 @@ public final class TypeUtil {
         return builder.build();
     }
     /**
-	 * This method returns the most appropriate PDataType associated with 
-	 * the incoming Pig type. Note for Pig DataType DATETIME, returns DATE as 
-	 * inferredSqlType. 
-	 * 
-	 * This is later used to make a cast to targetPhoenixType accordingly. See
-	 * {@link #castPigTypeToPhoenix(Object, byte, PDataType)}
-	 * 
-	 * @param obj
-	 * @return PDataType
-	 */
-	public static PDataType getType(Object obj, byte type) {
-		if (obj == null) {
-			return null;
-		}
-		PDataType sqlType;
+     * This method returns the most appropriate PDataType associated with 
+     * the incoming Pig type. Note for Pig DataType DATETIME, returns DATE as 
+     * inferredSqlType. 
+     * 
+     * This is later used to make a cast to targetPhoenixType accordingly. See
+     * {@link #castPigTypeToPhoenix(Object, byte, PDataType)}
+     * 
+     * @param obj
+     * @return PDataType
+     */
+    public static PDataType getType(Object obj, byte type) {
+        if (obj == null) {
+            return null;
+        }
+        PDataType sqlType;
 
-		switch (type) {
-		case DataType.BYTEARRAY:
-			sqlType = PDataType.VARBINARY;
-			break;
-		case DataType.CHARARRAY:
-			sqlType = PDataType.VARCHAR;
-			break;
-		case DataType.DOUBLE:
-		case DataType.BIGDECIMAL:
-			sqlType = PDataType.DOUBLE;
-			break;
-		case DataType.FLOAT:
-			sqlType = PDataType.FLOAT;
-			break;
-		case DataType.INTEGER:
-			sqlType = PDataType.INTEGER;
-			break;
-		case DataType.LONG:
-		case DataType.BIGINTEGER:
-			sqlType = PDataType.LONG;
-			break;
-		case DataType.BOOLEAN:
-			sqlType = PDataType.BOOLEAN;
-			break;
-		case DataType.DATETIME:
-			sqlType = PDataType.DATE;
-			break;
-		case DataType.BYTE:
-			sqlType = PDataType.TINYINT;
-			break;
-		default:
-			throw new RuntimeException("Unknown type " + obj.getClass().getName()
-					+ " passed to PhoenixHBaseStorage");
-		}
+        switch (type) {
+        case DataType.BYTEARRAY:
+            sqlType = PDataType.VARBINARY;
+            break;
+        case DataType.CHARARRAY:
+            sqlType = PDataType.VARCHAR;
+            break;
+        case DataType.DOUBLE:
+        case DataType.BIGDECIMAL:
+            sqlType = PDataType.DOUBLE;
+            break;
+        case DataType.FLOAT:
+            sqlType = PDataType.FLOAT;
+            break;
+        case DataType.INTEGER:
+            sqlType = PDataType.INTEGER;
+            break;
+        case DataType.LONG:
+        case DataType.BIGINTEGER:
+            sqlType = PDataType.LONG;
+            break;
+        case DataType.BOOLEAN:
+            sqlType = PDataType.BOOLEAN;
+            break;
+        case DataType.DATETIME:
+            sqlType = PDataType.DATE;
+            break;
+        case DataType.BYTE:
+            sqlType = PDataType.TINYINT;
+            break;
+        default:
+            throw new RuntimeException("Unknown type " + obj.getClass().getName()
+                    + " passed to PhoenixHBaseStorage");
+        }
 
-		return sqlType;
+        return sqlType;
 
-	}
+    }
 
-	/**
-	 * This method encodes a value with Phoenix data type. It begins
-	 * with checking whether an object is BINARY and makes a call to
-	 * {@link #castBytes(Object, PDataType)} to convery bytes to
-	 * targetPhoenixType
-	 * 
-	 * @param o
-	 * @param targetPhoenixType
-	 * @return Object
-	 */
-	public static Object castPigTypeToPhoenix(Object o, byte objectType, PDataType targetPhoenixType) {
-		PDataType inferredPType = getType(o, objectType);
-		
-		if(inferredPType == null) {
-			return null;
-		}
+    /**
+     * This method encodes a value with Phoenix data type. It begins
+     * with checking whether an object is BINARY and makes a call to
+     * {@link #castBytes(Object, PDataType)} to convery bytes to
+     * targetPhoenixType
+     * 
+     * @param o
+     * @param targetPhoenixType
+     * @return Object
+     */
+    public static Object castPigTypeToPhoenix(Object o, byte objectType, PDataType targetPhoenixType) {
+        PDataType inferredPType = getType(o, objectType);
+        
+        if(inferredPType == null) {
+            return null;
+        }
 
-		if(inferredPType == PDataType.VARBINARY) {
-			try {
-				o = castBytes(o, targetPhoenixType);
-				if(targetPhoenixType != PDataType.VARBINARY && targetPhoenixType != PDataType.BINARY) {
-					inferredPType = getType(o, DataType.findType(o));	
-				}
-			} catch (IOException e) {
-				throw new RuntimeException("Error while casting bytes for object " +o);
-			}
-		}
-		if(inferredPType == PDataType.DATE) {
-			int inferredSqlType = targetPhoenixType.getSqlType();
+        if(inferredPType == PDataType.VARBINARY) {
+            try {
+                o = castBytes(o, targetPhoenixType);
+                if(targetPhoenixType != PDataType.VARBINARY && targetPhoenixType != PDataType.BINARY) {
+                    inferredPType = getType(o, DataType.findType(o));   
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Error while casting bytes for object " +o);
+            }
+        }
+        if(inferredPType == PDataType.DATE) {
+            int inferredSqlType = targetPhoenixType.getSqlType();
 
-			if(inferredSqlType == Types.DATE) {
-				return new Date(((DateTime)o).getMillis());
-			} 
-			if(inferredSqlType == Types.TIME) {
-				return new Time(((DateTime)o).getMillis());
-			}
-			if(inferredSqlType == Types.TIMESTAMP) {
-				return new Timestamp(((DateTime)o).getMillis());
-			}
-		}
-		
-		if (targetPhoenixType == inferredPType || inferredPType.isCoercibleTo(targetPhoenixType)) {
-			return inferredPType.toObject(o, targetPhoenixType);
-		}
-		
-		throw new RuntimeException(o.getClass().getName()
-				+ " cannot be coerced to "+targetPhoenixType.toString());
-	}
-	
-	/**
-	 * This method converts bytes to the target type required
-	 * for Phoenix. It uses {@link Utf8StorageConverter} for
-	 * the conversion.
-	 * 
-	 * @param o
-	 * @param targetPhoenixType
-	 * @return Object
-	 * @throws IOException
-	 */
-	private static Object castBytes(Object o, PDataType targetPhoenixType) throws IOException {
+            if(inferredSqlType == Types.DATE) {
+                return new Date(((DateTime)o).getMillis());
+            } 
+            if(inferredSqlType == Types.TIME) {
+                return new Time(((DateTime)o).getMillis());
+            }
+            if(inferredSqlType == Types.TIMESTAMP) {
+                return new Timestamp(((DateTime)o).getMillis());
+            }
+        }
+        
+        if (targetPhoenixType == inferredPType || inferredPType.isCoercibleTo(targetPhoenixType)) {
+            return inferredPType.toObject(o, targetPhoenixType);
+        }
+        
+        throw new RuntimeException(o.getClass().getName()
+                + " cannot be coerced to "+targetPhoenixType.toString());
+    }
+    
+    /**
+     * This method converts bytes to the target type required
+     * for Phoenix. It uses {@link Utf8StorageConverter} for
+     * the conversion.
+     * 
+     * @param o
+     * @param targetPhoenixType
+     * @return Object
+     * @throws IOException
+     */
+    private static Object castBytes(Object o, PDataType targetPhoenixType) throws IOException {
         byte[] bytes = ((DataByteArray)o).get();
         
         switch(targetPhoenixType) {
@@ -213,7 +213,7 @@ public final class TypeUtil {
             return binaryConverter.bytesToInteger(bytes).byteValue();
         case UNSIGNED_INT:
         case INTEGER:
-        	return binaryConverter.bytesToInteger(bytes);
+            return binaryConverter.bytesToInteger(bytes);
         case BOOLEAN:
             return binaryConverter.bytesToBoolean(bytes);
         case FLOAT:
@@ -227,9 +227,9 @@ public final class TypeUtil {
             return binaryConverter.bytesToLong(bytes);
         case VARBINARY : 
         case BINARY:
-        	 return bytes;
+             return bytes;
         default:
-        	return o;
+            return o;
         }        
     }
     
@@ -240,7 +240,7 @@ public final class TypeUtil {
      * @return
      * @throws IOException
      */
-    public static Tuple transformToTuple(final PhoenixRecord record, final ResourceFieldSchema[] projectedColumns) throws IOException {
+    public static Tuple transformToTuple(final PhoenixPigDBWritable record, final ResourceFieldSchema[] projectedColumns) throws IOException {
         
         List<Object> columnValues = record.getValues();
         if(columnValues == null || columnValues.size() == 0 || projectedColumns == null || projectedColumns.length != columnValues.size()) {
