@@ -1,0 +1,527 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.phoenix.end2end.index;
+                                              
+import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
+import static org.apache.phoenix.util.TestUtil.INDEX_DATA_TABLE;
+import static org.apache.phoenix.util.TestUtil.MUTABLE_INDEX_DATA_TABLE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Properties;
+
+import org.apache.commons.lang.StringUtils;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
+import org.junit.Test;
+
+public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
+
+	@Test
+	public void testImmutableIndexCreationAndUpdate() throws Exception {
+		testCreateAndUpdate(false, false);
+	}
+
+	@Test
+	public void testImmutableLocalIndexCreationAndUpdate() throws Exception {
+		testCreateAndUpdate(false, true);
+	}
+
+	@Test
+	public void testMutableIndexCreationAndUpdate() throws Exception {
+		testCreateAndUpdate(true, false);
+	}
+
+	@Test
+	public void testMutableLocalIndexCreationAndUpdate() throws Exception {
+		testCreateAndUpdate(true, true);
+	}
+
+	/**
+	 * Adds a row to the index data table 
+	 * 
+	 * @param i
+	 *            row number
+	 */
+	private void insertRow(PreparedStatement stmt, int i) throws SQLException {
+		// insert row
+		stmt.setString(1, "varchar" + String.valueOf(i));
+		stmt.setString(2, "char" + String.valueOf(i));
+		stmt.setInt(3, i);
+		stmt.setLong(4, i);
+		stmt.setBigDecimal(5, new BigDecimal(Double.valueOf(i)));
+		stmt.setString(6, "a.varchar" + String.valueOf(i));
+		stmt.setString(7, "a.char" + String.valueOf(i));
+		stmt.setInt(8, i);
+		stmt.setLong(9, i);
+		stmt.setBigDecimal(10, new BigDecimal((double) i));
+		stmt.setString(11, "b.varchar" + String.valueOf(i));
+		stmt.setString(12, "b.char" + String.valueOf(i));
+		stmt.setInt(13, i);
+		stmt.setLong(14, i);
+		stmt.setBigDecimal(15, new BigDecimal((double) i));
+		stmt.executeUpdate();
+	}
+
+	private void verifyResult(ResultSet rs, int i) throws SQLException {
+		assertTrue(rs.next());
+		assertEquals(
+				"VARCHAR"+ String.valueOf(i)+ "_"
+				+ StringUtils.rightPad("CHAR" + String.valueOf(i), 6,' ')
+				+ "_A.VARCHAR"+ String.valueOf(i)
+				+ "_"+ StringUtils.rightPad("B.CHAR" + String.valueOf(i),10, ' '), rs.getString(1));
+		assertEquals(i * 4, rs.getInt(2));
+		assertEquals("varchar" + String.valueOf(i), rs.getString(3));
+		assertEquals("char" + String.valueOf(i), rs.getString(4));
+		assertEquals(i, rs.getInt(5));
+		assertEquals(i, rs.getLong(6));
+		assertEquals(i, rs.getDouble(7), 0.000001);
+		assertEquals(i, rs.getLong(8));
+		assertEquals(i, rs.getLong(9));
+	}
+
+	private void testCreateAndUpdate(boolean mutable, boolean localIndex)
+			throws Exception {
+		String dataTable = mutable ? MUTABLE_INDEX_DATA_TABLE
+				: INDEX_DATA_TABLE;
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
+		conn.setAutoCommit(false);
+		populateDataTable(conn, dataTable);
+
+		// create an expression index
+		String ddl = "CREATE "
+				+ (localIndex ? "LOCAL" : "")
+				+ " INDEX IDX ON "+ INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable
+				+ " ((UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(char_col2)),"
+				+ " (decimal_pk+int_pk+decimal_col2+int_col1) )"
+				+ " INCLUDE (long_col1, long_col2)";
+		PreparedStatement stmt = conn.prepareStatement(ddl);
+		stmt.execute();
+
+		// run select query with expression in WHERE clause
+		String whereSql = "SELECT long_col1, long_col2 from "
+				+ INDEX_DATA_SCHEMA
+				+ QueryConstants.NAME_SEPARATOR
+				+ dataTable
+				+ " WHERE UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(char_col2) = ? AND decimal_pk+int_pk+decimal_col2+int_col1=?";
+		stmt = conn.prepareStatement(whereSql);
+		stmt.setString(1, "VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ");
+		stmt.setInt(2, 4);
+
+		// verify that the query does a range scan on the index table
+		ResultSet rs = stmt.executeQuery("EXPLAIN " + whereSql);
+		assertEquals( localIndex ? 
+		"CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_INDEX_TEST." + dataTable + " [-32768,'VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ',4]\nCLIENT MERGE SORT"
+		: "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST.IDX ['VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ',4]",
+		QueryUtil.getExplainPlan(rs));
+		
+		// verify that the correct results are returned
+		rs = stmt.executeQuery();
+		assertTrue(rs.next());
+		assertEquals(1, rs.getInt(1));
+		assertEquals(1, rs.getInt(2));
+		assertFalse(rs.next());
+
+		// verify all rows in data table are present in index table
+		String indexSelectSql = "SELECT UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(char_col2), "
+				+ "decimal_pk+int_pk+decimal_col2+int_col1, "
+				+ "varchar_pk, char_pk, int_pk, long_pk, decimal_pk, "
+				+ "long_col1, long_col2 "
+				+ "from "
+				+ INDEX_DATA_SCHEMA
+				+ QueryConstants.NAME_SEPARATOR + dataTable;
+		rs = conn.createStatement().executeQuery(
+				"EXPLAIN " + indexSelectSql);
+		assertEquals(
+				localIndex ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_INDEX_TEST."
+						+ dataTable + " [-32768]\nCLIENT MERGE SORT"
+						: "CLIENT PARALLEL 1-WAY FULL SCAN OVER INDEX_TEST.IDX",
+				QueryUtil.getExplainPlan(rs));
+		rs = conn.createStatement().executeQuery(indexSelectSql);
+		verifyResult(rs, 1);
+		verifyResult(rs, 2);
+
+		// Insert two more rows to the index data table
+		String upsert = "UPSERT INTO " + INDEX_DATA_SCHEMA
+				+ QueryConstants.NAME_SEPARATOR + dataTable
+				+ " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+		stmt = conn.prepareStatement(upsert);
+		insertRow(stmt, 3);
+		insertRow(stmt, 4);
+		conn.commit();
+
+		rs = conn.createStatement().executeQuery(indexSelectSql);
+		verifyResult(rs, 1);
+		verifyResult(rs, 2);
+		// verify that two rows added after index was created were also added to
+		// the index table
+		verifyResult(rs, 3);
+		verifyResult(rs, 4);
+
+		// update the first row
+		upsert = "UPSERT INTO "
+				+ INDEX_DATA_SCHEMA
+				+ QueryConstants.NAME_SEPARATOR
+				+ dataTable
+				+ "(varchar_pk,char_pk,int_pk,long_pk,decimal_pk,a.varchar_col1) VALUES(?, ?, ?, ?, ?, ?)";
+
+		stmt = conn.prepareStatement(upsert);
+		stmt.setString(1, "varchar1");
+		stmt.setString(2, "char1");
+		stmt.setInt(3, 1);
+		stmt.setLong(4, 1l);
+		stmt.setBigDecimal(5, new BigDecimal(1.0));
+		stmt.setString(6, "a.varchar_updated");
+		stmt.executeUpdate();
+		conn.commit();
+
+		// verify only one row was updated in the data table
+		String selectSql = "UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(char_col2) from "
+				+ INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable;
+		rs = conn.createStatement().executeQuery(
+				"SELECT /*+ NO_INDEX */ " + selectSql);
+		assertTrue(rs.next());
+		assertEquals("VARCHAR1_CHAR1 _A.VARCHAR_UPDATED_B.CHAR1   ", rs.getString(1));
+		assertTrue(rs.next());
+		assertEquals("VARCHAR2_CHAR2 _A.VARCHAR2_B.CHAR2   ", rs.getString(1));
+		assertTrue(rs.next());
+		assertEquals("VARCHAR3_CHAR3 _A.VARCHAR3_B.CHAR3   ", rs.getString(1));
+		assertTrue(rs.next());
+		assertEquals("VARCHAR4_CHAR4 _A.VARCHAR4_B.CHAR4   ", rs.getString(1));
+		assertFalse(rs.next());
+
+		// verify that the rows in the index table are also updated
+		rs = conn.createStatement().executeQuery("SELECT " + selectSql);
+		assertTrue(rs.next());
+		// if the data table is immutable, the index table will have one more
+		// row
+		if (!mutable) {
+			assertEquals("VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ", rs.getString(1));
+			assertTrue(rs.next());
+		}
+		assertEquals("VARCHAR1_CHAR1 _A.VARCHAR_UPDATED_" + (mutable ? "B.CHAR1   " : ""), rs.getString(1));
+		assertTrue(rs.next());
+		assertEquals("VARCHAR2_CHAR2 _A.VARCHAR2_B.CHAR2   ", rs.getString(1));
+		assertTrue(rs.next());
+		assertEquals("VARCHAR3_CHAR3 _A.VARCHAR3_B.CHAR3   ", rs.getString(1));
+		assertTrue(rs.next());
+		assertEquals("VARCHAR4_CHAR4 _A.VARCHAR4_B.CHAR4   ", rs.getString(1));
+		assertFalse(rs.next());	
+	}
+
+	private void populateDataTable(Connection conn, String dataTable)
+			throws SQLException {
+		ensureTableCreated(getUrl(), dataTable);
+		String upsert = "UPSERT INTO " + INDEX_DATA_SCHEMA
+				+ QueryConstants.NAME_SEPARATOR + dataTable
+				+ " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+		PreparedStatement stmt1 = conn.prepareStatement(upsert);
+		// insert two rows
+		insertRow(stmt1, 1);
+		insertRow(stmt1, 2);
+		conn.commit();
+	}
+
+	@Test
+	public void testDeleteIndexedExpressionImmutableIndex() throws Exception {
+		helpTestDeleteIndexedExpression(false, false);
+	}
+
+	@Test
+	public void testDeleteIndexedExpressionImmutableLocalIndex() throws Exception {
+		helpTestDeleteIndexedExpression(false, true);
+	}
+
+	@Test
+	public void testDeleteIndexedExpressionMutableIndex() throws Exception {
+		helpTestDeleteIndexedExpression(true, false);
+	}
+
+	@Test
+	public void testDeleteIndexedExpressionMutableLocalIndex() throws Exception {
+		helpTestDeleteIndexedExpression(true, true);
+	}
+
+	public void helpTestDeleteIndexedExpression(boolean mutable, boolean localIndex)
+			throws Exception {
+		String dataTable = mutable ? MUTABLE_INDEX_DATA_TABLE
+				: INDEX_DATA_TABLE;
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
+		conn.setAutoCommit(false);
+		ensureTableCreated(getUrl(), dataTable);
+		populateDataTable(conn, dataTable);
+		String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON "
+				+ INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable
+				+ " (2*long_col2)";
+		PreparedStatement stmt = conn.prepareStatement(ddl);
+		stmt.execute();
+
+		ResultSet rs;
+		rs = conn.createStatement().executeQuery(
+				"SELECT COUNT(*) FROM " + INDEX_DATA_SCHEMA
+						+ QueryConstants.NAME_SEPARATOR + dataTable);
+		assertTrue(rs.next());
+		assertEquals(2, rs.getInt(1));
+		rs = conn.createStatement().executeQuery(
+				"SELECT COUNT(*) FROM " + INDEX_DATA_SCHEMA
+						+ QueryConstants.NAME_SEPARATOR + "IDX");
+		assertTrue(rs.next());
+		assertEquals(2, rs.getInt(1));
+
+		conn.setAutoCommit(true);
+		String dml = "DELETE from " + INDEX_DATA_SCHEMA
+				+ QueryConstants.NAME_SEPARATOR + dataTable
+				+ " WHERE long_col2 = 2";
+		try {
+			conn.createStatement().execute(dml);
+			if (!mutable) {
+				fail();
+			}
+		} catch (SQLException e) {
+			if (!mutable) {
+				assertEquals(
+						SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS
+								.getErrorCode(),
+						e.getErrorCode());
+			}
+		}
+
+		if (!mutable) {
+			dml = "DELETE from " + INDEX_DATA_SCHEMA
+					+ QueryConstants.NAME_SEPARATOR + dataTable
+					+ " WHERE 2*long_col2 = 4";
+			conn.createStatement().execute(dml);
+		}
+
+		rs = conn.createStatement().executeQuery(
+				"SELECT COUNT(*) FROM " + INDEX_DATA_SCHEMA
+						+ QueryConstants.NAME_SEPARATOR + dataTable);
+		assertTrue(rs.next());
+		assertEquals(1, rs.getInt(1));
+		rs = conn.createStatement().executeQuery(
+				"SELECT COUNT(*) FROM " + INDEX_DATA_SCHEMA
+						+ QueryConstants.NAME_SEPARATOR + "IDX");
+		assertTrue(rs.next());
+		assertEquals(1, rs.getInt(1));
+	}
+	
+	@Test
+	public void testDeleteCoveredColImmutableIndex() throws Exception {
+		helpTestDeleteCoveredCol(false, false);
+	}
+
+	@Test
+	public void testDeleteCoveredColImmutableLocalIndex() throws Exception {
+		helpTestDeleteCoveredCol(false, true);
+	}
+
+	@Test
+	public void testDeleteCoveredColMutableIndex() throws Exception {
+		helpTestDeleteCoveredCol(true, false);
+	}
+
+	@Test
+	public void testDeleteCoveredColMutableLocalIndex() throws Exception {
+		helpTestDeleteCoveredCol(true, true);
+	}
+	
+	public void helpTestDeleteCoveredCol(boolean mutable, boolean localIndex) throws Exception {
+		String dataTable = mutable ? MUTABLE_INDEX_DATA_TABLE
+				: INDEX_DATA_TABLE;
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
+		conn.setAutoCommit(false);
+		ensureTableCreated(getUrl(), dataTable);
+		populateDataTable(conn, dataTable);
+		String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON "
+				+ " (long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) )"
+                + " INCLUDE (long_col1, long_col2)";
+		PreparedStatement stmt = conn.prepareStatement(ddl);
+		stmt.execute();
+        
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " +INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE);
+        assertTrue(rs.next());
+        assertEquals(2,rs.getInt(1));
+        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " +INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + "IDX");
+        assertTrue(rs.next());
+        assertEquals(2,rs.getInt(1));
+        
+        String dml = "DELETE from " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE +
+                " WHERE long_col2 = 4";
+        assertEquals(1,conn.createStatement().executeUpdate(dml));
+        conn.commit();
+        
+        String query = "SELECT /*+ NO_INDEX */ long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) FROM " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals(1L, rs.getLong(1));
+        assertEquals("varchar1", rs.getString(2));
+        assertEquals(2L, rs.getLong(3));
+        assertEquals("VARCHAR1", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals(3L, rs.getLong(1));
+        assertEquals("varchar3", rs.getString(2));
+        assertEquals(4L, rs.getLong(3));
+        assertEquals("VARCHAR3", rs.getString(4));
+        assertFalse(rs.next());
+        
+        query = "SELECT long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) FROM " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals(1L, rs.getLong(1));
+        assertEquals("varchar1", rs.getString(2));
+        assertEquals(2L, rs.getLong(3));
+        assertEquals("VARCHAR1", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals(3L, rs.getLong(1));
+        assertEquals("varchar3", rs.getString(2));
+        assertEquals(4L, rs.getLong(3));
+        assertEquals("VARCHAR3", rs.getString(4));
+        assertFalse(rs.next());
+        
+        query = "SELECT * FROM " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + "IDX" ;
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        
+        assertEquals(1L, rs.getLong(1));
+        assertEquals("varchar1", rs.getString(2));
+        assertEquals(2L, rs.getLong(3));
+        assertEquals("VARCHAR1", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals(3L, rs.getLong(1));
+        assertEquals("varchar3", rs.getString(2));
+        assertEquals(4L, rs.getLong(3));
+        assertEquals("VARCHAR3", rs.getString(4));
+        assertFalse(rs.next());
+        
+    }
+
+	@Test
+	public void testGroupByCountImmutableIndex() throws Exception {
+		testGroupByCount(false, false);
+	}
+
+	@Test
+	public void testGroupByCountImmutableLocalIndex() throws Exception {
+		testGroupByCount(false, true);
+	}
+
+	@Test
+	public void testGroupByCountMutableIndex() throws Exception {
+		testGroupByCount(true, false);
+	}
+
+	@Test
+	public void testGroupByCountMutableLocalIndex() throws Exception {
+		testGroupByCount(true, true);
+	}
+
+	public void testGroupByCount(boolean mutable, boolean localIndex)
+			throws Exception {
+		String dataTable = mutable ? MUTABLE_INDEX_DATA_TABLE
+				: INDEX_DATA_TABLE;
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
+		conn.setAutoCommit(false);
+		ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
+		populateDataTable(conn, dataTable);
+		String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON "
+				+ INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable
+				+ " (int_col2+int_col1)";
+		PreparedStatement stmt = conn.prepareStatement(ddl);
+		stmt.execute();
+
+		String groupBySql = "SELECT (int_col1+int_col2), COUNT(*) FROM "
+				+ INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable
+				+ " GROUP BY (int_col1+int_col2)";
+		// TODO fix this
+		// ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " +
+		// groupBySql);
+		// assertEquals("", QueryUtil.getExplainPlan(rs));
+		ResultSet rs = conn.createStatement().executeQuery(groupBySql);
+		assertTrue(rs.next());
+		assertEquals(1, rs.getInt(2));
+		assertTrue(rs.next());
+		assertEquals(1, rs.getInt(2));
+		assertFalse(rs.next());
+	}
+
+	@Test
+	public void testSelectDistinctImmutableIndex() throws Exception {
+		testSelectDistinct(false, false);
+	}
+
+	@Test
+	public void testSelectDistinctImmutableIndexLocal() throws Exception {
+		testSelectDistinct(false, true);
+	}
+
+	@Test
+	public void testSelectDistinctMutableIndex() throws Exception {
+		testSelectDistinct(true, false);
+	}
+
+	@Test
+	public void testSelectDistinctMutableLocalIndex() throws Exception {
+		testSelectDistinct(true, true);
+	}
+
+	public void testSelectDistinct(boolean mutable, boolean localIndex)
+			throws Exception {
+		String dataTable = mutable ? MUTABLE_INDEX_DATA_TABLE
+				: INDEX_DATA_TABLE;
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
+		conn.setAutoCommit(false);
+		ensureTableCreated(getUrl(), dataTable);
+		populateDataTable(conn, dataTable);
+		String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON "
+				+ INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable
+				+ " (1+int_col2)";
+		PreparedStatement stmt = conn.prepareStatement(ddl);
+		stmt.execute();
+		String sql = "SELECT distinct int_col2 FROM " + INDEX_DATA_SCHEMA
+				+ QueryConstants.NAME_SEPARATOR + dataTable
+				+ " where 1+int_col2 > 0";
+		// TODO fix this
+		// ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
+		// assertEquals("", QueryUtil.getExplainPlan(rs));
+		ResultSet rs = conn.createStatement().executeQuery(sql);
+		assertTrue(rs.next());
+		assertEquals(1, rs.getInt(1));
+		assertTrue(rs.next());
+		assertEquals(2, rs.getInt(1));
+		assertFalse(rs.next());
+	}
+
+}

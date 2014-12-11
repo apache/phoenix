@@ -19,6 +19,7 @@ package org.apache.phoenix.schema;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.expression.Expression;
 
 
 /**
@@ -37,12 +38,16 @@ public class ColumnNotFoundException extends MetaDataEntityNotFoundException {
     private final String columnName;
 
     public ColumnNotFoundException(String columnName) {
-        this(null, null, null, columnName);
+        this(null, null, null, columnName, null);
+    }
+    
+    public ColumnNotFoundException(Expression expression) {
+        this(null, null, null, null, expression);
     }
 
-    public ColumnNotFoundException(String schemaName, String tableName, String familyName, String columnName) {
+    public ColumnNotFoundException(String schemaName, String tableName, String familyName, String columnName, Expression expression) {
         super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(tableName)
-                .setFamilyName(familyName).setColumnName(columnName).build().toString(),
+                .setFamilyName(familyName).setColumnName(columnName).setExpression(expression).build().toString(),
                 code.getSQLState(), code.getErrorCode(), null);
         this.schemaName = schemaName;
         this.tableName = tableName;

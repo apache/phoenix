@@ -32,5 +32,7 @@ public interface ValueGetter {
    *         present.
    * @throws IOException if there is an error accessing the underlying data storage
    */
-  public ImmutableBytesPtr getLatestValue(ColumnReference ref) throws IOException;
+  public ImmutableBytesPtr getLatestValue(ColumnReference ref);
+  
+  public byte[] getRowKey();
 }

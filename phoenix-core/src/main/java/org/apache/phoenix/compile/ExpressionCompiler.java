@@ -137,7 +137,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     private int nodeCount;
     private final boolean resolveViewConstants;
 
-    ExpressionCompiler(StatementContext context) {
+    //TODO is there a better way than making this public
+    public ExpressionCompiler(StatementContext context) {
         this(context,GroupBy.EMPTY_GROUP_BY, false);
     }
 
@@ -365,7 +366,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             boolean isSharedViewIndex = table.getViewIndexId() != null;
             int minPosition = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
             if (pkPosition < minPosition) {
-                throw new ColumnNotFoundException(table.getSchemaName().getString(), table.getTableName().getString(), null, ref.getColumn().getName().getString());
+                throw new ColumnNotFoundException(table.getSchemaName().getString(), table.getTableName().getString(), null, ref.getColumn().getName().getString(), null);
             }
         }
         return ref;

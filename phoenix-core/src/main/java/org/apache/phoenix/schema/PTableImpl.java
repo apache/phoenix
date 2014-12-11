@@ -41,6 +41,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -72,10 +73,10 @@ import com.sun.istack.NotNull;
 
 /**
  * 
- * Base class for PTable implementors.  Provides abstraction for
- * storing data in a single column (ColumnLayout.SINGLE) or in
- * multiple columns (ColumnLayout.MULTI).
- *
+ * Base class for PTable implementors. Provides abstraction for storing data in
+ * a single column (ColumnLayout.SINGLE) or in multiple columns
+ * (ColumnLayout.MULTI).
+ * 
  * 
  * @since 0.1
  */
@@ -98,6 +99,7 @@ public class PTableImpl implements PTable {
     private Map<byte[], PColumnFamily> familyByBytes;
     private Map<String, PColumnFamily> familyByString;
     private ListMultimap<String,PColumn> columnsByName;
+    private ListMultimap<Expression, PColumn> columnsByExpression;
     private PName pkName;
     private Integer bucketNum;
     private RowKeySchema rowKeySchema;
@@ -306,6 +308,7 @@ public class PTableImpl implements PTable {
         PColumn[] allColumns;
 
         this.columnsByName = ArrayListMultimap.create(columns.size(), 1);
+        this.columnsByExpression = ArrayListMultimap.create(columns.size(), 1);
         if (bucketNum != null) {
             // Add salt column to allColumns and pkColumns, but don't add to
             // columnsByName, since it should not be addressable via name.
@@ -325,17 +328,23 @@ public class PTableImpl implements PTable {
                 pkColumns.add(column);
             }
             String columnName = column.getName().getString();
+            Expression expression = column.getExpression();			
             if (columnsByName.put(columnName, column)) {
                 int count = 0;
                 for (PColumn dupColumn : columnsByName.get(columnName)) {
                     if (Objects.equal(familyName, dupColumn.getFamilyName())) {
                         count++;
                         if (count > 1) {
-                            throw new ColumnAlreadyExistsException(null, name.getString(), columnName);
+                            throw new ColumnAlreadyExistsException(null, name.getString(), columnName, expression);
                         }
                     }
                 }
             }
+			if (expression!=null && columnsByExpression.containsKey(expression)) {
+				throw new ColumnAlreadyExistsException(null,
+							name.getString(), columnName, expression);
+			}
+			columnsByExpression.put(expression, column);
         }
         estimatedSize += SizedUtil.sizeOfMap(allColumns.length, SizedUtil.POINTER_SIZE, SizedUtil.sizeOfArrayList(1)); // for multi-map
         
@@ -563,6 +572,20 @@ public class PTableImpl implements PTable {
         }
         return columns.get(0);
     }
+    
+    @Override
+	public PColumn getColumn(Expression expression)
+			throws ColumnNotFoundException, AmbiguousColumnException {
+		List<PColumn> columns = columnsByExpression.get(expression);
+		int size = columns.size();
+		if (size == 0) {
+			throw new ColumnNotFoundException(expression);
+		}
+		if (size > 1) {
+			throw new AmbiguousColumnException(expression);
+		}
+		return columns.get(0);
+	}
 
     /**
      * 
@@ -727,25 +750,25 @@ public class PTableImpl implements PTable {
         return timeStamp;
     }
     
-    @Override
-    public PColumn getPKColumn(String name) throws ColumnNotFoundException {
-        List<PColumn> columns = columnsByName.get(name);
-        int size = columns.size();
-        if (size == 0) {
-            throw new ColumnNotFoundException(name);
-        }
-        if (size > 1) {
-            do {
-                PColumn column = columns.get(--size);
-                if (column.getFamilyName() == null) {
-                    return column;
-                }
-            } while (size > 0);
-            throw new ColumnNotFoundException(name);
-        }
-        return columns.get(0);
-    }
-
+	@Override
+	public PColumn getPKColumn(String name) throws ColumnNotFoundException {
+		List<PColumn> columns = columnsByName.get(name);
+		int size = columns.size();
+		if (size == 0) {
+			throw new ColumnNotFoundException(name);
+		}
+		if (size > 1) {
+			do {
+				PColumn column = columns.get(--size);
+				if (column.getFamilyName() == null) {
+					return column;
+				}
+			} while (size > 0);
+			throw new ColumnNotFoundException(name);
+		}
+		return columns.get(0);
+	}
+	
     @Override
     public PName getPKName() {
         return pkName;
@@ -1024,4 +1047,5 @@ public class PTableImpl implements PTable {
         return parentSchemaName;
     }
     
+
 }

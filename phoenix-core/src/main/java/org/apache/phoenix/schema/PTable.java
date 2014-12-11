@@ -21,6 +21,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.schema.stats.PTableStats;
@@ -208,6 +209,16 @@ public interface PTable {
      * @throws AmbiguousColumnException if multiple columns are found with the given name
      */
     PColumn getColumn(String name) throws ColumnNotFoundException, AmbiguousColumnException;
+    
+    /**
+     * Get the column with the given expression.
+     * @param expression 
+     * @return the PColumn with the given name
+     * @throws ColumnNotFoundException if no column with the given name
+     * can be found
+     * @throws AmbiguousColumnException if multiple columns are found with the given expression
+     */
+    PColumn getColumn(Expression expression) throws ColumnNotFoundException, AmbiguousColumnException;
 
     /**
      * Get the PK column with the given name.

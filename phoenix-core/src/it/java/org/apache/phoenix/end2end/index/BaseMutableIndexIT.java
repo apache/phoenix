@@ -143,12 +143,15 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals("chara", rs.getString(1));
             assertEquals("chara", rs.getString("char_col1"));
             assertEquals(2, rs.getInt(2));
+            assertEquals("VARCHAR1", rs.getString(3));
             assertTrue(rs.next());
             assertEquals("chara", rs.getString(1));
             assertEquals(3, rs.getInt(2));
+            assertEquals("VARCHAR2", rs.getString(3));
             assertTrue(rs.next());
             assertEquals("chara", rs.getString(1));
             assertEquals(4, rs.getInt(2));
+            assertEquals("VARCHAR3", rs.getString(3));
             assertFalse(rs.next());
         } finally {
             conn.close();

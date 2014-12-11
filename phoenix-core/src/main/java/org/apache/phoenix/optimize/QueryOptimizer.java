@@ -238,6 +238,7 @@ public class QueryOptimizer {
                 }
             }
         } catch (ColumnNotFoundException e) {
+        	System.err.print(e);
             /* Means that a column is being used that's not in our index.
              * Since we currently don't keep stats, we don't know the selectivity of the index.
              * For now, we just don't use this index (as opposed to trying to join back from

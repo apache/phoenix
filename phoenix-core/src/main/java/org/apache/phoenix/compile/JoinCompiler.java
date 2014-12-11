@@ -786,10 +786,14 @@ public class JoinCompiler {
             PName name = PNameFactory.newName(aliasedName);
             PColumnImpl column = new PColumnImpl(name, familyName, sourceColumn.getDataType(), 
                     sourceColumn.getMaxLength(), sourceColumn.getScale(), sourceColumn.isNullable(), 
-                    position, sourceColumn.getSortOrder(), sourceColumn.getArraySize(), sourceColumn.getViewConstant(), sourceColumn.isViewReferenced());
+                    position, sourceColumn.getSortOrder(), sourceColumn.getArraySize(), sourceColumn.getViewConstant(), sourceColumn.isViewReferenced(), null);
+<<<<<<< HEAD
             Expression sourceExpression = isLocalIndexColumnRef ? 
                       NODE_FACTORY.column(TableName.create(schemaName, tableName), "\"" + colName + "\"", null).accept(new ExpressionCompiler(context)) 
                     : new ColumnRef(tableRef, sourceColumn.getPosition()).newColumnExpression();
+=======
+            Expression sourceExpression = new ColumnRef(tableRef, sourceColumn.getPosition()).newColumnExpression();
+>>>>>>> Initialial functional index impl
             projectedColumns.add(column);
             sourceExpressions.add(sourceExpression);
         }
@@ -805,7 +809,7 @@ public class JoinCompiler {
                 Expression sourceExpression = rowProjector.getColumnProjector(column.getPosition()).getExpression();
                 PColumnImpl projectedColumn = new PColumnImpl(PNameFactory.newName(colName), PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY), 
                         sourceExpression.getDataType(), sourceExpression.getMaxLength(), sourceExpression.getScale(), sourceExpression.isNullable(), 
-                        column.getPosition(), sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced());                
+                        column.getPosition(), sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), null);                
                 projectedColumns.add(projectedColumn);
                 sourceExpressions.add(sourceExpression);
             }
@@ -1363,7 +1367,7 @@ public class JoinCompiler {
                     } else {
                         PColumnImpl column = new PColumnImpl(c.getName(), c.getFamilyName(), c.getDataType(), 
                                 c.getMaxLength(), c.getScale(), true, c.getPosition(), 
-                                c.getSortOrder(), c.getArraySize(), c.getViewConstant(), c.isViewReferenced());
+                                c.getSortOrder(), c.getArraySize(), c.getViewConstant(), c.isViewReferenced(), null);
                         merged.add(column);
                     }
                 }
@@ -1374,7 +1378,7 @@ public class JoinCompiler {
                     PColumnImpl column = new PColumnImpl(c.getName(), 
                             PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY), c.getDataType(), 
                             c.getMaxLength(), c.getScale(), type == JoinType.Inner ? c.isNullable() : true, position++, 
-                            c.getSortOrder(), c.getArraySize(), c.getViewConstant(), c.isViewReferenced());
+                            c.getSortOrder(), c.getArraySize(), c.getViewConstant(), c.isViewReferenced(), null);
                     merged.add(column);
                 }
             }

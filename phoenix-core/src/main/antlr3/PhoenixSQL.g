@@ -392,11 +392,11 @@ create_view_node returns [CreateTableStatement ret]
 // Parse a create index statement.
 create_index_node returns [CreateIndexStatement ret]
     :   CREATE l=LOCAL? INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
-        (LPAREN pk=index_pk_constraint RPAREN)
+        (LPAREN ik=ik_constraint RPAREN)
         (INCLUDE (LPAREN icrefs=column_names RPAREN))?
         (p=fam_properties)?
         (SPLIT ON v=value_expression_list)?
-        {ret = factory.createIndex(i, factory.namedTable(null,t), pk, icrefs, v, p, ex!=null, l==null ? IndexType.getDefault() : IndexType.LOCAL, getBindCount()); }
+        {ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null, l==null ? IndexType.getDefault() : IndexType.LOCAL, getBindCount()); }
     ;
 
 // Parse a create sequence statement.
@@ -435,17 +435,17 @@ col_name_with_sort_order returns [Pair<ColumnName, SortOrder> ret]
     :   f=identifier (order=ASC|order=DESC)? {$ret = Pair.newPair(factory.columnName(f), order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()));}
 ;
 
-index_pk_constraint returns [PrimaryKeyConstraint ret]
-    :   cols = col_def_name_with_sort_order_list {$ret = factory.primaryKey(null, cols); }
-    ;
-
-col_def_name_with_sort_order_list returns [List<Pair<ColumnName, SortOrder>> ret]
-@init{ret = new ArrayList<Pair<ColumnName, SortOrder>>(); }
-    :   p=col_def_name_with_sort_order {$ret.add(p);}  (COMMA p = col_def_name_with_sort_order {$ret.add(p);} )*
+ik_constraint returns [IndexKeyConstraint ret]
+    :   x = expression_with_sort_order_list {$ret = factory.indexKey(x); }
 ;
 
-col_def_name_with_sort_order returns [Pair<ColumnName, SortOrder> ret]
-    :   c=column_name (order=ASC|order=DESC)? {$ret = Pair.newPair(c, order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()));}
+expression_with_sort_order_list returns [List<Pair<ParseNode, SortOrder>> ret]
+@init{ret = new ArrayList<Pair<ParseNode, SortOrder>>(); }
+    :   p=expression_with_sort_order {$ret.add(p);}  (COMMA p = expression_with_sort_order {$ret.add(p);} )*
+;
+
+expression_with_sort_order returns [Pair<ParseNode, SortOrder> ret]
+    :   (x=expression) (order=ASC|order=DESC)? {$ret = Pair.newPair(x, order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()));}
 ;
 
 fam_properties returns [ListMultimap<String,Pair<String,Object>> ret]
@@ -774,6 +774,7 @@ term returns [ParseNode ret]
     :   e=literal_or_bind { $ret = e; }
     |   field=identifier { $ret = factory.column(null,field,field); }
     |   ex=ARRAY LSQUARE v=one_or_more_expressions RSQUARE {$ret = factory.upsertStmtArrayNode(v);}
+//TODO for functional indexes the field before DOT refers to column family, figure out how this should this be handled?    
     |   tableName=table_name DOT field=identifier { $ret = factory.column(tableName, field, field); }
     |   field=identifier LPAREN l=zero_or_more_expressions RPAREN wg=(WITHIN GROUP LPAREN ORDER BY l2=one_or_more_expressions (a=ASC | DESC) RPAREN)?
         {

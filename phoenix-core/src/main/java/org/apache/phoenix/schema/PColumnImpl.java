@@ -17,10 +17,19 @@
  */
 package org.apache.phoenix.schema;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.util.Arrays;
+
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.SizedUtil;
+import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import com.google.common.base.Preconditions;
 import com.google.protobuf.HBaseZeroCopyByteString;
@@ -37,6 +46,7 @@ public class PColumnImpl implements PColumn {
     private Integer arraySize;
     private byte[] viewConstant;
     private boolean isViewReferenced;
+    private Expression expression;
 
     public PColumnImpl() {
     }
@@ -48,13 +58,13 @@ public class PColumnImpl implements PColumn {
                        Integer scale,
                        boolean nullable,
                        int position,
-                       SortOrder sortOrder, Integer arrSize, byte[] viewConstant, boolean isViewReferenced) {
-        init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize, viewConstant, isViewReferenced);
+                       SortOrder sortOrder, Integer arrSize, byte[] viewConstant, boolean isViewReferenced, Expression expression) {
+        init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize, viewConstant, isViewReferenced, expression);
     }
 
     public PColumnImpl(PColumn column, int position) {
         this(column.getName(), column.getFamilyName(), column.getDataType(), column.getMaxLength(),
-                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced());
+                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpression());
     }
 
     private void init(PName name,
@@ -66,7 +76,7 @@ public class PColumnImpl implements PColumn {
             int position,
             SortOrder sortOrder,
             Integer arrSize,
-            byte[] viewConstant, boolean isViewReferenced) {
+            byte[] viewConstant, boolean isViewReferenced, Expression expression) {
     	Preconditions.checkNotNull(sortOrder);
         this.dataType = dataType;
         if (familyName == null) {
@@ -88,6 +98,7 @@ public class PColumnImpl implements PColumn {
         this.arraySize = arrSize;
         this.viewConstant = viewConstant;
         this.isViewReferenced = isViewReferenced;
+        this.expression = expression;
     }
 
     @Override
@@ -120,6 +131,11 @@ public class PColumnImpl implements PColumn {
     @Override
     public Integer getScale() {
         return scale;
+    }
+    
+    @Override
+    public Expression getExpression() {
+        return expression;
     }
 
     @Override
@@ -221,9 +237,17 @@ public class PColumnImpl implements PColumn {
         if (column.hasViewReferenced()) {
             isViewReferenced = column.getViewReferenced();
         }
-
+        Expression expression = null;
+        if (column.hasExpression()) {
+	        int expressionOrdinal = column.getExpressionOrdinal();
+	        expression = ExpressionType.values()[expressionOrdinal].newInstance();
+	        try {
+				expression.readFields(new DataInputStream(new ByteArrayInputStream(column.getExpression().toByteArray())));
+			} catch (IOException e) {
+			}
+        }
         return new PColumnImpl(columnName, familyName, dataType, maxLength, scale, nullable, position, sortOrder,
-                arraySize, viewConstant, isViewReferenced);
+                arraySize, viewConstant, isViewReferenced, expression);
     }
 
     public static PTableProtos.PColumn toProto(PColumn column) {
@@ -249,6 +273,17 @@ public class PColumnImpl implements PColumn {
             builder.setViewConstant(HBaseZeroCopyByteString.wrap(column.getViewConstant()));
         }
         builder.setViewReferenced(column.isViewReferenced());
+        
+        if (column.getExpression() != null) {
+	        TrustedByteArrayOutputStream output = new TrustedByteArrayOutputStream(256);
+	        DataOutputStream dataOutputStream = new DataOutputStream(output);
+	        try {
+				column.getExpression().write(dataOutputStream);
+			} catch (IOException e) {
+			}
+	        builder.setExpressionOrdinal(ExpressionType.valueOf(column.getExpression()).ordinal());
+	        builder.setExpression(HBaseZeroCopyByteString.wrap(Arrays.copyOf(output.getBuffer(), dataOutputStream.size())));
+        }
         return builder.build();
     }
 }

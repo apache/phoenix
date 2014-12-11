@@ -26,6 +26,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -223,6 +224,11 @@ public class IndexUtil {
                     // TODO: is this more efficient than looking in our mutation map
                     // using the key plus finding the PColumn?
                     ValueGetter valueGetter = new ValueGetter() {
+                    	
+                    	@Override
+                        public byte[] getRowKey() {
+                    		return dataMutation.getRow();
+                    	}
         
                         @Override
                         public ImmutableBytesPtr getLatestValue(ColumnReference ref) {
@@ -261,6 +267,10 @@ public class IndexUtil {
 
     public static boolean isDataPKColumn(PColumn column) {
         return column.getName().getString().startsWith(INDEX_COLUMN_NAME_SEP);
+    }
+    
+    public static boolean isIndexColumn(PColumn column) {
+        return column.getName().getString().contains(INDEX_COLUMN_NAME_SEP);
     }
     
     public static boolean getViewConstantValue(PColumn column, ImmutableBytesWritable ptr) {

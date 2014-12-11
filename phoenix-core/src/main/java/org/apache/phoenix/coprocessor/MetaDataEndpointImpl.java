@@ -19,6 +19,8 @@ package org.apache.phoenix.coprocessor;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_EXPRESSION_ORDINAL_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_EXPRESSION_SERIALIZED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME_INDEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES;
@@ -53,6 +55,9 @@ import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -104,6 +109,8 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
@@ -145,6 +152,7 @@ import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -238,6 +246,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final KeyValue ARRAY_SIZE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, ARRAY_SIZE_BYTES);
     private static final KeyValue VIEW_CONSTANT_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VIEW_CONSTANT_BYTES);
     private static final KeyValue IS_VIEW_REFERENCED_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, IS_VIEW_REFERENCED_BYTES);
+    private static final KeyValue COLUMN_EXPRESSION_ORDINAL_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_EXPRESSION_ORDINAL_BYTES);
+    private static final KeyValue COLUMN_EXPRESSION_SERIALIZED_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_EXPRESSION_SERIALIZED_BYTES);
     private static final List<KeyValue> COLUMN_KV_COLUMNS = Arrays.<KeyValue>asList(
             DECIMAL_DIGITS_KV,
             COLUMN_SIZE_KV,
@@ -248,7 +258,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             DATA_TABLE_NAME_KV, // included in both column and table row for metadata APIs
             ARRAY_SIZE_KV,
             VIEW_CONSTANT_KV,
-            IS_VIEW_REFERENCED_KV
+            IS_VIEW_REFERENCED_KV,
+            COLUMN_EXPRESSION_ORDINAL_KV,
+            COLUMN_EXPRESSION_SERIALIZED_KV
             );
     static {
         Collections.sort(COLUMN_KV_COLUMNS, KeyValue.COMPARATOR);
@@ -262,6 +274,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final int ARRAY_SIZE_INDEX = COLUMN_KV_COLUMNS.indexOf(ARRAY_SIZE_KV);
     private static final int VIEW_CONSTANT_INDEX = COLUMN_KV_COLUMNS.indexOf(VIEW_CONSTANT_KV);
     private static final int IS_VIEW_REFERENCED_INDEX = COLUMN_KV_COLUMNS.indexOf(IS_VIEW_REFERENCED_KV);
+    private static final int COLUMN_EXPRESSION_ORDINAL_INDEX = COLUMN_KV_COLUMNS.indexOf(COLUMN_EXPRESSION_ORDINAL_KV);
+    private static final int COLUMN_EXPRESSION_SERIALIZED_INDEX = COLUMN_KV_COLUMNS.indexOf(COLUMN_EXPRESSION_SERIALIZED_KV);
     
     private static final int LINK_TYPE_INDEX = 0;
 
@@ -393,7 +407,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
     @SuppressWarnings("deprecation")
     private void addColumnToTable(List<Cell> results, PName colName, PName famName,
-        Cell[] colKeyValues, List<PColumn> columns, boolean isSalted) {
+        Cell[] colKeyValues, List<PColumn> columns, boolean isSalted) throws IOException {
         int i = 0;
         int j = 0;
         while (i < results.size() && j < COLUMN_KV_COLUMNS.size()) {
@@ -457,6 +471,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         Cell isViewReferencedKv = colKeyValues[IS_VIEW_REFERENCED_INDEX];
         boolean isViewReferenced = isViewReferencedKv != null && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isViewReferencedKv.getValueArray(), isViewReferencedKv.getValueOffset(), isViewReferencedKv.getValueLength()));
         PColumn column = new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable, position-1, sortOrder, arraySize, viewConstant, isViewReferenced);
+        Cell columnExpressionOrdinalKv = colKeyValues[COLUMN_EXPRESSION_ORDINAL_INDEX];
+        int expressionOrdinal = PDataType.INTEGER.getCodec().decodeInt(columnExpressionOrdinalKv.getValueArray(), columnExpressionOrdinalKv.getValueOffset(), SortOrder.getDefault()) + (isSalted ? 1 : 0);
+        Cell columnExpressionKv = colKeyValues[COLUMN_EXPRESSION_SERIALIZED_INDEX];
+        Expression expression = null;
+        if (columnExpressionKv!=null) {
+	        expression = ExpressionType.values()[expressionOrdinal].newInstance();
+	        expression.readFields(new DataInputStream(new ByteArrayInputStream(columnExpressionKv.getValue())));
+        }
+        PColumn column = new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable, position-1, sortOrder, arraySize, viewConstant, isViewReferenced, expression);
         columns.add(column);
     }
     

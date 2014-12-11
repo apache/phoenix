@@ -40,10 +40,6 @@ public class ColumnParseNode extends NamedParseNode {
         this.tableName = tableName;
         fullName = tableName == null ? getName() : tableName.toString() + QueryConstants.NAME_SEPARATOR + getName();
     }
-
-    public ColumnParseNode(TableName tableName, String name) {
-        this(tableName, name, null);
-    }
     
     @Override
     public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {

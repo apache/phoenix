@@ -290,7 +290,7 @@ public class FromCompiler {
                     if ( ! ( schemaName.equals(resolvedSchemaName)  &&
                              tableName.equals(resolvedTableName) )) {
                         if (!(resolveCF = schemaName.equals(alias))) {
-                            throw new ColumnNotFoundException(schemaName, tableName, null, colName);
+                            throw new ColumnNotFoundException(schemaName, tableName, null, colName, null);
                         }
                     }
 			    } else { // schemaName == null && tableName != null
@@ -391,7 +391,7 @@ public class FromCompiler {
                         familyName = PNameFactory.newName(family);
                     }
                     allcolumns.add(new PColumnImpl(name, familyName, dynColumn.getDataType(), dynColumn.getMaxLength(),
-                            dynColumn.getScale(), dynColumn.isNull(), position, dynColumn.getSortOrder(), dynColumn.getArraySize(), null, false));
+                            dynColumn.getScale(), dynColumn.isNull(), position, dynColumn.getSortOrder(), dynColumn.getArraySize(), null, false, null));
                     position++;
                 }
                 theTable = PTableImpl.makePTable(theTable, allcolumns);
@@ -469,7 +469,7 @@ public class FromCompiler {
                 }
                 PColumnImpl column = new PColumnImpl(PNameFactory.newName(alias), 
                         PNameFactory.newName(QueryConstants.DEFAULT_COLUMN_FAMILY), 
-                        null, 0, 0, true, position++, SortOrder.ASC, null, null, false);
+                        null, 0, 0, true, position++, SortOrder.ASC, null, null, false, null);
                 columns.add(column);
             }
             PTable t = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME, 

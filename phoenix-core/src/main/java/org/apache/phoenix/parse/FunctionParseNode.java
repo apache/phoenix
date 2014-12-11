@@ -230,7 +230,6 @@ public class FunctionParseNode extends CompoundParseNode {
     /**
      * Entry point for parser to instantiate compiled representation of built-in function
      * @param children Compiled expressions for child nodes
-     * @param context Query context for accessing state shared across the processing of multiple clauses
      * @return compiled representation of built-in function
      * @throws SQLException
      */

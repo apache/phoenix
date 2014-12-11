@@ -21,6 +21,7 @@ import java.sql.SQLException;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.expression.Expression;
 
 
 /**
@@ -37,8 +38,8 @@ public class ColumnAlreadyExistsException extends SQLException {
     private final String tableName;
     private final String columnName;
 
-    public ColumnAlreadyExistsException(String schemaName, String tableName, String columnName) {
-        super(new SQLExceptionInfo.Builder(code).setColumnName(columnName)
+    public ColumnAlreadyExistsException(String schemaName, String tableName, String columnName, Expression expression) {
+        super(new SQLExceptionInfo.Builder(code).setColumnName(columnName).setExpression(expression)
                 .setSchemaName(schemaName).setTableName(tableName).build().toString(),
                 code.getSQLState(), code.getErrorCode(), null);
         this.schemaName = schemaName;

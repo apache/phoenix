@@ -20,6 +20,7 @@ package org.apache.phoenix.schema;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.schema.stats.PTableStats;
@@ -230,4 +231,10 @@ public class DelegateTable implements PTable {
     public PName getParentSchemaName() {
         return delegate.getParentSchemaName();
     }
+
+	@Override
+	public PColumn getColumn(Expression expression)
+			throws ColumnNotFoundException, AmbiguousColumnException {
+		return delegate.getColumn(expression);
+	}
 }

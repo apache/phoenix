@@ -21,6 +21,7 @@ import java.sql.SQLException;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.expression.Expression;
 
 /**
  * 
@@ -40,6 +41,11 @@ public class AmbiguousColumnException extends SQLException {
 
     public AmbiguousColumnException(String columnName) {
         super(new SQLExceptionInfo.Builder(code).setColumnName(columnName).build().toString(),
+                code.getSQLState(), code.getErrorCode());
+    }
+    
+    public AmbiguousColumnException(Expression expression) {
+        super(new SQLExceptionInfo.Builder(code).setExpression(expression).build().toString(),
                 code.getSQLState(), code.getErrorCode());
     }
 

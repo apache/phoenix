@@ -234,6 +234,26 @@ public final class PTableProtos {
      * <code>optional bool viewReferenced = 11;</code>
      */
     boolean getViewReferenced();
+
+    // optional int32 expressionOrdinal = 12;
+    /**
+     * <code>optional int32 expressionOrdinal = 12;</code>
+     */
+    boolean hasExpressionOrdinal();
+    /**
+     * <code>optional int32 expressionOrdinal = 12;</code>
+     */
+    int getExpressionOrdinal();
+
+    // optional bytes expression = 13;
+    /**
+     * <code>optional bytes expression = 13;</code>
+     */
+    boolean hasExpression();
+    /**
+     * <code>optional bytes expression = 13;</code>
+     */
+    com.google.protobuf.ByteString getExpression();
   }
   /**
    * Protobuf type {@code PColumn}
@@ -339,6 +359,16 @@ public final class PTableProtos {
             case 88: {
               bitField0_ |= 0x00000400;
               viewReferenced_ = input.readBool();
+              break;
+            }
+            case 96: {
+              bitField0_ |= 0x00000800;
+              expressionOrdinal_ = input.readInt32();
+              break;
+            }
+            case 106: {
+              bitField0_ |= 0x00001000;
+              expression_ = input.readBytes();
               break;
             }
           }
@@ -584,6 +614,38 @@ public final class PTableProtos {
       return viewReferenced_;
     }
 
+    // optional int32 expressionOrdinal = 12;
+    public static final int EXPRESSIONORDINAL_FIELD_NUMBER = 12;
+    private int expressionOrdinal_;
+    /**
+     * <code>optional int32 expressionOrdinal = 12;</code>
+     */
+    public boolean hasExpressionOrdinal() {
+      return ((bitField0_ & 0x00000800) == 0x00000800);
+    }
+    /**
+     * <code>optional int32 expressionOrdinal = 12;</code>
+     */
+    public int getExpressionOrdinal() {
+      return expressionOrdinal_;
+    }
+
+    // optional bytes expression = 13;
+    public static final int EXPRESSION_FIELD_NUMBER = 13;
+    private com.google.protobuf.ByteString expression_;
+    /**
+     * <code>optional bytes expression = 13;</code>
+     */
+    public boolean hasExpression() {
+      return ((bitField0_ & 0x00001000) == 0x00001000);
+    }
+    /**
+     * <code>optional bytes expression = 13;</code>
+     */
+    public com.google.protobuf.ByteString getExpression() {
+      return expression_;
+    }
+
     private void initFields() {
       columnNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       familyNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -596,6 +658,8 @@ public final class PTableProtos {
       arraySize_ = 0;
       viewConstant_ = com.google.protobuf.ByteString.EMPTY;
       viewReferenced_ = false;
+      expressionOrdinal_ = 0;
+      expression_ = com.google.protobuf.ByteString.EMPTY;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -662,6 +726,12 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00000400) == 0x00000400)) {
         output.writeBool(11, viewReferenced_);
       }
+      if (((bitField0_ & 0x00000800) == 0x00000800)) {
+        output.writeInt32(12, expressionOrdinal_);
+      }
+      if (((bitField0_ & 0x00001000) == 0x00001000)) {
+        output.writeBytes(13, expression_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -714,6 +784,14 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00000400) == 0x00000400)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBoolSize(11, viewReferenced_);
+      }
+      if (((bitField0_ & 0x00000800) == 0x00000800)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(12, expressionOrdinal_);
+      }
+      if (((bitField0_ & 0x00001000) == 0x00001000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(13, expression_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -793,6 +871,16 @@ public final class PTableProtos {
         result = result && (getViewReferenced()
             == other.getViewReferenced());
       }
+      result = result && (hasExpressionOrdinal() == other.hasExpressionOrdinal());
+      if (hasExpressionOrdinal()) {
+        result = result && (getExpressionOrdinal()
+            == other.getExpressionOrdinal());
+      }
+      result = result && (hasExpression() == other.hasExpression());
+      if (hasExpression()) {
+        result = result && getExpression()
+            .equals(other.getExpression());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -849,6 +937,14 @@ public final class PTableProtos {
       if (hasViewReferenced()) {
         hash = (37 * hash) + VIEWREFERENCED_FIELD_NUMBER;
         hash = (53 * hash) + hashBoolean(getViewReferenced());
+      }
+      if (hasExpressionOrdinal()) {
+        hash = (37 * hash) + EXPRESSIONORDINAL_FIELD_NUMBER;
+        hash = (53 * hash) + getExpressionOrdinal();
+      }
+      if (hasExpression()) {
+        hash = (37 * hash) + EXPRESSION_FIELD_NUMBER;
+        hash = (53 * hash) + getExpression().hashCode();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -981,6 +1077,10 @@ public final class PTableProtos {
         bitField0_ = (bitField0_ & ~0x00000200);
         viewReferenced_ = false;
         bitField0_ = (bitField0_ & ~0x00000400);
+        expressionOrdinal_ = 0;
+        bitField0_ = (bitField0_ & ~0x00000800);
+        expression_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00001000);
         return this;
       }
 
@@ -1053,6 +1153,14 @@ public final class PTableProtos {
           to_bitField0_ |= 0x00000400;
         }
         result.viewReferenced_ = viewReferenced_;
+        if (((from_bitField0_ & 0x00000800) == 0x00000800)) {
+          to_bitField0_ |= 0x00000800;
+        }
+        result.expressionOrdinal_ = expressionOrdinal_;
+        if (((from_bitField0_ & 0x00001000) == 0x00001000)) {
+          to_bitField0_ |= 0x00001000;
+        }
+        result.expression_ = expression_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -1103,6 +1211,12 @@ public final class PTableProtos {
         }
         if (other.hasViewReferenced()) {
           setViewReferenced(other.getViewReferenced());
+        }
+        if (other.hasExpressionOrdinal()) {
+          setExpressionOrdinal(other.getExpressionOrdinal());
+        }
+        if (other.hasExpression()) {
+          setExpression(other.getExpression());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -1560,6 +1674,75 @@ public final class PTableProtos {
       public Builder clearViewReferenced() {
         bitField0_ = (bitField0_ & ~0x00000400);
         viewReferenced_ = false;
+        onChanged();
+        return this;
+      }
+
+      // optional int32 expressionOrdinal = 12;
+      private int expressionOrdinal_ ;
+      /**
+       * <code>optional int32 expressionOrdinal = 12;</code>
+       */
+      public boolean hasExpressionOrdinal() {
+        return ((bitField0_ & 0x00000800) == 0x00000800);
+      }
+      /**
+       * <code>optional int32 expressionOrdinal = 12;</code>
+       */
+      public int getExpressionOrdinal() {
+        return expressionOrdinal_;
+      }
+      /**
+       * <code>optional int32 expressionOrdinal = 12;</code>
+       */
+      public Builder setExpressionOrdinal(int value) {
+        bitField0_ |= 0x00000800;
+        expressionOrdinal_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int32 expressionOrdinal = 12;</code>
+       */
+      public Builder clearExpressionOrdinal() {
+        bitField0_ = (bitField0_ & ~0x00000800);
+        expressionOrdinal_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // optional bytes expression = 13;
+      private com.google.protobuf.ByteString expression_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>optional bytes expression = 13;</code>
+       */
+      public boolean hasExpression() {
+        return ((bitField0_ & 0x00001000) == 0x00001000);
+      }
+      /**
+       * <code>optional bytes expression = 13;</code>
+       */
+      public com.google.protobuf.ByteString getExpression() {
+        return expression_;
+      }
+      /**
+       * <code>optional bytes expression = 13;</code>
+       */
+      public Builder setExpression(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00001000;
+        expression_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bytes expression = 13;</code>
+       */
+      public Builder clearExpression() {
+        bitField0_ = (bitField0_ & ~0x00001000);
+        expression_ = getDefaultInstance().getExpression();
         onChanged();
         return this;
       }
@@ -6003,33 +6186,34 @@ public final class PTableProtos {
       descriptor;
   static {
     java.lang.String[] descriptorData = {
-      "\n\014PTable.proto\"\347\001\n\007PColumn\022\027\n\017columnName" +
+      "\n\014PTable.proto\"\226\002\n\007PColumn\022\027\n\017columnName" +
       "Bytes\030\001 \002(\014\022\027\n\017familyNameBytes\030\002 \001(\014\022\020\n\010" +
       "dataType\030\003 \002(\t\022\021\n\tmaxLength\030\004 \001(\005\022\r\n\005sca" +
       "le\030\005 \001(\005\022\020\n\010nullable\030\006 \002(\010\022\020\n\010position\030\007" +
       " \002(\005\022\021\n\tsortOrder\030\010 \002(\005\022\021\n\tarraySize\030\t \001" +
       "(\005\022\024\n\014viewConstant\030\n \001(\014\022\026\n\016viewReferenc" +
-      "ed\030\013 \001(\010\"w\n\013PTableStats\022\013\n\003key\030\001 \002(\014\022\016\n\006" +
-      "values\030\002 \003(\014\022\033\n\023guidePostsByteCount\030\003 \001(" +
-      "\003\022\025\n\rkeyBytesCount\030\004 \001(\003\022\027\n\017guidePostsCo" +
-      "unt\030\005 \001(\005\"\242\004\n\006PTable\022\027\n\017schemaNameBytes\030",
-      "\001 \002(\014\022\026\n\016tableNameBytes\030\002 \002(\014\022\036\n\ttableTy" +
-      "pe\030\003 \002(\0162\013.PTableType\022\022\n\nindexState\030\004 \001(" +
-      "\t\022\026\n\016sequenceNumber\030\005 \002(\003\022\021\n\ttimeStamp\030\006" +
-      " \002(\003\022\023\n\013pkNameBytes\030\007 \001(\014\022\021\n\tbucketNum\030\010" +
-      " \002(\005\022\031\n\007columns\030\t \003(\0132\010.PColumn\022\030\n\007index" +
-      "es\030\n \003(\0132\007.PTable\022\027\n\017isImmutableRows\030\013 \002" +
-      "(\010\022 \n\nguidePosts\030\014 \003(\0132\014.PTableStats\022\032\n\022" +
-      "dataTableNameBytes\030\r \001(\014\022\031\n\021defaultFamil" +
-      "yName\030\016 \001(\014\022\022\n\ndisableWAL\030\017 \002(\010\022\023\n\013multi" +
-      "Tenant\030\020 \002(\010\022\020\n\010viewType\030\021 \001(\014\022\025\n\rviewSt",
-      "atement\030\022 \001(\014\022\025\n\rphysicalNames\030\023 \003(\014\022\020\n\010" +
-      "tenantId\030\024 \001(\014\022\023\n\013viewIndexId\030\025 \001(\005\022\021\n\ti" +
-      "ndexType\030\026 \001(\014\022\026\n\016statsTimeStamp\030\027 \001(\003*A" +
-      "\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VI" +
-      "EW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache." +
-      "phoenix.coprocessor.generatedB\014PTablePro" +
-      "tosH\001\210\001\001\240\001\001"
+      "ed\030\013 \001(\010\022\031\n\021expressionOrdinal\030\014 \001(\005\022\022\n\ne" +
+      "xpression\030\r \001(\014\"w\n\013PTableStats\022\013\n\003key\030\001 " +
+      "\002(\014\022\016\n\006values\030\002 \003(\014\022\033\n\023guidePostsByteCou" +
+      "nt\030\003 \001(\003\022\025\n\rkeyBytesCount\030\004 \001(\003\022\027\n\017guide",
+      "PostsCount\030\005 \001(\005\"\242\004\n\006PTable\022\027\n\017schemaNam" +
+      "eBytes\030\001 \002(\014\022\026\n\016tableNameBytes\030\002 \002(\014\022\036\n\t" +
+      "tableType\030\003 \002(\0162\013.PTableType\022\022\n\nindexSta" +
+      "te\030\004 \001(\t\022\026\n\016sequenceNumber\030\005 \002(\003\022\021\n\ttime" +
+      "Stamp\030\006 \002(\003\022\023\n\013pkNameBytes\030\007 \001(\014\022\021\n\tbuck" +
+      "etNum\030\010 \002(\005\022\031\n\007columns\030\t \003(\0132\010.PColumn\022\030" +
+      "\n\007indexes\030\n \003(\0132\007.PTable\022\027\n\017isImmutableR" +
+      "ows\030\013 \002(\010\022 \n\nguidePosts\030\014 \003(\0132\014.PTableSt" +
+      "ats\022\032\n\022dataTableNameBytes\030\r \001(\014\022\031\n\021defau" +
+      "ltFamilyName\030\016 \001(\014\022\022\n\ndisableWAL\030\017 \002(\010\022\023",
+      "\n\013multiTenant\030\020 \002(\010\022\020\n\010viewType\030\021 \001(\014\022\025\n" +
+      "\rviewStatement\030\022 \001(\014\022\025\n\rphysicalNames\030\023 " +
+      "\003(\014\022\020\n\010tenantId\030\024 \001(\014\022\023\n\013viewIndexId\030\025 \001" +
+      "(\005\022\021\n\tindexType\030\026 \001(\014\022\026\n\016statsTimeStamp\030" +
+      "\027 \001(\003*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020" +
+      "\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org." +
+      "apache.phoenix.coprocessor.generatedB\014PT" +
+      "ableProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -6041,7 +6225,7 @@ public final class PTableProtos {
           internal_static_PColumn_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PColumn_descriptor,
-              new java.lang.String[] { "ColumnNameBytes", "FamilyNameBytes", "DataType", "MaxLength", "Scale", "Nullable", "Position", "SortOrder", "ArraySize", "ViewConstant", "ViewReferenced", });
+              new java.lang.String[] { "ColumnNameBytes", "FamilyNameBytes", "DataType", "MaxLength", "Scale", "Nullable", "Position", "SortOrder", "ArraySize", "ViewConstant", "ViewReferenced", "ExpressionOrdinal", "Expression", });
           internal_static_PTableStats_descriptor =
             getDescriptor().getMessageTypes().get(1);
           internal_static_PTableStats_fieldAccessorTable = new

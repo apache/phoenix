@@ -69,13 +69,18 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
         testIndexRowKeyBuilding(DEFAULT_SCHEMA_NAME, DEFAULT_TABLE_NAME, dataColumns, pk, indexColumns, values, "", dataProps, indexProps);
     }
 
-    private static ValueGetter newValueGetter(final Map<ColumnReference, byte[]> valueMap) {
+    private static ValueGetter newValueGetter(final byte[] row, final Map<ColumnReference, byte[]> valueMap) {
         return new ValueGetter() {
 
             @Override
             public ImmutableBytesPtr getLatestValue(ColumnReference ref) {
                 return new ImmutableBytesPtr(valueMap.get(ref));
             }
+
+			@Override
+			public byte[] getRowKey() {
+				return row;
+			}
             
         };
     }
@@ -116,13 +121,14 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
             	Iterator<Pair<byte[],List<KeyValue>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
             List<KeyValue> dataKeyValues = iterator.next().getSecond();
             Map<ColumnReference,byte[]> valueMap = Maps.newHashMapWithExpectedSize(dataKeyValues.size());
-            ImmutableBytesWritable rowKeyPtr = new ImmutableBytesWritable(dataKeyValues.get(0).getRow());
+            byte[] row = dataKeyValues.get(0).getRow();
+			ImmutableBytesWritable rowKeyPtr = new ImmutableBytesWritable(row);
             Put dataMutation = new Put(rowKeyPtr.copyBytes());
             for (KeyValue kv : dataKeyValues) {
                 valueMap.put(new ColumnReference(kv.getFamily(),kv.getQualifier()), kv.getValue());
                 dataMutation.add(kv);
             }
-            ValueGetter valueGetter = newValueGetter(valueMap);
+            ValueGetter valueGetter = newValueGetter(row, valueMap);
             
             List<Mutation> indexMutations =
                     IndexTestUtil.generateIndexData(index, table, dataMutation, ptr, builder);

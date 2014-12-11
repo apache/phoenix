@@ -44,6 +44,8 @@ message PColumn {
   optional int32 arraySize = 9;
   optional bytes viewConstant = 10;
   optional bool viewReferenced = 11;
+  optional int32 expressionOrdinal = 12;
+  optional bytes expression = 13;
 }
 
 message PTableStats {

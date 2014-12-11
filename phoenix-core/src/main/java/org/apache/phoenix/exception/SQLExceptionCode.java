@@ -118,7 +118,7 @@ public enum SQLExceptionCode {
      COLUMN_NOT_FOUND(504, "42703", "Undefined column.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
-            return new ColumnNotFoundException(info.getSchemaName(), info.getTableName(), info.getFamilyName(), info.getColumnName());
+            return new ColumnNotFoundException(info.getSchemaName(), info.getTableName(), info.getFamilyName(), info.getColumnName(), info.getExpression());
         }
     }),
     READ_ONLY_TABLE(505, "42000", "Table is read only.", new Factory() {
@@ -136,7 +136,7 @@ public enum SQLExceptionCode {
     COLUMN_EXIST_IN_DEF(514, "42892", "A duplicate column name was detected in the object definition or ALTER TABLE statement.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
-            return new ColumnAlreadyExistsException(info.getSchemaName(), info.getTableName(), info.getColumnName());
+            return new ColumnAlreadyExistsException(info.getSchemaName(), info.getTableName(), info.getColumnName(), info.getExpression());
         }
     }),
     ORDER_BY_ARRAY_NOT_SUPPORTED(515, "42893", "ORDER BY of an array type is not allowed"),
