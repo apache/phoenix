@@ -48,11 +48,13 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SaltingUtil;
@@ -82,7 +84,7 @@ public class SchemaUtil {
     
         @Override
         public PDataType getDataType() {
-            return PDataType.VARBINARY;
+            return PVarbinary.INSTANCE;
         }
     
         @Override
@@ -343,7 +345,7 @@ public class SchemaUtil {
     }
 
     public static String toString(PDataType type, byte[] value) {
-        boolean isString = type.isCoercibleTo(PDataType.VARCHAR);
+        boolean isString = type.isCoercibleTo(PVarchar.INSTANCE);
         return isString ? ("'" + type.toObject(value).toString() + "'") : type.toObject(value).toString();
     }
 

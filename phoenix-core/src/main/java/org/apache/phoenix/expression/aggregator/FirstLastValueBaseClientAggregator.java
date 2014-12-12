@@ -27,7 +27,8 @@ import java.util.TreeMap;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes.ByteArrayComparator;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -142,7 +143,7 @@ public class FirstLastValueBaseClientAggregator extends BaseAggregator {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.VARBINARY;
+        return PVarbinary.INSTANCE;
     }
 
     public void init(int offset) {

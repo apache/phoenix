@@ -20,7 +20,7 @@ package org.apache.phoenix.expression;
 import java.util.List;
 
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 
 
 /**

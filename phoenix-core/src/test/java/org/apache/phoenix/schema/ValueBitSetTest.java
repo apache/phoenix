@@ -24,6 +24,7 @@ import static org.junit.Assert.assertTrue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
+import org.apache.phoenix.schema.types.PDataType;
 import org.junit.Test;
 
 

@@ -29,7 +29,8 @@ import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.junit.Test;
 
 
@@ -44,7 +45,7 @@ public class DecodeFunctionIT extends BaseHBaseManagedTimeIT {
 		conn.createStatement().execute(ddl);
 		PreparedStatement ps = conn.prepareStatement("UPSERT INTO test_table (some_column) VALUES (?)");
 
-		byte[] kk = Bytes.add(PDataType.UNSIGNED_LONG.toBytes(2232594215l), PDataType.INTEGER.toBytes(-8));
+		byte[] kk = Bytes.add(PUnsignedLong.INSTANCE.toBytes(2232594215l), PInteger.INSTANCE.toBytes(-8));
 		ps.setBytes(1, kk);
 
 		ps.execute();
@@ -63,7 +64,7 @@ public class DecodeFunctionIT extends BaseHBaseManagedTimeIT {
 		conn.createStatement().execute(ddl);
 		PreparedStatement ps = conn.prepareStatement("UPSERT INTO test_table (some_column) VALUES (?)");
 
-		byte[] kk = Bytes.add(PDataType.UNSIGNED_LONG.toBytes(2232594215l), PDataType.INTEGER.toBytes(-8));
+		byte[] kk = Bytes.add(PUnsignedLong.INSTANCE.toBytes(2232594215l), PInteger.INSTANCE.toBytes(-8));
 		ps.setBytes(1, kk);
 
 		ps.execute();

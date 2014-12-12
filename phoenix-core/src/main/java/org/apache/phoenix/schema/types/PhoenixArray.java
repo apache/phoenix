@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.schema.types;
 
 import java.sql.Array;
 import java.sql.ResultSet;
@@ -92,8 +92,9 @@ public class PhoenixArray implements Array,SQLCloseable {
 		        maxLength = baseType.getByteSize();
 		    }
 		}
-        this.array = convertObjectArrayToPrimitiveArray(elements);
+    this.array = elements;
 		this.numElements = elements.length;
+    convertObjectArrayToPrimitiveArray(elements);
 	}
 	
 	public PhoenixArray(PhoenixArray pArr, Integer desiredMaxLength) {
@@ -107,12 +108,12 @@ public class PhoenixArray implements Array,SQLCloseable {
                 maxLength = baseType.getByteSize();
             }
         }
-        this.array = convertObjectArrayToPrimitiveArray(elements);
+        this.array = elements;
         this.numElements = elements.length;
+        convertObjectArrayToPrimitiveArray(elements);
     }
 
-    public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-	    return elements; 
+  public void convertObjectArrayToPrimitiveArray(Object[] elements) {
 	}
 	
 	@Override
@@ -254,10 +255,8 @@ public class PhoenixArray implements Array,SQLCloseable {
 			super(dataType, elements);
 		}
 		@Override
-		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(int.class,
-					elements.length);
-			intArr = (int[]) object;
+		public void convertObjectArrayToPrimitiveArray(Object[] elements) {
+			intArr = new int[elements.length];
 			int i = 0;
 			for(Object o : elements) {
 			    if (o != null) {
@@ -265,7 +264,6 @@ public class PhoenixArray implements Array,SQLCloseable {
 			    }
 			    i++;
 			}
-			return intArr;
 		}
 		
 		@Override
@@ -286,8 +284,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 			if (this.baseType != ((PhoenixArray) obj).baseType) {
 				return false;
 			}
-			return Arrays.equals((int[]) this.array,
-					(int[]) ((PhoenixArray) obj).array);
+			return Arrays.equals((Object[]) this.array, (Object[]) ((PhoenixArray) obj).array);
 		}
 	}
 	
@@ -297,10 +294,8 @@ public class PhoenixArray implements Array,SQLCloseable {
 			super(dataType, elements);
 		}
 		@Override
-		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(short.class,
-					elements.length);
-			shortArr = (short[]) object;
+		public void convertObjectArrayToPrimitiveArray(Object[] elements) {
+			shortArr = new short[elements.length];
 			int i = 0;
             for(Object o : elements) {
                 if (o != null) {
@@ -308,7 +303,6 @@ public class PhoenixArray implements Array,SQLCloseable {
                 }
                 i++;
             }
-			return shortArr;
 		}
 		
 		@Override
@@ -329,8 +323,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 			if (this.baseType != ((PhoenixArray) obj).baseType) {
 				return false;
 			}
-			return Arrays.equals((short[]) this.array,
-					(short[]) ((PhoenixArray) obj).array);
+			return Arrays.equals((Object[]) this.array, (Object[]) ((PhoenixArray) obj).array);
 		}
 	}
 	
@@ -340,10 +333,8 @@ public class PhoenixArray implements Array,SQLCloseable {
 			super(dataType, elements);
 		}
 		@Override
-		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(long.class,
-					elements.length);
-			longArr = (long[]) object;
+		public void convertObjectArrayToPrimitiveArray(Object[] elements) {
+			longArr = new long[elements.length];
 			int i = 0;
             for(Object o : elements) {
                 if (o != null) {
@@ -351,7 +342,6 @@ public class PhoenixArray implements Array,SQLCloseable {
                 }
                 i++;
             }
-			return longArr;
 		}
 		@Override
         public int estimateByteSize(int pos) {
@@ -371,8 +361,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 			if (this.baseType != ((PhoenixArray) obj).baseType) {
 				return false;
 			}
-			return Arrays.equals((long[]) this.array,
-					(long[]) ((PhoenixArray) obj).array);
+			return Arrays.equals((Object[]) this.array, (Object[]) ((PhoenixArray) obj).array);
 		}
 
 	}
@@ -383,10 +372,8 @@ public class PhoenixArray implements Array,SQLCloseable {
 			super(dataType, elements);
 		}
 		@Override
-		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(double.class,
-					elements.length);
-			doubleArr = (double[]) object;
+		public void convertObjectArrayToPrimitiveArray(Object[] elements) {
+			doubleArr = new double[elements.length];
 			int i = 0;
 			for (Object o : elements) {
 			    if (o != null) {
@@ -394,7 +381,6 @@ public class PhoenixArray implements Array,SQLCloseable {
 			    }
 			    i++;
 			}
-			return doubleArr;
 		}
 		
 		@Override
@@ -415,8 +401,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 			if (this.baseType != ((PhoenixArray) obj).baseType) {
 				return false;
 			}
-			return Arrays.equals((double[]) this.array,
-					(double[]) ((PhoenixArray) obj).array);
+			return Arrays.equals((Object[]) this.array, (Object[]) ((PhoenixArray) obj).array);
 		}
 	}
 	
@@ -426,10 +411,8 @@ public class PhoenixArray implements Array,SQLCloseable {
 			super(dataType, elements);
 		}
 		@Override
-		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(float.class,
-					elements.length);
-			floatArr = (float[]) object;
+		public void convertObjectArrayToPrimitiveArray(Object[] elements) {
+			floatArr = new float[elements.length];
 			int i = 0;
             for(Object o : elements) {
                 if (o != null) {
@@ -437,7 +420,6 @@ public class PhoenixArray implements Array,SQLCloseable {
                 }
                 i++;
             }
-			return floatArr;
 		}
 		
 		@Override
@@ -458,8 +440,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 			if (this.baseType != ((PhoenixArray) obj).baseType) {
 				return false;
 			}
-			return Arrays.equals((float[]) this.array,
-					(float[]) ((PhoenixArray) obj).array);
+			return Arrays.equals((Object[]) this.array, (Object[]) ((PhoenixArray) obj).array);
 		}
 	}
 	
@@ -469,10 +450,8 @@ public class PhoenixArray implements Array,SQLCloseable {
 			super(dataType, elements);
 		}
 		@Override
-		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(byte.class,
-					elements.length);
-			byteArr = (byte[]) object;
+		public void convertObjectArrayToPrimitiveArray(Object[] elements) {
+			byteArr = new byte[elements.length];
 			int i = 0;
             for(Object o : elements) {
                 if (o != null) {
@@ -480,7 +459,6 @@ public class PhoenixArray implements Array,SQLCloseable {
                 }
                 i++;
             }
-			return byteArr;
 		}
 		
 		@Override
@@ -501,8 +479,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 			if (this.baseType != ((PhoenixArray) obj).baseType) {
 				return false;
 			}
-			return Arrays.equals((byte[]) this.array,
-					(byte[]) ((PhoenixArray) obj).array);
+			return Arrays.equals((Object[]) this.array,	(Object[]) ((PhoenixArray) obj).array);
 		}
 	}
 	
@@ -512,10 +489,8 @@ public class PhoenixArray implements Array,SQLCloseable {
 			super(dataType, elements);
 		}
 		@Override
-		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(boolean.class,
-					elements.length);
-			booleanArr = (boolean[]) object;
+		public void convertObjectArrayToPrimitiveArray(Object[] elements) {
+			booleanArr = new boolean[elements.length];
 			int i = 0;
             for(Object o : elements) {
                 if (o != null) {
@@ -523,7 +498,6 @@ public class PhoenixArray implements Array,SQLCloseable {
                 }
                 i++;
             }
-			return booleanArr;
 		}
 		
 		@Override
@@ -544,8 +518,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 			if (this.baseType != ((PhoenixArray) obj).baseType) {
 				return false;
 			}
-			return Arrays.equals((boolean[]) this.array,
-					(boolean[]) ((PhoenixArray) obj).array);
+			return Arrays.equals((Object[]) this.array, (Object[]) ((PhoenixArray) obj).array);
 		}
 	}
 }

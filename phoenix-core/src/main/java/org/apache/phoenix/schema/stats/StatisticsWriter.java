@@ -43,7 +43,9 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -58,11 +60,6 @@ public class StatisticsWriter implements Closeable {
     /**
      * @param tableName TODO
      * @param clientTimeStamp TODO
-     * @param guidepostDepth 
-     * @param Configuration
-     *            Configruation to update the stats table.
-     * @param primaryTableName
-     *            name of the primary table on which we should collect stats
      * @return the {@link StatisticsWriter} for the given primary table.
      * @throws IOException
      *             if the table cannot be created due to an underlying HTable creation error
@@ -124,7 +121,7 @@ public class StatisticsWriter implements Closeable {
 	        	long byteSize = 0;
 	        	Cell byteSizeCell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
 	        	if (byteSizeCell != null) {
-	        		byteSize = PDataType.LONG.getCodec().decodeLong(byteSizeCell.getValueArray(), byteSizeCell.getValueOffset(), SortOrder.getDefault()) / 2;
+	        		byteSize = PLong.INSTANCE.getCodec().decodeLong(byteSizeCell.getValueArray(), byteSizeCell.getValueOffset(), SortOrder.getDefault()) / 2;
 	        	}
 	        	int midEndIndex, midStartIndex;
 	            int index = Collections.binarySearch(guidePosts.getGuidePosts(), r.getStartKey(), Bytes.BYTES_COMPARATOR);
@@ -159,10 +156,6 @@ public class StatisticsWriter implements Closeable {
      * @param tracker - the statistics tracker
      * @param cfKey -  the family for which the stats is getting collected.
      * @param mutations - list of mutations that collects all the mutations to commit in a batch
-     * @param tablekey - The table name
-     * @param schemaName - the schema name associated with the table          
-     * @param region name -  the region of the table for which the stats are collected
-     * @param split - if the updation is caused due to a split
      * @throws IOException
      *             if we fail to do any of the puts. Any single failure will prevent any future attempts for the remaining list of stats to
      *             update
@@ -180,11 +173,11 @@ public class StatisticsWriter implements Closeable {
         GuidePostsInfo gp = tracker.getGuidePosts(cfKey);
         if (gp != null) {
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_COUNT_BYTES,
-                    timeStamp, PDataType.LONG.toBytes((gp.getGuidePosts().size())));
+                    timeStamp, PLong.INSTANCE.toBytes((gp.getGuidePosts().size())));
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES,
-                    timeStamp, PDataType.VARBINARY.toBytes(gp.toBytes()));
+                    timeStamp, PVarbinary.INSTANCE.toBytes(gp.toBytes()));
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
-                    timeStamp, PDataType.LONG.toBytes(gp.getByteCount()));
+                    timeStamp, PLong.INSTANCE.toBytes(gp.getByteCount()));
         }
         // Add our empty column value so queries behave correctly
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
@@ -225,8 +218,9 @@ public class StatisticsWriter implements Closeable {
         long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
         byte[] prefix = tableName;
         Put put = new Put(prefix);
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES, timeStamp,
-                PDataType.DATE.toBytes(new Date(currentTime)));
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+            PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES, timeStamp,
+            PDate.INSTANCE.toBytes(new Date(currentTime)));
         return put;
     }
 

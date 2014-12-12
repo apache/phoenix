@@ -26,9 +26,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -53,8 +51,8 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -159,7 +157,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                 Scan scan = new Scan();
                 SingleColumnValueFilter filter = new SingleColumnValueFilter(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES,
-                    CompareFilter.CompareOp.NOT_EQUAL, PDataType.LONG.toBytes(0L));
+                    CompareFilter.CompareOp.NOT_EQUAL, PLong.INSTANCE.toBytes(0L));
                 filter.setFilterIfMissing(true);
                 scan.setFilter(filter);
                 scan.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
@@ -190,7 +188,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     }
 
                     // disableTimeStamp has to be a positive value
-                    disabledTimeStampVal = (Long) PDataType.LONG.toObject(disabledTimeStamp);
+                    disabledTimeStampVal = (Long) PLong.INSTANCE.toObject(disabledTimeStamp);
                     if (disabledTimeStampVal <= 0) {
                         continue;
                     }

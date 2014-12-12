@@ -35,7 +35,7 @@ import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.junit.Test;
 
 import com.google.common.collect.ImmutableList;

@@ -52,11 +52,12 @@ import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
@@ -944,7 +945,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         }
         @Override
         public PDataType getDataType() {
-            return PDataType.VARCHAR;
+            return PVarchar.INSTANCE;
         }
         @Override
         public Integer getMaxLength() {

@@ -21,7 +21,12 @@ import java.sql.SQLException;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -61,7 +66,7 @@ public class ColumnDef {
         	 localType = sqlTypeName == null ? null : PDataType.fromTypeId(PDataType.sqlArrayType(SchemaUtil.normalizeIdentifier(sqlTypeName)));
         	 this.dataType = sqlTypeName == null ? null : PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(sqlTypeName));
              this.arrSize = arrSize; // Can only be non negative based on parsing
-             if (this.dataType == PDataType.VARBINARY) {
+             if (this.dataType == PVarbinary.INSTANCE) {
                  throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_ARRAY_NOT_SUPPORTED)
                  .setColumnName(columnDefName.getColumnName()).build().buildException();
              }
@@ -71,7 +76,7 @@ public class ColumnDef {
          }
          
          this.isNull = isNull;
-         if (this.dataType == PDataType.CHAR) {
+         if (this.dataType == PChar.INSTANCE) {
              if (maxLength == null) {
                  throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CHAR_LENGTH)
                      .setColumnName(columnDefName.getColumnName()).build().buildException();
@@ -81,13 +86,13 @@ public class ColumnDef {
                      .setColumnName(columnDefName.getColumnName()).build().buildException();
              }
              scale = null;
-         } else if (this.dataType == PDataType.VARCHAR) {
+         } else if (this.dataType == PVarchar.INSTANCE) {
              if (maxLength != null && maxLength < 1) {
                  throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_CHAR_LENGTH)
                      .setColumnName(columnDefName.getColumnName()).build().buildException(); 
              }
              scale = null;
-         } else if (this.dataType == PDataType.DECIMAL) {
+         } else if (this.dataType == PDecimal.INSTANCE) {
              // for deciaml, 1 <= maxLength <= PDataType.MAX_PRECISION;
              if (maxLength != null) {
                  if (maxLength < 1 || maxLength > PDataType.MAX_PRECISION) {
@@ -106,7 +111,7 @@ public class ColumnDef {
                  // ignored. All decimal are stored with as much decimal points as possible.
                  scale = scale == null ? PDataType.DEFAULT_SCALE : scale > maxLength ? maxLength : scale; 
              }
-         } else if (this.dataType == PDataType.BINARY) {
+         } else if (this.dataType == PBinary.INSTANCE) {
              if (maxLength == null) {
                  throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_BINARY_LENGTH)
                      .setColumnName(columnDefName.getColumnName()).build().buildException();

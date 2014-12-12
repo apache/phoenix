@@ -49,7 +49,7 @@ import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
@@ -127,12 +127,12 @@ public class WhereCompiler {
         
         Set<Expression> extractedNodes = Sets.<Expression>newHashSet();
         WhereExpressionCompiler whereCompiler = new WhereExpressionCompiler(context);
-        Expression expression = where == null ? LiteralExpression.newConstant(true,PDataType.BOOLEAN,Determinism.ALWAYS) : where.accept(whereCompiler);
+        Expression expression = where == null ? LiteralExpression.newConstant(true, PBoolean.INSTANCE,Determinism.ALWAYS) : where.accept(whereCompiler);
         if (whereCompiler.isAggregate()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_IN_WHERE).build().buildException();
         }
-        if (expression.getDataType() != PDataType.BOOLEAN) {
-            throw TypeMismatchException.newException(PDataType.BOOLEAN, expression.getDataType(), expression.toString());
+        if (expression.getDataType() != PBoolean.INSTANCE) {
+            throw TypeMismatchException.newException(PBoolean.INSTANCE, expression.getDataType(), expression.toString());
         }
         if (viewWhere != null) {
             WhereExpressionCompiler viewWhereCompiler = new WhereExpressionCompiler(context, true);

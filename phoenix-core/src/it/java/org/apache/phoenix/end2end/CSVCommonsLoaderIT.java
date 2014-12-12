@@ -36,8 +36,8 @@ import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
-import org.apache.phoenix.schema.PArrayDataType;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -639,7 +639,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
             assertTrue(phoenixResultSet.next());
             assertEquals(1L, phoenixResultSet.getLong(1));
             assertEquals(
-                    PArrayDataType.instantiatePhoenixArray(PDataType.INTEGER, new Integer[]{2, 3, 4}),
+                    PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Integer[]{2, 3, 4}),
                     phoenixResultSet.getArray(2));
             assertFalse(phoenixResultSet.next());
         } finally {

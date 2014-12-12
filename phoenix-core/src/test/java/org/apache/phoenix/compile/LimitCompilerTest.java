@@ -34,7 +34,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -59,8 +59,8 @@ public class LimitCompilerTest extends BaseConnectionlessQueryTest {
         Scan scan = plan.getContext().getScan();
         
         assertNull(scan.getFilter());
-        assertArrayEquals(PDataType.VARCHAR.toBytes(tenantId), scan.getStartRow());
-        assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStopRow());
+        assertArrayEquals(PVarchar.INSTANCE.toBytes(tenantId), scan.getStartRow());
+        assertArrayEquals(ByteUtil.nextKey(PVarchar.INSTANCE.toBytes(tenantId)), scan.getStopRow());
         assertEquals(plan.getLimit(),Integer.valueOf(5));
     }
 
@@ -74,8 +74,8 @@ public class LimitCompilerTest extends BaseConnectionlessQueryTest {
 
         assertNull(scan.getFilter());
         assertNull(plan.getLimit());
-        assertArrayEquals(PDataType.VARCHAR.toBytes(tenantId), scan.getStartRow());
-        assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStopRow());
+        assertArrayEquals(PVarchar.INSTANCE.toBytes(tenantId), scan.getStartRow());
+        assertArrayEquals(ByteUtil.nextKey(PVarchar.INSTANCE.toBytes(tenantId)), scan.getStopRow());
     }
     
     @Test
@@ -87,8 +87,8 @@ public class LimitCompilerTest extends BaseConnectionlessQueryTest {
         Scan scan = plan.getContext().getScan();
 
         assertNull(scan.getFilter());
-        assertArrayEquals(PDataType.VARCHAR.toBytes(tenantId), scan.getStartRow());
-        assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStopRow());
+        assertArrayEquals(PVarchar.INSTANCE.toBytes(tenantId), scan.getStartRow());
+        assertArrayEquals(ByteUtil.nextKey(PVarchar.INSTANCE.toBytes(tenantId)), scan.getStopRow());
         assertEquals(plan.getLimit(),Integer.valueOf(5));
     }
 

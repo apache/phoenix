@@ -22,7 +22,9 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -52,7 +54,7 @@ public class LongSubtractExpression extends SubtractExpression {
                 return false;
             }
             PDataType childType = child.getDataType();
-            boolean isDate = childType.isCoercibleTo(PDataType.DATE);
+            boolean isDate = childType.isCoercibleTo(PDate.INSTANCE);
             long childvalue = childType.getCodec().decodeLong(ptr, child.getSortOrder());
             if (i == 0) {
                 finalResult = childvalue;
@@ -75,7 +77,7 @@ public class LongSubtractExpression extends SubtractExpression {
 
 	@Override
 	public final PDataType getDataType() {
-		return PDataType.LONG;
+		return PLong.INSTANCE;
 	}
 	
 }

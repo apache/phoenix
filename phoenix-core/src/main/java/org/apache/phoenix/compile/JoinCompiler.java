@@ -69,14 +69,25 @@ import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PTinyint;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -541,57 +552,57 @@ public class JoinCompiler {
                     .setMessage("On-clause LHS expression and RHS expression must be comparable. LHS type: " + lType + ", RHS type: " + rType)
                     .build().buildException();
 
-            if ((lType == null || lType.isCoercibleTo(PDataType.TINYINT))
-                    && (rType == null || rType.isCoercibleTo(PDataType.TINYINT))) {
+            if ((lType == null || lType.isCoercibleTo(PTinyint.INSTANCE))
+                    && (rType == null || rType.isCoercibleTo(PTinyint.INSTANCE))) {
                 return lType == null ? rType : lType; // to preserve UNSIGNED type
             }
 
-            if ((lType == null || lType.isCoercibleTo(PDataType.SMALLINT))
-                    && (rType == null || rType.isCoercibleTo(PDataType.SMALLINT))) {
+            if ((lType == null || lType.isCoercibleTo(PSmallint.INSTANCE))
+                    && (rType == null || rType.isCoercibleTo(PSmallint.INSTANCE))) {
                 return lType == null ? rType : lType; // to preserve UNSIGNED type
             }
 
-            if ((lType == null || lType.isCoercibleTo(PDataType.INTEGER))
-                    && (rType == null || rType.isCoercibleTo(PDataType.INTEGER))) {
+            if ((lType == null || lType.isCoercibleTo(PInteger.INSTANCE))
+                    && (rType == null || rType.isCoercibleTo(PInteger.INSTANCE))) {
                 return lType == null ? rType : lType; // to preserve UNSIGNED type
             }
 
-            if ((lType == null || lType.isCoercibleTo(PDataType.LONG))
-                    && (rType == null || rType.isCoercibleTo(PDataType.LONG))) {
+            if ((lType == null || lType.isCoercibleTo(PLong.INSTANCE))
+                    && (rType == null || rType.isCoercibleTo(PLong.INSTANCE))) {
                 return lType == null ? rType : lType; // to preserve UNSIGNED type
             }
 
-            if ((lType == null || lType.isCoercibleTo(PDataType.DOUBLE))
-                    && (rType == null || rType.isCoercibleTo(PDataType.DOUBLE))) {
+            if ((lType == null || lType.isCoercibleTo(PDouble.INSTANCE))
+                    && (rType == null || rType.isCoercibleTo(PDouble.INSTANCE))) {
                 return lType == null ? rType : lType; // to preserve UNSIGNED type
             }
 
-            if ((lType == null || lType.isCoercibleTo(PDataType.DECIMAL))
-                    && (rType == null || rType.isCoercibleTo(PDataType.DECIMAL))) {
-                return PDataType.DECIMAL;
+            if ((lType == null || lType.isCoercibleTo(PDecimal.INSTANCE))
+                    && (rType == null || rType.isCoercibleTo(PDecimal.INSTANCE))) {
+                return PDecimal.INSTANCE;
             }
 
-            if ((lType == null || lType.isCoercibleTo(PDataType.DATE))
-                    && (rType == null || rType.isCoercibleTo(PDataType.DATE))) {
+            if ((lType == null || lType.isCoercibleTo(PDate.INSTANCE))
+                    && (rType == null || rType.isCoercibleTo(PDate.INSTANCE))) {
                 return lType == null ? rType : lType;
             }
 
-            if ((lType == null || lType.isCoercibleTo(PDataType.TIMESTAMP))
-                    && (rType == null || rType.isCoercibleTo(PDataType.TIMESTAMP))) {
+            if ((lType == null || lType.isCoercibleTo(PTimestamp.INSTANCE))
+                    && (rType == null || rType.isCoercibleTo(PTimestamp.INSTANCE))) {
                 return lType == null ? rType : lType;
             }
 
-            if ((lType == null || lType.isCoercibleTo(PDataType.VARCHAR))
-                    && (rType == null || rType.isCoercibleTo(PDataType.VARCHAR))) {
-                return PDataType.VARCHAR;
+            if ((lType == null || lType.isCoercibleTo(PVarchar.INSTANCE))
+                    && (rType == null || rType.isCoercibleTo(PVarchar.INSTANCE))) {
+                return PVarchar.INSTANCE;
             }
 
-            if ((lType == null || lType.isCoercibleTo(PDataType.BOOLEAN))
-                    && (rType == null || rType.isCoercibleTo(PDataType.BOOLEAN))) {
-                return PDataType.BOOLEAN;
+            if ((lType == null || lType.isCoercibleTo(PBoolean.INSTANCE))
+                    && (rType == null || rType.isCoercibleTo(PBoolean.INSTANCE))) {
+                return PBoolean.INSTANCE;
             }
 
-            return PDataType.VARBINARY;
+            return PVarbinary.INSTANCE;
         }
     }
     

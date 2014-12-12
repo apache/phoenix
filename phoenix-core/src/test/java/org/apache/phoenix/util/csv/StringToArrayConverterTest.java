@@ -26,7 +26,8 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -39,7 +40,7 @@ public class StringToArrayConverterTest extends BaseConnectionlessQueryTest {
     @Before
     public void setUp() throws SQLException {
         conn = DriverManager.getConnection(getUrl());
-        converter = new StringToArrayConverter(conn, ":", PDataType.VARCHAR);
+        converter = new StringToArrayConverter(conn, ":", PVarchar.INSTANCE);
     }
 
     @After
@@ -73,10 +74,10 @@ public class StringToArrayConverterTest extends BaseConnectionlessQueryTest {
     @Test
     public void testToArray_IntegerValues() throws SQLException {
         StringToArrayConverter intArrayConverter = new StringToArrayConverter(
-                                                            conn, ":", PDataType.INTEGER);
+            conn, ":", PInteger.INSTANCE);
         Array intArray = intArrayConverter.toArray("1:2:3");
         assertArrayEquals(
-                new int[]{1, 2, 3},
-                (int[]) intArray.getArray());
+                new Object[]{1, 2, 3},
+                (Object[]) intArray.getArray());
     }
 }
