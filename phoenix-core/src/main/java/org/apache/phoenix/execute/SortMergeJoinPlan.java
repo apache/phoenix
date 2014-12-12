@@ -39,6 +39,8 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.TupleProjector.ProjectedValueTuple;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.MappedByteBufferQueue;
@@ -76,10 +78,11 @@ public class SortMergeJoinPlan implements QueryPlan {
     private final KeyValueSchema lhsSchema;
     private final KeyValueSchema rhsSchema;
     private final int rhsFieldPosition;
+    private final boolean isSingleValueOnly;
 
     public SortMergeJoinPlan(StatementContext context, FilterableStatement statement, TableRef table, 
             JoinType type, QueryPlan lhsPlan, QueryPlan rhsPlan, List<Expression> lhsKeyExpressions, List<Expression> rhsKeyExpressions,
-            PTable joinedTable, PTable lhsTable, PTable rhsTable, int rhsFieldPosition) {
+            PTable joinedTable, PTable lhsTable, PTable rhsTable, int rhsFieldPosition, boolean isSingleValueOnly) {
         if (type == JoinType.Right) throw new IllegalArgumentException("JoinType should not be " + type);
         this.context = context;
         this.statement = statement;
@@ -93,6 +96,7 @@ public class SortMergeJoinPlan implements QueryPlan {
         this.lhsSchema = buildSchema(lhsTable);
         this.rhsSchema = buildSchema(rhsTable);
         this.rhsFieldPosition = rhsFieldPosition;
+        this.isSingleValueOnly = isSingleValueOnly;
     }
 
     private static KeyValueSchema buildSchema(PTable table) {
@@ -269,14 +273,18 @@ public class SortMergeJoinPlan implements QueryPlan {
                     if (rhsTuple != null) {
                         if (lhsKey.equals(rhsKey)) {
                             next = join(lhsTuple, rhsTuple);
-                            if (nextLhsTuple != null && lhsKey.equals(nextLhsKey)) {
+                             if (nextLhsTuple != null && lhsKey.equals(nextLhsKey)) {
                                 queue.offer(rhsTuple);
                                 if (nextRhsTuple == null || !rhsKey.equals(nextRhsKey)) {
                                     queueIterator = queue.iterator();
                                     advance(true);
+                                } else if (isSingleValueOnly) {
+                                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS).build().buildException();
                                 }
                             } else if (nextRhsTuple == null || !rhsKey.equals(nextRhsKey)) {
                                 advance(true);
+                            } else if (isSingleValueOnly) {
+                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS).build().buildException();                                
                             }
                             advance(false);
                         } else if (lhsKey.compareTo(rhsKey) < 0) {
