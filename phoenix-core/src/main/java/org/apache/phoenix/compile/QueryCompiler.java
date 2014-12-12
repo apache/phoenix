@@ -381,7 +381,7 @@ public class QueryCompiler {
         TableRef tableRef = ((JoinedTableColumnResolver) resolver).getTableRef();
         StatementContext subCtx = new StatementContext(statement, resolver, ScanUtil.newScan(originalScan), new SequenceManager(statement));
         subCtx.setCurrentTable(tableRef);
-        QueryPlan innerPlan = new SortMergeJoinPlan(subCtx, joinTable.getStatement(), tableRef, type == JoinType.Right ? JoinType.Left : type, lhsPlan, rhsPlan, lhsKeyExpressions, rhsKeyExpressions, projectedTable.getTable(), lhsProjTable.getTable(), rhsTable, fieldPosition);
+        QueryPlan innerPlan = new SortMergeJoinPlan(subCtx, joinTable.getStatement(), tableRef, type == JoinType.Right ? JoinType.Left : type, lhsPlan, rhsPlan, lhsKeyExpressions, rhsKeyExpressions, projectedTable.getTable(), lhsProjTable.getTable(), rhsTable, fieldPosition, lastJoinSpec.isSingleValueOnly());
         context.setCurrentTable(tableRef);
         context.setResolver(resolver);
         TableNode from = NODE_FACTORY.namedTable(tableRef.getTableAlias(), NODE_FACTORY.table(tableRef.getTable().getSchemaName().getString(), tableRef.getTable().getTableName().getString()));
