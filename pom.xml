@@ -74,7 +74,7 @@
     <test.output.tofile>true</test.output.tofile>
 
     <!-- Hadoop Versions -->
-    <hbase.version>0.98.4-hadoop2</hbase.version>
+    <hbase.version>0.98.8-hadoop2</hbase.version>
     <hadoop-two.version>2.2.0</hadoop-two.version>
 
     <!-- Dependency versions -->
