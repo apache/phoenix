@@ -35,7 +35,6 @@ import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -53,7 +52,6 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -609,17 +607,16 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         descriptor = admin.getTableDescriptor(htableName);
         assertEquals(3,descriptor.getColumnFamilies().length);
         HColumnDescriptor cdA = descriptor.getFamily(cfA);
-        assertNotEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdA.getKeepDeletedCells());
+        assertTrue(cdA.getKeepDeletedCells());
         assertEquals(DataBlockEncoding.NONE, cdA.getDataBlockEncoding()); // Overriden using WITH
         assertEquals(1,cdA.getMaxVersions());// Overriden using WITH
         HColumnDescriptor cdB = descriptor.getFamily(cfB);
-        // Allow KEEP_DELETED_CELLS to be false for VIEW
-        assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdA.getKeepDeletedCells());
+        assertFalse(cdB.getKeepDeletedCells()); // Allow KEEP_DELETED_CELLS to be false for VEIW
         assertEquals(DataBlockEncoding.NONE, cdB.getDataBlockEncoding()); // Should keep the original value.
         // CF c should stay the same since it's not a Phoenix cf.
         HColumnDescriptor cdC = descriptor.getFamily(cfC);
         assertNotNull("Column family not found", cdC);
-        assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdA.getKeepDeletedCells());
+        assertFalse(cdC.getKeepDeletedCells());
         assertFalse(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING == cdC.getDataBlockEncoding());
         assertTrue(descriptor.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName()));
         assertTrue(descriptor.hasCoprocessor(GroupedAggregateRegionObserver.class.getName()));
@@ -656,7 +653,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertFalse(rs.next());
         conn2.close();
     }
-
+    
     @SuppressWarnings("deprecation")
     @Test
     public void testCreateViewOnExistingTable() throws Exception {
