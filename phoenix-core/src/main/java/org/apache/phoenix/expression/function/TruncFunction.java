@@ -24,8 +24,10 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FloorParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.PDataType;
-
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PVarchar;
 
 /**
  * 
@@ -33,7 +35,7 @@ import org.apache.phoenix.schema.PDataType;
  * an even increment.  Usage:
  * TRUNC(<date/time col ref>,<'day'|'hour'|'minute'|'second'|'millisecond'>,[<optional integer multiplier>])
  * The integer multiplier is optional and is used to do rollups to a partial time unit (i.e. 10 minute rollup)
- * The function returns a {@link org.apache.phoenix.schema.PDataType#DATE}
+ * The function returns a {@link org.apache.phoenix.schema.types.PDate}
  *
  * 
  * @since 0.1
@@ -41,9 +43,9 @@ import org.apache.phoenix.schema.PDataType;
 @BuiltInFunction(name = TruncFunction.NAME,
 nodeClass = FloorParseNode.class,
 args = {
-       @Argument(allowedTypes={PDataType.TIMESTAMP, PDataType.DECIMAL}),
-       @Argument(allowedTypes={PDataType.VARCHAR, PDataType.INTEGER}, defaultValue = "null", isConstant=true),
-       @Argument(allowedTypes={PDataType.INTEGER}, defaultValue="1", isConstant=true)
+       @Argument(allowedTypes={PTimestamp.class, PDecimal.class}),
+       @Argument(allowedTypes={PVarchar.class, PInteger.class}, defaultValue = "null", isConstant=true),
+       @Argument(allowedTypes={PInteger.class}, defaultValue="1", isConstant=true)
        } 
 )
 public abstract class TruncFunction extends ScalarFunction {

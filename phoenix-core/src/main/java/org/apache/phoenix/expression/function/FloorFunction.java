@@ -23,7 +23,11 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FloorParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PVarchar;
+
 /**
  * 
  * Base class for built-in FLOOR function.
@@ -34,9 +38,9 @@ import org.apache.phoenix.schema.PDataType;
 @BuiltInFunction(name = FloorFunction.NAME,
                  nodeClass = FloorParseNode.class,
                  args = {
-                        @Argument(allowedTypes={PDataType.TIMESTAMP, PDataType.DECIMAL}),
-                        @Argument(allowedTypes={PDataType.VARCHAR, PDataType.INTEGER}, defaultValue = "null", isConstant=true),
-                        @Argument(allowedTypes={PDataType.INTEGER}, defaultValue="1", isConstant=true)
+                        @Argument(allowedTypes={PTimestamp.class, PDecimal.class}),
+                        @Argument(allowedTypes={PVarchar.class, PInteger.class}, defaultValue = "null", isConstant=true),
+                        @Argument(allowedTypes={PInteger.class}, defaultValue="1", isConstant=true)
                         } 
                 )
 public abstract class FloorFunction extends ScalarFunction {

@@ -45,7 +45,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -451,8 +451,8 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testUpsertSelectLongToInt() throws Exception {
-        byte[][] splits = new byte[][] {PDataType.INTEGER.toBytes(1), PDataType.INTEGER.toBytes(2),
-                PDataType.INTEGER.toBytes(3), PDataType.INTEGER.toBytes(4)};
+        byte[][] splits = new byte[][] { PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(2),
+                PInteger.INSTANCE.toBytes(3), PInteger.INSTANCE.toBytes(4)};
         long ts = nextTimestamp();
         ensureTableCreated(getUrl(),"IntKeyTest",splits, ts-2);
         Properties props = new Properties();
@@ -488,8 +488,8 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testUpsertSelectRunOnServer() throws Exception {
-        byte[][] splits = new byte[][] {PDataType.INTEGER.toBytes(1), PDataType.INTEGER.toBytes(2),
-                PDataType.INTEGER.toBytes(3), PDataType.INTEGER.toBytes(4)};
+        byte[][] splits = new byte[][] { PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(2),
+                PInteger.INSTANCE.toBytes(3), PInteger.INSTANCE.toBytes(4)};
         long ts = nextTimestamp();
         createTestTable(getUrl(), "create table IntKeyTest (i integer not null primary key desc, j integer)" ,splits, ts-2);
         Properties props = new Properties();
@@ -551,8 +551,8 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testUpsertSelectOnDescToAsc() throws Exception {
-        byte[][] splits = new byte[][] {PDataType.INTEGER.toBytes(1), PDataType.INTEGER.toBytes(2),
-                PDataType.INTEGER.toBytes(3), PDataType.INTEGER.toBytes(4)};
+        byte[][] splits = new byte[][] { PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(2),
+                PInteger.INSTANCE.toBytes(3), PInteger.INSTANCE.toBytes(4)};
         long ts = nextTimestamp();
         createTestTable(getUrl(), "create table IntKeyTest (i integer not null primary key desc, j integer)" ,splits, ts-2);
         Properties props = new Properties();
@@ -591,8 +591,8 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testUpsertSelectRowKeyMutationOnSplitedTable() throws Exception {
-        byte[][] splits = new byte[][] {PDataType.INTEGER.toBytes(1), PDataType.INTEGER.toBytes(2),
-                PDataType.INTEGER.toBytes(3), PDataType.INTEGER.toBytes(4)};
+        byte[][] splits = new byte[][] { PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(2),
+                PInteger.INSTANCE.toBytes(3), PInteger.INSTANCE.toBytes(4)};
         long ts = nextTimestamp();
         ensureTableCreated(getUrl(),"IntKeyTest",splits,ts-2);
         Properties props = new Properties();

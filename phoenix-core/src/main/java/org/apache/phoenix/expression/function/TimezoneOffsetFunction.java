@@ -29,16 +29,18 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.tuple.Tuple;
-
 
 /**
  * Returns offset (shift in minutes) of timezone at particular datetime in minutes.
  */
 @FunctionParseNode.BuiltInFunction(name = TimezoneOffsetFunction.NAME, args = {
-    @FunctionParseNode.Argument(allowedTypes = {PDataType.VARCHAR}),
-    @FunctionParseNode.Argument(allowedTypes = {PDataType.DATE})})
+    @FunctionParseNode.Argument(allowedTypes = {PVarchar.class}),
+    @FunctionParseNode.Argument(allowedTypes = {PDate.class})})
 public class TimezoneOffsetFunction extends ScalarFunction {
 
     public static final String NAME = "TIMEZONE_OFFSET";
@@ -77,16 +79,16 @@ public class TimezoneOffsetFunction extends ScalarFunction {
             cachedTimeZones.put(timezone, tz);
         }
 
-		Date date = (Date)PDataType.DATE.toObject(ptr, children.get(1).getSortOrder());
+		Date date = (Date) PDate.INSTANCE.toObject(ptr, children.get(1).getSortOrder());
 		int offset = cachedTimeZones.get(timezone).getOffset(date.getTime());
 
-        ptr.set(PDataType.INTEGER.toBytes(offset / MILLIS_TO_MINUTES));
+        ptr.set(PInteger.INSTANCE.toBytes(offset / MILLIS_TO_MINUTES));
         return true;
     }
 
     @Override
     public PDataType getDataType() {
-        return PDataType.INTEGER;
+        return PInteger.INSTANCE;
     }
 
 	@Override

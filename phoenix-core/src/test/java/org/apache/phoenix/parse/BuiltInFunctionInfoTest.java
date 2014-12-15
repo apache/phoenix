@@ -20,7 +20,8 @@ package org.apache.phoenix.parse;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.function.FunctionExpression;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.junit.Test;
 
@@ -77,7 +78,7 @@ public class BuiltInFunctionInfoTest {
 
         @Override
         public PDataType getDataType() {
-            return PDataType.VARCHAR;
+            return PVarchar.INSTANCE;
         }
 
         @Override
@@ -87,8 +88,8 @@ public class BuiltInFunctionInfoTest {
     }
 
     @BuiltInFunction(name="NO_DEFAULT_ARGS", args={
-            @Argument(allowedTypes={PDataType.VARCHAR}),
-            @Argument(allowedTypes={PDataType.VARCHAR})})
+            @Argument(allowedTypes={PVarchar.class}),
+            @Argument(allowedTypes={PVarchar.class})})
     static class NoDefaultArgsFunction extends BaseFunctionAdapter {
 
         public NoDefaultArgsFunction(List<Expression> ignoreChildren) {
@@ -98,9 +99,9 @@ public class BuiltInFunctionInfoTest {
     }
 
     @BuiltInFunction(name="WITH_ONE_DEFAULT_ARG", args={
-            @Argument(allowedTypes={PDataType.VARCHAR}),
-            @Argument(allowedTypes={PDataType.VARCHAR}),
-            @Argument(allowedTypes={PDataType.VARCHAR}, defaultValue = "'a'") })
+            @Argument(allowedTypes={PVarchar.class}),
+            @Argument(allowedTypes={PVarchar.class}),
+            @Argument(allowedTypes={PVarchar.class}, defaultValue = "'a'") })
     static class WithOneDefaultArg extends BaseFunctionAdapter {
 
         public WithOneDefaultArg(List<Expression> ignoreChildren) {
@@ -109,9 +110,9 @@ public class BuiltInFunctionInfoTest {
     }
 
     @BuiltInFunction(name="WITH_MULTIPLE_DEFAULT_ARGS", args={
-            @Argument(allowedTypes={PDataType.VARCHAR}),
-            @Argument(allowedTypes={PDataType.VARCHAR}, defaultValue = "'a'"),
-            @Argument(allowedTypes={PDataType.VARCHAR}, defaultValue = "'b'") })
+            @Argument(allowedTypes={PVarchar.class}),
+            @Argument(allowedTypes={PVarchar.class}, defaultValue = "'a'"),
+            @Argument(allowedTypes={PVarchar.class}, defaultValue = "'b'") })
     static class WithMultipleDefaultArgs extends BaseFunctionAdapter {
 
         public WithMultipleDefaultArgs(List<Expression> ignoreChildren) {

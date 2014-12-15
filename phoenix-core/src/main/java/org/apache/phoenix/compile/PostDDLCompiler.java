@@ -42,7 +42,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -210,7 +210,7 @@ public class PostDDLCompiler {
                                 try {
                                     Tuple row = iterator.next();
                                     ImmutableBytesWritable ptr = context.getTempPtr();
-                                    totalMutationCount += (Long)projector.getColumnProjector(0).getValue(row, PDataType.LONG, ptr);
+                                    totalMutationCount += (Long)projector.getColumnProjector(0).getValue(row, PLong.INSTANCE, ptr);
                                 } catch (SQLException e) {
                                     sqlE = e;
                                 } finally {

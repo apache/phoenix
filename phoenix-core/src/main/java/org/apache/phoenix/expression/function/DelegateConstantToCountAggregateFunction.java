@@ -22,7 +22,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -36,7 +36,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * @since 0.1
  */
 abstract public class DelegateConstantToCountAggregateFunction extends SingleAggregateFunction {
-    private static final ImmutableBytesWritable ZERO = new ImmutableBytesWritable(PDataType.LONG.toBytes(0L));
+    private static final ImmutableBytesWritable ZERO = new ImmutableBytesWritable(PLong.INSTANCE.toBytes(0L));
     private CountAggregateFunction delegate;
     
     public DelegateConstantToCountAggregateFunction() {
@@ -58,7 +58,7 @@ abstract public class DelegateConstantToCountAggregateFunction extends SingleAgg
             return super.evaluate(tuple, ptr);
         }
         delegate.evaluate(tuple, ptr);
-        if (PDataType.LONG.compareTo(ptr,ZERO) == 0) {
+        if (PLong.INSTANCE.compareTo(ptr,ZERO) == 0) {
             return false;
         }
         return true;

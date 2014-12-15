@@ -23,8 +23,9 @@ import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.*;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
@@ -70,13 +71,13 @@ public class PercentRankClientAggregator extends DistinctValueWithCountClientAgg
         if (buffer == null) {
             initBuffer();
         }
-        buffer = PDataType.DECIMAL.toBytes(this.cachedResult);
+        buffer = PDecimal.INSTANCE.toBytes(this.cachedResult);
         ptr.set(buffer);
         return true;
     }
 
     @Override
     protected PDataType getResultDataType() {
-        return PDataType.DECIMAL;
+        return PDecimal.INSTANCE;
     }
 }

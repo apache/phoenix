@@ -26,7 +26,9 @@ import java.util.regex.Pattern;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
@@ -267,7 +269,7 @@ public class LikeExpression extends BaseCompoundExpression {
                 }
                 return false;
             }
-            String value = (String)PDataType.VARCHAR.toObject(ptr, getPatternExpression().getSortOrder());
+            String value = (String) PVarchar.INSTANCE.toObject(ptr, getPatternExpression().getSortOrder());
             pattern = compilePattern(value);
             if (logger.isDebugEnabled()) {
                 logger.debug("LIKE pattern is expression: " + pattern.pattern());
@@ -284,7 +286,7 @@ public class LikeExpression extends BaseCompoundExpression {
             return true;
         }
 
-        String value = (String)PDataType.VARCHAR.toObject(ptr, getStrExpression().getSortOrder());
+        String value = (String) PVarchar.INSTANCE.toObject(ptr, getStrExpression().getSortOrder());
         boolean matched = pattern.matcher(value).matches();
         ptr.set(matched ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
         if (logger.isDebugEnabled()) {
@@ -306,7 +308,7 @@ public class LikeExpression extends BaseCompoundExpression {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.BOOLEAN;
+        return PBoolean.INSTANCE;
     }
 
     @Override

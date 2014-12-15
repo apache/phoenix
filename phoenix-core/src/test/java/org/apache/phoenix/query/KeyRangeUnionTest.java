@@ -27,12 +27,11 @@ import java.util.Collection;
 
 import junit.framework.TestCase;
 
+import org.apache.phoenix.schema.types.PChar;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
-import org.apache.phoenix.schema.PDataType;
 
 @RunWith(Parameterized.class)
 public class KeyRangeUnionTest extends TestCase {
@@ -48,33 +47,33 @@ public class KeyRangeUnionTest extends TestCase {
     public static Collection<?> data() {
         return Arrays.asList(new Object[][] {
                 {
-                    PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("E"), true),
-                    PDataType.CHAR.getKeyRange(toBytes("D"), true, toBytes("F"), true),
-                    PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("F"), true)
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("F"), true),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("F"), true)
                 },
                 {
-                    PDataType.CHAR.getKeyRange(toBytes("C"), false, toBytes("E"), false),
-                    PDataType.CHAR.getKeyRange(toBytes("D"), true, toBytes("F"), true),
-                    PDataType.CHAR.getKeyRange(toBytes("C"), false, toBytes("F"), true)
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("E"), false),
+                    PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("F"), true),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("F"), true)
                 },
                 {
-                    PDataType.CHAR.getKeyRange(toBytes("C"), false, toBytes("E"), false),
-                    PDataType.CHAR.getKeyRange(toBytes("D"), true, toBytes("E"), true),
-                    PDataType.CHAR.getKeyRange(toBytes("C"), false, toBytes("E"), true)
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("E"), false),
+                    PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("E"), true)
                 },
                 {
-                    PDataType.CHAR.getKeyRange(toBytes("C"), false, toBytes("E"), false),
-                    PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("E"), true),
-                    PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("E"), true)
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("E"), false),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true)
                 },
                 {
-                    PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("E"), false),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), false),
                     EMPTY_RANGE,
-                    PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("E"), false),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), false),
                 },
                 {
                     EVERYTHING_RANGE,
-                    PDataType.CHAR.getKeyRange(toBytes("E"), false, toBytes("F"), true),
+                    PChar.INSTANCE.getKeyRange(toBytes("E"), false, toBytes("F"), true),
                     EVERYTHING_RANGE,
                 },
                 {

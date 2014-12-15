@@ -21,11 +21,8 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.function.ScalarFunction;
-import org.apache.phoenix.parse.FunctionParseNode.Argument;
-import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -80,7 +77,7 @@ public class ModulusExpression extends ArithmeticExpression {
         long remainder = dividend % divisor;
         
         // return the result, use encodeLong to avoid extra Long allocation
-        byte[] resultPtr=new byte[PDataType.LONG.getByteSize()];
+        byte[] resultPtr=new byte[PLong.INSTANCE.getByteSize()];
         getDataType().getCodec().encodeLong(remainder, resultPtr, 0);
         ptr.set(resultPtr);
         return true;
@@ -88,7 +85,7 @@ public class ModulusExpression extends ArithmeticExpression {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.LONG;
+        return PLong.INSTANCE;
     }
 
     @Override

@@ -22,7 +22,8 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 
@@ -44,7 +45,7 @@ import java.util.List;
  * @since 3.0
  */
 @BuiltInFunction(name=ExternalSqlTypeIdFunction.NAME, args= {
-    @Argument(allowedTypes=PDataType.INTEGER)} )
+    @Argument(allowedTypes= PInteger.class )} )
 public class ExternalSqlTypeIdFunction extends ScalarFunction {
     public static final String NAME = "ExternalSqlTypeId";
 
@@ -66,8 +67,8 @@ public class ExternalSqlTypeIdFunction extends ScalarFunction {
         }
         int sqlType = child.getDataType().getCodec().decodeInt(ptr, child.getSortOrder());
         try {
-            byte[] externalIdTypeBytes = PDataType.INTEGER.toBytes(
-                    PDataType.fromTypeId(sqlType).getResultSetSqlType());
+            byte[] externalIdTypeBytes = PInteger.INSTANCE.toBytes(
+                PDataType.fromTypeId(sqlType).getResultSetSqlType());
             ptr.set(externalIdTypeBytes);
         } catch (IllegalDataException e) {
             ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
@@ -77,7 +78,7 @@ public class ExternalSqlTypeIdFunction extends ScalarFunction {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.INTEGER;
+        return PInteger.INSTANCE;
     }
     
     @Override

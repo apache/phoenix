@@ -26,8 +26,9 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.BigDecimalUtil;
 import org.apache.phoenix.util.BigDecimalUtil.Operation;
@@ -76,7 +77,7 @@ public abstract class BaseDecimalStddevAggregator extends DistinctValueWithCount
         if (buffer == null) {
             initBuffer();
         }
-        buffer = PDataType.DECIMAL.toBytes(cachedResult);
+        buffer = PDecimal.INSTANCE.toBytes(cachedResult);
         ptr.set(buffer);
         return true;
     }
@@ -87,7 +88,7 @@ public abstract class BaseDecimalStddevAggregator extends DistinctValueWithCount
         BigDecimal m = mean();
         BigDecimal result = BigDecimal.ZERO;
         for (Entry<ImmutableBytesPtr, Integer> entry : valueVsCount.entrySet()) {
-            BigDecimal colValue = (BigDecimal)PDataType.DECIMAL.toObject(entry.getKey());
+            BigDecimal colValue = (BigDecimal) PDecimal.INSTANCE.toObject(entry.getKey());
             BigDecimal delta = colValue.subtract(m);
             result = result.add(delta.multiply(delta).multiply(new BigDecimal(entry.getValue())));
         }
@@ -97,7 +98,7 @@ public abstract class BaseDecimalStddevAggregator extends DistinctValueWithCount
     private BigDecimal mean() {
         BigDecimal sum = BigDecimal.ZERO;
         for (Entry<ImmutableBytesPtr, Integer> entry : valueVsCount.entrySet()) {
-            BigDecimal colValue = (BigDecimal)PDataType.DECIMAL.toObject(entry.getKey());
+            BigDecimal colValue = (BigDecimal) PDecimal.INSTANCE.toObject(entry.getKey());
             sum = sum.add(colValue.multiply(new BigDecimal(entry.getValue())));
         }
         return sum.divide(new BigDecimal(totalCount), PDataType.DEFAULT_MATH_CONTEXT);
@@ -105,6 +106,6 @@ public abstract class BaseDecimalStddevAggregator extends DistinctValueWithCount
 
     @Override
     protected PDataType getResultDataType() {
-        return PDataType.DECIMAL;
+        return PDecimal.INSTANCE;
     }
 }

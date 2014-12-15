@@ -20,10 +20,8 @@ package org.apache.phoenix.util;
 import static org.junit.Assert.*;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.types.PInteger;
 import org.junit.Test;
-
-import org.apache.phoenix.schema.PDataType;
-
 
 public class ByteUtilTest {
 
@@ -57,9 +55,9 @@ public class ByteUtilTest {
         byte[] nextKey = ByteUtil.nextKey(key);
         byte[] expectedKey = new byte[] {2,(byte)0};
         assertArrayEquals(expectedKey, nextKey); 
-        key = ByteUtil.concat(Bytes.toBytes("00D300000000XHP"), PDataType.INTEGER.toBytes(Integer.MAX_VALUE));
+        key = ByteUtil.concat(Bytes.toBytes("00D300000000XHP"), PInteger.INSTANCE.toBytes(Integer.MAX_VALUE));
         nextKey = ByteUtil.nextKey(key);
-        expectedKey = ByteUtil.concat(Bytes.toBytes("00D300000000XHQ"), PDataType.INTEGER.toBytes(Integer.MIN_VALUE));
+        expectedKey = ByteUtil.concat(Bytes.toBytes("00D300000000XHQ"), PInteger.INSTANCE.toBytes(Integer.MIN_VALUE));
         assertArrayEquals(expectedKey, nextKey);
         
         key = new byte[] {(byte)255};

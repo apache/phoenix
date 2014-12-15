@@ -19,12 +19,9 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
-import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableMap;
-import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -48,7 +45,10 @@ import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
@@ -56,8 +56,6 @@ import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SequenceUtil;
 import org.apache.phoenix.util.ServerUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 
@@ -79,11 +77,11 @@ public class SequenceRegionObserver extends BaseRegionObserver {
     public static final String OPERATION_ATTRIB = "SEQUENCE_OPERATION";
     public static final String MAX_TIMERANGE_ATTRIB = "MAX_TIMERANGE";
     public static final String CURRENT_VALUE_ATTRIB = "CURRENT_VALUE";
-    private static final byte[] SUCCESS_VALUE = PDataType.INTEGER.toBytes(Integer.valueOf(Sequence.SUCCESS));
+    private static final byte[] SUCCESS_VALUE = PInteger.INSTANCE.toBytes(Integer.valueOf(Sequence.SUCCESS));
     
     private static Result getErrorResult(byte[] row, long timestamp, int errorCode) {
-        byte[] errorCodeBuf = new byte[PDataType.INTEGER.getByteSize()];
-        PDataType.INTEGER.getCodec().encodeInt(errorCode, errorCodeBuf, 0);
+        byte[] errorCodeBuf = new byte[PInteger.INSTANCE.getByteSize()];
+        PInteger.INSTANCE.getCodec().encodeInt(errorCode, errorCodeBuf, 0);
         return  Result.create(Collections.singletonList(
                 (Cell)KeyValueUtil.newKeyValue(row, 
                         PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, 
@@ -148,9 +146,9 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 KeyValue incrementByKV = Sequence.getIncrementByKV(result);
                 KeyValue cacheSizeKV = Sequence.getCacheSizeKV(result);
                 
-                long currentValue = PDataType.LONG.getCodec().decodeLong(currentValueKV.getValueArray(), currentValueKV.getValueOffset(), SortOrder.getDefault());
-                long incrementBy = PDataType.LONG.getCodec().decodeLong(incrementByKV.getValueArray(), incrementByKV.getValueOffset(), SortOrder.getDefault());
-                long cacheSize = PDataType.LONG.getCodec().decodeLong(cacheSizeKV.getValueArray(), cacheSizeKV.getValueOffset(), SortOrder.getDefault());
+                long currentValue = PLong.INSTANCE.getCodec().decodeLong(currentValueKV.getValueArray(), currentValueKV.getValueOffset(), SortOrder.getDefault());
+                long incrementBy = PLong.INSTANCE.getCodec().decodeLong(incrementByKV.getValueArray(), incrementByKV.getValueOffset(), SortOrder.getDefault());
+                long cacheSize = PLong.INSTANCE.getCodec().decodeLong(cacheSizeKV.getValueArray(), cacheSizeKV.getValueOffset(), SortOrder.getDefault());
                 
                 // Hold timestamp constant for sequences, so that clients always only see the latest
                 // value regardless of when they connect.
@@ -189,7 +187,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
 	                	Sequence.replaceLimitReachedKV(cells, newLimitReachedKV);
 	                }
 	                else {
-	                	limitReached = (Boolean) PDataType.BOOLEAN.toObject(limitReachedKV.getValueArray(),
+	                	limitReached = (Boolean) PBoolean.INSTANCE.toObject(limitReachedKV.getValueArray(),
 	                			limitReachedKV.getValueOffset(), limitReachedKV.getValueLength());
 	                }
 	                long minValue;
@@ -200,7 +198,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
 	                    Sequence.replaceMinValueKV(cells, newMinValueKV);
 	                }
 	                else {
-	                    minValue = PDataType.LONG.getCodec().decodeLong(minValueKV.getValueArray(),
+	                    minValue = PLong.INSTANCE.getCodec().decodeLong(minValueKV.getValueArray(),
 	                                minValueKV.getValueOffset(), SortOrder.getDefault());
 	                }           
 	                long maxValue;
@@ -211,7 +209,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
 	                    Sequence.replaceMaxValueKV(cells, newMaxValueKV);
 	                }
 	                else {
-	                    maxValue =  PDataType.LONG.getCodec().decodeLong(maxValueKV.getValueArray(),
+	                    maxValue =  PLong.INSTANCE.getCodec().decodeLong(maxValueKV.getValueArray(),
 	                            maxValueKV.getValueOffset(), SortOrder.getDefault());
 	                }
 	                boolean cycle;
@@ -222,7 +220,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
 	                    Sequence.replaceCycleValueKV(cells, newCycleKV);
 	                }
 	                else {
-	                    cycle = (Boolean) PDataType.BOOLEAN.toObject(cycleKV.getValueArray(),
+	                    cycle = (Boolean) PBoolean.INSTANCE.toObject(cycleKV.getValueArray(),
 	                            cycleKV.getValueOffset(), cycleKV.getValueLength());
 	                }
 	                
@@ -277,8 +275,8 @@ public class SequenceRegionObserver extends BaseRegionObserver {
 	 * @return return the KeyValue that was created
 	 */
 	KeyValue createKeyValue(byte[] key, byte[] cqBytes, long value, long timestamp) {
-		byte[] valueBuffer = new byte[PDataType.LONG.getByteSize()];
-		PDataType.LONG.getCodec().encodeLong(value, valueBuffer, 0);
+		byte[] valueBuffer = new byte[PLong.INSTANCE.getByteSize()];
+    PLong.INSTANCE.getCodec().encodeLong(value, valueBuffer, 0);
 		return KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, cqBytes, timestamp, valueBuffer);
 	}
     
@@ -374,8 +372,8 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 switch (op) {
                 case RETURN_SEQUENCE:
                     KeyValue currentValueKV = result.raw()[0];
-                    long expectedValue = PDataType.LONG.getCodec().decodeLong(append.getAttribute(CURRENT_VALUE_ATTRIB), 0, SortOrder.getDefault());
-                    long value = PDataType.LONG.getCodec().decodeLong(currentValueKV.getValueArray(), 
+                    long expectedValue = PLong.INSTANCE.getCodec().decodeLong(append.getAttribute(CURRENT_VALUE_ATTRIB), 0, SortOrder.getDefault());
+                    long value = PLong.INSTANCE.getCodec().decodeLong(currentValueKV.getValueArray(),
                       currentValueKV.getValueOffset(), SortOrder.getDefault());
                     // Timestamp should match exactly, or we may have the wrong sequence
                     if (expectedValue != value || currentValueKV.getTimestamp() != clientTimestamp) {

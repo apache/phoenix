@@ -30,8 +30,11 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 import com.google.common.collect.Lists;
@@ -40,12 +43,11 @@ import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
-import static org.apache.phoenix.schema.PDataType.DECIMAL;
 
 /**
  *
  * Class encapsulating the process for rounding off a column/literal of type
- * {@link org.apache.phoenix.schema.PDataType#DECIMAL}
+ * {@link org.apache.phoenix.schema.types.PDecimal}
  *
  *
  * @since 3.0.0
@@ -59,10 +61,10 @@ public class RoundDecimalExpression extends ScalarFunction {
      *
      */
     public static Expression create(Expression expr, int scale) throws SQLException {
-        if (expr.getDataType().isCoercibleTo(PDataType.LONG)) {
+        if (expr.getDataType().isCoercibleTo(PLong.INSTANCE)) {
             return expr;
         }
-        Expression scaleExpr = LiteralExpression.newConstant(scale, PDataType.INTEGER, Determinism.ALWAYS);
+        Expression scaleExpr = LiteralExpression.newConstant(scale, PInteger.INSTANCE, Determinism.ALWAYS);
         List<Expression> expressions = Lists.newArrayList(expr, scaleExpr);
         return new RoundDecimalExpression(expressions);
     }
@@ -77,11 +79,11 @@ public class RoundDecimalExpression extends ScalarFunction {
 
     public static Expression create(List<Expression> exprs) throws SQLException {
         Expression expr = exprs.get(0);
-        if (expr.getDataType().isCoercibleTo(PDataType.LONG)) {
+        if (expr.getDataType().isCoercibleTo(PLong.INSTANCE)) {
             return expr;
         }
         if (exprs.size() == 1) {
-            Expression scaleExpr = LiteralExpression.newConstant(0, PDataType.INTEGER, Determinism.ALWAYS);
+            Expression scaleExpr = LiteralExpression.newConstant(0, PInteger.INSTANCE, Determinism.ALWAYS);
             exprs = Lists.newArrayList(expr, scaleExpr);
         }
         return new RoundDecimalExpression(exprs);
@@ -95,8 +97,8 @@ public class RoundDecimalExpression extends ScalarFunction {
         PDataType scaleType = scaleChild.getDataType();
         Object scaleValue = scaleChild.getValue();
         if(scaleValue != null) {
-            if (scaleType.isCoercibleTo(PDataType.INTEGER, scaleValue)) {
-                int scale = (Integer)PDataType.INTEGER.toObject(scaleValue, scaleType);
+            if (scaleType.isCoercibleTo(PInteger.INSTANCE, scaleValue)) {
+                int scale = (Integer) PInteger.INSTANCE.toObject(scaleValue, scaleType);
                 if (scale >=0 && scale <= PDataType.MAX_PRECISION) {
                     this.scale = scale;
                     return;
@@ -110,9 +112,9 @@ public class RoundDecimalExpression extends ScalarFunction {
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         Expression childExpr = children.get(0);
         if(childExpr.evaluate(tuple, ptr)) {
-            BigDecimal value = (BigDecimal)PDataType.DECIMAL.toObject(ptr, childExpr.getDataType(), childExpr.getSortOrder());
+            BigDecimal value = (BigDecimal) PDecimal.INSTANCE.toObject(ptr, childExpr.getDataType(), childExpr.getSortOrder());
             BigDecimal scaledValue = value.setScale(scale, getRoundingMode());
-            ptr.set(PDataType.DECIMAL.toBytes(scaledValue));
+            ptr.set(PDecimal.INSTANCE.toBytes(scaledValue));
             return true;
         }
         return false;
@@ -120,7 +122,7 @@ public class RoundDecimalExpression extends ScalarFunction {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.DECIMAL;
+        return PDecimal.INSTANCE;
     }
 
     protected RoundingMode getRoundingMode() {
@@ -175,7 +177,7 @@ public class RoundDecimalExpression extends ScalarFunction {
 
             @Override
             public KeyRange getKeyRange(CompareFilter.CompareOp op, Expression rhs) {
-                final BigDecimal rhsDecimal = (BigDecimal) DECIMAL.toObject(evaluateExpression(rhs));
+                final BigDecimal rhsDecimal = (BigDecimal) PDecimal.INSTANCE.toObject(evaluateExpression(rhs));
                 
                 // equality requires an exact match. if rounding would cut off more precision
                 // than needed for a match, it's impossible for there to be any matches
@@ -289,8 +291,8 @@ public class RoundDecimalExpression extends ScalarFunction {
             throw new IllegalArgumentException("Cannot produce input range for decimal " + result 
                 + ", not enough precision with scale " + getRoundingScale());
         }
-        byte[] lowerRange = DECIMAL.toBytes(halfStepPrevInScale(result));
-        byte[] upperRange = DECIMAL.toBytes(halfStepNextInScale(result));
+        byte[] lowerRange = PDecimal.INSTANCE.toBytes(halfStepPrevInScale(result));
+        byte[] upperRange = PDecimal.INSTANCE.toBytes(halfStepNextInScale(result));
         // inclusiveness changes depending on sign
         // e.g. -0.5 rounds "up" to -1 even though it is the lower boundary
         boolean lowerInclusive = result.signum() > 0;

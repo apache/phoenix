@@ -41,7 +41,9 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.AggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.schema.ArgumentTypeMismatchException;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDataTypeFactory;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.ValueRangeExcpetion;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -139,14 +141,15 @@ public class FunctionParseNode extends CompoundParseNode {
         if (args.length > children.size()) {
             List<Expression> moreChildren = new ArrayList<Expression>(children);
             for (int i = children.size(); i < info.getArgs().length; i++) {
-                moreChildren.add(LiteralExpression.newConstant(null, args[i].allowedTypes.length == 0 ? null :  args[i].allowedTypes[0], Determinism.ALWAYS));
+                moreChildren.add(LiteralExpression.newConstant(null, args[i].allowedTypes.length == 0 ? null :
+                    PDataTypeFactory.getInstance().instanceFromClass(args[i].allowedTypes[0]), Determinism.ALWAYS));
             }
             children = moreChildren;
         }
         List<ParseNode> nodeChildren = this.getChildren();
         for (int i = 0; i < children.size(); i++) {
             BindParseNode bindNode = null;
-            PDataType[] allowedTypes = args[i].getAllowedTypes();
+            Class<? extends PDataType>[] allowedTypes = args[i].getAllowedTypes();
             // Check if the node is a bind parameter, and set the parameter
             // metadata based on the function argument annotation. Check to
             // make sure we're not looking past the end of the list of
@@ -176,7 +179,8 @@ public class FunctionParseNode extends CompoundParseNode {
                     // based on the function argument annonation set the parameter meta data.
                     if (child.getDataType() == null) {
                         if (allowedTypes.length > 0) {
-                            context.getBindManager().addParamMetaData(bindNode, LiteralExpression.newConstant(null, allowedTypes[0], Determinism.ALWAYS));
+                            context.getBindManager().addParamMetaData(bindNode, LiteralExpression.newConstant(null, PDataTypeFactory.getInstance().instanceFromClass(
+                                allowedTypes[0]), Determinism.ALWAYS));
                         }
                     } else { // Use expression as is, since we already have the data type set
                         context.getBindManager().addParamMetaData(bindNode, child);
@@ -185,15 +189,16 @@ public class FunctionParseNode extends CompoundParseNode {
             } else {
                 if (allowedTypes.length > 0) {
                     boolean isCoercible = false;
-                    for (PDataType type : allowedTypes) {
-                        if (child.getDataType().isCoercibleTo(type)) {
+                    for (Class<? extends PDataType> type : allowedTypes) {
+                        if (child.getDataType().isCoercibleTo(
+                            PDataTypeFactory.getInstance().instanceFromClass(type))) {
                             isCoercible = true;
                             break;
                         }
                     }
                     if (!isCoercible) {
-                        throw new ArgumentTypeMismatchException(Arrays.toString(args[i].getAllowedTypes()),
-                                child.getDataType().toString(), info.getName() + " argument " + (i + 1));
+                        throw new ArgumentTypeMismatchException(args[i].getAllowedTypes(),
+                            child.getDataType(), info.getName() + " argument " + (i + 1));
                     }
                     if (child instanceof LiteralExpression) {
                         LiteralExpression valueExp = (LiteralExpression) child;
@@ -262,7 +267,7 @@ public class FunctionParseNode extends CompoundParseNode {
     @Target(ElementType.TYPE)
     public
     @interface Argument {
-        PDataType[] allowedTypes() default {};
+        Class<? extends PDataType>[] allowedTypes() default {};
         boolean isConstant() default false;
         String defaultValue() default "";
         String enumeration() default "";
@@ -325,8 +330,8 @@ public class FunctionParseNode extends CompoundParseNode {
 
     @Immutable
     public static class BuiltInFunctionArgInfo {
-        private static final PDataType[] ENUMERATION_TYPES = new PDataType[] {PDataType.VARCHAR};
-        private final PDataType[] allowedTypes;
+        private static final Class<? extends PDataType>[] ENUMERATION_TYPES = new Class[] { PVarchar.class };
+        private final Class<? extends PDataType>[] allowedTypes;
         private final boolean isConstant;
         private final Set<String> allowedValues; // Enumeration of possible values
         private final LiteralExpression defaultValue;
@@ -378,11 +383,16 @@ public class FunctionParseNode extends CompoundParseNode {
                 SQLParser parser = new SQLParser(strValue);
                 try {
                     LiteralParseNode node = parser.parseLiteral();
-                    LiteralExpression defaultValue = LiteralExpression.newConstant(node.getValue(), this.allowedTypes[0], Determinism.ALWAYS);
+                    LiteralExpression defaultValue = LiteralExpression.newConstant(node.getValue(), PDataTypeFactory.getInstance().instanceFromClass(
+                        allowedTypes[0]), Determinism.ALWAYS);
                     if (this.getAllowedTypes().length > 0) {
-                        for (PDataType type : this.getAllowedTypes()) {
-                            if (defaultValue.getDataType() == null || defaultValue.getDataType().isCoercibleTo(type, node.getValue())) {
-                                return LiteralExpression.newConstant(node.getValue(), type, Determinism.ALWAYS);
+                        for (Class<? extends PDataType> type : this.getAllowedTypes()) {
+                            if (defaultValue.getDataType() == null || defaultValue.getDataType().isCoercibleTo(
+                                PDataTypeFactory.getInstance().instanceFromClass(type),
+                                node.getValue())) {
+                                return LiteralExpression.newConstant(node.getValue(),
+                                    PDataTypeFactory.getInstance().instanceFromClass(type),
+                                    Determinism.ALWAYS);
                             }
                         }
                         throw new IllegalStateException("Unable to coerce default value " + strValue + " to any of the allowed types of " + Arrays.toString(this.getAllowedTypes()));
@@ -410,8 +420,7 @@ public class FunctionParseNode extends CompoundParseNode {
         public LiteralExpression getMaxValue() {
             return maxValue;
         }
-
-        public PDataType[] getAllowedTypes() {
+        public Class<? extends PDataType>[] getAllowedTypes() {
             return allowedTypes;
         }
 

@@ -63,7 +63,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.Closeables;
@@ -128,7 +128,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         long limit = Long.MAX_VALUE;
         byte[] limitBytes = scan.getAttribute(GROUP_BY_LIMIT);
         if (limitBytes != null) {
-            limit = PDataType.INTEGER.getCodec().decodeInt(limitBytes, 0, SortOrder.getDefault());
+            limit = PInteger.INSTANCE.getCodec().decodeInt(limitBytes, 0, SortOrder.getDefault());
         }
 
         RegionScanner innerScanner = s;

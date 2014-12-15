@@ -25,8 +25,10 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PTable.ViewType;
+import org.apache.phoenix.schema.types.PUnsignedTinyint;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -41,7 +43,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * @since 2.2
  */
 @BuiltInFunction(name=SQLViewTypeFunction.NAME, args= {
-    @Argument(allowedTypes=PDataType.UNSIGNED_TINYINT)} )
+    @Argument(allowedTypes= PUnsignedTinyint.class)} )
 public class SQLViewTypeFunction extends ScalarFunction {
     public static final String NAME = "SQLViewType";
 
@@ -68,7 +70,7 @@ public class SQLViewTypeFunction extends ScalarFunction {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.VARCHAR;
+        return PVarchar.INSTANCE;
     }
     
     @Override

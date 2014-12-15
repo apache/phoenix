@@ -167,7 +167,7 @@ public class RowKeySchema extends ValueSchema {
      * set, and null if the value is null and there are no more values
      */
     public Boolean next(ImmutableBytesWritable ptr, int position, int maxOffset, int extraSpan) {
-        Boolean returnValue = next(ptr, position, maxOffset);
+      Boolean returnValue = next(ptr, position, maxOffset);
         readExtraFields(ptr, position + 1, maxOffset, extraSpan);
         return returnValue;
     }

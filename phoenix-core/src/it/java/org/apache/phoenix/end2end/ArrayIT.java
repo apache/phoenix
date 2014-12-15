@@ -39,7 +39,7 @@ import java.sql.Types;
 import java.util.Properties;
 
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.schema.PhoenixArray;
+import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;

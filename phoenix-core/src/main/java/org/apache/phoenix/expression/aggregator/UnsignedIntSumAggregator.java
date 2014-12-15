@@ -17,8 +17,9 @@
  */
 package org.apache.phoenix.expression.aggregator;
 
+import org.apache.phoenix.schema.types.PUnsignedInt;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * 
@@ -35,7 +36,7 @@ public class UnsignedIntSumAggregator extends NumberSumAggregator {
     
     @Override
     protected PDataType getInputDataType() {
-        return PDataType.UNSIGNED_INT;
+        return PUnsignedInt.INSTANCE;
     }
 
 }

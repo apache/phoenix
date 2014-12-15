@@ -27,6 +27,8 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
 import org.junit.Test;
 
 /**
@@ -43,13 +45,22 @@ public class SortOrderTest {
 	
 	@Test
 	public void booleanLogic() {
-	    assertTrue(PDataType.BOOLEAN.toObject(PDataType.TRUE_BYTES, SortOrder.ASC) == PDataType.BOOLEAN.toObject(PDataType.FALSE_BYTES, SortOrder.DESC));
-        assertTrue(PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(true), SortOrder.ASC) == PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(false), SortOrder.DESC));
-        assertTrue(PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(true,SortOrder.ASC)) == PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(false,SortOrder.DESC)));
+	    assertTrue(PBoolean.INSTANCE.toObject(PDataType.TRUE_BYTES, SortOrder.ASC) == PBoolean.INSTANCE.toObject(
+          PDataType.FALSE_BYTES, SortOrder.DESC));
+        assertTrue(
+            PBoolean.INSTANCE.toObject(PBoolean.INSTANCE.toBytes(true), SortOrder.ASC) == PBoolean.INSTANCE.toObject(
+                PBoolean.INSTANCE.toBytes(false), SortOrder.DESC));
+        assertTrue(
+            PBoolean.INSTANCE.toObject(PBoolean.INSTANCE.toBytes(true,SortOrder.ASC)) == PBoolean.INSTANCE.toObject(
+                PBoolean.INSTANCE.toBytes(false,SortOrder.DESC)));
 
-        assertFalse(PDataType.BOOLEAN.toObject(PDataType.FALSE_BYTES, SortOrder.ASC) == PDataType.BOOLEAN.toObject(PDataType.FALSE_BYTES, SortOrder.DESC));
-        assertFalse(PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(false), SortOrder.ASC) == PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(false), SortOrder.DESC));
-        assertFalse(PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(false,SortOrder.ASC)) == PDataType.BOOLEAN.toObject(PDataType.BOOLEAN.toBytes(false,SortOrder.DESC)));
+        assertFalse(PBoolean.INSTANCE.toObject(PDataType.FALSE_BYTES, SortOrder.ASC) == PBoolean.INSTANCE.toObject(PDataType.FALSE_BYTES, SortOrder.DESC));
+        assertFalse(
+            PBoolean.INSTANCE.toObject(PBoolean.INSTANCE.toBytes(false), SortOrder.ASC) == PBoolean.INSTANCE.toObject(
+                PBoolean.INSTANCE.toBytes(false), SortOrder.DESC));
+        assertFalse(
+            PBoolean.INSTANCE.toObject(PBoolean.INSTANCE.toBytes(false,SortOrder.ASC)) == PBoolean.INSTANCE.toObject(
+                PBoolean.INSTANCE.toBytes(false,SortOrder.DESC)));
 	}
 
 	@Test

@@ -24,8 +24,9 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.schema.PArrayDataType;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PIntegerArray;
+import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.util.ColumnInfo;
 import org.junit.After;
 import org.junit.Before;
@@ -60,7 +61,7 @@ public class CsvUpsertExecutorTest extends BaseConnectionlessQueryTest {
                 new ColumnInfo("ID", Types.BIGINT),
                 new ColumnInfo("NAME", Types.VARCHAR),
                 new ColumnInfo("AGE", Types.INTEGER),
-                new ColumnInfo("VALUES", PDataType.INTEGER_ARRAY.getSqlType()));
+                new ColumnInfo("VALUES", PIntegerArray.INSTANCE.getSqlType()));
 
         preparedStatement = mock(PreparedStatement.class);
         upsertListener = mock(CsvUpsertExecutor.UpsertListener.class);
@@ -83,7 +84,7 @@ public class CsvUpsertExecutorTest extends BaseConnectionlessQueryTest {
         verify(preparedStatement).setObject(1, Long.valueOf(123L));
         verify(preparedStatement).setObject(2, "NameValue");
         verify(preparedStatement).setObject(3, Integer.valueOf(42));
-        verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PDataType.INTEGER, new Object[]{1,2,3}));
+        verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
         verify(preparedStatement).execute();
         verifyNoMoreInteractions(preparedStatement);
     }
@@ -108,7 +109,7 @@ public class CsvUpsertExecutorTest extends BaseConnectionlessQueryTest {
         verify(preparedStatement).setObject(1, Long.valueOf(123L));
         verify(preparedStatement).setObject(2, "NameValue");
         verify(preparedStatement).setObject(3, Integer.valueOf(42));
-        verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PDataType.INTEGER, new Object[]{1,2,3}));
+        verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
         verify(preparedStatement).execute();
         verifyNoMoreInteractions(preparedStatement);
     }
@@ -123,7 +124,7 @@ public class CsvUpsertExecutorTest extends BaseConnectionlessQueryTest {
         verify(preparedStatement).setObject(1, Long.valueOf(123L));
         verify(preparedStatement).setObject(2, "NameValue");
         verify(preparedStatement).setNull(3, columnInfoList.get(2).getSqlType());
-        verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PDataType.INTEGER, new Object[]{1,2,3}));
+        verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
         verify(preparedStatement).execute();
         verifyNoMoreInteractions(preparedStatement);
     }

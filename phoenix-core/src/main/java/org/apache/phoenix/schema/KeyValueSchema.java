@@ -24,12 +24,13 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.http.annotation.Immutable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 
 
 /**
  * 
- * Simple flat schema over a byte array where fields may be any of {@link PDataType}.
+ * Simple flat schema over a byte array where fields may be any of {@link org.apache.phoenix.schema.types.PDataType}.
  * Optimized for positional access by index.
  *
  * 

@@ -20,7 +20,7 @@ package org.apache.phoenix.mapreduce;
 import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ColumnInfo;
 import org.junit.Test;
 
@@ -41,7 +41,7 @@ public class CsvBulkImportUtilTest {
         char escape = '\\';
 
         List<ColumnInfo> columnInfoList = ImmutableList.of(
-                new ColumnInfo("MYCOL", PDataType.INTEGER.getSqlType()));
+                new ColumnInfo("MYCOL", PInteger.INSTANCE.getSqlType()));
 
         CsvBulkImportUtil.initCsvImportJob(
                 conf, tableName, delimiter, quote, escape, null, columnInfoList, true);

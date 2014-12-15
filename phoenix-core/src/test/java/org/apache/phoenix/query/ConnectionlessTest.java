@@ -40,7 +40,9 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -60,9 +62,9 @@ public class ConnectionlessTest {
     private static final String name2 = "Simon";
     private static final Date now = new Date(System.currentTimeMillis());
     private static final byte[] unsaltedRowKey1 = ByteUtil.concat(
-            PDataType.CHAR.toBytes(orgId),PDataType.CHAR.toBytes(keyPrefix1),PDataType.CHAR.toBytes(entityHistoryId1));
+            PChar.INSTANCE.toBytes(orgId), PChar.INSTANCE.toBytes(keyPrefix1), PChar.INSTANCE.toBytes(entityHistoryId1));
     private static final byte[] unsaltedRowKey2 = ByteUtil.concat(
-            PDataType.CHAR.toBytes(orgId),PDataType.CHAR.toBytes(keyPrefix2),PDataType.CHAR.toBytes(entityHistoryId2));
+            PChar.INSTANCE.toBytes(orgId), PChar.INSTANCE.toBytes(keyPrefix2), PChar.INSTANCE.toBytes(entityHistoryId2));
     private static final byte[] saltedRowKey1 = ByteUtil.concat(
             new byte[] {SaltingUtil.getSaltingByte(unsaltedRowKey1, 0, unsaltedRowKey1.length, saltBuckets)},
             unsaltedRowKey1);
@@ -142,15 +144,15 @@ public class ConnectionlessTest {
         assertTrue(iterator.hasNext());
         kv = iterator.next();
         assertArrayEquals(expectedRowKey1, kv.getRow());        
-        assertEquals(name1, PDataType.VARCHAR.toObject(kv.getValue()));
+        assertEquals(name1, PVarchar.INSTANCE.toObject(kv.getValue()));
         assertTrue(iterator.hasNext());
         kv = iterator.next();
         assertArrayEquals(expectedRowKey1, kv.getRow());        
-        assertEquals(now, PDataType.DATE.toObject(kv.getValue()));
+        assertEquals(now, PDate.INSTANCE.toObject(kv.getValue()));
         assertTrue(iterator.hasNext());
         kv = iterator.next();
         assertArrayEquals(expectedRowKey1, kv.getRow());        
-        assertNull(PDataType.VARCHAR.toObject(kv.getValue()));
+        assertNull(PVarchar.INSTANCE.toObject(kv.getValue()));
     }
 
     private static void assertRow2(Iterator<KeyValue> iterator, byte[] expectedRowKey2) {
@@ -158,15 +160,15 @@ public class ConnectionlessTest {
         assertTrue(iterator.hasNext());
         kv = iterator.next();
         assertArrayEquals(expectedRowKey2, kv.getRow());        
-        assertEquals(name2, PDataType.VARCHAR.toObject(kv.getValue()));
+        assertEquals(name2, PVarchar.INSTANCE.toObject(kv.getValue()));
         assertTrue(iterator.hasNext());
         kv = iterator.next();
         assertArrayEquals(expectedRowKey2, kv.getRow());        
-        assertEquals(now, PDataType.DATE.toObject(kv.getValue()));
+        assertEquals(now, PDate.INSTANCE.toObject(kv.getValue()));
         assertTrue(iterator.hasNext());
         kv = iterator.next();
         assertArrayEquals(expectedRowKey2, kv.getRow());        
-        assertNull(PDataType.VARCHAR.toObject(kv.getValue()));
+        assertNull(PVarchar.INSTANCE.toObject(kv.getValue()));
     }
     
     @Test

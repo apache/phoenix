@@ -29,7 +29,9 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -73,8 +75,8 @@ public class CaseExpression extends BaseCompoundExpression {
         }
         // If we found an "unknown" child type and the return type is a number
         // make the return type be the most general number type of DECIMAL.
-        if (isChildTypeUnknown && returnType != null && returnType.isCoercibleTo(PDataType.DECIMAL)) {
-            returnType = PDataType.DECIMAL;
+        if (isChildTypeUnknown && returnType != null && returnType.isCoercibleTo(PDecimal.INSTANCE)) {
+            returnType = PDecimal.INSTANCE;
         }
         List<Expression> newChildren = children;
         for (int i = 0; i < children.size(); i+=2) {
@@ -156,7 +158,7 @@ public class CaseExpression extends BaseCompoundExpression {
             // If we get null, we have to re-evaluate from that point (special case this in filter, like is null)
             // We may only run this when we're done/have all values
             boolean evaluated = children.get(i+1).evaluate(tuple, ptr);
-            if (evaluated && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(ptr))) {
+            if (evaluated && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr))) {
                 if (isPartiallyEvaluating()) {
                     foundIndex = true;
                 }

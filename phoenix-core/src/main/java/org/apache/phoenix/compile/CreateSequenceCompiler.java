@@ -23,7 +23,6 @@ import java.util.Collections;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -34,9 +33,11 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.SortOrder;
 
 import org.apache.phoenix.util.SequenceUtil;
@@ -57,7 +58,7 @@ public class CreateSequenceCompiler {
 
         @Override
         public PDataType getDataType() {
-            return PDataType.LONG;
+            return PLong.INSTANCE;
         }
 
         @Override
@@ -85,7 +86,7 @@ public class CreateSequenceCompiler {
 
         @Override
         public PDataType getDataType() {
-            return PDataType.INTEGER;
+            return PInteger.INSTANCE;
         }
 
         @Override
@@ -119,11 +120,11 @@ public class CreateSequenceCompiler {
             Expression expression, SQLExceptionCode code) throws SQLException {
         ImmutableBytesWritable ptr = context.getTempPtr();
         expression.evaluate(null, ptr);
-        if (ptr.getLength() == 0 || !expression.getDataType().isCoercibleTo(PDataType.LONG)) {
+        if (ptr.getLength() == 0 || !expression.getDataType().isCoercibleTo(PLong.INSTANCE)) {
             TableName sequenceName = sequence.getSequenceName();
             throw SequenceUtil.getException(sequenceName.getSchemaName(), sequenceName.getTableName(), code);
         }
-        return (Long) PDataType.LONG.toObject(ptr, expression.getDataType());
+        return (Long) PLong.INSTANCE.toObject(ptr, expression.getDataType());
     }
 
     public MutationPlan compile(final CreateSequenceStatement sequence) throws SQLException {

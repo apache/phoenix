@@ -25,7 +25,8 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ExpressionUtil;
 
@@ -42,11 +43,11 @@ public class IsNullExpression extends BaseSingleExpression {
 
     public static Expression create(Expression child, boolean negate, ImmutableBytesWritable ptr) throws SQLException {
         if (!child.isNullable()) {
-            return LiteralExpression.newConstant(negate, PDataType.BOOLEAN, child.getDeterminism());
+            return LiteralExpression.newConstant(negate, PBoolean.INSTANCE, child.getDeterminism());
         }
         if (ExpressionUtil.isConstant(child)) {
             boolean evaluated = child.evaluate(null, ptr);
-            return LiteralExpression.newConstant(negate ^ (!evaluated || ptr.getLength() == 0), PDataType.BOOLEAN, child.getDeterminism());
+            return LiteralExpression.newConstant(negate ^ (!evaluated || ptr.getLength() == 0), PBoolean.INSTANCE, child.getDeterminism());
         }
         return new IsNullExpression(child, negate);
     }
@@ -92,7 +93,7 @@ public class IsNullExpression extends BaseSingleExpression {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.BOOLEAN;
+        return PBoolean.INSTANCE;
     }
     
     @Override

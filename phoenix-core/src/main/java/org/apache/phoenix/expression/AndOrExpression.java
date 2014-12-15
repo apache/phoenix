@@ -21,7 +21,8 @@ import java.util.BitSet;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -45,7 +46,7 @@ public abstract class AndOrExpression extends BaseCompoundExpression {
     
     @Override
     public PDataType getDataType() {
-        return PDataType.BOOLEAN;
+        return PBoolean.INSTANCE;
     }
 
     @Override
@@ -70,7 +71,7 @@ public abstract class AndOrExpression extends BaseCompoundExpression {
                 // evaluate versus getValue code path.
                 if (child.evaluate(tuple, ptr)) {
                     // Short circuit if we see our stop value
-                    if (isStopValue((Boolean)PDataType.BOOLEAN.toObject(ptr, child.getDataType()))) {
+                    if (isStopValue((Boolean) PBoolean.INSTANCE.toObject(ptr, child.getDataType()))) {
                         return true;
                     } else if (partialEvalState != null) {
                         partialEvalState.set(i);

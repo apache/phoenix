@@ -26,8 +26,9 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
-
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * 
@@ -87,7 +88,7 @@ public class PhoenixResultSetMetaData implements ResultSetMetaData {
         if (type == null) {
             return QueryConstants.NULL_DISPLAY_TEXT.length();
         }
-        if (type.isCoercibleTo(PDataType.DATE)) {
+        if (type.isCoercibleTo(PDate.INSTANCE)) {
             return connection.getDatePattern().length();
         }
         if (projector.getExpression().getMaxLength() != null) {
@@ -182,7 +183,7 @@ public class PhoenixResultSetMetaData implements ResultSetMetaData {
         if (type == null) {
             return false;
         }
-        return type.isCoercibleTo(PDataType.DECIMAL);
+        return type.isCoercibleTo(PDecimal.INSTANCE);
     }
 
     @Override

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
+import org.apache.phoenix.schema.types.PVarchar;
 
 public enum PIndexState {
     BUILDING("b"),
@@ -33,8 +34,8 @@ public enum PIndexState {
 
     private PIndexState(String value) {
         this.serializedValue = value;
-        this.serializedBytes = PDataType.VARCHAR.toBytes(value);
-        this.nameBytesValue = PDataType.VARCHAR.toBytes(this.toString());
+        this.serializedBytes = PVarchar.INSTANCE.toBytes(value);
+        this.nameBytesValue = PVarchar.INSTANCE.toBytes(this.toString());
     }
 
     public String getSerializedValue() {

@@ -34,7 +34,10 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.*;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
@@ -46,8 +49,8 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * @since 0.1
  */
 @BuiltInFunction(name=ToNumberFunction.NAME,  nodeClass=ToNumberParseNode.class, args= {
-        @Argument(allowedTypes={PDataType.VARCHAR, PDataType.TIMESTAMP}),
-        @Argument(allowedTypes={PDataType.VARCHAR}, isConstant=true, defaultValue="null")} )
+        @Argument(allowedTypes={PVarchar.class, PTimestamp.class}),
+        @Argument(allowedTypes={PVarchar.class}, isConstant=true, defaultValue="null")} )
 public class ToNumberFunction extends ScalarFunction {
 	public static final String NAME = "TO_NUMBER";
     
@@ -75,7 +78,7 @@ public class ToNumberFunction extends ScalarFunction {
         }
 
         PDataType type = expression.getDataType();
-        if (type.isCoercibleTo(PDataType.TIMESTAMP)) {
+        if (type.isCoercibleTo(PTimestamp.INSTANCE)) {
         	Date date = (Date) type.toObject(ptr, expression.getSortOrder());
         	BigDecimal time = new BigDecimal(date.getTime());
             byte[] byteValue = getDataType().toBytes(time);
@@ -116,7 +119,7 @@ public class ToNumberFunction extends ScalarFunction {
 
     @Override
     public PDataType getDataType() {
-    	return PDataType.DECIMAL;
+    	return PDecimal.INSTANCE;
     }
     
     @Override

@@ -13,7 +13,7 @@ package org.apache.phoenix.util;
 import java.util.List;
 
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;

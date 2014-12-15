@@ -50,6 +50,8 @@ import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.schema.stats.PTableStatsImpl;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
@@ -661,7 +663,7 @@ public class PTableImpl implements PTable {
                         .getFamilyName().getBytesPtr(), column.getName().getBytesPtr(), ts));
             } else {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable(byteValue);
-            	Integer	maxLength = column.getMaxLength();
+              Integer	maxLength = column.getMaxLength();
             	if (type.isFixedWidth() && maxLength != null) {
     				if (ptr.getLength() <= maxLength) {
                         type.pad(ptr, maxLength);
@@ -908,7 +910,7 @@ public class PTableImpl implements PTable {
       if (tableType == PTableType.VIEW) {
         viewType = ViewType.fromSerializedValue(table.getViewType().toByteArray()[0]);
         if(table.hasViewStatement()){
-          viewStatement = (String)PDataType.VARCHAR.toObject(table.getViewStatement().toByteArray());
+          viewStatement = (String) PVarchar.INSTANCE.toObject(table.getViewStatement().toByteArray());
         }
       }
       if (tableType == PTableType.VIEW || viewIndexId != null) {
@@ -996,7 +998,7 @@ public class PTableImpl implements PTable {
       builder.setMultiTenant(table.isMultiTenant());
       if(table.getType() == PTableType.VIEW){
         builder.setViewType(HBaseZeroCopyByteString.wrap(new byte[]{table.getViewType().getSerializedValue()}));
-        builder.setViewStatement(HBaseZeroCopyByteString.wrap(PDataType.VARCHAR.toBytes(table.getViewStatement())));
+        builder.setViewStatement(HBaseZeroCopyByteString.wrap(PVarchar.INSTANCE.toBytes(table.getViewStatement())));
       }
       if(table.getType() == PTableType.VIEW || table.getViewIndexId() != null){
         for (int i = 0; i < table.getPhysicalNames().size(); i++) {

@@ -29,7 +29,8 @@ import org.apache.phoenix.expression.aggregator.DistinctValueWithCountServerAggr
 import org.apache.phoenix.expression.aggregator.StddevSampAggregator;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * 
@@ -38,7 +39,7 @@ import org.apache.phoenix.schema.PDataType;
  * 
  * @since 1.2.1
  */
-@BuiltInFunction(name = StddevSampFunction.NAME, args = { @Argument(allowedTypes={PDataType.DECIMAL})})
+@BuiltInFunction(name = StddevSampFunction.NAME, args = { @Argument(allowedTypes={PDecimal.class})})
 public class StddevSampFunction extends DistinctValueWithCountAggregateFunction {
     public static final String NAME = "STDDEV_SAMP";
 
@@ -57,7 +58,7 @@ public class StddevSampFunction extends DistinctValueWithCountAggregateFunction 
 
     @Override
     public DistinctValueWithCountClientAggregator newClientAggregator() {
-        if (children.get(0).getDataType() == PDataType.DECIMAL) {
+        if (children.get(0).getDataType() == PDecimal.INSTANCE) {
             // Special Aggregators for DECIMAL datatype for more precision than double
             return new DecimalStddevSampAggregator(children, getAggregatorExpression().getSortOrder());
         }
@@ -71,6 +72,6 @@ public class StddevSampFunction extends DistinctValueWithCountAggregateFunction 
 
     @Override
     public PDataType getDataType() {
-        return PDataType.DECIMAL;
+        return PDecimal.INSTANCE;
     }
 }

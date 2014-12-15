@@ -22,7 +22,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.TypeMismatchException;
 
 
@@ -41,8 +41,8 @@ public class AndExpression extends AndOrExpression {
         Iterator<Expression> iterator = children.iterator();
         while (iterator.hasNext()) {
             Expression child = iterator.next();
-            if (child.getDataType() != PDataType.BOOLEAN) {
-                throw TypeMismatchException.newException(PDataType.BOOLEAN, child.getDataType(), child.toString());
+            if (child.getDataType() != PBoolean.INSTANCE) {
+                throw TypeMismatchException.newException(PBoolean.INSTANCE, child.getDataType(), child.toString());
             }
             if (LiteralExpression.isFalse(child)) {
                 return child;

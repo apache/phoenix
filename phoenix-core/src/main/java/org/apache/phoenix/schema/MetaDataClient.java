@@ -61,7 +61,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
-import static org.apache.phoenix.schema.PDataType.VARCHAR;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -141,6 +140,10 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
@@ -197,7 +200,7 @@ public class MetaDataClient {
             TABLE_NAME + "," +
             COLUMN_FAMILY + "," +
             LINK_TYPE + "," +
-            PARENT_TENANT_ID + " " + PDataType.VARCHAR.getSqlTypeName() + // Dynamic column for now to prevent schema change
+            PARENT_TENANT_ID + " " + PVarchar.INSTANCE.getSqlTypeName() + // Dynamic column for now to prevent schema change
             ") VALUES (?, ?, ?, ?, ?, ?)";
     private static final String INCREMENT_SEQ_NUM =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + 
@@ -347,8 +350,8 @@ public class MetaDataClient {
         MetaDataMutationResult result;
         
         do {
-            final byte[] schemaBytes = PDataType.VARCHAR.toBytes(schemaName);
-            final byte[] tableBytes = PDataType.VARCHAR.toBytes(tableName);
+            final byte[] schemaBytes = PVarchar.INSTANCE.toBytes(schemaName);
+            final byte[] tableBytes = PVarchar.INSTANCE.toBytes(tableName);
             result = connection.getQueryServices().getTable(tenantId, schemaBytes, tableBytes, tableTimestamp, clientTimeStamp);
             
             if (SYSTEM_CATALOG_SCHEMA.equals(schemaName)) {
@@ -809,7 +812,7 @@ public class MetaDataClient {
                         Cell kv = plan.iterator().next().getValue(0);
                         ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
                         // A single Cell will be returned with the count(*) - we decode that here
-                        long rowCount = PDataType.LONG.getCodec().decodeLong(tmpPtr, SortOrder.getDefault());
+                        long rowCount = PLong.INSTANCE.getCodec().decodeLong(tmpPtr, SortOrder.getDefault());
                         // The contract is to return a MutationState that contains the number of rows modified. In this
                         // case, it's the number of rows in the data table which corresponds to the number of index
                         // rows that were added.
@@ -1008,7 +1011,7 @@ public class MetaDataClient {
                 
                 // Don't re-allocate indexId on ConcurrentTableMutationException,
                 // as there's no need to burn another sequence value.
-                if (allocateIndexId && indexId == null) { 
+                if (allocateIndexId && indexId == null) {
                     Long scn = connection.getSCN();
                     long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
                     PName tenantId = connection.getTenantId();
@@ -1382,7 +1385,7 @@ public class MetaDataClient {
                     throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
                 }
                 columns.add(column);
-                if ((colDef.getDataType() == PDataType.VARBINARY || colDef.getDataType().isArrayType())  
+                if ((colDef.getDataType() == PVarbinary.INSTANCE || colDef.getDataType().isArrayType())
                         && SchemaUtil.isPKColumn(column)
                         && pkColumnsIterator.hasNext()) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_IN_ROW_KEY)
@@ -1688,7 +1691,7 @@ public class MetaDataClient {
         // NOT NULL is a requirement, since otherwise the table key would conflict
         // potentially with the global table definition.
         PColumn tenantIdCol = iterator.next();
-        if (!tenantIdCol.getDataType().isCoercibleTo(VARCHAR) || tenantIdCol.isNullable()) {
+        if (!tenantIdCol.getDataType().isCoercibleTo(PVarchar.INSTANCE) || tenantIdCol.isNullable()) {
             throw new SQLExceptionInfo.Builder(INSUFFICIENT_MULTI_TENANT_COLUMNS).setSchemaName(schemaName).setTableName(tableName).build().buildException();
         }
     }
@@ -1967,7 +1970,7 @@ public class MetaDataClient {
                 List<PColumn> currentPKs = table.getPKColumns();
                 PColumn lastPK = currentPKs.get(currentPKs.size()-1);
                 // Disallow adding columns if the last column is VARBIANRY.
-                if (lastPK.getDataType() == PDataType.VARBINARY || lastPK.getDataType().isArrayType()) {
+                if (lastPK.getDataType() == PVarbinary.INSTANCE || lastPK.getDataType().isArrayType()) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_LAST_PK)
                         .setColumnName(lastPK.getName().getString()).build().buildException();
                 }
@@ -1976,7 +1979,7 @@ public class MetaDataClient {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.NULLABLE_FIXED_WIDTH_LAST_PK)
                         .setColumnName(lastPK.getName().getString()).build().buildException();
                 }
-                          
+
                 Boolean isImmutableRows = null;
                 if (isImmutableRowsProp != null) {
                     if (isImmutableRowsProp.booleanValue() != table.isImmutableRows()) {

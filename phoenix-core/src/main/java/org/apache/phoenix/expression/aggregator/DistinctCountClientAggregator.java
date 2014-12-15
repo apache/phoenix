@@ -19,8 +19,9 @@ package org.apache.phoenix.expression.aggregator;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
@@ -41,9 +42,9 @@ public class DistinctCountClientAggregator extends DistinctValueWithCountClientA
             initBuffer();
         }
         if (cachedResult != null) {
-            buffer = PDataType.LONG.toBytes(cachedResult);
+            buffer = PLong.INSTANCE.toBytes(cachedResult);
         } else {
-            buffer = PDataType.LONG.toBytes(this.valueVsCount.size());
+            buffer = PLong.INSTANCE.toBytes(this.valueVsCount.size());
         }
         ptr.set(buffer);
         return true;
@@ -51,6 +52,6 @@ public class DistinctCountClientAggregator extends DistinctValueWithCountClientA
 
     @Override
     protected PDataType getResultDataType() {
-        return PDataType.LONG;
+        return PLong.INSTANCE;
     }
 }

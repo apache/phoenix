@@ -34,7 +34,7 @@ import java.util.Locale;
 import java.util.Properties;
 
 import org.apache.phoenix.expression.function.ToNumberFunction;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.AfterClass;
@@ -181,7 +181,7 @@ public class ToNumberFunctionIT extends BaseClientManagedTimeIT {
     @Test
     public void testKeyProjectionWithDecimalValue() throws Exception {
         String query = "select to_number(a_string) from " + TO_NUMBER_TABLE_NAME + " where a_id = 2";
-        BigDecimal expectedDecimalValue = (BigDecimal)PDataType.DECIMAL.toObject("2.2");
+        BigDecimal expectedDecimalValue = (BigDecimal) PDecimal.INSTANCE.toObject("2.2");
         runOneRowQueryTest(query, expectedDecimalValue);
     }
     
@@ -195,7 +195,7 @@ public class ToNumberFunctionIT extends BaseClientManagedTimeIT {
     @Test
     public void testNonKeyProjectionWithDecimalValue() throws Exception {
         String query = "select to_number(b_string) from " + TO_NUMBER_TABLE_NAME + " where a_id = 2";
-        BigDecimal expectedDecimalValue = (BigDecimal)PDataType.DECIMAL.toObject("2.2");
+        BigDecimal expectedDecimalValue = (BigDecimal) PDecimal.INSTANCE.toObject("2.2");
         runOneRowQueryTest(query, expectedDecimalValue);
     }
     

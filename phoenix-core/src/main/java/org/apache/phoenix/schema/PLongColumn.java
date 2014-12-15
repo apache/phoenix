@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema;
 
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 
 /**
  * 
@@ -28,6 +30,6 @@ package org.apache.phoenix.schema;
 public abstract class PLongColumn extends PBaseColumn {
     @Override
     public final PDataType getDataType() {
-        return PDataType.LONG;
+        return PLong.INSTANCE;
     }
 }

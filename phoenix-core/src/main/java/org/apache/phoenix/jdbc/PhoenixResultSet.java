@@ -49,7 +49,20 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.iterate.ResultIterator;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PSmallint;
+import org.apache.phoenix.schema.types.PTime;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PTinyint;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.DateUtil;
@@ -204,7 +217,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public BigDecimal getBigDecimal(int columnIndex) throws SQLException {
         checkCursorState();
-        BigDecimal value = (BigDecimal)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.DECIMAL, ptr);
+        BigDecimal value = (BigDecimal)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+            PDecimal.INSTANCE, ptr);
         wasNull = (value == null);
         return value;
     }
@@ -255,18 +269,17 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
         if (value == null) {
             return false;
         }
-        switch(type) {
-        case BOOLEAN:
-            return Boolean.TRUE.equals(value);
-        case VARCHAR:
-            return !STRING_FALSE.equals(value);
-        case INTEGER:
-            return !INTEGER_FALSE.equals(value);
-        case DECIMAL:
-            return !BIG_DECIMAL_FALSE.equals(value);
-        default:
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CALL_METHOD_ON_TYPE)
-                .setMessage("Method: getBoolean; Type:" + type).build().buildException();
+        if (type == PBoolean.INSTANCE) {
+          return Boolean.TRUE.equals(value);
+        } else if (type == PVarchar.INSTANCE) {
+          return !STRING_FALSE.equals(value);
+        } else if (type == PInteger.INSTANCE) {
+          return !INTEGER_FALSE.equals(value);
+        } else if (type == PDecimal.INSTANCE) {
+          return !BIG_DECIMAL_FALSE.equals(value);
+        } else {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CALL_METHOD_ON_TYPE)
+              .setMessage("Method: getBoolean; Type:" + type).build().buildException();
         }
     }
 
@@ -278,7 +291,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public byte[] getBytes(int columnIndex) throws SQLException {
         checkCursorState();
-        byte[] value = (byte[])rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.VARBINARY, ptr);
+        byte[] value = (byte[])rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+            PVarbinary.INSTANCE, ptr);
         wasNull = (value == null);
         return value;
     }
@@ -292,7 +306,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     public byte getByte(int columnIndex) throws SQLException {
 //        throw new SQLFeatureNotSupportedException();
         checkCursorState();
-        Byte value = (Byte)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.TINYINT, ptr);
+        Byte value = (Byte)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+            PTinyint.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return 0;
@@ -338,7 +353,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public Date getDate(int columnIndex) throws SQLException {
         checkCursorState();
-        Date value = (Date)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.DATE, ptr);
+        Date value = (Date)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+            PDate.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return null;
@@ -354,7 +370,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public Date getDate(int columnIndex, Calendar cal) throws SQLException {
         checkCursorState();
-        Date value = (Date)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.DATE, ptr);
+        Date value = (Date)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+            PDate.INSTANCE, ptr);
         cal.setTime(value);
         return new Date(cal.getTimeInMillis());
     }
@@ -367,7 +384,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public double getDouble(int columnIndex) throws SQLException {
         checkCursorState();
-        Double value = (Double)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.DOUBLE, ptr);
+        Double value = (Double)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+            PDouble.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return 0;
@@ -393,7 +411,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public float getFloat(int columnIndex) throws SQLException {
         checkCursorState();
-        Float value = (Float)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.FLOAT, ptr);
+        Float value = (Float)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+            PFloat.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return 0;
@@ -414,7 +433,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public int getInt(int columnIndex) throws SQLException {
         checkCursorState();
-        Integer value = (Integer)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.INTEGER, ptr);
+        Integer value = (Integer)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+            PInteger.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return 0;
@@ -430,7 +450,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public long getLong(int columnIndex) throws SQLException {
         checkCursorState();
-        Long value = (Long)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.LONG, ptr);
+        Long value = (Long)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+            PLong.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return 0;
@@ -541,7 +562,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public short getShort(int columnIndex) throws SQLException {
         checkCursorState();
-        Short value = (Short)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.SMALLINT, ptr);
+        Short value = (Short)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PSmallint.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return 0;
@@ -585,7 +606,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public Time getTime(int columnIndex) throws SQLException {
         checkCursorState();
-        Time value = (Time)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.TIME, ptr);
+        Time value = (Time)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+            PTime.INSTANCE, ptr);
         wasNull = (value == null);
         return value;
     }
@@ -598,7 +620,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public Time getTime(int columnIndex, Calendar cal) throws SQLException {
         checkCursorState();
-        Time value = (Time)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.TIME, ptr);
+        Time value = (Time)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+            PTime.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return null;
@@ -616,7 +639,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public Timestamp getTimestamp(int columnIndex) throws SQLException {
         checkCursorState();
-        Timestamp value = (Timestamp)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.TIMESTAMP, ptr);
+        Timestamp value = (Timestamp)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+            PTimestamp.INSTANCE, ptr);
         wasNull = (value == null);
         return value;
     }
@@ -629,7 +653,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public Timestamp getTimestamp(int columnIndex, Calendar cal) throws SQLException {
         checkCursorState();
-        Timestamp value = (Timestamp)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.TIMESTAMP, ptr);
+        Timestamp value = (Timestamp)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+            PTimestamp.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return null;
@@ -651,7 +676,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public URL getURL(int columnIndex) throws SQLException {
         checkCursorState();
-        String value = (String)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.VARCHAR, ptr);
+        String value = (String)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PVarchar.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return null;

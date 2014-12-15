@@ -30,7 +30,8 @@ import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.LongSumAggregator;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.SchemaUtil;
 
 
@@ -79,7 +80,7 @@ public class CountAggregateFunction extends SingleAggregateFunction {
     
     @Override
     public PDataType getDataType() {
-        return PDataType.LONG;
+        return PLong.INSTANCE;
     }
 
     @Override 

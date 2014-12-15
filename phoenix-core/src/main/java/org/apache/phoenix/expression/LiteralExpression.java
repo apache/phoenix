@@ -25,8 +25,11 @@ import java.sql.SQLException;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PhoenixArray;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -55,8 +58,9 @@ public class LiteralExpression extends BaseTerminalExpression {
 	        for (int i = 0; i < PDataType.values().length; i++) {
 	            TYPED_NULL_EXPRESSIONS[i+PDataType.values().length*determinism.ordinal()] = new LiteralExpression(PDataType.values()[i], determinism);
 	        }        
-	        BOOLEAN_EXPRESSIONS[determinism.ordinal()] = new LiteralExpression(Boolean.FALSE, PDataType.BOOLEAN, PDataType.BOOLEAN.toBytes(Boolean.FALSE), determinism);
-	        BOOLEAN_EXPRESSIONS[Determinism.values().length+determinism.ordinal()] = new LiteralExpression(Boolean.TRUE, PDataType.BOOLEAN, PDataType.BOOLEAN.toBytes(Boolean.TRUE), determinism);
+	        BOOLEAN_EXPRESSIONS[determinism.ordinal()] = new LiteralExpression(Boolean.FALSE,
+              PBoolean.INSTANCE, PBoolean.INSTANCE.toBytes(Boolean.FALSE), determinism);
+	        BOOLEAN_EXPRESSIONS[Determinism.values().length+determinism.ordinal()] = new LiteralExpression(Boolean.TRUE, PBoolean.INSTANCE, PBoolean.INSTANCE.toBytes(Boolean.TRUE), determinism);
     	}
     }
     
@@ -111,10 +115,10 @@ public class LiteralExpression extends BaseTerminalExpression {
         if (type.isNull(b)) {
             return getTypedNullLiteralExpression(type, determinism);
         }
-        if (type == PDataType.VARCHAR) {
+        if (type == PVarchar.INSTANCE) {
             String s = (String) value;
             if (s.length() == b.length) { // single byte characters only
-                type = PDataType.CHAR;
+                type = PChar.INSTANCE;
             }
         }
         return new LiteralExpression(value, type, b, determinism);
@@ -161,8 +165,8 @@ public class LiteralExpression extends BaseTerminalExpression {
         }
         value = type.toObject(value, actualType);
         byte[] b = type.toBytes(value, sortOrder);
-        if (type == PDataType.VARCHAR || type == PDataType.CHAR) {
-            if (type == PDataType.CHAR && maxLength != null  && b.length < maxLength) {
+        if (type == PVarchar.INSTANCE || type == PChar.INSTANCE) {
+            if (type == PChar.INSTANCE && maxLength != null  && b.length < maxLength) {
                 b = StringUtil.padChar(b, maxLength);
             } else if (value != null) {
                 maxLength = ((String)value).length();

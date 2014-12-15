@@ -23,7 +23,9 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.Base62Encoder;
 
@@ -32,7 +34,7 @@ import org.apache.phoenix.util.Base62Encoder;
  * 
  * Converts the given base 10 number to a base 62 number and returns a string representing the number.
  */
-@BuiltInFunction(name = EncodeFunction.NAME, args = { @Argument(allowedTypes = { PDataType.LONG }),
+@BuiltInFunction(name = EncodeFunction.NAME, args = { @Argument(allowedTypes = { PLong.class }),
     @Argument(enumeration = "EncodeFormat") })
 public class EncodeFunction extends ScalarFunction {
     public static final String NAME = "ENCODE";
@@ -67,7 +69,7 @@ public class EncodeFunction extends ScalarFunction {
         switch (format) {
             case BASE62:
                 String encodedString = Base62Encoder.toString(num);
-                ptr.set(PDataType.VARCHAR.toBytes(encodedString));
+                ptr.set(PVarchar.INSTANCE.toBytes(encodedString));
                 break;
             default:
                 throw new IllegalDataException(getUnsupportedEncodeFormatMsg(encodingFormat));
@@ -85,7 +87,7 @@ public class EncodeFunction extends ScalarFunction {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.VARCHAR;
+        return PVarchar.INSTANCE;
     }
 
     @Override

@@ -26,7 +26,9 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 
@@ -42,7 +44,7 @@ import org.apache.phoenix.util.ByteUtil;
  * @since 0.1
  */
 @BuiltInFunction(name=SqlTypeNameFunction.NAME, args= {
-    @Argument(allowedTypes=PDataType.INTEGER)} )
+    @Argument(allowedTypes= PInteger.class)} )
 public class SqlTypeNameFunction extends ScalarFunction {
     public static final String NAME = "SqlTypeName";
 
@@ -74,7 +76,7 @@ public class SqlTypeNameFunction extends ScalarFunction {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.VARCHAR;
+        return PVarchar.INSTANCE;
     }
     
     @Override

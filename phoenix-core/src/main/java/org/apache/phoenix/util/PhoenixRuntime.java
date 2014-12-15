@@ -18,7 +18,7 @@
 package org.apache.phoenix.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static org.apache.phoenix.schema.PDataType.ARRAY_TYPE_SUFFIX;
+import static org.apache.phoenix.schema.types.PDataType.ARRAY_TYPE_SUFFIX;
 
 import java.io.File;
 import java.io.FileReader;
@@ -66,7 +66,7 @@ import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;

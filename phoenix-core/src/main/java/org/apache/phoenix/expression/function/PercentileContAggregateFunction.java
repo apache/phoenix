@@ -28,7 +28,9 @@ import org.apache.phoenix.expression.aggregator.DistinctValueWithCountServerAggr
 import org.apache.phoenix.expression.aggregator.PercentileClientAggregator;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * 
@@ -37,9 +39,9 @@ import org.apache.phoenix.schema.PDataType;
  * 
  * @since 1.2.1
  */
-@BuiltInFunction(name = PercentileContAggregateFunction.NAME, args = { @Argument(allowedTypes = { PDataType.DECIMAL }),
-        @Argument(allowedTypes = { PDataType.BOOLEAN }, isConstant = true),
-        @Argument(allowedTypes = { PDataType.DECIMAL }, isConstant = true, minValue = "0", maxValue = "1") })
+@BuiltInFunction(name = PercentileContAggregateFunction.NAME, args = { @Argument(allowedTypes = { PDecimal.class }),
+        @Argument(allowedTypes = { PBoolean.class }, isConstant = true),
+        @Argument(allowedTypes = { PDecimal.class }, isConstant = true, minValue = "0", maxValue = "1") })
 public class PercentileContAggregateFunction extends DistinctValueWithCountAggregateFunction {
     public static final String NAME = "PERCENTILE_CONT";
 
@@ -68,6 +70,6 @@ public class PercentileContAggregateFunction extends DistinctValueWithCountAggre
     
     @Override
     public PDataType getDataType() {
-        return PDataType.DECIMAL;
+        return PDecimal.INSTANCE;
     }
 }

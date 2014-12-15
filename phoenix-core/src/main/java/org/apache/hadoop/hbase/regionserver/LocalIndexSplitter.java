@@ -31,17 +31,13 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
-import org.apache.hadoop.hbase.regionserver.RegionServerServices;
-import org.apache.hadoop.hbase.regionserver.IndexSplitTransaction;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -70,7 +66,7 @@ public class LocalIndexSplitter extends BaseRegionObserver {
         }
         RegionServerServices rss = ctx.getEnvironment().getRegionServerServices();
         if (tableDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) == null
-                || !Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(tableDesc
+                || !Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(tableDesc
                         .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
             HRegion indexRegion = IndexUtil.getIndexRegion(environment);
             if (indexRegion == null) return;

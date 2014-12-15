@@ -28,7 +28,8 @@ import org.apache.phoenix.expression.aggregator.DistinctCountClientAggregator;
 import org.apache.phoenix.expression.aggregator.DistinctValueWithCountServerAggregator;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -44,8 +45,8 @@ import org.apache.phoenix.util.SchemaUtil;
 public class DistinctCountAggregateFunction extends DelegateConstantToCountAggregateFunction {
     public static final String NAME = "DISTINCT_COUNT";
     public static final String NORMALIZED_NAME = SchemaUtil.normalizeIdentifier(NAME);
-    public final static byte[] ZERO = PDataType.LONG.toBytes(0L);
-    public final static byte[] ONE = PDataType.LONG.toBytes(1L);
+    public final static byte[] ZERO = PLong.INSTANCE.toBytes(0L);
+    public final static byte[] ONE = PLong.INSTANCE.toBytes(1L);
     
     public DistinctCountAggregateFunction() {
     }
@@ -84,7 +85,7 @@ public class DistinctCountAggregateFunction extends DelegateConstantToCountAggre
 
     @Override
     public PDataType getDataType() {
-        return PDataType.LONG;
+        return PLong.INSTANCE;
     }
 
     @Override 

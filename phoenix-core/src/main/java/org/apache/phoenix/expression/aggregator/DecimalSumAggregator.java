@@ -21,8 +21,9 @@ import java.math.BigDecimal;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SizedUtil;
 
@@ -42,12 +43,12 @@ public class DecimalSumAggregator extends BaseAggregator {
         super(sortOrder);
         if (ptr != null) {
             initBuffer();
-            sum = (BigDecimal)PDataType.DECIMAL.toObject(ptr);
+            sum = (BigDecimal) PDecimal.INSTANCE.toObject(ptr);
         }
     }
     
     private PDataType getInputDataType() {
-        return PDataType.DECIMAL;
+        return PDecimal.INSTANCE;
     }
     
     private int getBufferLength() {
@@ -79,7 +80,7 @@ public class DecimalSumAggregator extends BaseAggregator {
     
     @Override
     public final PDataType getDataType() {
-        return PDataType.DECIMAL;
+        return PDecimal.INSTANCE;
     }
     
     @Override

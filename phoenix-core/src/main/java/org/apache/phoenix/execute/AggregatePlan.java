@@ -53,7 +53,7 @@ import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.TableRef;
 
 
@@ -168,7 +168,7 @@ public class AggregatePlan extends BaseQueryPlan {
              *    order, so we can early exit, even when aggregate functions are used, as
              *    the rows in the group are contiguous.
              */
-            context.getScan().setAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT, PDataType.INTEGER.toBytes(limit));
+            context.getScan().setAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT, PInteger.INSTANCE.toBytes(limit));
         }
         ParallelIterators parallelIterators = new ParallelIterators(this, null, wrapParallelIteratorFactory());
         splits = parallelIterators.getSplits();

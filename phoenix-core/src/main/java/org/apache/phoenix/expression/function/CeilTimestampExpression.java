@@ -27,14 +27,18 @@ import com.google.common.collect.Lists;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PUnsignedDate;
+import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PDataType.PDataCodec;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDataType.PDataCodec;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
  * 
- * Class encapsulating the CEIL operation on {@link org.apache.phoenix.schema.PDataType#TIMESTAMP}
+ * Class encapsulating the CEIL operation on {@link org.apache.phoenix.schema.types.PTimestamp}
  * This class only supports CEIL {@link TimeUnit#MILLISECOND}. If you want more options of CEIL like 
  * using {@link TimeUnit#HOUR} use {@link CeilDateExpression}
  * 
@@ -67,7 +71,8 @@ public class CeilTimestampExpression extends CeilDateExpression {
         }
         // Coerce TIMESTAMP to DATE, as the nanos has no affect
         List<Expression> newChildren = Lists.newArrayListWithExpectedSize(children.size());
-        newChildren.add(CoerceExpression.create(firstChild, firstChildDataType == PDataType.TIMESTAMP ? PDataType.DATE : PDataType.UNSIGNED_DATE));
+        newChildren.add(CoerceExpression.create(firstChild, firstChildDataType == PTimestamp.INSTANCE ?
+            PDate.INSTANCE : PUnsignedDate.INSTANCE));
         newChildren.addAll(children.subList(1, children.size()));
         return CeilDateExpression.create(newChildren);
     }
@@ -82,10 +87,10 @@ public class CeilTimestampExpression extends CeilDateExpression {
 
     @Override
     protected PDataCodec getKeyRangeCodec(PDataType columnDataType) {
-        return columnDataType == PDataType.TIMESTAMP 
-                ? PDataType.DATE.getCodec() 
-                : columnDataType == PDataType.UNSIGNED_TIMESTAMP 
-                    ? PDataType.UNSIGNED_DATE.getCodec() 
+        return columnDataType == PTimestamp.INSTANCE
+                ? PDate.INSTANCE.getCodec()
+                : columnDataType == PUnsignedTimestamp.INSTANCE
+                    ? PUnsignedDate.INSTANCE.getCodec()
                     : super.getKeyRangeCodec(columnDataType);
     }
     

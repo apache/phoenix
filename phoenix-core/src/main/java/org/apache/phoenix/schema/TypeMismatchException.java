@@ -21,6 +21,7 @@ import java.sql.SQLException;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * Exception thrown when we try to convert one type into a different incompatible type.

@@ -32,8 +32,14 @@ import org.apache.phoenix.expression.aggregator.NumberSumAggregator;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.SumAggregateParseNode;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PUnsignedDouble;
+import org.apache.phoenix.schema.types.PUnsignedFloat;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -44,7 +50,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * 
  * @since 0.1
  */
-@BuiltInFunction(name=SumAggregateFunction.NAME, nodeClass=SumAggregateParseNode.class, args= {@Argument(allowedTypes={PDataType.DECIMAL})} )
+@BuiltInFunction(name=SumAggregateFunction.NAME, nodeClass=SumAggregateParseNode.class, args= {@Argument(allowedTypes={PDecimal.class})} )
 public class SumAggregateFunction extends DelegateConstantToCountAggregateFunction {
     public static final String NAME = "SUM";
     
@@ -61,26 +67,22 @@ public class SumAggregateFunction extends DelegateConstantToCountAggregateFuncti
     }
     
     private Aggregator newAggregator(final PDataType type, SortOrder sortOrder, ImmutableBytesWritable ptr) {
-        switch( type ) {
-            case DECIMAL:
-                return new DecimalSumAggregator(sortOrder, ptr);
-            case UNSIGNED_DOUBLE:
-            case UNSIGNED_FLOAT:
-            case DOUBLE:
-            case FLOAT:
-                return new DoubleSumAggregator(sortOrder, ptr) {
-                    @Override
-                    protected PDataType getInputDataType() {
-                        return type;
-                    }
-                };
-            default:
-                return new NumberSumAggregator(sortOrder, ptr) {
-                    @Override
-                    protected PDataType getInputDataType() {
-                        return type;
-                    }
-                };
+        if (type == PDecimal.INSTANCE) {
+          return new DecimalSumAggregator(sortOrder, ptr);
+        } else if (PDataType.equalsAny(type, PUnsignedDouble.INSTANCE, PUnsignedFloat.INSTANCE, PDouble.INSTANCE, PFloat.INSTANCE)) {
+          return new DoubleSumAggregator(sortOrder, ptr) {
+            @Override
+            protected PDataType getInputDataType() {
+              return type;
+            }
+          };
+        } else {
+          return new NumberSumAggregator(sortOrder, ptr) {
+            @Override
+            protected PDataType getInputDataType() {
+              return type;
+            }
+          };
         }
     }
 
@@ -109,9 +111,9 @@ public class SumAggregateFunction extends DelegateConstantToCountAggregateFuncti
         if (isConstantExpression()) {
             PDataType type = getDataType();
             Object constantValue = ((LiteralExpression)children.get(0)).getValue();
-            if (type == PDataType.DECIMAL) {
-                BigDecimal value = ((BigDecimal)constantValue).multiply((BigDecimal)PDataType.DECIMAL.toObject(ptr, PDataType.LONG));
-                ptr.set(PDataType.DECIMAL.toBytes(value));
+            if (type == PDecimal.INSTANCE) {
+                BigDecimal value = ((BigDecimal)constantValue).multiply((BigDecimal) PDecimal.INSTANCE.toObject(ptr, PLong.INSTANCE));
+                ptr.set(PDecimal.INSTANCE.toBytes(value));
             } else {
                 long constantLongValue = ((Number)constantValue).longValue();
                 long value = constantLongValue * type.getCodec().decodeLong(ptr, SortOrder.getDefault());
@@ -125,16 +127,13 @@ public class SumAggregateFunction extends DelegateConstantToCountAggregateFuncti
 
     @Override
     public PDataType getDataType() {
-        switch(super.getDataType()) {
-        case DECIMAL:
-            return PDataType.DECIMAL;
-        case UNSIGNED_FLOAT:
-        case UNSIGNED_DOUBLE:
-        case FLOAT:
-        case DOUBLE:
-            return PDataType.DOUBLE;
-        default:
-            return PDataType.LONG;
+        if (super.getDataType() == PDecimal.INSTANCE) {
+          return PDecimal.INSTANCE;
+        } else if (PDataType.equalsAny(super.getDataType(), PUnsignedFloat.INSTANCE, PUnsignedDouble.INSTANCE,
+            PFloat.INSTANCE, PDouble.INSTANCE)) {
+          return PDouble.INSTANCE;
+        } else {
+          return PLong.INSTANCE;
         }
     }
 

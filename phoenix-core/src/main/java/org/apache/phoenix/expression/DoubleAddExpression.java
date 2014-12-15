@@ -21,7 +21,8 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 public class DoubleAddExpression extends AddExpression {
@@ -62,7 +63,7 @@ public class DoubleAddExpression extends AddExpression {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.DOUBLE;
+        return PDouble.INSTANCE;
     }
 
 }

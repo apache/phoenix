@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
+import org.apache.phoenix.schema.types.PDataType;
 
 public interface PDatum {
     /**

@@ -38,7 +38,8 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
@@ -208,7 +209,7 @@ public class UpgradeUtil {
                     PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES,
                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
-                    PDataType.INTEGER.toBytes(nSaltBuckets));
+                    PInteger.INSTANCE.toBytes(nSaltBuckets));
             Put saltPut = new Put(seqTableKey);
             saltPut.add(saltKV);
             // Prevent multiple clients from doing this upgrade
@@ -221,12 +222,12 @@ public class UpgradeUtil {
                 }
                 // We can detect upgrade from 4.2.0 -> 4.2.1 based on the timestamp of the table row
                 if (oldTable.getTimeStamp() == MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP-1) {
-                    byte[] oldSeqNum = PDataType.LONG.toBytes(oldTable.getSequenceNumber());
+                    byte[] oldSeqNum = PLong.INSTANCE.toBytes(oldTable.getSequenceNumber());
                     KeyValue seqNumKV = KeyValueUtil.newKeyValue(seqTableKey, 
                             PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                             PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES,
                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
-                            PDataType.LONG.toBytes(oldTable.getSequenceNumber()+1));
+                            PLong.INSTANCE.toBytes(oldTable.getSequenceNumber()+1));
                     Put seqNumPut = new Put(seqTableKey);
                     seqNumPut.add(seqNumKV);
                     // Increment TABLE_SEQ_NUM in checkAndPut as semaphore so that only single client
@@ -317,7 +318,7 @@ public class UpgradeUtil {
                                         PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                         PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES,
                                         MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
-                                        PDataType.INTEGER.toBytes(0));
+                                        PInteger.INSTANCE.toBytes(0));
                                 Put unsaltPut = new Put(seqTableKey);
                                 unsaltPut.add(unsaltKV);
                                 try {

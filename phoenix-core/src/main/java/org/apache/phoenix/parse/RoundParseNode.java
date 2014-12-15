@@ -26,7 +26,10 @@ import org.apache.phoenix.expression.function.RoundDateExpression;
 import org.apache.phoenix.expression.function.RoundDecimalExpression;
 import org.apache.phoenix.expression.function.RoundFunction;
 import org.apache.phoenix.expression.function.RoundTimestampExpression;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.TypeMismatchException;
 
 /**
@@ -54,11 +57,11 @@ public class RoundParseNode extends FunctionParseNode {
         final Expression firstChild = children.get(0);
         final PDataType firstChildDataType = firstChild.getDataType();
         
-        if(firstChildDataType.isCoercibleTo(PDataType.DATE)) {
+        if(firstChildDataType.isCoercibleTo(PDate.INSTANCE)) {
             return RoundDateExpression.create(children);
-        } else if (firstChildDataType.isCoercibleTo(PDataType.TIMESTAMP)) {
+        } else if (firstChildDataType.isCoercibleTo(PTimestamp.INSTANCE)) {
             return RoundTimestampExpression.create(children);
-        } else if(firstChildDataType.isCoercibleTo(PDataType.DECIMAL)) {
+        } else if(firstChildDataType.isCoercibleTo(PDecimal.INSTANCE)) {
             return RoundDecimalExpression.create(children);
         } else {
             throw TypeMismatchException.newException(firstChildDataType, "1");

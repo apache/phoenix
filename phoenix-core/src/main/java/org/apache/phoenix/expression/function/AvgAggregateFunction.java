@@ -26,12 +26,13 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.AvgAggregateParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
-@BuiltInFunction(name=AvgAggregateFunction.NAME, nodeClass=AvgAggregateParseNode.class, args= {@Argument(allowedTypes={PDataType.DECIMAL})} )
+@BuiltInFunction(name=AvgAggregateFunction.NAME, nodeClass=AvgAggregateParseNode.class, args= {@Argument(allowedTypes={PDecimal.class})} )
 public class AvgAggregateFunction extends CompositeAggregateFunction {
     public static final String NAME = "AVG";
     private final CountAggregateFunction countFunc;
@@ -64,7 +65,7 @@ public class AvgAggregateFunction extends CompositeAggregateFunction {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.DECIMAL;
+        return PDecimal.INSTANCE;
     }
 
     @Override
@@ -80,17 +81,17 @@ public class AvgAggregateFunction extends CompositeAggregateFunction {
         // Normal case where a column reference was used as the argument to AVG
         if (!countFunc.isConstantExpression()) {
             sumFunc.evaluate(tuple, ptr);
-            BigDecimal sum = (BigDecimal)PDataType.DECIMAL.toObject(ptr, sumFunc.getDataType());
+            BigDecimal sum = (BigDecimal) PDecimal.INSTANCE.toObject(ptr, sumFunc.getDataType());
             // For the final column projection, we divide the sum by the count, both coerced to BigDecimal.
             // TODO: base the precision on column metadata instead of constant
             BigDecimal avg = sum.divide(BigDecimal.valueOf(count), PDataType.DEFAULT_MATH_CONTEXT);
             avg = avg.setScale(scale, BigDecimal.ROUND_DOWN);
-            ptr.set(PDataType.DECIMAL.toBytes(avg));
+            ptr.set(PDecimal.INSTANCE.toBytes(avg));
             return true;
         }
         BigDecimal value = (BigDecimal) ((LiteralExpression)countFunc.getChildren().get(0)).getValue();
         value = value.setScale(scale, BigDecimal.ROUND_DOWN);
-        ptr.set(PDataType.DECIMAL.toBytes(value));
+        ptr.set(PDecimal.INSTANCE.toBytes(value));
         return true;
     }
 
