@@ -67,10 +67,15 @@ public class MinAggregateFunction extends DelegateConstantToCountAggregateFuncti
     public Aggregator newServerAggregator(Configuration conf) {
         final PDataType type = getAggregatorExpression().getDataType();
         SortOrder sortOrder = getAggregatorExpression().getSortOrder();
+        final Integer maxLength = getAggregator().getMaxLength();
         return new MinAggregator(sortOrder) {
             @Override
             public PDataType getDataType() {
                 return type;
+            }
+            @Override
+            public Integer getMaxLength() {
+            	return maxLength;
             }
         };
     }

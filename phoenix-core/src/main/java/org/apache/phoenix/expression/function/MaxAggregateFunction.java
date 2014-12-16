@@ -53,10 +53,16 @@ public class MaxAggregateFunction extends MinAggregateFunction {
     public Aggregator newServerAggregator(Configuration conf) {
         final PDataType type = getAggregatorExpression().getDataType();
         SortOrder sortOrder = getAggregatorExpression().getSortOrder();
+        final Integer maxLength = getAggregator().getMaxLength();
         return new MaxAggregator(sortOrder) {
             @Override
             public PDataType getDataType() {
                 return type;
+            }
+
+            @Override
+            public Integer getMaxLength() {
+                return maxLength;
             }
         };
     }
