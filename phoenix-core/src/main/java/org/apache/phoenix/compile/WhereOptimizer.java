@@ -342,9 +342,9 @@ public class WhereOptimizer {
                 }
                 if (minPkPos != Integer.MAX_VALUE) {
                     candidateIndexes.add(i);
+                    pkPositions.add(minPkPos);
                 }
             }
-            pkPositions.add(minPkPos);
         }
         
         if (candidateIndexes.isEmpty())
@@ -380,6 +380,10 @@ public class WhereOptimizer {
             Expression secondRhs = count == 0 ? sampleValues.get(1).get(0) : new RowValueConstructorExpression(sampleValues.get(1).subList(0, count + 1), true);
             Expression testExpression = InListExpression.create(Lists.newArrayList(lhs, firstRhs, secondRhs), false, context.getTempPtr());
             remaining = pushKeyExpressionsToScan(context, statement, testExpression);
+            if (context.getScanRanges().isPointLookup()) {
+                count++;
+                break; // found the best match
+            }
             int pkSpan = context.getScanRanges().getPkColumnSpan();
             if (pkSpan <= maxPkSpan) {
                 break;
