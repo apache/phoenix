@@ -21,15 +21,14 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.MinAggregator;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.MinAggregateParseNode;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -67,6 +66,7 @@ public class MinAggregateFunction extends DelegateConstantToCountAggregateFuncti
     public Aggregator newServerAggregator(Configuration conf) {
         final PDataType type = getAggregatorExpression().getDataType();
         SortOrder sortOrder = getAggregatorExpression().getSortOrder();
+        final Integer maxLength = getAggregator().getMaxLength();
         return new MinAggregator(sortOrder) {
             @Override
             public PDataType getDataType() {
@@ -74,7 +74,7 @@ public class MinAggregateFunction extends DelegateConstantToCountAggregateFuncti
             }
             @Override
             public Integer getMaxLength() {
-            	return getAggregatorExpression().getMaxLength();
+            	return maxLength;
             }
         };
     }
