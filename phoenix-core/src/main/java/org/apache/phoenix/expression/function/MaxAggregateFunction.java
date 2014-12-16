@@ -58,6 +58,10 @@ public class MaxAggregateFunction extends MinAggregateFunction {
             public PDataType getDataType() {
                 return type;
             }
+            @Override
+            public Integer getMaxLength() {
+            	return getAggregatorExpression().getMaxLength();
+            }
         };
     }
     
