@@ -25,7 +25,7 @@ import org.apache.phoenix.expression.Expression;
 
 /**
  * 
- * Class encapsulating ceil operation on {@link org.apache.phoenix.schema.PDataType#DATE}.
+ * Class encapsulating ceil operation on {@link org.apache.phoenix.schema.types.PDataType#DATE}.
  *
  * 
  * @since 3.0.0

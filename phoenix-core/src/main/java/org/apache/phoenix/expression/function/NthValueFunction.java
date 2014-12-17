@@ -26,7 +26,8 @@ import org.apache.phoenix.expression.aggregator.FirstLastValueBaseClientAggregat
 import org.apache.phoenix.expression.aggregator.FirstLastValueServerAggregator;
 import org.apache.phoenix.parse.NthValueAggregateParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PInteger;
 
 /**
  * Built-in function for NTH_VALUE(<expression>, <expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC)
@@ -35,9 +36,9 @@ import org.apache.phoenix.schema.PDataType;
  */
 @FunctionParseNode.BuiltInFunction(name = NthValueFunction.NAME, nodeClass = NthValueAggregateParseNode.class, args = {
     @FunctionParseNode.Argument(),
-    @FunctionParseNode.Argument(allowedTypes = {PDataType.BOOLEAN}, isConstant = true),
+    @FunctionParseNode.Argument(allowedTypes = { PBoolean.class }, isConstant = true),
     @FunctionParseNode.Argument(),
-    @FunctionParseNode.Argument(allowedTypes = {PDataType.INTEGER}, isConstant = true)})
+    @FunctionParseNode.Argument(allowedTypes = { PInteger.class }, isConstant = true)})
 public class NthValueFunction extends FirstLastValueBaseFunction {
 
     public static final String NAME = "NTH_VALUE";

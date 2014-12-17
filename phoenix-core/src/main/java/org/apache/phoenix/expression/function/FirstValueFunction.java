@@ -26,7 +26,7 @@ import org.apache.phoenix.expression.aggregator.FirstLastValueBaseClientAggregat
 import org.apache.phoenix.expression.aggregator.FirstLastValueServerAggregator;
 import org.apache.phoenix.parse.FirstValueAggregateParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBoolean;
 
 /**
  * Built-in function for FIRST_VALUE(<expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) aggregate
@@ -35,7 +35,7 @@ import org.apache.phoenix.schema.PDataType;
  */
 @FunctionParseNode.BuiltInFunction(name = FirstValueFunction.NAME, nodeClass = FirstValueAggregateParseNode.class, args = {
     @FunctionParseNode.Argument(),
-    @FunctionParseNode.Argument(allowedTypes = {PDataType.BOOLEAN}, isConstant = true),
+    @FunctionParseNode.Argument(allowedTypes = { PBoolean.class }, isConstant = true),
     @FunctionParseNode.Argument()})
 public class FirstValueFunction extends FirstLastValueBaseFunction {
 

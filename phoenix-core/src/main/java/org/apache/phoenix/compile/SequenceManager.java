@@ -32,7 +32,8 @@ import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.SequenceValueParseNode.Op;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
@@ -191,15 +192,15 @@ public class SequenceManager {
         
         @Override
         public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        		byte[] valueBuffer = new byte[PDataType.LONG.getByteSize()];
-            PDataType.LONG.getCodec().encodeLong(tuple.getSequenceValue(index), valueBuffer, 0);
+        		byte[] valueBuffer = new byte[PLong.INSTANCE.getByteSize()];
+            PLong.INSTANCE.getCodec().encodeLong(tuple.getSequenceValue(index), valueBuffer, 0);
             ptr.set(valueBuffer);
             return true;
         }
 
         @Override
         public PDataType getDataType() {
-            return PDataType.LONG;
+            return PLong.INSTANCE;
         }
         
         @Override

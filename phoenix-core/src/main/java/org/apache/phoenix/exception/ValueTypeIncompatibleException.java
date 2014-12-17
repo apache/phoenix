@@ -18,7 +18,7 @@
 package org.apache.phoenix.exception;
 
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 
 
 public class ValueTypeIncompatibleException extends IllegalDataException {

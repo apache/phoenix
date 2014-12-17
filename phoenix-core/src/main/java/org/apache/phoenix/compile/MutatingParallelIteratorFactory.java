@@ -35,7 +35,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -68,7 +68,7 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
             state = new MutationState(maxSize, connection, totalRowCount);
         }
         final MutationState finalState = state;
-        byte[] value = PDataType.LONG.toBytes(totalRowCount);
+        byte[] value = PLong.INSTANCE.toBytes(totalRowCount);
         KeyValue keyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length);
         final Tuple tuple = new SingleKeyValueTuple(keyValue);
         return new PeekingResultIterator() {

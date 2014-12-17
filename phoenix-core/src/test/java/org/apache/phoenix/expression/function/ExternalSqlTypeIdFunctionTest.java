@@ -21,7 +21,8 @@ import com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PIntegerArray;
 import org.junit.Test;
 
 import java.sql.SQLException;
@@ -35,7 +36,7 @@ public class ExternalSqlTypeIdFunctionTest {
     @Test
     public void testEvaluate() throws SQLException {
         Expression inputArg = LiteralExpression.newConstant(
-                PDataType.INTEGER.getSqlType(), PDataType.INTEGER);
+                PInteger.INSTANCE.getSqlType(), PInteger.INSTANCE);
 
         Object returnValue = executeFunction(inputArg);
 
@@ -45,7 +46,7 @@ public class ExternalSqlTypeIdFunctionTest {
     @Test
     public void testEvaluateArrayType() throws SQLException {
         Expression inputArg = LiteralExpression.newConstant(
-                PDataType.INTEGER_ARRAY.getSqlType(), PDataType.INTEGER);
+                PIntegerArray.INSTANCE.getSqlType(), PInteger.INSTANCE);
 
         Object returnValue = executeFunction(inputArg);
 
@@ -59,7 +60,7 @@ public class ExternalSqlTypeIdFunctionTest {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         assertTrue(externalIdFunction.evaluate(null, ptr));
 
-        return PDataType.INTEGER.toObject(ptr.get(), ptr.getOffset(), ptr.getLength(),
-                PDataType.INTEGER, inputArg.getSortOrder());
+        return PInteger.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength(),
+            PInteger.INSTANCE, inputArg.getSortOrder());
     }
 }

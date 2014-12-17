@@ -24,15 +24,18 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.ParseException;
-import org.apache.phoenix.schema.PArrayDataType;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBinaryArray;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinaryArray;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 @BuiltInFunction(name = ArrayIndexFunction.NAME, args = {
-		@Argument(allowedTypes = { PDataType.BINARY_ARRAY,
-				PDataType.VARBINARY_ARRAY }),
-		@Argument(allowedTypes = { PDataType.INTEGER }) })
+		@Argument(allowedTypes = { PBinaryArray.class,
+        PVarbinaryArray.class }),
+		@Argument(allowedTypes = { PInteger.class }) })
 public class ArrayIndexFunction extends ScalarFunction {
 
 	public static final String NAME = "ARRAY_ELEM";
@@ -53,12 +56,13 @@ public class ArrayIndexFunction extends ScalarFunction {
 		  return true;
 		}
 		// Use Codec to prevent Integer object allocation
-		int index = PDataType.INTEGER.getCodec().decodeInt(ptr, indexExpr.getSortOrder());
+		int index = PInteger.INSTANCE.getCodec().decodeInt(ptr, indexExpr.getSortOrder());
 		if(index < 0) {
 			throw new ParseException("Index cannot be negative :" + index);
 		}
 		Expression arrayExpr = children.get(0);
-		return PArrayDataType.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(), getMaxLength());
+		return PArrayDataType.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(),
+        getMaxLength());
 	}
 
 	@Override

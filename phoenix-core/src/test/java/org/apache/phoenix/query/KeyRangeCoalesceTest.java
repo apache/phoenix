@@ -27,12 +27,11 @@ import java.util.*;
 
 import junit.framework.TestCase;
 
+import org.apache.phoenix.schema.types.PChar;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
-import org.apache.phoenix.schema.PDataType;
 
 @RunWith(Parameterized.class)
 public class KeyRangeCoalesceTest extends TestCase {
@@ -53,64 +52,64 @@ public class KeyRangeCoalesceTest extends TestCase {
                 input(
                 )},
                 {expect(
-                        PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("E"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true)
                 ),
                 input(
-                        PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("E"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true)
                 )},
                 {expect(
-                        PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("E"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true)
                 ),
                 input(
-                        PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("D"), true),
-                        PDataType.CHAR.getKeyRange(toBytes("D"), true, toBytes("E"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("D"), true),
+                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("E"), true)
                 )},
                 {expect(
-                        PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("Z"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("Z"), true)
                 ),
                 input(
-                        PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("D"), true),
-                        PDataType.CHAR.getKeyRange(toBytes("D"), true, toBytes("E"), true),
-                        PDataType.CHAR.getKeyRange(toBytes("D"), true, toBytes("Z"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("D"), true),
+                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("E"), true),
+                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("Z"), true)
                 )},
                 {expect(
-                        PDataType.CHAR.getKeyRange(toBytes("B"), true, toBytes("Z"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), true)
                 ),
                 input(
-                        PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("D"), true),
-                        PDataType.CHAR.getKeyRange(toBytes("B"), true, toBytes("E"), true),
-                        PDataType.CHAR.getKeyRange(toBytes("D"), true, toBytes("Z"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("D"), true),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("E"), true),
+                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("Z"), true)
                 )},
                 {expect(
-                        PDataType.CHAR.getKeyRange(toBytes("B"), true, toBytes("Z"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), true)
                 ),
                 input(
-                        PDataType.CHAR.getKeyRange(toBytes("C"), true, toBytes("D"), true),
-                        PDataType.CHAR.getKeyRange(toBytes("B"), true, toBytes("Z"), false),
-                        PDataType.CHAR.getKeyRange(toBytes("D"), true, toBytes("Z"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("D"), true),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), false),
+                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("Z"), true)
                 )},
                 {expect(
-                        PDataType.CHAR.getKeyRange(toBytes("A"), true, toBytes("A"), true),
-                        PDataType.CHAR.getKeyRange(toBytes("B"), true, toBytes("Z"), false)
+                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("A"), true),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), false)
                 ),
                 input(
-                        PDataType.CHAR.getKeyRange(toBytes("A"), true, toBytes("A"), true),
-                        PDataType.CHAR.getKeyRange(toBytes("B"), true, toBytes("Z"), false)
+                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("A"), true),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), false)
                 )},
                 {expect(
-                        PDataType.CHAR.getKeyRange(toBytes("A"), true, toBytes("B"), false),
-                        PDataType.CHAR.getKeyRange(toBytes("B"), false, toBytes("Z"), false)
+                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("B"), false),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), false, toBytes("Z"), false)
                 ),
                 input(
-                        PDataType.CHAR.getKeyRange(toBytes("A"), true, toBytes("B"), false),
-                        PDataType.CHAR.getKeyRange(toBytes("B"), false, toBytes("Z"), false)
+                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("B"), false),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), false, toBytes("Z"), false)
                 )},
                 {expect(
-                        PDataType.CHAR.getKeyRange(toBytes("A"), true, toBytes("Z"), false)
+                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("Z"), false)
                 ),
                 input(
-                        PDataType.CHAR.getKeyRange(toBytes("A"), true, toBytes("B"), false),
-                        PDataType.CHAR.getKeyRange(toBytes("B"), true, toBytes("Z"), false)
+                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("B"), false),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), false)
                 )},
                 {expect(
                     EVERYTHING_RANGE

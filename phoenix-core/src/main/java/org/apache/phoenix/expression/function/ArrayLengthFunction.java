@@ -23,12 +23,15 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.PArrayDataType;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBinaryArray;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 @BuiltInFunction(name = ArrayLengthFunction.NAME, args = { @Argument(allowedTypes = {
-		PDataType.BINARY_ARRAY, PDataType.VARBINARY_ARRAY }) })
+		PBinaryArray.class, PVarbinary.class }) })
 public class ArrayLengthFunction extends ScalarFunction {
 	public static final String NAME = "ARRAY_LENGTH";
 
@@ -51,8 +54,8 @@ public class ArrayLengthFunction extends ScalarFunction {
 				.getSqlType()
 				- PDataType.ARRAY_TYPE_BASE);
 		int length = PArrayDataType.getArrayLength(ptr, baseType, arrayExpr.getMaxLength());
-		byte[] lengthBuf = new byte[PDataType.INTEGER.getByteSize()];
-		PDataType.INTEGER.getCodec().encodeInt(length, lengthBuf, 0);
+		byte[] lengthBuf = new byte[PInteger.INSTANCE.getByteSize()];
+    PInteger.INSTANCE.getCodec().encodeInt(length, lengthBuf, 0);
 		ptr.set(lengthBuf);
 		return true;
 	}
@@ -60,7 +63,7 @@ public class ArrayLengthFunction extends ScalarFunction {
 	@Override
 	public PDataType getDataType() {
 		// Array length will return an Integer
-		return PDataType.INTEGER;
+		return PInteger.INSTANCE;
 	}
 
 	@Override
