@@ -301,20 +301,6 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals(4, rs.getInt(2));
             assertEquals(5L, rs.getLong(3));
             assertFalse(rs.next());
-            if(localIndex) {
-                query = "SELECT b.* from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " where int_col1 = 4";
-                rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME +" [-32768]\n" +
-                		"    SERVER FILTER BY TO_INTEGER(INT_COL1) = 4\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
-                rs = conn.createStatement().executeQuery(query);
-                assertTrue(rs.next());
-                assertEquals("varchar_b", rs.getString(1));
-                assertEquals("charb", rs.getString(2));
-                assertEquals(5, rs.getInt(3));
-                assertEquals(5, rs.getLong(4));
-                assertFalse(rs.next());
-                
-            }
         } finally {
             conn.close();
         }
