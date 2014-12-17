@@ -20,15 +20,14 @@ package org.apache.phoenix.expression.function;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.MaxAggregator;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.MaxAggregateParseNode;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 
 
 
@@ -51,12 +50,18 @@ public class MaxAggregateFunction extends MinAggregateFunction {
 
     @Override 
     public Aggregator newServerAggregator(Configuration conf) {
-        final PDataType type = getAggregatorExpression().getDataType();
-        SortOrder sortOrder = getAggregatorExpression().getSortOrder();
-        return new MaxAggregator(sortOrder) {
+        Expression child = getAggregatorExpression();
+        final PDataType type = child.getDataType();
+        final Integer maxLength = child.getMaxLength();
+        return new MaxAggregator(child.getSortOrder()) {
             @Override
             public PDataType getDataType() {
                 return type;
+            }
+
+            @Override
+            public Integer getMaxLength() {
+                return maxLength;
             }
         };
     }
