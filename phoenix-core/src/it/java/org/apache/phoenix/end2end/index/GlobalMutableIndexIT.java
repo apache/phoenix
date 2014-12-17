@@ -17,14 +17,10 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
-import org.apache.phoenix.util.SchemaUtil;
+public class GlobalMutableIndexIT extends BaseMutableIndexIT {
 
+    public GlobalMutableIndexIT() {
+        super(false);
+    }
 
-public class BaseIndexIT extends BaseHBaseManagedTimeIT {
-    public static final String SCHEMA_NAME = "";
-    public static final String DATA_TABLE_NAME = "T";
-    public static final String INDEX_TABLE_NAME = "I";
-    public static final String DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "T");
-    public static final String INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "I");
 }

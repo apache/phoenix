@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
-import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
@@ -34,11 +32,9 @@ import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -50,33 +46,19 @@ import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.SequenceNotFoundException;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
-
-
 
 /**
  * 
  * Basic tests for Phoenix JDBC implementation
  *
- * 
- * @since 0.1
  */
-
-
 public class QueryIT extends BaseQueryIT {
     
     public QueryIT(String indexDDL) {
@@ -144,27 +126,6 @@ public class QueryIT extends BaseQueryIT {
     public void testEmptyStringValue() throws Exception {
         testNoStringValue("");
     }
-
-    
-    @Test
-    public void testGroupByPlusOne() throws Exception {
-        String query = "SELECT a_integer+1 FROM aTable WHERE organization_id=? and a_integer = 5 GROUP BY a_integer+1";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, tenantId);
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(6, rs.getInt(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-    
-    
 
     @Test
     public void testToDateOnString() throws Exception { // TODO: test more conversion combinations
@@ -247,126 +208,6 @@ public class QueryIT extends BaseQueryIT {
     }
     
     @Test
-    public void testPointInTimeScan() throws Exception {
-        // Override value that was set at creation time
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 10);
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection upsertConn = DriverManager.getConnection(url, props);
-        String upsertStmt =
-            "upsert into " +
-            "ATABLE(" +
-            "    ORGANIZATION_ID, " +
-            "    ENTITY_ID, " +
-            "    A_INTEGER) " +
-            "VALUES (?, ?, ?)";
-        upsertConn.setAutoCommit(true); // Test auto commit
-        // Insert all rows at ts
-        PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW4);
-        stmt.setInt(3, 5);
-        stmt.execute(); // should commit too
-        
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 15);
-        Connection conn1 = DriverManager.getConnection(url, props);
-        analyzeTable(conn1, "ATABLE");
-        conn1.close();
-        upsertConn.close();
-
-        // Override value again, but should be ignored since it's past the SCN
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 30);
-        upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        // Insert all rows at ts
-        stmt = upsertConn.prepareStatement(upsertStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW4);
-        stmt.setInt(3, 9);
-        stmt.execute(); // should commit too
-        upsertConn.close();
-        
-        String query = "SELECT organization_id, a_string AS a FROM atable WHERE organization_id=? and a_integer = 5";
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        PreparedStatement statement = conn.prepareStatement(query);
-        statement.setString(1, tenantId);
-        ResultSet rs = statement.executeQuery();
-        assertTrue(rs.next());
-        assertEquals(tenantId, rs.getString(1));
-        assertEquals(A_VALUE, rs.getString("a"));
-        assertTrue(rs.next());
-        assertEquals(tenantId, rs.getString(1));
-        assertEquals(B_VALUE, rs.getString(2));
-        assertFalse(rs.next());
-        conn.close();
-    }
-
-    @Test
-    public void testPointInTimeSequence() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn;
-        ResultSet rs;
-
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+5));
-        conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE SEQUENCE s");
-        
-        try {
-            conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
-            fail();
-        } catch (SequenceNotFoundException e) {
-            conn.close();
-        }
-        
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+10));
-        conn = DriverManager.getConnection(getUrl(), props);
-        rs = conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt(1));
-        conn.close();
-        
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+7));
-        conn = DriverManager.getConnection(getUrl(), props);
-        rs = conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
-        assertTrue(rs.next());
-        assertEquals(2, rs.getInt(1));
-        conn.close();
-        
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+15));
-        conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("DROP SEQUENCE s");
-        rs = conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
-        assertTrue(rs.next());
-        assertEquals(3, rs.getInt(1));
-        conn.close();
-
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+20));
-        conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            rs = conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
-            fail();
-        } catch (SequenceNotFoundException e) {
-            conn.close();            
-        }
-        
-        conn.createStatement().execute("CREATE SEQUENCE s");
-        conn.close();
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+25));
-        conn = DriverManager.getConnection(getUrl(), props);
-        rs = conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt(1));
-        conn.close();
-
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+6));
-        conn = DriverManager.getConnection(getUrl(), props);
-        rs = conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
-        assertTrue(rs.next());
-        assertEquals(4, rs.getInt(1));
-        conn.close();
-    }
-    
-    @Test
     public void testDateInList() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE a_date IN (?,?) AND a_integer < 4";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
@@ -431,12 +272,6 @@ public class QueryIT extends BaseQueryIT {
         stmt.execute();
         upsertConn.close();
         
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 20);       
-        conn1 = DriverManager.getConnection(url, props);
-        analyzeTable(conn1, "ATABLE");
-        conn1.close();
-        
-        analyzeTable(upsertConn, "ATABLE");
         assertTrue(compare(CompareOp.GREATER, new ImmutableBytesWritable(ts2), new ImmutableBytesWritable(ts1)));
         assertFalse(compare(CompareOp.GREATER, new ImmutableBytesWritable(ts1), new ImmutableBytesWritable(ts1)));
 
@@ -502,29 +337,6 @@ public class QueryIT extends BaseQueryIT {
             statement.setString(3, ROW5);
             ResultSet rs = statement.executeQuery();
             assertValueEqualsResultSet(rs, Arrays.<Object>asList(ROW2, ROW5));
-        } finally {
-            conn.close();
-        }
-    }
-    
-    /**
-     * Test to repro Null Pointer Exception
-     * @throws Exception
-     */
-    @Test
-    public void testInFilterOnKey() throws Exception {
-        String query = "SELECT count(entity_id) FROM ATABLE WHERE organization_id IN (?,?)";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, tenantId);
-            statement.setString(2, tenantId);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals(9, rs.getInt(1));
-            assertFalse(rs.next());
         } finally {
             conn.close();
         }
@@ -597,40 +409,6 @@ public class QueryIT extends BaseQueryIT {
             assertEquals(rs.getString(1), ROW5);
             assertTrue (rs.next());
             assertEquals(rs.getString(1), ROW6);
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
-    public void testCountIsNull() throws Exception {
-        String query = "SELECT count(1) FROM aTable WHERE X_DECIMAL is null";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(6, rs.getLong(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
-    public void testCountIsNotNull() throws Exception {
-        String query = "SELECT count(1) FROM aTable WHERE X_DECIMAL is not null";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(3, rs.getLong(1));
             assertFalse(rs.next());
         } finally {
             conn.close();
@@ -739,72 +517,6 @@ public class QueryIT extends BaseQueryIT {
     }
     
     @Test
-    public void testSplitWithCachedMeta() throws Exception {
-        // Tests that you don't get an ambiguous column exception when using the same alias as the column name
-        String query = "SELECT a_string, b_string, count(1) FROM atable WHERE organization_id=? and entity_id<=? GROUP BY a_string,b_string";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        HBaseAdmin admin = null;
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, tenantId);
-            statement.setString(2, ROW4);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals(A_VALUE, rs.getString(1));
-            assertEquals(B_VALUE, rs.getString(2));
-            assertEquals(2, rs.getLong(3));
-            assertTrue(rs.next());
-            assertEquals(A_VALUE, rs.getString(1));
-            assertEquals(C_VALUE, rs.getString(2));
-            assertEquals(1, rs.getLong(3));
-            assertTrue(rs.next());
-            assertEquals(A_VALUE, rs.getString(1));
-            assertEquals(E_VALUE, rs.getString(2));
-            assertEquals(1, rs.getLong(3));
-            assertFalse(rs.next());
-            
-            byte[] tableName = Bytes.toBytes(ATABLE_NAME);
-            admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            HTable htable = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName);
-            htable.clearRegionCache();
-            int nRegions = htable.getRegionLocations().size();
-            if(!admin.tableExists(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(ATABLE_NAME)))) {
-                admin.split(tableName, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A" + Character.valueOf((char) ('3' + nextRunCount())) + ts))); // vary split point with test run
-                int retryCount = 0;
-                do {
-                    Thread.sleep(2000);
-                    retryCount++;
-                    //htable.clearRegionCache();
-                } while (retryCount < 10 && htable.getRegionLocations().size() == nRegions);
-                assertNotEquals(nRegions, htable.getRegionLocations().size());
-            } 
-            
-            statement.setString(1, tenantId);
-            rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals(A_VALUE, rs.getString(1));
-            assertEquals(B_VALUE, rs.getString(2));
-            assertEquals(2, rs.getLong(3));
-            assertTrue(rs.next());
-            assertEquals(A_VALUE, rs.getString(1));
-            assertEquals(C_VALUE, rs.getString(2));
-            assertEquals(1, rs.getLong(3));
-            assertTrue(rs.next());
-            assertEquals(A_VALUE, rs.getString(1));
-            assertEquals(E_VALUE, rs.getString(2));
-           assertEquals(1, rs.getLong(3));
-            assertFalse(rs.next());
-        } finally {
-            if (admin != null) {
-            admin.close();
-            }
-            conn.close();
-        }
-    }
-
-    @Test
     public void testColumnAliasMapping() throws Exception {
         String query = "SELECT a.a_string, aTable.b_string FROM aTable a WHERE ?=organization_id and 5=a_integer ORDER BY a_string, b_string";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -821,55 +533,5 @@ public class QueryIT extends BaseQueryIT {
         } finally {
             conn.close();
         }
-    }
-
-    @Test
-    public void testSumOverNullIntegerColumn() throws Exception {
-        String query = "SELECT sum(a_integer) FROM aTable a";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(true);
-        conn.createStatement().execute("UPSERT INTO atable(organization_id,entity_id,a_integer) VALUES('" + getOrganizationId() + "','" + ROW3 + "',NULL)");
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
-        Connection conn1 = DriverManager.getConnection(getUrl(), props);
-        analyzeTable(conn1, "ATABLE");
-        conn1.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
-        conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(42, rs.getInt(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
-        conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(true);
-        conn.createStatement().execute("UPSERT INTO atable(organization_id,entity_id,a_integer) SELECT organization_id, entity_id, null FROM atable");
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
-        conn1 = DriverManager.getConnection(getUrl(), props);
-        analyzeTable(conn1, "ATABLE");
-        conn1.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 90));
-        conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(0, rs.getInt(1));
-            assertTrue(rs.wasNull());
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-
-    private void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
-        String query = "UPDATE STATISTICS " + tableName;
-        conn.createStatement().execute(query);
     }
 }
