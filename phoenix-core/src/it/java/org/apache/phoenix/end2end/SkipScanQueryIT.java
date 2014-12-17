@@ -17,11 +17,13 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.StringReader;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -30,8 +32,11 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -295,4 +300,87 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
         assertFalse(rs.next());
-    }}
+    }
+
+    @Test
+    public void testSkipScanFilterWhenTableHasMultipleColumnFamilies() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            createMultiCFTestTable(TestUtil.DEFAULT_DATA_TABLE_FULL_NAME);
+            populateMultiCFTestTable(TestUtil.DEFAULT_DATA_TABLE_FULL_NAME);
+            String upsert = "UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME
+                    + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(upsert);
+            stmt.setString(1, "varchar4");
+            stmt.setString(2, "char1");
+            stmt.setInt(3, 1);
+            stmt.setLong(4, 1L);
+            stmt.setBigDecimal(5, new BigDecimal("1.1"));
+            stmt.setString(6, "varchar_a");
+            stmt.setString(7, "chara");
+            stmt.setInt(8, 2);
+            stmt.setLong(9, 2L);
+            stmt.setBigDecimal(10, new BigDecimal("2.1"));
+            stmt.setString(11, "varchar_b");
+            stmt.setString(12, "charb");
+            stmt.setInt(13, 3);
+            stmt.setLong(14, 3L);
+            stmt.setBigDecimal(15, new BigDecimal("3.1"));
+            stmt.setDate(16, null);
+            stmt.executeUpdate();
+            
+            stmt.setString(1, "varchar5");
+            stmt.setString(2, "char2");
+            stmt.setInt(3, 2);
+            stmt.setLong(4, 2L);
+            stmt.setBigDecimal(5, new BigDecimal("2.2"));
+            stmt.setString(6, "varchar_a");
+            stmt.setString(7, "chara");
+            stmt.setInt(8, 3);
+            stmt.setLong(9, 3L);
+            stmt.setBigDecimal(10, new BigDecimal("3.2"));
+            stmt.setString(11, "varchar_b");
+            stmt.setString(12, "charb");
+            stmt.setInt(13, 4);
+            stmt.setLong(14, 4L);
+            stmt.setBigDecimal(15, new BigDecimal("4.2"));
+            stmt.setDate(16, null);
+            stmt.executeUpdate();
+            
+            stmt.setString(1, "varchar6");
+            stmt.setString(2, "char3");
+            stmt.setInt(3, 3);
+            stmt.setLong(4, 3L);
+            stmt.setBigDecimal(5, new BigDecimal("3.3"));
+            stmt.setString(6, "varchar_a");
+            stmt.setString(7, "chara");
+            stmt.setInt(8, 4);
+            stmt.setLong(9, 4L);
+            stmt.setBigDecimal(10, new BigDecimal("4.3"));
+            stmt.setString(11, "varchar_b");
+            stmt.setString(12, "charb");
+            stmt.setInt(13, 5);
+            stmt.setLong(14, 5L);
+            stmt.setBigDecimal(15, new BigDecimal("5.3"));
+            stmt.setDate(16, null);
+            stmt.executeUpdate();
+            conn.commit();
+            String query = "SELECT char_col1, int_col1, long_col2 from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " where varchar_pk in ('varchar3','varchar6')";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("chara", rs.getString(1));
+            assertEquals(4, rs.getInt(2));
+            assertEquals(5L, rs.getLong(3));
+            assertTrue(rs.next());
+            assertEquals("chara", rs.getString(1));
+            assertEquals(4, rs.getInt(2));
+            assertEquals(5L, rs.getLong(3));
+            assertFalse(rs.next());
+            
+        } finally {
+            conn.close();
+        }
+    }    
+}

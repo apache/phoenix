@@ -27,6 +27,8 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -38,11 +40,12 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 
-public class ViewIndexIT extends BaseIndexIT {
+public class ViewIndexIT extends BaseHBaseManagedTimeIT {
 
     private String VIEW_NAME = "MY_VIEW";
 
     @BeforeClass
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Drop the HBase table metadata for this test to confirm that view index table dropped
@@ -66,17 +69,17 @@ public class ViewIndexIT extends BaseIndexIT {
 
     @Test
     public void testDeleteViewIndexSequences() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, null);
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, null);
         Connection conn1 = DriverManager.getConnection(getUrl());
         Connection conn2 = DriverManager.getConnection(getUrl());
-        conn1.createStatement().execute("CREATE VIEW " + VIEW_NAME + " AS SELECT * FROM " + DATA_TABLE_NAME);
-        conn1.createStatement().execute("CREATE INDEX " + INDEX_TABLE_NAME + " ON " + VIEW_NAME + " (v1)");
-        conn2.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_FULL_NAME).next();
+        conn1.createStatement().execute("CREATE VIEW " + VIEW_NAME + " AS SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME);
+        conn1.createStatement().execute("CREATE INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + VIEW_NAME + " (v1)");
+        conn2.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         conn1.createStatement().execute("DROP VIEW " + VIEW_NAME);
-        conn1.createStatement().execute("DROP TABLE "+ DATA_TABLE_NAME);
+        conn1.createStatement().execute("DROP TABLE "+ TestUtil.DEFAULT_DATA_TABLE_NAME);
         admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        assertFalse("View index table should be deleted.", admin.tableExists(TableName.valueOf(MetaDataUtil.getViewIndexTableName(DATA_TABLE_NAME))));
+        assertFalse("View index table should be deleted.", admin.tableExists(TableName.valueOf(MetaDataUtil.getViewIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME))));
         ResultSet rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME

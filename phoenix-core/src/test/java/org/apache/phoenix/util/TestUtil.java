@@ -86,6 +86,12 @@ import com.google.common.collect.Lists;
 
 
 public class TestUtil {
+    public static final String DEFAULT_SCHEMA_NAME = "";
+    public static final String DEFAULT_DATA_TABLE_NAME = "T";
+    public static final String DEFAULT_INDEX_TABLE_NAME = "I";
+    public static final String DEFAULT_DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "T");
+    public static final String DEFAULT_INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "I");
+
     private TestUtil() {
     }
 
