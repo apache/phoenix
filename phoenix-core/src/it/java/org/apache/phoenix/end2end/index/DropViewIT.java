@@ -43,7 +43,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class DropViewIT extends BaseMutableIndexIT {
+public class DropViewIT extends BaseHBaseManagedTimeIT {
     private static final byte[] HBASE_NATIVE_BYTES = SchemaUtil.getTableNameAsBytes(HBASE_NATIVE_SCHEMA_NAME, HBASE_NATIVE);
     private static final byte[] FAMILY_NAME = Bytes.toBytes(SchemaUtil.normalizeIdentifier("1"));
     
