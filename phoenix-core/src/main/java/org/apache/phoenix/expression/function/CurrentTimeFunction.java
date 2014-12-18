@@ -22,7 +22,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.CurrentDateTimeFunction;
 import org.apache.phoenix.parse.CurrentTimeParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -39,7 +40,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 @BuiltInFunction(name=CurrentTimeFunction.NAME, nodeClass=CurrentTimeParseNode.class, args={} )
 public class CurrentTimeFunction extends CurrentDateTimeFunction {
     public static final String NAME = "CURRENT_TIME";
-    private final ImmutableBytesWritable currentDate = new ImmutableBytesWritable(new byte[PDataType.TIME.getByteSize()]);
+    private final ImmutableBytesWritable currentDate = new ImmutableBytesWritable(new byte[PTime.INSTANCE.getByteSize()]);
     
     public CurrentTimeFunction() {
         this(System.currentTimeMillis());
@@ -51,13 +52,13 @@ public class CurrentTimeFunction extends CurrentDateTimeFunction {
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        ptr.set(currentDate.get(), 0, PDataType.TIME.getByteSize());
+        ptr.set(currentDate.get(), 0, PTime.INSTANCE.getByteSize());
         return true;
     }
 
     @Override
     public final PDataType getDataType() {
-        return PDataType.TIME;
+        return PTime.INSTANCE;
     }
 
     @Override

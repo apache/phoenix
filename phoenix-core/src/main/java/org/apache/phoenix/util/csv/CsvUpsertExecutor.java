@@ -21,7 +21,7 @@ import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;

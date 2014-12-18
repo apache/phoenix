@@ -24,8 +24,9 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.BaseCompoundExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.schema.PArrayDataType;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 public class ArrayAnyComparisonExpression extends BaseCompoundExpression {
@@ -73,6 +74,6 @@ public class ArrayAnyComparisonExpression extends BaseCompoundExpression {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.BOOLEAN;
+        return PBoolean.INSTANCE;
     }
 }

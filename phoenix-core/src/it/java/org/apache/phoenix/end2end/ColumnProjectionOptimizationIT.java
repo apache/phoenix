@@ -52,7 +52,9 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -246,20 +248,20 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
         HTableInterface htable = null;
         try {
             htable = conn2.getQueryServices().getTable(htableName);
-            Put put = new Put(PDataType.INTEGER.toBytes(1));
-            put.add(cfB, c1, ts + 6, PDataType.INTEGER.toBytes(1));
-            put.add(cfC, c2, ts + 6, PDataType.LONG.toBytes(2));
+            Put put = new Put(PInteger.INSTANCE.toBytes(1));
+            put.add(cfB, c1, ts + 6, PInteger.INSTANCE.toBytes(1));
+            put.add(cfC, c2, ts + 6, PLong.INSTANCE.toBytes(2));
             htable.put(put);
 
-            put = new Put(PDataType.INTEGER.toBytes(2));
-            put.add(cfC, c2, ts + 6, PDataType.LONG.toBytes(10));
-            put.add(cfC, c3, ts + 6, PDataType.VARCHAR.toBytes("abcd"));
+            put = new Put(PInteger.INSTANCE.toBytes(2));
+            put.add(cfC, c2, ts + 6, PLong.INSTANCE.toBytes(10));
+            put.add(cfC, c3, ts + 6, PVarchar.INSTANCE.toBytes("abcd"));
             htable.put(put);
 
-            put = new Put(PDataType.INTEGER.toBytes(3));
-            put.add(cfB, c1, ts + 6, PDataType.INTEGER.toBytes(3));
-            put.add(cfC, c2, ts + 6, PDataType.LONG.toBytes(10));
-            put.add(cfC, c3, ts + 6, PDataType.VARCHAR.toBytes("abcd"));
+            put = new Put(PInteger.INSTANCE.toBytes(3));
+            put.add(cfB, c1, ts + 6, PInteger.INSTANCE.toBytes(3));
+            put.add(cfC, c2, ts + 6, PLong.INSTANCE.toBytes(10));
+            put.add(cfC, c3, ts + 6, PVarchar.INSTANCE.toBytes("abcd"));
             htable.put(put);
 
             conn2.close();

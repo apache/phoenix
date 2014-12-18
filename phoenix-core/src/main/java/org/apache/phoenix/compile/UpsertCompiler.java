@@ -73,7 +73,7 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
@@ -613,7 +613,7 @@ public class UpsertCompiler {
                                 ResultIterator iterator = aggPlan.iterator();
                                 try {
                                     Tuple row = iterator.next();
-                                    final long mutationCount = (Long)aggProjector.getColumnProjector(0).getValue(row, PDataType.LONG, ptr);
+                                    final long mutationCount = (Long)aggProjector.getColumnProjector(0).getValue(row, PLong.INSTANCE, ptr);
                                     return new MutationState(maxSize, connection) {
                                         @Override
                                         public long getUpdateCount() {
@@ -675,7 +675,7 @@ public class UpsertCompiler {
                     long totalRowCount = 0;
                     while ((tuple=iterator.next()) != null) {// Runs query
                         Cell kv = tuple.getValue(0);
-                        totalRowCount += PDataType.LONG.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
+                        totalRowCount += PLong.INSTANCE.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
                     }
                     // Return total number of rows that have been updated. In the case of auto commit being off
                     // the mutations will all be in the mutation state of the current connection.

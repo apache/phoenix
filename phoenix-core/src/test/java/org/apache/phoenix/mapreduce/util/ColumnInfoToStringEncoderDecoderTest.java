@@ -23,8 +23,7 @@ import static org.junit.Assert.assertEquals;
 
 import java.util.List;
 
-import org.apache.phoenix.mapreduce.util.ColumnInfoToStringEncoderDecoder;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ColumnInfo;
 import org.junit.Test;
 
@@ -37,21 +36,21 @@ public class ColumnInfoToStringEncoderDecoderTest {
 
     @Test
     public void testEncode() {
-        final ColumnInfo columnInfo = new ColumnInfo("col1", PDataType.VARCHAR.getSqlType());
+        final ColumnInfo columnInfo = new ColumnInfo("col1", PVarchar.INSTANCE.getSqlType());
         final String encodedColumnInfo = ColumnInfoToStringEncoderDecoder.encode(Lists.newArrayList(columnInfo));
         assertEquals(columnInfo.toString(),encodedColumnInfo);
     }
     
     @Test
     public void testDecode() {
-        final ColumnInfo columnInfo = new ColumnInfo("col1", PDataType.VARCHAR.getSqlType());
+        final ColumnInfo columnInfo = new ColumnInfo("col1", PVarchar.INSTANCE.getSqlType());
         final String encodedColumnInfo = ColumnInfoToStringEncoderDecoder.encode(Lists.newArrayList(columnInfo));
         assertEquals(columnInfo.toString(),encodedColumnInfo);
     }
     
     @Test
     public void testEncodeDecodeWithNulls() {
-        final ColumnInfo columnInfo1 = new ColumnInfo("col1", PDataType.VARCHAR.getSqlType());
+        final ColumnInfo columnInfo1 = new ColumnInfo("col1", PVarchar.INSTANCE.getSqlType());
         final ColumnInfo columnInfo2 = null;
         final String columnInfoStr = ColumnInfoToStringEncoderDecoder.encode(Lists.newArrayList(columnInfo1,columnInfo2));
         final List<ColumnInfo> decodedColumnInfo = ColumnInfoToStringEncoderDecoder.decode(columnInfoStr);

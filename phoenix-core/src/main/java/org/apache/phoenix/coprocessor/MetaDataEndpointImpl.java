@@ -112,13 +112,17 @@ import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
+import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
@@ -127,6 +131,8 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stats.PTableStats;
@@ -415,41 +421,41 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
         Cell columnSizeKv = colKeyValues[COLUMN_SIZE_INDEX];
         Integer maxLength =
-                columnSizeKv == null ? null : PDataType.INTEGER.getCodec().decodeInt(
+                columnSizeKv == null ? null : PInteger.INSTANCE.getCodec().decodeInt(
                     columnSizeKv.getValueArray(), columnSizeKv.getValueOffset(), SortOrder.getDefault());
         Cell decimalDigitKv = colKeyValues[DECIMAL_DIGITS_INDEX];
         Integer scale =
-                decimalDigitKv == null ? null : PDataType.INTEGER.getCodec().decodeInt(
+                decimalDigitKv == null ? null : PInteger.INSTANCE.getCodec().decodeInt(
                     decimalDigitKv.getValueArray(), decimalDigitKv.getValueOffset(), SortOrder.getDefault());
         Cell ordinalPositionKv = colKeyValues[ORDINAL_POSITION_INDEX];
         int position =
-                PDataType.INTEGER.getCodec().decodeInt(ordinalPositionKv.getValueArray(),
+            PInteger.INSTANCE.getCodec().decodeInt(ordinalPositionKv.getValueArray(),
                     ordinalPositionKv.getValueOffset(), SortOrder.getDefault()) + (isSalted ? 1 : 0);
         Cell nullableKv = colKeyValues[NULLABLE_INDEX];
         boolean isNullable =
-                PDataType.INTEGER.getCodec().decodeInt(nullableKv.getValueArray(),
+            PInteger.INSTANCE.getCodec().decodeInt(nullableKv.getValueArray(),
                     nullableKv.getValueOffset(), SortOrder.getDefault()) != ResultSetMetaData.columnNoNulls;
         Cell dataTypeKv = colKeyValues[DATA_TYPE_INDEX];
         PDataType dataType =
-                PDataType.fromTypeId(PDataType.INTEGER.getCodec().decodeInt(
+                PDataType.fromTypeId(PInteger.INSTANCE.getCodec().decodeInt(
                   dataTypeKv.getValueArray(), dataTypeKv.getValueOffset(), SortOrder.getDefault()));
-        if (maxLength == null && dataType == PDataType.BINARY) dataType = PDataType.VARBINARY; // For
+        if (maxLength == null && dataType == PBinary.INSTANCE) dataType = PVarbinary.INSTANCE;   // For
                                                                                                // backward
                                                                                                // compatibility.
         Cell sortOrderKv = colKeyValues[SORT_ORDER_INDEX];
         SortOrder sortOrder =
-        		sortOrderKv == null ? SortOrder.getDefault() : SortOrder.fromSystemValue(PDataType.INTEGER
+        		sortOrderKv == null ? SortOrder.getDefault() : SortOrder.fromSystemValue(PInteger.INSTANCE
                         .getCodec().decodeInt(sortOrderKv.getValueArray(),
                         		sortOrderKv.getValueOffset(), SortOrder.getDefault()));
         
         Cell arraySizeKv = colKeyValues[ARRAY_SIZE_INDEX];
-        Integer arraySize = arraySizeKv == null ? null : 
-          PDataType.INTEGER.getCodec().decodeInt(arraySizeKv.getValueArray(), arraySizeKv.getValueOffset(), SortOrder.getDefault());
+        Integer arraySize = arraySizeKv == null ? null :
+            PInteger.INSTANCE.getCodec().decodeInt(arraySizeKv.getValueArray(), arraySizeKv.getValueOffset(), SortOrder.getDefault());
  
         Cell viewConstantKv = colKeyValues[VIEW_CONSTANT_INDEX];
         byte[] viewConstant = viewConstantKv == null ? null : viewConstantKv.getValue();
         Cell isViewReferencedKv = colKeyValues[IS_VIEW_REFERENCED_INDEX];
-        boolean isViewReferenced = isViewReferencedKv != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(isViewReferencedKv.getValueArray(), isViewReferencedKv.getValueOffset(), isViewReferencedKv.getValueLength()));
+        boolean isViewReferenced = isViewReferencedKv != null && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isViewReferencedKv.getValueArray(), isViewReferencedKv.getValueOffset(), isViewReferencedKv.getValueLength()));
         PColumn column = new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable, position-1, sortOrder, arraySize, viewConstant, isViewReferenced);
         columns.add(column);
     }
@@ -530,11 +536,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         .fromSerializedValue(tableTypeKv.getValueArray()[tableTypeKv.getValueOffset()]);
         Cell tableSeqNumKv = tableKeyValues[TABLE_SEQ_NUM_INDEX];
         long tableSeqNum =
-                PDataType.LONG.getCodec().decodeLong(tableSeqNumKv.getValueArray(),
+            PLong.INSTANCE.getCodec().decodeLong(tableSeqNumKv.getValueArray(),
                     tableSeqNumKv.getValueOffset(), SortOrder.getDefault());
         Cell columnCountKv = tableKeyValues[COLUMN_COUNT_INDEX];
         int columnCount =
-                PDataType.INTEGER.getCodec().decodeInt(columnCountKv.getValueArray(),
+            PInteger.INSTANCE.getCodec().decodeInt(columnCountKv.getValueArray(),
                     columnCountKv.getValueOffset(), SortOrder.getDefault());
         Cell pkNameKv = tableKeyValues[PK_NAME_INDEX];
         PName pkName =
@@ -542,7 +548,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     pkNameKv.getValueLength()) : null;
         Cell saltBucketNumKv = tableKeyValues[SALT_BUCKETS_INDEX];
         Integer saltBucketNum =
-                saltBucketNumKv != null ? (Integer) PDataType.INTEGER.getCodec().decodeInt(
+                saltBucketNumKv != null ? (Integer) PInteger.INSTANCE.getCodec().decodeInt(
                     saltBucketNumKv.getValueArray(), saltBucketNumKv.getValueOffset(), SortOrder.getDefault()) : null;
         if (saltBucketNum != null && saltBucketNum.intValue() == 0) {
             saltBucketNum = null; // Zero salt buckets means not salted
@@ -557,17 +563,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         .getValueArray()[indexStateKv.getValueOffset()]);
         Cell immutableRowsKv = tableKeyValues[IMMUTABLE_ROWS_INDEX];
         boolean isImmutableRows =
-                immutableRowsKv == null ? false : (Boolean) PDataType.BOOLEAN.toObject(
+                immutableRowsKv == null ? false : (Boolean) PBoolean.INSTANCE.toObject(
                     immutableRowsKv.getValueArray(), immutableRowsKv.getValueOffset(),
                     immutableRowsKv.getValueLength());
         Cell defaultFamilyNameKv = tableKeyValues[DEFAULT_COLUMN_FAMILY_INDEX];
         PName defaultFamilyName = defaultFamilyNameKv != null ? newPName(defaultFamilyNameKv.getValueArray(), defaultFamilyNameKv.getValueOffset(), defaultFamilyNameKv.getValueLength()) : null;
         Cell viewStatementKv = tableKeyValues[VIEW_STATEMENT_INDEX];
-        String viewStatement = viewStatementKv != null ? (String)PDataType.VARCHAR.toObject(viewStatementKv.getValueArray(), viewStatementKv.getValueOffset(), viewStatementKv.getValueLength()) : null;
+        String viewStatement = viewStatementKv != null ? (String) PVarchar.INSTANCE.toObject(viewStatementKv.getValueArray(), viewStatementKv.getValueOffset(),
+                viewStatementKv.getValueLength()) : null;
         Cell disableWALKv = tableKeyValues[DISABLE_WAL_INDEX];
-        boolean disableWAL = disableWALKv == null ? PTable.DEFAULT_DISABLE_WAL : Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(disableWALKv.getValueArray(), disableWALKv.getValueOffset(), disableWALKv.getValueLength()));
+        boolean disableWAL = disableWALKv == null ? PTable.DEFAULT_DISABLE_WAL : Boolean.TRUE.equals(
+            PBoolean.INSTANCE.toObject(disableWALKv.getValueArray(), disableWALKv.getValueOffset(), disableWALKv.getValueLength()));
         Cell multiTenantKv = tableKeyValues[MULTI_TENANT_INDEX];
-        boolean multiTenant = multiTenantKv == null ? false : Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(multiTenantKv.getValueArray(), multiTenantKv.getValueOffset(), multiTenantKv.getValueLength()));
+        boolean multiTenant = multiTenantKv == null ? false : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(multiTenantKv.getValueArray(), multiTenantKv.getValueOffset(), multiTenantKv.getValueLength()));
         Cell viewTypeKv = tableKeyValues[VIEW_TYPE_INDEX];
         ViewType viewType = viewTypeKv == null ? null : ViewType.fromSerializedValue(viewTypeKv.getValueArray()[viewTypeKv.getValueOffset()]);
         Cell viewIndexIdKv = tableKeyValues[VIEW_INDEX_ID_INDEX];
@@ -1540,11 +1548,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     (currentState == PIndexState.DISABLE || currentState == PIndexState.INACTIVE) && 
                     (currentDisableTimeStamp != null && currentDisableTimeStamp.getValueLength() > 0) &&
                     (disableTimeStampKVIndex >= 0)) {
-                    Long curTimeStampVal = (Long)PDataType.LONG.toObject(currentDisableTimeStamp.getValueArray(), 
+                    Long curTimeStampVal = (Long) PLong.INSTANCE.toObject(currentDisableTimeStamp.getValueArray(),
                       currentDisableTimeStamp.getValueOffset(), currentDisableTimeStamp.getValueLength());
                     // new DisableTimeStamp is passed in
                     Cell newDisableTimeStampCell = newKVs.get(disableTimeStampKVIndex);
-                    Long newDisableTimeStamp = (Long)PDataType.LONG.toObject(newDisableTimeStampCell.getValueArray(),
+                    Long newDisableTimeStamp = (Long) PLong.INSTANCE.toObject(newDisableTimeStampCell.getValueArray(),
                       newDisableTimeStampCell.getValueOffset(), newDisableTimeStampCell.getValueLength());
                     if(curTimeStampVal > 0 && curTimeStampVal < newDisableTimeStamp){
                         // not reset disable timestamp

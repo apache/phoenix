@@ -23,7 +23,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -49,7 +49,7 @@ public class FilterResultIterator  extends LookAheadResultIterator {
         }
         this.delegate = delegate;
         this.expression = expression;
-        if (expression.getDataType() != PDataType.BOOLEAN) {
+        if (expression.getDataType() != PBoolean.INSTANCE) {
             throw new IllegalArgumentException("FilterResultIterator requires a boolean expression, but got " + expression);
         }
     }

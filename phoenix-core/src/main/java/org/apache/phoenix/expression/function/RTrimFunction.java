@@ -29,7 +29,8 @@ import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
@@ -45,7 +46,7 @@ import org.apache.phoenix.util.StringUtil;
  * @since 0.1
  */
 @BuiltInFunction(name=RTrimFunction.NAME, args={
-    @Argument(allowedTypes={PDataType.VARCHAR})})
+    @Argument(allowedTypes={PVarchar.class})})
 public class RTrimFunction extends ScalarFunction {
     public static final String NAME = "RTRIM";
 
@@ -152,7 +153,7 @@ public class RTrimFunction extends ScalarFunction {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.VARCHAR;
+        return PVarchar.INSTANCE;
     }
 
     @Override

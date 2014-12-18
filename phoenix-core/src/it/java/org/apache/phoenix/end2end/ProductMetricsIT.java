@@ -43,7 +43,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -82,8 +82,8 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     
     private static byte[][] getSplits(String tenantId) {
         return new byte[][] { 
-            ByteUtil.concat(Bytes.toBytes(tenantId), PDataType.DATE.toBytes(D3)),
-            ByteUtil.concat(Bytes.toBytes(tenantId), PDataType.DATE.toBytes(D5)),
+            ByteUtil.concat(Bytes.toBytes(tenantId), PDate.INSTANCE.toBytes(D3)),
+            ByteUtil.concat(Bytes.toBytes(tenantId), PDate.INSTANCE.toBytes(D5)),
             };
     }
     

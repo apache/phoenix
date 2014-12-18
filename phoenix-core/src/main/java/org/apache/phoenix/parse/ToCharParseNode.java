@@ -27,8 +27,9 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.ToCharFunction;
-import org.apache.phoenix.schema.PDataType;
-
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PTimestamp;
 
 public class ToCharParseNode extends FunctionParseNode {
 
@@ -42,7 +43,7 @@ public class ToCharParseNode extends FunctionParseNode {
         String formatString = (String)((LiteralExpression)children.get(1)).getValue(); // either date or number format string
         Format formatter;
         FunctionArgumentType type;
-        if (dataType.isCoercibleTo(PDataType.TIMESTAMP)) {
+        if (dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
             if (formatString == null) {
                 formatString = context.getDateFormat();
                 formatter = context.getDateFormatter();
@@ -51,7 +52,7 @@ public class ToCharParseNode extends FunctionParseNode {
             }
             type = FunctionArgumentType.TEMPORAL;
         }
-        else if (dataType.isCoercibleTo(PDataType.DECIMAL)) {
+        else if (dataType.isCoercibleTo(PDecimal.INSTANCE)) {
             if (formatString == null)
                 formatString = context.getNumberFormat();
             formatter = FunctionArgumentType.NUMERIC.getFormatter(formatString);

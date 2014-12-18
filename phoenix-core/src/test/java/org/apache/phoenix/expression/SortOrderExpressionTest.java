@@ -30,6 +30,19 @@ import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PUnsignedDouble;
+import org.apache.phoenix.schema.types.PUnsignedFloat;
+import org.apache.phoenix.schema.types.PUnsignedInt;
+import org.apache.phoenix.schema.types.PUnsignedLong;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -50,7 +63,7 @@ import org.apache.phoenix.expression.function.ToNumberFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.DateUtil;
 
 /**
@@ -60,31 +73,31 @@ public class SortOrderExpressionTest {
     
     @Test
     public void substr() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PDataType.CHAR), getLiteral(3), getLiteral(2));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PChar.INSTANCE), getLiteral(3), getLiteral(2));
         evaluateAndAssertResult(new SubstrFunction(args), "ah");
     }
     
     @Test
     public void regexpSubstr() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PDataType.CHAR), getLiteral("l.h"), getLiteral(2));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PChar.INSTANCE), getLiteral("l.h"), getLiteral(2));
         evaluateAndAssertResult(new RegexpSubstrFunction(args), "lah");
     }
     
     @Test
     public void regexpReplace() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PDataType.CHAR), getLiteral("l.h"), getLiteral("foo"));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PChar.INSTANCE), getLiteral("l.h"), getLiteral("foo"));
         evaluateAndAssertResult(new RegexpReplaceFunction(args), "bfoo");
     }
     
     @Test
     public void ltrim() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral("   blah", PDataType.CHAR));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("   blah", PChar.INSTANCE));
         evaluateAndAssertResult(new LTrimFunction(args), "blah");
     }
     
     @Test
     public void substrLtrim() throws Exception {
-        List<Expression> ltrimArgs = Lists.newArrayList(getInvertedLiteral("   blah", PDataType.CHAR));
+        List<Expression> ltrimArgs = Lists.newArrayList(getInvertedLiteral("   blah", PChar.INSTANCE));
         Expression ltrim = new LTrimFunction(ltrimArgs);
         List<Expression> substrArgs = Lists.newArrayList(ltrim, getLiteral(3), getLiteral(2));
         evaluateAndAssertResult(new SubstrFunction(substrArgs), "ah");
@@ -92,157 +105,157 @@ public class SortOrderExpressionTest {
     
     @Test
     public void rtrim() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah    ", PDataType.CHAR));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah    ", PChar.INSTANCE));
         evaluateAndAssertResult(new RTrimFunction(args), "blah");
     }
     
     @Test
     public void lower() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral("BLAH", PDataType.CHAR));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("BLAH", PChar.INSTANCE));
         evaluateAndAssertResult(new LowerFunction(args), "blah");        
     }
     
     @Test
     public void upper() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PDataType.CHAR));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PChar.INSTANCE));
         evaluateAndAssertResult(new UpperFunction(args), "BLAH");        
     }
     
     @Test
     public void length() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PDataType.CHAR));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PChar.INSTANCE));
         evaluateAndAssertResult(new LengthFunction(args), 4);
     }
     
     @Test
     public void round() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral(date(12, 11, 2001), PDataType.DATE), getLiteral("hour"), getLiteral(1));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral(date(12, 11, 2001), PDate.INSTANCE), getLiteral("hour"), getLiteral(1));
         evaluateAndAssertResult(RoundDateExpression.create(args), date(12, 11, 2001));
     }
     
     @Test
     public void sqlTypeName() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral(12, PDataType.INTEGER));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral(12, PInteger.INSTANCE));
         evaluateAndAssertResult(new SqlTypeNameFunction(args), "VARCHAR");        
     }
     
     @Test
     public void toChar() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral(date(12, 11, 2001), PDataType.DATE));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral(date(12, 11, 2001), PDate.INSTANCE));
         evaluateAndAssertResult(new ToCharFunction(args, FunctionArgumentType.TEMPORAL, "", DateUtil.getDateFormatter("MM/dd/yy hh:mm a")), "12/11/01 12:00 AM");
     }
     
     @Test
     public void toDate() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral("2001-11-30 00:00:00:0", PDataType.VARCHAR));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("2001-11-30 00:00:00:0", PVarchar.INSTANCE));
         evaluateAndAssertResult(new ToDateFunction(args, null, DateUtil.getDateParser("yyyy-MM-dd HH:mm:ss:S")), date(11, 30, 2001));
     }
     
     @Test
     public void toNumber() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral("10", PDataType.VARCHAR));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("10", PVarchar.INSTANCE));
         evaluateAndAssertResult(new ToNumberFunction(args, FunctionArgumentType.CHAR, "", null), new BigDecimal(BigInteger.valueOf(1), -1));
     }
     
     @Test
     public void trim() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral("   blah    ", PDataType.CHAR));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("   blah    ", PChar.INSTANCE));
         evaluateAndAssertResult(new TrimFunction(args), "blah");
     }
     
     @Test
     public void lpad() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral("ABCD", PDataType.CHAR), getLiteral(7), getLiteral("12"));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("ABCD", PChar.INSTANCE), getLiteral(7), getLiteral("12"));
         evaluateAndAssertResult(new LpadFunction(args), "121ABCD");
     }
     
     @Test
     public void add() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral(10, PDataType.INTEGER), getLiteral(2));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral(10, PInteger.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DecimalAddExpression(args), BigDecimal.valueOf(12));
         
-        args = Lists.newArrayList(getInvertedLiteral(10, PDataType.INTEGER), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10, PInteger.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new LongAddExpression(args), 12l);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.FLOAT), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PFloat.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleAddExpression(args), 12.0);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.UNSIGNED_FLOAT), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PUnsignedFloat.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleAddExpression(args), 12.0);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.UNSIGNED_DOUBLE), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PUnsignedDouble.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleAddExpression(args), 12.0);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.DOUBLE), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PDouble.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleAddExpression(args), 12.0);
     }
 
     @Test
     public void subtract() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral(10, PDataType.INTEGER), getLiteral(2));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral(10, PInteger.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DecimalSubtractExpression(args), BigDecimal.valueOf(8));
         
-        args = Lists.newArrayList(getInvertedLiteral(10, PDataType.INTEGER), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10, PInteger.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new LongSubtractExpression(args), 8l);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.FLOAT), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PFloat.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleSubtractExpression(args), 8.0);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.UNSIGNED_FLOAT), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PUnsignedFloat.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleSubtractExpression(args), 8.0);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.UNSIGNED_DOUBLE), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PUnsignedDouble.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleSubtractExpression(args), 8.0);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.DOUBLE), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PDouble.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleSubtractExpression(args), 8.0);
     }
     
     @Test
     public void divide() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral(10, PDataType.INTEGER), getLiteral(2));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral(10, PInteger.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DecimalDivideExpression(args), BigDecimal.valueOf(5));
         
-        args = Lists.newArrayList(getInvertedLiteral(10, PDataType.INTEGER), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10, PInteger.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new LongDivideExpression(args), 5l);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.FLOAT), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PFloat.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleDivideExpression(args), 5.0);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.UNSIGNED_FLOAT), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PUnsignedFloat.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleDivideExpression(args), 5.0);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.UNSIGNED_DOUBLE), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PUnsignedDouble.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleDivideExpression(args), 5.0);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.DOUBLE), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PDouble.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleDivideExpression(args), 5.0);
     }
     
     @Test
     public void multiply() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral(10, PDataType.INTEGER), getLiteral(2));
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral(10, PInteger.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DecimalMultiplyExpression(args), new BigDecimal(BigInteger.valueOf(2), -1));
         
-        args = Lists.newArrayList(getInvertedLiteral(10, PDataType.INTEGER), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10, PInteger.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new LongMultiplyExpression(args), 20l);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.FLOAT), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PFloat.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleMultiplyExpression(args), 20.0);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.UNSIGNED_FLOAT), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PUnsignedFloat.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleMultiplyExpression(args), 20.0);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.UNSIGNED_DOUBLE), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PUnsignedDouble.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleMultiplyExpression(args), 20.0);
         
-        args = Lists.newArrayList(getInvertedLiteral(10.0, PDataType.DOUBLE), getLiteral(2));
+        args = Lists.newArrayList(getInvertedLiteral(10.0, PDouble.INSTANCE), getLiteral(2));
         evaluateAndAssertResult(new DoubleMultiplyExpression(args), 20.0);
     }
         
     @Test
     public void compareNumbers() throws Exception {
-        PDataType[] numberDataTypes = new PDataType[]{PDataType.INTEGER, PDataType.LONG, PDataType.DECIMAL, PDataType.UNSIGNED_INT, PDataType.UNSIGNED_LONG};
+        PDataType[] numberDataTypes = new PDataType[]{ PInteger.INSTANCE, PLong.INSTANCE, PDecimal.INSTANCE, PUnsignedInt.INSTANCE, PUnsignedLong.INSTANCE};
         for (PDataType lhsDataType : numberDataTypes) {
             for (PDataType rhsDataType : numberDataTypes) {
                 runCompareTest(CompareOp.GREATER, true, 10, lhsDataType, 2, rhsDataType);
@@ -252,7 +265,7 @@ public class SortOrderExpressionTest {
     
     @Test
     public void compareCharacters() throws Exception {
-        PDataType[] textDataTypes = new PDataType[]{PDataType.CHAR, PDataType.VARCHAR};
+        PDataType[] textDataTypes = new PDataType[]{ PChar.INSTANCE, PVarchar.INSTANCE};
         for (PDataType lhsDataType : textDataTypes) {
             for (PDataType rhsDataType : textDataTypes) {
                 runCompareTest(CompareOp.GREATER, true, "xxx", lhsDataType, "bbb", rhsDataType);
@@ -262,15 +275,15 @@ public class SortOrderExpressionTest {
     
     @Test
     public void compareBooleans() throws Exception {
-        runCompareTest(CompareOp.GREATER, true, true, PDataType.BOOLEAN, false, PDataType.BOOLEAN);        
+        runCompareTest(CompareOp.GREATER, true, true, PBoolean.INSTANCE, false, PBoolean.INSTANCE);
     }
     
     @Test
     public void stringConcat() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PDataType.VARCHAR), getInvertedLiteral("foo", PDataType.VARCHAR)); 
+        List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PVarchar.INSTANCE), getInvertedLiteral("foo", PVarchar.INSTANCE));
         evaluateAndAssertResult(new StringConcatExpression(args), "blahfoo");
         
-        args = Lists.newArrayList(getInvertedLiteral("blah", PDataType.VARCHAR), getInvertedLiteral(10, PDataType.INTEGER)); 
+        args = Lists.newArrayList(getInvertedLiteral("blah", PVarchar.INSTANCE), getInvertedLiteral(10, PInteger.INSTANCE));
         evaluateAndAssertResult(new StringConcatExpression(args), "blah10");        
     }
     

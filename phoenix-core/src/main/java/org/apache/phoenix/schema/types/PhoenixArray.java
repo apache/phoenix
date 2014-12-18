@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.schema.types;
 
 import java.sql.Array;
 import java.sql.ResultSet;
@@ -33,6 +33,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 	Object array;
 	int numElements;
 	Integer maxLength;
+  protected int hashCode = Integer.MIN_VALUE;
 	public PhoenixArray() {
 		// empty constructor
 	}
@@ -92,7 +93,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 		        maxLength = baseType.getByteSize();
 		    }
 		}
-        this.array = convertObjectArrayToPrimitiveArray(elements);
+    this.array = convertObjectArrayToPrimitiveArray(elements);
 		this.numElements = elements.length;
 	}
 	
@@ -111,8 +112,8 @@ public class PhoenixArray implements Array,SQLCloseable {
         this.numElements = elements.length;
     }
 
-    public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-	    return elements; 
+  public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
+    return elements;
 	}
 	
 	@Override
@@ -199,6 +200,14 @@ public class PhoenixArray implements Array,SQLCloseable {
 		throw new UnsupportedOperationException("Currently not supported");
 	}
 
+  /**
+   * Return the value in position {@code index} from the underlying array. Used to work around
+   * casting and reflection while enabling primitive arrays.
+   */
+  public Object getElement(int index) {
+    return ((Object[]) array)[index];
+  }
+
 	public int getDimensions() {
 		return this.numElements;
 	}
@@ -228,26 +237,27 @@ public class PhoenixArray implements Array,SQLCloseable {
 	
 	@Override
 	public boolean equals(Object obj) {
-		if (this.numElements != ((PhoenixArray) obj).numElements) {
-			return false;
-		}
-		if (this.baseType != ((PhoenixArray) obj).baseType) {
-			return false;
-		}
-		return Arrays.deepEquals((Object[]) this.array,
-				(Object[]) ((PhoenixArray) obj).array);
+    if (obj == null) return false;
+    if (this == obj) return true;
+    if (!(obj instanceof PhoenixArray)) return false;
+    PhoenixArray oArray = (PhoenixArray) obj;
+    if (numElements != oArray.numElements) return false;
+    if (baseType.getSqlType() != oArray.baseType.getSqlType()) return false;
+    return Arrays.deepEquals((Object[]) array, (Object[]) oArray.array);
 	}
 
 	@Override
 	public int hashCode() {
-		// TODO : Revisit
-		final int prime = 31;
-		int result = 1;
-		result = prime * result
-				+ ((array == null) ? 0 : array.hashCode());
-		return result;
+    // implementation based on commons.lang.HashCodeBuilder, except the hashcode is cached and
+    // reused for a given instance.
+    if (hashCode != Integer.MIN_VALUE) return hashCode;
+    hashCode = 17;
+    hashCode = hashCode * 37 + numElements;
+    hashCode = hashCode * 37 + baseType.getSqlType();
+    hashCode = hashCode * 37 + Arrays.deepHashCode((Object[]) array);
+    return hashCode;
 	}
-	
+
 	public static class PrimitiveIntPhoenixArray extends PhoenixArray {
 		private int[] intArr;
 		public PrimitiveIntPhoenixArray(PDataType dataType, Object[] elements) {
@@ -255,9 +265,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 		}
 		@Override
 		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(int.class,
-					elements.length);
-			intArr = (int[]) object;
+			intArr = new int[elements.length];
 			int i = 0;
 			for(Object o : elements) {
 			    if (o != null) {
@@ -265,7 +273,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 			    }
 			    i++;
 			}
-			return intArr;
+      return intArr;
 		}
 		
 		@Override
@@ -280,15 +288,29 @@ public class PhoenixArray implements Array,SQLCloseable {
 		
 		@Override
 		public boolean equals(Object obj) {
-			if (this.numElements != ((PhoenixArray) obj).numElements) {
-				return false;
-			}
-			if (this.baseType != ((PhoenixArray) obj).baseType) {
-				return false;
-			}
-			return Arrays.equals((int[]) this.array,
-					(int[]) ((PhoenixArray) obj).array);
+      if (obj == null) return false;
+      if (this == obj) return true;
+      if (this.getClass() != obj.getClass()) return false;
+      PrimitiveIntPhoenixArray oArray = (PrimitiveIntPhoenixArray) obj;
+      if (numElements != oArray.numElements) return false;
+      if (baseType.getSqlType() != oArray.baseType.getSqlType()) return false;
+      return Arrays.equals((int[]) array, (int[]) oArray.array);
 		}
+
+    @Override
+    public int hashCode() {
+      if (hashCode != Integer.MIN_VALUE) return hashCode;
+      hashCode = 17;
+      hashCode = hashCode * 37 + numElements;
+      hashCode = hashCode * 37 + baseType.getSqlType();
+      hashCode = hashCode * 37 + Arrays.hashCode((int[]) array);
+      return hashCode;
+    }
+
+    @Override
+    public Object getElement(int index) {
+      return ((int[]) array)[index];
+    }
 	}
 	
 	public static class PrimitiveShortPhoenixArray extends PhoenixArray {
@@ -298,9 +320,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 		}
 		@Override
 		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(short.class,
-					elements.length);
-			shortArr = (short[]) object;
+			shortArr = new short[elements.length];
 			int i = 0;
             for(Object o : elements) {
                 if (o != null) {
@@ -308,7 +328,7 @@ public class PhoenixArray implements Array,SQLCloseable {
                 }
                 i++;
             }
-			return shortArr;
+      return shortArr;
 		}
 		
 		@Override
@@ -323,16 +343,30 @@ public class PhoenixArray implements Array,SQLCloseable {
 		
 		@Override
 		public boolean equals(Object obj) {
-			if (this.numElements != ((PhoenixArray) obj).numElements) {
-				return false;
-			}
-			if (this.baseType != ((PhoenixArray) obj).baseType) {
-				return false;
-			}
-			return Arrays.equals((short[]) this.array,
-					(short[]) ((PhoenixArray) obj).array);
+      if (obj == null) return false;
+      if (this == obj) return true;
+      if (this.getClass() != obj.getClass()) return false;
+      PrimitiveShortPhoenixArray oArray = (PrimitiveShortPhoenixArray) obj;
+      if (numElements != oArray.numElements) return false;
+      if (baseType.getSqlType() != oArray.baseType.getSqlType()) return false;
+      return Arrays.equals((short[]) array, (short[]) oArray.array);
 		}
-	}
+
+    @Override
+    public int hashCode() {
+      if (hashCode != Integer.MIN_VALUE) return hashCode;
+      hashCode = 17;
+      hashCode = hashCode * 37 + numElements;
+      hashCode = hashCode * 37 + baseType.getSqlType();
+      hashCode = hashCode * 37 + Arrays.hashCode((short[]) array);
+      return hashCode;
+    }
+
+    @Override
+    public Object getElement(int index) {
+      return ((short[]) array)[index];
+    }
+  }
 	
 	public static class PrimitiveLongPhoenixArray extends PhoenixArray {
 		private long[] longArr;
@@ -341,9 +375,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 		}
 		@Override
 		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(long.class,
-					elements.length);
-			longArr = (long[]) object;
+			longArr = new long[elements.length];
 			int i = 0;
             for(Object o : elements) {
                 if (o != null) {
@@ -351,7 +383,7 @@ public class PhoenixArray implements Array,SQLCloseable {
                 }
                 i++;
             }
-			return longArr;
+      return longArr;
 		}
 		@Override
         public int estimateByteSize(int pos) {
@@ -365,16 +397,29 @@ public class PhoenixArray implements Array,SQLCloseable {
 		
 		@Override
 		public boolean equals(Object obj) {
-			if (this.numElements != ((PhoenixArray) obj).numElements) {
-				return false;
-			}
-			if (this.baseType != ((PhoenixArray) obj).baseType) {
-				return false;
-			}
-			return Arrays.equals((long[]) this.array,
-					(long[]) ((PhoenixArray) obj).array);
+      if (obj == null) return false;
+      if (this == obj) return true;
+      if (this.getClass() != obj.getClass()) return false;
+      PrimitiveLongPhoenixArray oArray = (PrimitiveLongPhoenixArray) obj;
+      if (numElements != oArray.numElements) return false;
+      if (baseType.getSqlType() != oArray.baseType.getSqlType()) return false;
+      return Arrays.equals((long[]) array, (long[]) oArray.array);
 		}
 
+    @Override
+    public int hashCode() {
+      if (hashCode != Integer.MIN_VALUE) return hashCode;
+      hashCode = 17;
+      hashCode = hashCode * 37 + numElements;
+      hashCode = hashCode * 37 + baseType.getSqlType();
+      hashCode = hashCode * 37 + Arrays.hashCode((long[]) array);
+      return hashCode;
+    }
+
+    @Override
+    public Object getElement(int index) {
+      return ((long[]) array)[index];
+    }
 	}
 	
 	public static class PrimitiveDoublePhoenixArray extends PhoenixArray {
@@ -384,9 +429,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 		}
 		@Override
 		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(double.class,
-					elements.length);
-			doubleArr = (double[]) object;
+			doubleArr = new double[elements.length];
 			int i = 0;
 			for (Object o : elements) {
 			    if (o != null) {
@@ -394,7 +437,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 			    }
 			    i++;
 			}
-			return doubleArr;
+      return doubleArr;
 		}
 		
 		@Override
@@ -409,15 +452,29 @@ public class PhoenixArray implements Array,SQLCloseable {
 		
 		@Override
 		public boolean equals(Object obj) {
-			if (this.numElements != ((PhoenixArray) obj).numElements) {
-				return false;
-			}
-			if (this.baseType != ((PhoenixArray) obj).baseType) {
-				return false;
-			}
-			return Arrays.equals((double[]) this.array,
-					(double[]) ((PhoenixArray) obj).array);
+      if (obj == null) return false;
+      if (this == obj) return true;
+      if (this.getClass() != obj.getClass()) return false;
+      PrimitiveDoublePhoenixArray oArray = (PrimitiveDoublePhoenixArray) obj;
+      if (numElements != oArray.numElements) return false;
+      if (baseType.getSqlType() != oArray.baseType.getSqlType()) return false;
+      return Arrays.equals((double[]) array, (double[]) oArray.array);
 		}
+
+    @Override
+    public int hashCode() {
+      if (hashCode != Integer.MIN_VALUE) return hashCode;
+      hashCode = 17;
+      hashCode = hashCode * 37 + numElements;
+      hashCode = hashCode * 37 + baseType.getSqlType();
+      hashCode = hashCode * 37 + Arrays.hashCode((double[]) array);
+      return hashCode;
+    }
+
+    @Override
+    public Object getElement(int index) {
+      return ((double[]) array)[index];
+    }
 	}
 	
 	public static class PrimitiveFloatPhoenixArray extends PhoenixArray {
@@ -427,9 +484,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 		}
 		@Override
 		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(float.class,
-					elements.length);
-			floatArr = (float[]) object;
+			floatArr = new float[elements.length];
 			int i = 0;
             for(Object o : elements) {
                 if (o != null) {
@@ -437,7 +492,7 @@ public class PhoenixArray implements Array,SQLCloseable {
                 }
                 i++;
             }
-			return floatArr;
+      return floatArr;
 		}
 		
 		@Override
@@ -452,15 +507,29 @@ public class PhoenixArray implements Array,SQLCloseable {
 		
 		@Override
 		public boolean equals(Object obj) {
-			if (this.numElements != ((PhoenixArray) obj).numElements) {
-				return false;
-			}
-			if (this.baseType != ((PhoenixArray) obj).baseType) {
-				return false;
-			}
-			return Arrays.equals((float[]) this.array,
-					(float[]) ((PhoenixArray) obj).array);
+      if (obj == null) return false;
+      if (this == obj) return true;
+      if (this.getClass() != obj.getClass()) return false;
+      PrimitiveFloatPhoenixArray oArray = (PrimitiveFloatPhoenixArray) obj;
+      if (numElements != oArray.numElements) return false;
+      if (baseType.getSqlType() != oArray.baseType.getSqlType()) return false;
+      return Arrays.equals((float[]) array, (float[]) oArray.array);
 		}
+
+    @Override
+    public int hashCode() {
+      if (hashCode != Integer.MIN_VALUE) return hashCode;
+      hashCode = 17;
+      hashCode = hashCode * 37 + numElements;
+      hashCode = hashCode * 37 + baseType.getSqlType();
+      hashCode = hashCode * 37 + Arrays.hashCode((float[]) array);
+      return hashCode;
+    }
+
+    @Override
+    public Object getElement(int index) {
+      return ((float[]) array)[index];
+    }
 	}
 	
 	public static class PrimitiveBytePhoenixArray extends PhoenixArray {
@@ -470,9 +539,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 		}
 		@Override
 		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(byte.class,
-					elements.length);
-			byteArr = (byte[]) object;
+			byteArr = new byte[elements.length];
 			int i = 0;
             for(Object o : elements) {
                 if (o != null) {
@@ -480,7 +547,7 @@ public class PhoenixArray implements Array,SQLCloseable {
                 }
                 i++;
             }
-			return byteArr;
+      return byteArr;
 		}
 		
 		@Override
@@ -495,15 +562,29 @@ public class PhoenixArray implements Array,SQLCloseable {
 		
 		@Override
 		public boolean equals(Object obj) {
-			if (this.numElements != ((PhoenixArray) obj).numElements) {
-				return false;
-			}
-			if (this.baseType != ((PhoenixArray) obj).baseType) {
-				return false;
-			}
-			return Arrays.equals((byte[]) this.array,
-					(byte[]) ((PhoenixArray) obj).array);
+      if (obj == null) return false;
+      if (this == obj) return true;
+      if (this.getClass() != obj.getClass()) return false;
+      PrimitiveBytePhoenixArray oArray = (PrimitiveBytePhoenixArray) obj;
+      if (numElements != oArray.numElements) return false;
+      if (baseType.getSqlType() != oArray.baseType.getSqlType()) return false;
+      return Arrays.equals((byte[]) array, (byte[]) oArray.array);
 		}
+
+    @Override
+    public int hashCode() {
+      if (hashCode != Integer.MIN_VALUE) return hashCode;
+      hashCode = 17;
+      hashCode = hashCode * 37 + numElements;
+      hashCode = hashCode * 37 + baseType.getSqlType();
+      hashCode = hashCode * 37 + Arrays.hashCode((byte[]) array);
+      return hashCode;
+    }
+
+    @Override
+    public Object getElement(int index) {
+      return ((byte[]) array)[index];
+    }
 	}
 	
 	public static class PrimitiveBooleanPhoenixArray extends PhoenixArray {
@@ -513,9 +594,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 		}
 		@Override
 		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			Object object = java.lang.reflect.Array.newInstance(boolean.class,
-					elements.length);
-			booleanArr = (boolean[]) object;
+			booleanArr = new boolean[elements.length];
 			int i = 0;
             for(Object o : elements) {
                 if (o != null) {
@@ -523,7 +602,7 @@ public class PhoenixArray implements Array,SQLCloseable {
                 }
                 i++;
             }
-			return booleanArr;
+      return booleanArr;
 		}
 		
 		@Override
@@ -538,14 +617,28 @@ public class PhoenixArray implements Array,SQLCloseable {
 		
 		@Override
 		public boolean equals(Object obj) {
-			if (this.numElements != ((PhoenixArray) obj).numElements) {
-				return false;
-			}
-			if (this.baseType != ((PhoenixArray) obj).baseType) {
-				return false;
-			}
-			return Arrays.equals((boolean[]) this.array,
-					(boolean[]) ((PhoenixArray) obj).array);
+      if (obj == null) return false;
+      if (this == obj) return true;
+      if (this.getClass() != obj.getClass()) return false;
+      PrimitiveBooleanPhoenixArray oArray = (PrimitiveBooleanPhoenixArray) obj;
+      if (numElements != oArray.numElements) return false;
+      if (baseType.getSqlType() != oArray.baseType.getSqlType()) return false;
+      return Arrays.equals((boolean[]) array, (boolean[]) oArray.array);
 		}
+
+    @Override
+    public int hashCode() {
+      if (hashCode != Integer.MIN_VALUE) return hashCode;
+      hashCode = 17;
+      hashCode = hashCode * 37 + numElements;
+      hashCode = hashCode * 37 + baseType.getSqlType();
+      hashCode = hashCode * 37 + Arrays.hashCode((boolean[]) array);
+      return hashCode;
+    }
+
+    @Override
+    public Object getElement(int index) {
+      return ((boolean[]) array)[index];
+    }
 	}
 }

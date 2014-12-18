@@ -23,7 +23,7 @@ import java.sql.SQLException;
 
 import javax.annotation.Nullable;
 
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.base.Function;
 import com.google.common.base.Splitter;

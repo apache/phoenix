@@ -50,8 +50,8 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateR
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.protobuf.ProtobufUtil;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -150,7 +150,7 @@ public class PhoenixIndexFailurePolicy extends  KillServerOnFailurePolicy {
             put.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_STATE_BYTES,
                     PIndexState.DISABLE.getSerializedBytes());
             put.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES,
-                    PDataType.LONG.toBytes(minTimeStamp));
+                PLong.INSTANCE.toBytes(minTimeStamp));
             final List<Mutation> tableMetadata = Collections.<Mutation>singletonList(put);
 
             final Map<byte[], MetaDataResponse> results =

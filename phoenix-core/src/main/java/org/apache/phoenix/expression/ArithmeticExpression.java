@@ -19,7 +19,7 @@ package org.apache.phoenix.expression;
 
 import java.util.List;
 
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 
 public abstract class ArithmeticExpression extends BaseCompoundExpression {
 

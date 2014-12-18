@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.schema.types;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -26,6 +26,9 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.ConstraintViolationException;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
@@ -44,13 +47,15 @@ import com.google.common.base.Preconditions;
  * byte array of arrays of the same type to be directly comparable against each other. 
  * This prevents a costly deserialization on compare and allows an array column to be used as the last column in a primary key constraint.
  */
-public class PArrayDataType {
+public abstract class PArrayDataType<T> extends PDataType<T> {
 
     public static final byte ARRAY_SERIALIZATION_VERSION = 1;
-	public PArrayDataType() {
-	}
 
-	public byte[] toBytes(Object object, PDataType baseType, SortOrder sortOrder) {
+  protected PArrayDataType(String sqlTypeName, int sqlType, Class clazz, PDataCodec codec, int ordinal) {
+    super(sqlTypeName, sqlType, clazz, codec, ordinal);
+  }
+
+  public byte[] toBytes(Object object, PDataType baseType, SortOrder sortOrder) {
 		if(object == null) {
 			throw new ConstraintViolationException(this + " may not be null");
 		}
@@ -61,7 +66,7 @@ public class PArrayDataType {
         }
         TrustedByteArrayOutputStream byteStream = null;
 		if (!baseType.isFixedWidth()) {
-	        Pair<Integer, Integer> nullsVsNullRepeationCounter = new Pair<Integer, Integer>();
+	        Pair<Integer, Integer> nullsVsNullRepeationCounter = new Pair<>();
 	        int size = estimateByteSize(object, nullsVsNullRepeationCounter,
 	                PDataType.fromTypeId((baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE)));
 		    size += ((2 * Bytes.SIZEOF_BYTE) + (noOfElements - nullsVsNullRepeationCounter.getFirst()) * Bytes.SIZEOF_BYTE)
@@ -196,26 +201,26 @@ public class PArrayDataType {
 			return expectedTargetElementType.isCoercibleTo(targetElementType);
 		}
     }
-	
+
+  @Override
 	public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value,
-			PDataType srcType, Integer maxLength, Integer scale,
-			Integer desiredMaxLength, Integer desiredScale) {
-        if (value == null) return true;
+      PDataType srcType, Integer maxLength, Integer scale,
+      Integer desiredMaxLength, Integer desiredScale) {
+    if (value == null) return true;
 		PhoenixArray pArr = (PhoenixArray) value;
-		Object[] arr = (Object[]) pArr.array;
-		PDataType baseType = PDataType.fromTypeId(srcType.getSqlType()
-				- PDataType.ARRAY_TYPE_BASE);
-		for (int i = 0 ; i < arr.length; i++) {
-			if (!baseType.isSizeCompatible(ptr, arr[i], baseType, srcType.getMaxLength(arr[i]),
-					scale, desiredMaxLength, desiredScale)) {
-				return false;
-			}
+    PDataType baseType = PDataType.fromTypeId(srcType.getSqlType() - PDataType.ARRAY_TYPE_BASE);
+    for (int i = 0 ; i < pArr.numElements; i++) {
+      Object val = pArr.getElement(i);
+      if (!baseType.isSizeCompatible(ptr, val, baseType, srcType.getMaxLength(val),
+          scale, desiredMaxLength, desiredScale)) {
+        return false;
+      }
 		}
 		return true;
 	}
-	
+
     public void coerceBytes(ImmutableBytesWritable ptr, Object value, PDataType actualType, Integer maxLength,
-            Integer scale, Integer desiredMaxLength, Integer desiredScale, PDataType desiredType,
+        Integer scale, Integer desiredMaxLength, Integer desiredScale, PDataType desiredType,
             SortOrder actualModifer, SortOrder expectedModifier) {
         if (ptr.getLength() == 0) { // a zero length ptr means null which will not be coerced to anything different
             return;
@@ -269,7 +274,7 @@ public class PArrayDataType {
         return true;
     }
     public static void positionAtArrayElement(ImmutableBytesWritable ptr, int arrayIndex, PDataType baseDataType,
-            Integer byteSize) {
+        Integer byteSize) {
         byte[] bytes = ptr.get();
         int initPos = ptr.getOffset();
         if (!baseDataType.isFixedWidth()) {
@@ -320,7 +325,7 @@ public class PArrayDataType {
     }
     
     public static void positionAtArrayElement(ImmutableBytesWritable ptr, int arrayIndex, PDataType baseDataType,
-            Integer byteSize, int offset, int length, int noOfElements, boolean first) {
+        Integer byteSize, int offset, int length, int noOfElements, boolean first) {
         byte[] bytes = ptr.get();
         if (!baseDataType.isFixedWidth()) {
             int indexOffset = Bytes.toInt(bytes, (offset + length - (Bytes.SIZEOF_BYTE + 2 * Bytes.SIZEOF_INT)))
@@ -398,15 +403,6 @@ public class PArrayDataType {
 	
 	/**
 	 * creates array bytes
-	 * @param byteStream
-	 * @param oStream
-	 * @param array
-	 * @param noOfElements
-	 * @param baseType
-	 * @param sortOrder 
-	 * @param maxLength 
-	 * @param capacity
-	 * @return
 	 */
     private byte[] createArrayBytes(TrustedByteArrayOutputStream byteStream, DataOutputStream oStream,
             PhoenixArray array, int noOfElements, PDataType baseType, SortOrder sortOrder) {

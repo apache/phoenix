@@ -34,7 +34,7 @@ import java.util.Map;
 
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -172,7 +172,7 @@ public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
 
     private static KeyRange newKeyRange(byte[] lowerRange, byte[] upperRange) {
-        return PDataType.CHAR.getKeyRange(lowerRange, true, upperRange, false);
+        return PChar.INSTANCE.getKeyRange(lowerRange, true, upperRange, false);
     }
     
     private static void initTableValues(Connection conn) throws Exception {

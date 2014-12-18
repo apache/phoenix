@@ -35,7 +35,7 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -57,7 +57,7 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
         ImmutableBytesWritable indexTableName = new ImmutableBytesWritable();
         for (int i = 0; i < miniBatchOp.size(); i++) {
             Mutation m = miniBatchOp.getOperation(i);
-            keys.add(PDataType.VARBINARY.getKeyRange(m.getRow()));
+            keys.add(PVarbinary.INSTANCE.getKeyRange(m.getRow()));
             List<IndexMaintainer> indexMaintainers = getCodec().getIndexMaintainers(m.getAttributesMap());
             
             for(IndexMaintainer indexMaintainer: indexMaintainers) {

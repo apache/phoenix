@@ -35,7 +35,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SelectStatementRewriter;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.TypeMismatchException;
 
 
@@ -51,8 +51,8 @@ public class HavingCompiler {
         }
         ExpressionCompiler expressionBuilder = new ExpressionCompiler(context, groupBy);
         Expression expression = having.accept(expressionBuilder);
-        if (expression.getDataType() != PDataType.BOOLEAN) {
-            throw TypeMismatchException.newException(PDataType.BOOLEAN, expression.getDataType(), expression.toString());
+        if (expression.getDataType() != PBoolean.INSTANCE) {
+            throw TypeMismatchException.newException(PBoolean.INSTANCE, expression.getDataType(), expression.toString());
         }
         if (LiteralExpression.isFalse(expression)) {
             context.setScanRanges(ScanRanges.NOTHING);

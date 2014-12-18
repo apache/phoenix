@@ -26,9 +26,16 @@ import java.sql.Timestamp;
 import java.util.HashMap;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
 
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * Test class for unit-testing {@link CoerceExpression}
@@ -59,8 +66,8 @@ public class CoerceExpressionTest {
 	
 	@Test
     public void testCoerceExpressionSupportsCoercingIntToDecimal() throws Exception {
-        LiteralExpression v = LiteralExpression.newConstant(1, PDataType.INTEGER);
-        CoerceExpression e = new CoerceExpression(v, PDataType.DECIMAL);
+        LiteralExpression v = LiteralExpression.newConstant(1, PInteger.INSTANCE);
+        CoerceExpression e = new CoerceExpression(v, PDecimal.INSTANCE);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         e.evaluate(null, ptr);
         Object obj = e.getDataType().toObject(ptr);
@@ -71,8 +78,8 @@ public class CoerceExpressionTest {
 	
 	@Test
     public void testCoerceExpressionSupportsCoercingCharToVarchar() throws Exception {
-        LiteralExpression v = LiteralExpression.newConstant("a", PDataType.CHAR);
-        CoerceExpression e = new CoerceExpression(v, PDataType.VARCHAR);
+        LiteralExpression v = LiteralExpression.newConstant("a", PChar.INSTANCE);
+        CoerceExpression e = new CoerceExpression(v, PVarchar.INSTANCE);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         e.evaluate(null, ptr);
         Object obj = e.getDataType().toObject(ptr);
@@ -83,8 +90,8 @@ public class CoerceExpressionTest {
 	
 	@Test
     public void testCoerceExpressionSupportsCoercingIntToLong() throws Exception {
-        LiteralExpression v = LiteralExpression.newConstant(1, PDataType.INTEGER);
-        CoerceExpression e = new CoerceExpression(v, PDataType.LONG);
+        LiteralExpression v = LiteralExpression.newConstant(1, PInteger.INSTANCE);
+        CoerceExpression e = new CoerceExpression(v, PLong.INSTANCE);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         e.evaluate(null, ptr);
         Object obj = e.getDataType().toObject(ptr);
@@ -100,7 +107,7 @@ public class CoerceExpressionTest {
 				LiteralExpression v = LiteralExpression.newConstant(
 						map.get(p.getJavaClass()), p);
 				CoerceExpression e = new CoerceExpression(v,
-						PDataType.VARBINARY);
+            PVarbinary.INSTANCE);
 				ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 				e.evaluate(null, ptr);
 				Object obj = e.getDataType().toObject(ptr);
@@ -117,7 +124,7 @@ public class CoerceExpressionTest {
 			if (!p.isArrayType()) {
 				LiteralExpression v = LiteralExpression.newConstant(
 						map.get(p.getJavaClass()), p);
-				CoerceExpression e = new CoerceExpression(v, PDataType.BINARY);
+				CoerceExpression e = new CoerceExpression(v, PBinary.INSTANCE);
 				ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 				e.evaluate(null, ptr);
 				Object obj = e.getDataType().toObject(ptr);
