@@ -117,9 +117,8 @@ public class IndexUtil {
         if (dataType.isCoercibleTo(PVarchar.INSTANCE)) {
             return PVarchar.INSTANCE;
         }
-        // for nullable BINARY - we want to be able to support this type but it would have to be at
-        // the end of an index or be the only column in the index
-        if (isNullable && dataType.equals(PBinary.INSTANCE)) {
+
+        if (PBinary.INSTANCE.equals(dataType)) {
             return PVarbinary.INSTANCE;
         }
         throw new IllegalArgumentException("Unsupported non nullable index type " + dataType);
