@@ -421,4 +421,56 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }
+    
+    @Test
+    public void testBinaryNonnullableIndex() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            String ddl =
+                    "CREATE TABLE test_table ( "
+                    + "v1 BINARY(64) NOT NULL, "
+                    + "v2 VARCHAR, "
+                    + "v3 BINARY(64), "
+                    + "v4 VARCHAR "
+                    + "CONSTRAINT PK PRIMARY KEY (v1))";
+            conn.createStatement().execute(ddl);
+            conn.commit();
+            
+            try {
+                conn.createStatement().execute("CREATE INDEX idx ON test_table (v3) INCLUDE (v4)");
+                fail("Should have seen SQLExceptionCode.VARBINARY_IN_ROW_KEY");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.VARBINARY_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+            }
+            
+            try {
+                conn.createStatement().execute("CREATE INDEX idx2 ON test_table (v3, v4) INCLUDE (v2)");
+                fail("Should have seen SQLExceptionCode.VARBINARY_IN_ROW_KEY");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.VARBINARY_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+            }
+            
+            try {
+                conn.createStatement().execute("CREATE INDEX idx3 ON test_table (v2, v3) INCLUDE (v4)"); // Tz should this be allowable since it is at the end of a row key?
+                fail("Should have seen SQLExceptionCode.VARBINARY_IN_ROW_KEY");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.VARBINARY_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+            }
+            conn.createStatement().execute("CREATE INDEX idx4 ON test_table (v4) INCLUDE (v2)");
+            ResultSet rs =
+                    conn.createStatement().executeQuery(
+                        "select v1,v2,v3,v4 FROM test_table where v2 = 'abc' and v3 != 'a'");
+
+            conn.createStatement().execute(
+                "CREATE INDEX idx5 ON test_table (v2) INCLUDE (v4, v3, v1)");
+            conn.commit();
+            rs =
+                    conn.createStatement().executeQuery(
+                        "select v1,v2,v3,v4 FROM test_table where v2 = 'abc' and v3 != 'a'");
+            assertFalse(rs.next());
+
+        } finally {
+            conn.close();
+        }
+    }
 }
