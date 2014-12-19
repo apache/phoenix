@@ -67,17 +67,19 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 
 import com.google.common.collect.Lists;
 
@@ -114,6 +116,10 @@ public class IndexUtil {
         // for CHAR
         if (dataType.isCoercibleTo(PVarchar.INSTANCE)) {
             return PVarchar.INSTANCE;
+        }
+
+        if (PBinary.INSTANCE.equals(dataType)) {
+            return PVarbinary.INSTANCE;
         }
         throw new IllegalArgumentException("Unsupported non nullable index type " + dataType);
     }
