@@ -226,6 +226,10 @@
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
     </dependency>
+    <dependency>
+      <groupId>joda-time</groupId>
+      <artifactId>joda-time</artifactId>
+    </dependency>
     <!-- Findbugs Annotation -->
     <dependency>
       <groupId>net.sourceforge.findbugs</groupId>

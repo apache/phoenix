@@ -30,7 +30,11 @@ import org.apache.commons.lang.time.FastDateFormat;
 
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
-
+import org.joda.time.DateTime;
+import org.joda.time.chrono.ISOChronology;
+import org.joda.time.format.DateTimeFormatter;
+import org.joda.time.format.DateTimeFormatterBuilder;
+import org.joda.time.format.ISODateTimeFormat;
 
 
 @SuppressWarnings("serial")
@@ -44,6 +48,14 @@ public class DateUtil {
     public static final String DEFAULT_MS_DATE_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
     public static final Format DEFAULT_MS_DATE_FORMATTER = FastDateFormat.getInstance(
             DEFAULT_MS_DATE_FORMAT, TimeZone.getTimeZone(DEFAULT_TIME_ZONE_ID));
+
+    private static final DateTimeFormatter DATE_TIME_PARSER = new DateTimeFormatterBuilder()
+            .append(ISODateTimeFormat.dateParser())
+            .appendOptional(new DateTimeFormatterBuilder()
+                    .appendLiteral(' ')
+                    .append(ISODateTimeFormat.timeParser()).toParser())
+            .toFormatter()
+            .withChronology(ISOChronology.getInstanceUTC());
 
     private DateUtil() {
     }
@@ -102,49 +114,24 @@ public class DateUtil {
                 : FastDateFormat.getInstance(pattern, DateUtil.DEFAULT_TIME_ZONE);
     }
 
-    private static ThreadLocal<Format> dateFormat =
-            new ThreadLocal < Format > () {
-        @Override protected Format initialValue() {
-            return getDateParser(DEFAULT_DATE_FORMAT);
+    private static DateTime parseDateTime(String dateTimeValue) {
+        try {
+            return DATE_TIME_PARSER.parseDateTime(dateTimeValue);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalDataException(e);
         }
-    };
+    }
 
     public static Date parseDate(String dateValue) {
-        try {
-            return (Date)dateFormat.get().parseObject(dateValue);
-        } catch (ParseException e) {
-            throw new IllegalDataException(e);
-        }
+        return new Date(parseDateTime(dateValue).getMillis());
     }
-
-    private static ThreadLocal<Format> timeFormat =
-            new ThreadLocal < Format > () {
-        @Override protected Format initialValue() {
-            return getTimeParser(DEFAULT_DATE_FORMAT);
-        }
-    };
 
     public static Time parseTime(String timeValue) {
-        try {
-            return (Time)timeFormat.get().parseObject(timeValue);
-        } catch (ParseException e) {
-            throw new IllegalDataException(e);
-        }
+        return new Time(parseDateTime(timeValue).getMillis());
     }
 
-    private static ThreadLocal<Format> timestampFormat =
-            new ThreadLocal < Format > () {
-        @Override protected Format initialValue() {
-            return getTimestampParser(DEFAULT_DATE_FORMAT);
-        }
-    };
-
-    public static Timestamp parseTimestamp(String timeValue) {
-        try {
-            return (Timestamp)timestampFormat.get().parseObject(timeValue);
-        } catch (ParseException e) {
-            throw new IllegalDataException(e);
-        }
+    public static Timestamp parseTimestamp(String timestampValue) {
+        return new Timestamp(parseDateTime(timestampValue).getMillis());
     }
 
     /**
