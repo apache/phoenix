@@ -23,11 +23,13 @@ import java.sql.Timestamp;
 import java.text.ParseException;
 import java.util.TimeZone;
 
+import org.apache.phoenix.schema.IllegalDataException;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * Test class for {@link DateUtil}
@@ -126,5 +128,45 @@ public class DateUtilTest {
         Time time = (Time) DateUtil.getTimeParser(
                 "HH:mm:ss", TimeZone.getDefault()).parseObject("00:00:00");
         assertEquals(Time.valueOf("00:00:00"), time);
+    }
+
+    @Test
+    public void testParseDate() {
+        assertEquals(10000L, DateUtil.parseDate("1970-01-01 00:00:10").getTime());
+    }
+
+    @Test
+    public void testParseDate_PureDate() {
+        assertEquals(0L, DateUtil.parseDate("1970-01-01").getTime());
+    }
+
+    @Test(expected = IllegalDataException.class)
+    public void testParseDate_InvalidDate() {
+        DateUtil.parseDate("not-a-date");
+    }
+
+    @Test
+    public void testParseTime() {
+        assertEquals(10000L, DateUtil.parseTime("1970-01-01 00:00:10").getTime());
+    }
+
+    @Test(expected=IllegalDataException.class)
+    public void testParseTime_InvalidTime() {
+        DateUtil.parseDate("not-a-time");
+    }
+
+    @Test
+    public void testParseTimestamp() {
+        assertEquals(10000L, DateUtil.parseTimestamp("1970-01-01 00:00:10").getTime());
+    }
+
+    @Test
+    public void testParseTimestamp_WithMillis() {
+        assertEquals(10123L, DateUtil.parseTimestamp("1970-01-01 00:00:10.123").getTime());
+    }
+
+    @Test(expected=IllegalDataException.class)
+    public void testParseTimestamp_InvalidTimestamp() {
+        DateUtil.parseTimestamp("not-a-timestamp");
     }
 }

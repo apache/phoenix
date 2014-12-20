@@ -237,6 +237,10 @@
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase</artifactId>
     </dependency>
+    <dependency>
+      <groupId>joda-time</groupId>
+      <artifactId>joda-time</artifactId>
+    </dependency>
     <!-- Findbugs Annotation -->
     <dependency>
       <groupId>net.sourceforge.findbugs</groupId>

@@ -49,6 +49,7 @@
         <include>org.codehaus.jackson:jackson-mapper-asl</include>
         <include>org.codehaus.jackson:jackson-core-asl</include>
         <include>org.xerial.snappy:snappy-java</include>
+        <include>joda-time:joda-time</include>
       </includes>
     </dependencySet>
   </dependencySets>
