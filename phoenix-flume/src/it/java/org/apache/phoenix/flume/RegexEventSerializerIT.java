@@ -120,7 +120,7 @@ public class RegexEventSerializerIT extends BaseHBaseManagedTimeIT {
             sink.process();
             fail();
         }catch(Exception ex){
-            assertTrue(ex.getCause().getMessage().contains("java.text.ParseException: Unparseable date:"));
+            assertTrue(ex.getCause().getMessage().contains("java.lang.IllegalArgumentException: Invalid format:"));
         }
      }
     
