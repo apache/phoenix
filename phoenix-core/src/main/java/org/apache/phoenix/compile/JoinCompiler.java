@@ -41,6 +41,7 @@ import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AndParseNode;
@@ -69,26 +70,29 @@ import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ArrayListMultimap;
@@ -129,9 +133,9 @@ public class JoinCompiler {
             joinTable.addFilter(select.getWhere());
         }
         
-        ColumnRefParseNodeVisitor generalRefVisitor = new ColumnRefParseNodeVisitor(resolver);
-        ColumnRefParseNodeVisitor joinLocalRefVisitor = new ColumnRefParseNodeVisitor(resolver);
-        ColumnRefParseNodeVisitor prefilterRefVisitor = new ColumnRefParseNodeVisitor(resolver);
+        ColumnRefParseNodeVisitor generalRefVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
+        ColumnRefParseNodeVisitor joinLocalRefVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
+        ColumnRefParseNodeVisitor prefilterRefVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
         
         joinTable.pushDownColumnRefVisitors(generalRefVisitor, joinLocalRefVisitor, prefilterRefVisitor);
 
@@ -315,7 +319,7 @@ public class JoinCompiler {
             
             WhereNodeVisitor visitor = new WhereNodeVisitor(origResolver, table,
                     postFilters, Collections.<TableRef>singletonList(table.getTableRef()), 
-                    isPrefilterAccepted, prefilterAcceptedTables);
+                    isPrefilterAccepted, prefilterAcceptedTables, statement.getConnection());
             filter.accept(visitor);
         }
         
@@ -438,7 +442,7 @@ public class JoinCompiler {
         }
     }
     
-    public static class JoinSpec {
+    public class JoinSpec {
         private final JoinType type;
         private final List<EqualParseNode> onConditions;
         private final JoinTable joinTable;
@@ -453,7 +457,7 @@ public class JoinCompiler {
             this.joinTable = joinTable;
             this.singleValueOnly = singleValueOnly;
             this.dependencies = new HashSet<TableRef>();
-            this.onNodeVisitor = new OnNodeVisitor(resolver, onConditions, dependencies, joinTable);
+            this.onNodeVisitor = new OnNodeVisitor(resolver, onConditions, dependencies, joinTable, statement.getConnection());
             if (onNode != null) {
                 onNode.accept(this.onNodeVisitor);
             }
@@ -711,13 +715,14 @@ public class JoinCompiler {
             }
             for (ColumnRef columnRef : columnRefs.keySet()) {
                 if (columnRef.getTableRef().equals(tableRef)
-                        && !SchemaUtil.isPKColumn(columnRef.getColumn())) {
+                        && !SchemaUtil.isPKColumn(columnRef.getColumn())
+                        && !(columnRef instanceof LocalIndexColumnRef)) {
                     scan.addColumn(columnRef.getColumn().getFamilyName().getBytes(), columnRef.getColumn().getName().getBytes());
                 }
             }
         }
         
-        public ProjectedPTableWrapper createProjectedTable(boolean retainPKColumns) throws SQLException {
+        public ProjectedPTableWrapper createProjectedTable(boolean retainPKColumns, StatementContext context) throws SQLException {
             assert(!isSubselect());
             List<PColumn> projectedColumns = new ArrayList<PColumn>();
             List<Expression> sourceExpressions = new ArrayList<Expression>();
@@ -727,14 +732,14 @@ public class JoinCompiler {
             if (retainPKColumns) {
                 for (PColumn column : table.getPKColumns()) {
                     addProjectedColumn(projectedColumns, sourceExpressions, columnNameMap,
-                            column, column.getFamilyName(), hasSaltingColumn);
+                            column, column.getFamilyName(), hasSaltingColumn, false, context);
                 }
             }
             if (isWildCardSelect()) {
                 for (PColumn column : table.getColumns()) {
                     if (!retainPKColumns || !SchemaUtil.isPKColumn(column)) {
                         addProjectedColumn(projectedColumns, sourceExpressions, columnNameMap,
-                                column, PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn);
+                                column, PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn, false, context);
                     }
                 }
             } else {
@@ -745,7 +750,8 @@ public class JoinCompiler {
                             && (!retainPKColumns || !SchemaUtil.isPKColumn(columnRef.getColumn()))) {
                         PColumn column = columnRef.getColumn();
                         addProjectedColumn(projectedColumns, sourceExpressions, columnNameMap,
-                                column, PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn);
+                                column, PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn, 
+                                columnRef instanceof LocalIndexColumnRef, context);
                     }
                 }               
             }
@@ -758,7 +764,8 @@ public class JoinCompiler {
         }
         
         private void addProjectedColumn(List<PColumn> projectedColumns, List<Expression> sourceExpressions,
-                ListMultimap<String, String> columnNameMap, PColumn sourceColumn, PName familyName, boolean hasSaltingColumn) 
+                ListMultimap<String, String> columnNameMap, PColumn sourceColumn, PName familyName, boolean hasSaltingColumn, 
+                boolean isLocalIndexColumnRef, StatementContext context) 
         throws SQLException {
             if (sourceColumn == SALTING_COLUMN)
                 return;
@@ -767,7 +774,7 @@ public class JoinCompiler {
             PTable table = tableRef.getTable();
             String schemaName = table.getSchemaName().getString();
             String tableName = table.getTableName().getString();
-            String colName = sourceColumn.getName().getString();
+            String colName = isLocalIndexColumnRef ? IndexUtil.getIndexColumnName(sourceColumn) : sourceColumn.getName().getString();
             String fullName = getProjectedColumnName(schemaName, tableName, colName);
             String aliasedName = tableRef.getTableAlias() == null ? fullName : getProjectedColumnName(null, tableRef.getTableAlias(), colName);
             
@@ -780,7 +787,9 @@ public class JoinCompiler {
             PColumnImpl column = new PColumnImpl(name, familyName, sourceColumn.getDataType(), 
                     sourceColumn.getMaxLength(), sourceColumn.getScale(), sourceColumn.isNullable(), 
                     position, sourceColumn.getSortOrder(), sourceColumn.getArraySize(), sourceColumn.getViewConstant(), sourceColumn.isViewReferenced());
-            Expression sourceExpression = new ColumnRef(tableRef, sourceColumn.getPosition()).newColumnExpression();
+            Expression sourceExpression = isLocalIndexColumnRef ? 
+                      NODE_FACTORY.column(TableName.create(schemaName, tableName), "\"" + colName + "\"", null).accept(new ExpressionCompiler(context)) 
+                    : new ColumnRef(tableRef, sourceColumn.getPosition()).newColumnExpression();
             projectedColumns.add(column);
             sourceExpressions.add(sourceExpression);
         }
@@ -818,13 +827,13 @@ public class JoinCompiler {
         
         public WhereNodeVisitor(ColumnResolver resolver, Table table,
                 List<ParseNode> postFilters, List<TableRef> selfTableRefs, boolean isPrefilterAccepted, 
-                List<JoinSpec> prefilterAcceptedTables) {
+                List<JoinSpec> prefilterAcceptedTables, PhoenixConnection connection) {
             this.table = table;
             this.postFilters = postFilters;
             this.selfTableRefs = selfTableRefs;
             this.isPrefilterAccepted = isPrefilterAccepted;
             this.prefilterAcceptedTables = prefilterAcceptedTables;
-            this.columnRefVisitor = new ColumnRefParseNodeVisitor(resolver);
+            this.columnRefVisitor = new ColumnRefParseNodeVisitor(resolver, connection);
         }
         
         @Override
@@ -919,11 +928,11 @@ public class JoinCompiler {
         private ColumnRefParseNodeVisitor columnRefVisitor;
         
         public OnNodeVisitor(ColumnResolver resolver, List<EqualParseNode> onConditions, 
-                Set<TableRef> dependencies, JoinTable joinTable) {
+                Set<TableRef> dependencies, JoinTable joinTable, PhoenixConnection connection) {
             this.onConditions = onConditions;
             this.dependencies = dependencies;
             this.joinTable = joinTable;
-            this.columnRefVisitor = new ColumnRefParseNodeVisitor(resolver);
+            this.columnRefVisitor = new ColumnRefParseNodeVisitor(resolver, connection);
         }
         @Override
         protected boolean enterBooleanNode(ParseNode node) throws SQLException {
@@ -1005,18 +1014,35 @@ public class JoinCompiler {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.AMBIGUOUS_JOIN_CONDITION).build().buildException();
         }
     }
+    
+    private static class LocalIndexColumnRef extends ColumnRef {
+        private final TableRef indexTableRef;
+        
+        public LocalIndexColumnRef(TableRef tableRef, String familyName,
+                String columnName, TableRef indexTableRef) throws MetaDataEntityNotFoundException {
+            super(tableRef, familyName, columnName);
+            this.indexTableRef = indexTableRef;
+        }
+        
+        @Override
+        public TableRef getTableRef() {
+            return indexTableRef;
+        }
+    }
 
     private static class ColumnRefParseNodeVisitor extends StatelessTraverseAllParseNodeVisitor {
         public enum ColumnRefType {NONE, SELF_ONLY, FOREIGN_ONLY, COMPLEX};
 
-        private ColumnResolver resolver;
+        private final ColumnResolver resolver;
+        private final PhoenixConnection connection;
         private final Set<TableRef> tableRefSet;
         private final Map<ColumnRef, ColumnParseNode> columnRefMap;
 
-        public ColumnRefParseNodeVisitor(ColumnResolver resolver) {
+        public ColumnRefParseNodeVisitor(ColumnResolver resolver, PhoenixConnection connection) {
             this.resolver = resolver;
             this.tableRefSet = new HashSet<TableRef>();
             this.columnRefMap = new HashMap<ColumnRef, ColumnParseNode>();
+            this.connection = connection;
         }
 
         public void reset() {
@@ -1026,7 +1052,27 @@ public class JoinCompiler {
 
         @Override
         public Void visit(ColumnParseNode node) throws SQLException {
-            ColumnRef columnRef = resolver.resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
+            ColumnRef columnRef = null;
+            try {
+                columnRef = resolver.resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
+            } catch (ColumnNotFoundException e) {
+                // This could be a LocalIndexDataColumnRef. If so, the table name must have 
+                // been appended by the IndexStatementRewriter, and we can convert it into.
+                TableRef tableRef = resolver.resolveTable(node.getSchemaName(), node.getTableName());
+                if (tableRef.getTable().getIndexType() == IndexType.LOCAL) {
+                    TableRef parentTableRef = FromCompiler.getResolver(
+                            NODE_FACTORY.namedTable(null, TableName.create(tableRef.getTable()
+                                    .getSchemaName().getString(), tableRef.getTable()
+                                    .getParentTableName().getString())), connection).resolveTable(
+                            tableRef.getTable().getSchemaName().getString(),
+                            tableRef.getTable().getParentTableName().getString());
+                    columnRef = new LocalIndexColumnRef(parentTableRef, 
+                            IndexUtil.getDataColumnFamilyName(node.getName()), 
+                            IndexUtil.getDataColumnName(node.getName()), tableRef);
+                } else {
+                    throw e;
+                }
+            }
             columnRefMap.put(columnRef, node);
             tableRefSet.add(columnRef.getTableRef());
             return null;                
@@ -1092,9 +1138,9 @@ public class JoinCompiler {
         return NODE_FACTORY.and(nodes);
     }
     
-    private static List<AliasedNode> extractFromSelect(List<AliasedNode> select, TableRef tableRef, ColumnResolver resolver) throws SQLException {
+    private List<AliasedNode> extractFromSelect(List<AliasedNode> select, TableRef tableRef, ColumnResolver resolver) throws SQLException {
         List<AliasedNode> ret = new ArrayList<AliasedNode>();
-        ColumnRefParseNodeVisitor visitor = new ColumnRefParseNodeVisitor(resolver);
+        ColumnRefParseNodeVisitor visitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
         for (AliasedNode aliasedNode : select) {
             ParseNode node = aliasedNode.getNode();
             if (node instanceof TableWildcardParseNode) {
@@ -1145,7 +1191,7 @@ public class JoinCompiler {
         TableRef groupByTableRef = null;
         TableRef orderByTableRef = null;
         if (select.getGroupBy() != null && !select.getGroupBy().isEmpty()) {
-            ColumnRefParseNodeVisitor groupByVisitor = new ColumnRefParseNodeVisitor(resolver);
+            ColumnRefParseNodeVisitor groupByVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
             for (ParseNode node : select.getGroupBy()) {
                 node.accept(groupByVisitor);
             }
@@ -1154,7 +1200,7 @@ public class JoinCompiler {
                 groupByTableRef = set.iterator().next();
             }
         } else if (select.getOrderBy() != null && !select.getOrderBy().isEmpty()) {
-            ColumnRefParseNodeVisitor orderByVisitor = new ColumnRefParseNodeVisitor(resolver);
+            ColumnRefParseNodeVisitor orderByVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
             for (OrderByNode node : select.getOrderBy()) {
                 node.getNode().accept(orderByVisitor);
             }

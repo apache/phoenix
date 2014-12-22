@@ -63,9 +63,9 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -123,23 +123,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                         .getAttribute(BaseScannerRegionObserver.AGGREGATORS), c
                         .getEnvironment().getConfiguration());
 
-        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
-        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
-        long limit = Long.MAX_VALUE;
-        byte[] limitBytes = scan.getAttribute(GROUP_BY_LIMIT);
-        if (limitBytes != null) {
-            limit = PInteger.INSTANCE.getCodec().decodeInt(limitBytes, 0, SortOrder.getDefault());
-        }
-
         RegionScanner innerScanner = s;
-        if (p != null || j != null) {
-            innerScanner =
-                    new HashJoinRegionScanner(s, p, j, ScanUtil.getTenantId(scan),
-                            c.getEnvironment());
-        }
+        
         byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
         List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
-        boolean localIndexScan = ScanUtil.isLocalIndex(scan);
         TupleProjector tupleProjector = null;
         HRegion dataRegion = null;
         byte[][] viewConstants = null;
@@ -150,17 +137,30 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             }
+            ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
+            innerScanner =
+                    getWrappedScanner(c, innerScanner, offset, scan, dataColumns, tupleProjector, 
+                            dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, tempPtr);
         } 
 
+        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
+        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
+        if (p != null || j != null) {
+            innerScanner =
+                    new HashJoinRegionScanner(innerScanner, p, j, ScanUtil.getTenantId(scan),
+                            c.getEnvironment());
+        }
+
+        long limit = Long.MAX_VALUE;
+        byte[] limitBytes = scan.getAttribute(GROUP_BY_LIMIT);
+        if (limitBytes != null) {
+            limit = PInteger.INSTANCE.getCodec().decodeInt(limitBytes, 0, SortOrder.getDefault());
+        }
         if (keyOrdered) { // Optimize by taking advantage that the rows are
                           // already in the required group by key order
-            return scanOrdered(c, scan, innerScanner, expressions, aggregators, limit, offset,
-                localIndexScan, dataColumns, tupleProjector, indexMaintainers, dataRegion,
-                viewConstants);
+            return scanOrdered(c, scan, innerScanner, expressions, aggregators, limit);
         } else { // Otherwse, collect them all up in an in memory map
-            return scanUnordered(c, scan, innerScanner, expressions, aggregators, limit, offset,
-                localIndexScan, dataColumns, tupleProjector, indexMaintainers, dataRegion,
-                viewConstants);
+            return scanUnordered(c, scan, innerScanner, expressions, aggregators, limit);
         }
     }
 
@@ -376,10 +376,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
      */
     private RegionScanner scanUnordered(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
             final RegionScanner s, final List<Expression> expressions,
-            final ServerAggregators aggregators, long limit, int offset, boolean localIndexScan,
-            ColumnReference[] dataColumns, TupleProjector tupleProjector,
-            List<IndexMaintainer> indexMaintainers, HRegion dataRegion, byte[][] viewConstants)
-            throws IOException {
+            final ServerAggregators aggregators, long limit) throws IOException {
         if (logger.isDebugEnabled()) {
             logger.debug(LogUtil.addCustomAnnotations("Grouped aggregation over unordered rows with scan " + scan
                     + ", group by " + expressions + ", aggregators " + aggregators, ScanUtil.getCustomAnnotations(scan)));
@@ -401,7 +398,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 GroupByCacheFactory.INSTANCE.newCache(
                         env, ScanUtil.getTenantId(scan), ScanUtil.getCustomAnnotations(scan),
                         aggregators, estDistVals);
-        ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
         boolean success = false;
         try {
             boolean hasMore;
@@ -423,11 +419,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                     // ones returned
                     hasMore = s.nextRaw(results);
                     if (!results.isEmpty()) {
-                        if (localIndexScan) {
-                            IndexUtil.wrapResultUsingOffset(results, offset, dataColumns, tupleProjector,
-                                dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0),
-                                viewConstants, tempPtr);
-                        }
                         result.setKeyValues(results);
                         ImmutableBytesWritable key =
                                 TupleUtil.getConcatenatedValue(result, expressions);
@@ -463,16 +454,12 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
      */
     private RegionScanner scanOrdered(final ObserverContext<RegionCoprocessorEnvironment> c,
             final Scan scan, final RegionScanner s, final List<Expression> expressions,
-            final ServerAggregators aggregators, final long limit, final int offset,
-            final boolean localIndexScan, final ColumnReference[] dataColumns,
-            final TupleProjector tupleProjector, final List<IndexMaintainer> indexMaintainers,
-            final HRegion dataRegion, final byte[][] viewConstants) throws IOException {
+            final ServerAggregators aggregators, final long limit) throws IOException {
 
         if (logger.isDebugEnabled()) {
             logger.debug(LogUtil.addCustomAnnotations("Grouped aggregation over ordered rows with scan " + scan + ", group by "
                     + expressions + ", aggregators " + aggregators, ScanUtil.getCustomAnnotations(scan)));
         }
-        final ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
         return new BaseRegionScanner() {
             private long rowCount = 0;
             private ImmutableBytesWritable currentKey = null;
@@ -510,11 +497,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                         // ones returned
                         hasMore = s.nextRaw(kvs);
                         if (!kvs.isEmpty()) {
-                            if (localIndexScan) {
-                                IndexUtil.wrapResultUsingOffset(kvs, offset, dataColumns, tupleProjector,
-                                    dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0),
-                                    viewConstants, tempPtr);
-                            }
                             result.setKeyValues(kvs);
                             key = TupleUtil.getConcatenatedValue(result, expressions);
                             aggBoundary = currentKey != null && currentKey.compareTo(key) != 0;

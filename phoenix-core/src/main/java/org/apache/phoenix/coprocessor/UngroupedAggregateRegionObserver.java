@@ -174,14 +174,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
         List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
         List<Mutation> indexMutations = localIndexBytes == null ? Collections.<Mutation>emptyList() : Lists.<Mutation>newArrayListWithExpectedSize(1024);
-        boolean localIndexScan = ScanUtil.isLocalIndex(scan);
         
-        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
-        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         RegionScanner theScanner = s;
-        if (p != null || j != null)  {
-            theScanner = new HashJoinRegionScanner(s, p, j, ScanUtil.getTenantId(scan), c.getEnvironment());
-        }
         
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
         PTable projectedTable = null;
@@ -212,19 +206,28 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         if(localIndexBytes != null) {
             ptr = new ImmutableBytesWritable();
         }
-        TupleProjector scanProjector = null;
+        TupleProjector tupleProjector = null;
         HRegion dataRegion = null;
         byte[][] viewConstants = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
-        final RegionScanner innerScanner;
-        if (ScanUtil.isLocalIndex(scan) && !isDelete) {
+        boolean localIndexScan = ScanUtil.isLocalIndex(scan);
+        if (localIndexScan && !isDelete) {
             if (dataColumns != null) {
-                scanProjector = IndexUtil.getTupleProjector(scan, dataColumns);
+                tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
                 dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             }
+            ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
+            theScanner =
+                    getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector, 
+                            dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, tempPtr);
         } 
-        innerScanner = theScanner;
+        
+        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
+        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
+        if (p != null || j != null)  {
+            theScanner = new HashJoinRegionScanner(theScanner, p, j, ScanUtil.getTenantId(scan), c.getEnvironment());
+        }
         
         int batchSize = 0;
         List<Mutation> mutations = Collections.emptyList();
@@ -244,8 +247,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         	logger.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
         }
         long rowCount = 0;
+        final RegionScanner innerScanner = theScanner;
         region.startRegionOperation();
-        ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
         try {
             do {
                 List<Cell> results = new ArrayList<Cell>();
@@ -258,11 +261,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                 }
                 
                 if (!results.isEmpty()) {
-                    if (localIndexScan && !isDelete) {
-                        IndexUtil.wrapResultUsingOffset(results, offset, dataColumns, scanProjector,
-                            dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0),
-                            viewConstants, tempPtr);
-                    }
                     rowCount++;
                     result.setKeyValues(results);
                     try {
