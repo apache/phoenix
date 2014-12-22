@@ -35,13 +35,10 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
-import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -67,7 +64,6 @@ import com.google.common.collect.Maps;
 @RunWith(Parameterized.class)
 public class SubqueryIT extends BaseHBaseManagedTimeIT {
     
-    private SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     private String[] indexDDL;
     private String[] plans;
     
@@ -88,7 +84,8 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
     
     @Before
     public void initTable() throws Exception {
-        initTableValues();
+        initJoinTableValues(getUrl(), null, null);
+        initCoItemTableValues();
         if (indexDDL != null && indexDDL.length > 0) {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -319,254 +316,14 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
     }
     
     
-    protected void initTableValues() throws Exception {
-        ensureTableCreated(getUrl(), JOIN_CUSTOMER_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), JOIN_ITEM_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), JOIN_SUPPLIER_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), JOIN_ORDER_TABLE_FULL_NAME);
+    protected void initCoItemTableValues() throws Exception {
         ensureTableCreated(getUrl(), JOIN_COITEM_TABLE_FULL_NAME);
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            conn.createStatement().execute("CREATE SEQUENCE my.seq");
-            // Insert into customer table
-            PreparedStatement stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_CUSTOMER_TABLE_FULL_NAME +
-                    "   (\"customer_id\", " +
-                    "    NAME, " +
-                    "    PHONE, " +
-                    "    ADDRESS, " +
-                    "    LOC_ID, " +
-                    "    DATE) " +
-                    "values (?, ?, ?, ?, ?, ?)");
-            stmt.setString(1, "0000000001");
-            stmt.setString(2, "C1");
-            stmt.setString(3, "999-999-1111");
-            stmt.setString(4, "101 XXX Street");
-            stmt.setString(5, "10001");
-            stmt.setDate(6, new Date(format.parse("2013-11-01 10:20:36").getTime()));
-            stmt.execute();
-                
-            stmt.setString(1, "0000000002");
-            stmt.setString(2, "C2");
-            stmt.setString(3, "999-999-2222");
-            stmt.setString(4, "202 XXX Street");
-            stmt.setString(5, null);
-            stmt.setDate(6, new Date(format.parse("2013-11-25 16:45:07").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "0000000003");
-            stmt.setString(2, "C3");
-            stmt.setString(3, "999-999-3333");
-            stmt.setString(4, "303 XXX Street");
-            stmt.setString(5, null);
-            stmt.setDate(6, new Date(format.parse("2013-11-25 10:06:29").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "0000000004");
-            stmt.setString(2, "C4");
-            stmt.setString(3, "999-999-4444");
-            stmt.setString(4, "404 XXX Street");
-            stmt.setString(5, "10004");
-            stmt.setDate(6, new Date(format.parse("2013-11-22 14:22:56").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "0000000005");
-            stmt.setString(2, "C5");
-            stmt.setString(3, "999-999-5555");
-            stmt.setString(4, "505 XXX Street");
-            stmt.setString(5, "10005");
-            stmt.setDate(6, new Date(format.parse("2013-11-27 09:37:50").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "0000000006");
-            stmt.setString(2, "C6");
-            stmt.setString(3, "999-999-6666");
-            stmt.setString(4, "606 XXX Street");
-            stmt.setString(5, "10001");
-            stmt.setDate(6, new Date(format.parse("2013-11-01 10:20:36").getTime()));
-            stmt.execute();
-            
-            // Insert into item table
-            stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_ITEM_TABLE_FULL_NAME +
-                    "   (\"item_id\", " +
-                    "    NAME, " +
-                    "    PRICE, " +
-                    "    DISCOUNT1, " +
-                    "    DISCOUNT2, " +
-                    "    \"supplier_id\", " +
-                    "    DESCRIPTION) " +
-                    "values (?, ?, ?, ?, ?, ?, ?)");
-            stmt.setString(1, "0000000001");
-            stmt.setString(2, "T1");
-            stmt.setInt(3, 100);
-            stmt.setInt(4, 5);
-            stmt.setInt(5, 10);
-            stmt.setString(6, "0000000001");
-            stmt.setString(7, "Item T1");
-            stmt.execute();
-
-            stmt.setString(1, "0000000002");
-            stmt.setString(2, "T2");
-            stmt.setInt(3, 200);
-            stmt.setInt(4, 5);
-            stmt.setInt(5, 8);
-            stmt.setString(6, "0000000001");
-            stmt.setString(7, "Item T2");
-            stmt.execute();
-
-            stmt.setString(1, "0000000003");
-            stmt.setString(2, "T3");
-            stmt.setInt(3, 300);
-            stmt.setInt(4, 8);
-            stmt.setInt(5, 12);
-            stmt.setString(6, "0000000002");
-            stmt.setString(7, "Item T3");
-            stmt.execute();
-
-            stmt.setString(1, "0000000004");
-            stmt.setString(2, "T4");
-            stmt.setInt(3, 400);
-            stmt.setInt(4, 6);
-            stmt.setInt(5, 10);
-            stmt.setString(6, "0000000002");
-            stmt.setString(7, "Item T4");
-            stmt.execute();
-
-            stmt.setString(1, "0000000005");
-            stmt.setString(2, "T5");
-            stmt.setInt(3, 500);
-            stmt.setInt(4, 8);
-            stmt.setInt(5, 15);
-            stmt.setString(6, "0000000005");
-            stmt.setString(7, "Item T5");
-            stmt.execute();
-
-            stmt.setString(1, "0000000006");
-            stmt.setString(2, "T6");
-            stmt.setInt(3, 600);
-            stmt.setInt(4, 8);
-            stmt.setInt(5, 15);
-            stmt.setString(6, "0000000006");
-            stmt.setString(7, "Item T6");
-            stmt.execute();
-            
-            stmt.setString(1, "invalid001");
-            stmt.setString(2, "INVALID-1");
-            stmt.setInt(3, 0);
-            stmt.setInt(4, 0);
-            stmt.setInt(5, 0);
-            stmt.setString(6, "0000000000");
-            stmt.setString(7, "Invalid item for join test");
-            stmt.execute();
-
-            // Insert into supplier table
-            stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_SUPPLIER_TABLE_FULL_NAME +
-                    "   (\"supplier_id\", " +
-                    "    NAME, " +
-                    "    PHONE, " +
-                    "    ADDRESS, " +
-                    "    LOC_ID) " +
-                    "values (?, ?, ?, ?, ?)");
-            stmt.setString(1, "0000000001");
-            stmt.setString(2, "S1");
-            stmt.setString(3, "888-888-1111");
-            stmt.setString(4, "101 YYY Street");
-            stmt.setString(5, "10001");
-            stmt.execute();
-                
-            stmt.setString(1, "0000000002");
-            stmt.setString(2, "S2");
-            stmt.setString(3, "888-888-2222");
-            stmt.setString(4, "202 YYY Street");
-            stmt.setString(5, "10002");
-            stmt.execute();
-
-            stmt.setString(1, "0000000003");
-            stmt.setString(2, "S3");
-            stmt.setString(3, "888-888-3333");
-            stmt.setString(4, "303 YYY Street");
-            stmt.setString(5, null);
-            stmt.execute();
-
-            stmt.setString(1, "0000000004");
-            stmt.setString(2, "S4");
-            stmt.setString(3, "888-888-4444");
-            stmt.setString(4, "404 YYY Street");
-            stmt.setString(5, null);
-            stmt.execute();
-
-            stmt.setString(1, "0000000005");
-            stmt.setString(2, "S5");
-            stmt.setString(3, "888-888-5555");
-            stmt.setString(4, "505 YYY Street");
-            stmt.setString(5, "10005");
-            stmt.execute();
-
-            stmt.setString(1, "0000000006");
-            stmt.setString(2, "S6");
-            stmt.setString(3, "888-888-6666");
-            stmt.setString(4, "606 YYY Street");
-            stmt.setString(5, "10006");
-            stmt.execute();
-
-            // Insert into order table
-            stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_ORDER_TABLE_FULL_NAME +
-                    "   (\"order_id\", " +
-                    "    \"customer_id\", " +
-                    "    \"item_id\", " +
-                    "    PRICE, " +
-                    "    QUANTITY," +
-                    "    DATE) " +
-                    "values (?, ?, ?, ?, ?, ?)");
-            stmt.setString(1, "000000000000001");
-            stmt.setString(2, "0000000004");
-            stmt.setString(3, "0000000001");
-            stmt.setInt(4, 100);
-            stmt.setInt(5, 1000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-22 14:22:56").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "000000000000002");
-            stmt.setString(2, "0000000003");
-            stmt.setString(3, "0000000006");
-            stmt.setInt(4, 552);
-            stmt.setInt(5, 2000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-25 10:06:29").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "000000000000003");
-            stmt.setString(2, "0000000002");
-            stmt.setString(3, "0000000002");
-            stmt.setInt(4, 190);
-            stmt.setInt(5, 3000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-25 16:45:07").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "000000000000004");
-            stmt.setString(2, "0000000004");
-            stmt.setString(3, "0000000006");
-            stmt.setInt(4, 510);
-            stmt.setInt(5, 4000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-26 13:26:04").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "000000000000005");
-            stmt.setString(2, "0000000005");
-            stmt.setString(3, "0000000003");
-            stmt.setInt(4, 264);
-            stmt.setInt(5, 5000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-27 09:37:50").getTime()));
-            stmt.execute();
-
-            conn.commit();
-
             // Insert into coitem table
-            stmt = conn.prepareStatement(
+            PreparedStatement stmt = conn.prepareStatement(
                     "upsert into " + JOIN_COITEM_TABLE_FULL_NAME + 
                     "   (item_id, " + 
                     "    item_name, " + 
