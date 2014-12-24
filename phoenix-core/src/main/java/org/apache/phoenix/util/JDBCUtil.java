@@ -135,4 +135,19 @@ public class JDBCUtil {
         String tenantId = findProperty(url, info, PhoenixRuntime.TENANT_ID_ATTRIB);
         return (tenantId == null ? null : PNameFactory.newName(tenantId));
     }
+
+    // TODO Make true the default return value once PHOENIX-1543 is in place
+    /**
+     * Retrieve the value of the optional auto-commit setting from JDBC url or connection
+     * properties.
+     *
+     * @param url JDBC url used for connecting to Phoenix
+     * @param info connection properties
+     * @return <tt>true</tt> if AutoCommit=true was specified in the connection URL or properties,
+     * otherwise false
+     */
+    public static boolean getAutoCommit(String url, Properties info) {
+        String autoCommit = findProperty(url, info, PhoenixRuntime.AUTO_COMMIT_ATTRIB);
+        return Boolean.valueOf(autoCommit);
+    }
 }

@@ -130,6 +130,11 @@ public class PhoenixRuntime {
     public static final String ANNOTATION_ATTRIB_PREFIX = "phoenix.annotation.";
 
     /**
+     * Use this connection property to explicity enable or disable auto-commit on a new connection.
+     */
+    public static final String AUTO_COMMIT_ATTRIB = "AutoCommit";
+
+    /**
      * Use this as the zookeeper quorum name to have a connection-less connection. This enables
      * Phoenix-compatible HFiles to be created in a map/reduce job by creating tables,
      * upserting data into them, and getting the uncommitted state through {@link #getUncommittedData(Connection)}

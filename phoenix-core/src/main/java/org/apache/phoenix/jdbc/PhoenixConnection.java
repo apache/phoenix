@@ -196,6 +196,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             };
         }
         this.scn = JDBCUtil.getCurrentSCN(url, this.info);
+        this.isAutoCommit = JDBCUtil.getAutoCommit(url, this.info);
         this.tenantId = tenantId;
         this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
         datePattern = this.services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
