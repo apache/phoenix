@@ -29,4 +29,8 @@ public class IndexRegionSplitPolicy extends RegionSplitPolicy {
         return false;
     }
 
+    protected boolean skipStoreFileRangeCheck() {
+        return true;
+    }
+
 }

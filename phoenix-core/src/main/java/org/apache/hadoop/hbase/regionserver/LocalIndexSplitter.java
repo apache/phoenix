@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.PairOfSameType;
+import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ParseNodeFactory;
@@ -51,9 +52,11 @@ public class LocalIndexSplitter extends BaseRegionObserver {
 
     private static final Log LOG = LogFactory.getLog(LocalIndexSplitter.class);
 
-    private IndexSplitTransaction st = null;
+    private SplitTransaction st = null;
     private PairOfSameType<HRegion> daughterRegions = null;
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
+    private static final int SPLIT_TXN_MINIMUM_SUPPORTED_VERSION = VersionUtil
+            .encodeVersion("0.98.9");
 
     @Override
     public void preSplitBeforePONR(ObserverContext<RegionCoprocessorEnvironment> ctx,
@@ -71,7 +74,16 @@ public class LocalIndexSplitter extends BaseRegionObserver {
             HRegion indexRegion = IndexUtil.getIndexRegion(environment);
             if (indexRegion == null) return;
             try {
-                st = new IndexSplitTransaction(indexRegion, splitKey);
+                int encodedVersion = VersionUtil.encodeVersion(environment.getHBaseVersion());
+                if(encodedVersion >= SPLIT_TXN_MINIMUM_SUPPORTED_VERSION) {
+                    st = new SplitTransaction(indexRegion, splitKey);
+                    st.useZKForAssignment =
+                            environment.getConfiguration().getBoolean("hbase.assignment.usezk",
+                                true);
+                } else {
+                    st = new IndexSplitTransaction(indexRegion, splitKey);
+                }
+
                 if (!st.prepare()) {
                     LOG.error("Prepare for the table " + indexRegion.getTableDesc().getNameAsString()
                         + " failed. So returning null. ");
@@ -98,6 +110,7 @@ public class LocalIndexSplitter extends BaseRegionObserver {
                 metaEntries.add(putB);
             } catch (Exception e) {
                 ctx.bypass();
+                LOG.warn("index region splitting failed with the exception ", e);
                 if (st != null){
                     st.rollback(rss, rss);
                     st = null;
@@ -157,8 +170,7 @@ public class LocalIndexSplitter extends BaseRegionObserver {
             }
         } catch (Exception e) {
             if (st != null) {
-                LOG.error("Error while rolling back the split failure for index region "
-                    + st.getParent(), e);
+                LOG.error("Error while rolling back the split failure for index region", e);
             }
             rs.abort("Abort; we got an error during rollback of index");
         }
