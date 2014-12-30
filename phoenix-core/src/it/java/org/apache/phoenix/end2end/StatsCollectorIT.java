@@ -21,6 +21,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -43,6 +44,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -230,28 +232,39 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         return stmt;
     }
 
-    private void compactTable(Connection conn) throws IOException, InterruptedException, SQLException {
+    private void compactTable(Connection conn, String tableName) throws IOException, InterruptedException, SQLException {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         HBaseAdmin admin = services.getAdmin();
         try {
-            admin.flush(STATS_TEST_TABLE_NAME);
-            admin.majorCompact(STATS_TEST_TABLE_NAME);
+            admin.flush(tableName);
+            admin.majorCompact(tableName);
             Thread.sleep(10000); // FIXME: how do we know when compaction is done?
         } finally {
             admin.close();
         }
-        services.clearCache();
     }
     
     @Test
     public void testCompactUpdatesStats() throws Exception {
+        testCompactUpdatesStats(null, STATS_TEST_TABLE_NAME + 1);
+    }
+    
+    @Test
+    public void testCompactUpdatesStatsWithMinStatsUpdateFreq() throws Exception {
+        testCompactUpdatesStats(QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS, STATS_TEST_TABLE_NAME + 2);
+    }
+    
+    private void testCompactUpdatesStats(Integer minStatsUpdateFreq, String tableName) throws Exception {
         int nRows = 10;
         Connection conn;
         PreparedStatement stmt;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        if (minStatsUpdateFreq != null) {
+            props.setProperty(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, minStatsUpdateFreq.toString());
+        }
         conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE " + STATS_TEST_TABLE_NAME + "(k CHAR(1) PRIMARY KEY, v INTEGER) " + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
-        stmt = conn.prepareStatement("UPSERT INTO " + STATS_TEST_TABLE_NAME + " VALUES(?,?)");
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k CHAR(1) PRIMARY KEY, v INTEGER) " + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
+        stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?)");
         for (int i = 0; i < nRows; i++) {
             stmt.setString(1, Character.toString((char) ('a' + i)));
             stmt.setInt(2, i);
@@ -259,18 +272,41 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         }
         conn.commit();
         
-        compactTable(conn);
-        conn = DriverManager.getConnection(getUrl(), props);
-        List<KeyRange>keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
+        compactTable(conn, tableName);
+        if (minStatsUpdateFreq == null) {
+            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+        }
+        // Confirm that when we have a non zero MIN_STATS_UPDATE_FREQ_MS_ATTRIB, after we run
+        // UPDATATE STATISTICS, the new statistics are faulted in as expected.
+        if (minStatsUpdateFreq != null) {
+            List<KeyRange>keyRanges = getAllSplits(conn, tableName);
+            assertNotEquals(nRows+1, keyRanges.size());
+            // If we've set MIN_STATS_UPDATE_FREQ_MS_ATTRIB, an UPDATE STATISTICS will invalidate the cache
+            // and forcing the new stats to be pulled over.
+            int rowCount = conn.createStatement().executeUpdate("UPDATE STATISTICS " + tableName);
+            assertEquals(0, rowCount);
+        }
+        List<KeyRange>keyRanges = getAllSplits(conn, tableName);
         assertEquals(nRows+1, keyRanges.size());
         
-        int nDeletedRows = conn.createStatement().executeUpdate("DELETE FROM " + STATS_TEST_TABLE_NAME + " WHERE V < 5");
+        int nDeletedRows = conn.createStatement().executeUpdate("DELETE FROM " + tableName + " WHERE V < 5");
         conn.commit();
         assertEquals(5, nDeletedRows);
         
-        compactTable(conn);
+        compactTable(conn, tableName);
+        if (minStatsUpdateFreq == null) {
+            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+        }
         
-        keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
+        keyRanges = getAllSplits(conn, tableName);
+        if (minStatsUpdateFreq != null) {
+            assertEquals(nRows+1, keyRanges.size());
+            // If we've set MIN_STATS_UPDATE_FREQ_MS_ATTRIB, an UPDATE STATISTICS will invalidate the cache
+            // and force us to pull over the new stats
+            int rowCount = conn.createStatement().executeUpdate("UPDATE STATISTICS " + tableName);
+            assertEquals(0, rowCount);
+            keyRanges = getAllSplits(conn, tableName);
+        }
         assertEquals(nRows/2+1, keyRanges.size());
         
     }
