@@ -658,25 +658,28 @@ public class MetaDataClient {
         if (rs.next()) {
             msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
         }
-        if (msSinceLastUpdate < msMinBetweenUpdates) {
-            return 0;
+        long rowCount = 0;
+        if (msSinceLastUpdate >= msMinBetweenUpdates) {
+            /*
+             * Execute a COUNT(*) through PostDDLCompiler as we need to use the logicalTable passed through,
+             * since it may not represent a "real" table in the case of the view indexes of a base table.
+             */
+            PostDDLCompiler compiler = new PostDDLCompiler(connection);
+            TableRef tableRef = new TableRef(null, logicalTable, clientTimeStamp, false);
+            MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, null, null, clientTimeStamp);
+            Scan scan = plan.getContext().getScan();
+            scan.setCacheBlocks(false);
+            scan.setAttribute(BaseScannerRegionObserver.ANALYZE_TABLE, PDataType.TRUE_BYTES);
+            MutationState mutationState = plan.execute();
+            rowCount = mutationState.getUpdateCount();
         }
         
         /*
-         * Execute a COUNT(*) through PostDDLCompiler as we need to use the logicalTable passed through,
-         * since it may not represent a "real" table in the case of the view indexes of a base table.
+         *  Update the stats table so that client will pull the new one with the updated stats.
+         *  Even if we don't run the command due to the last update time, invalidate the cache.
+         *  This supports scenarios in which a major compaction was manually initiated and the
+         *  client wants the modified stats to be reflected immediately.
          */
-        PostDDLCompiler compiler = new PostDDLCompiler(connection);
-        TableRef tableRef = new TableRef(null, logicalTable, clientTimeStamp, false);
-        MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, null, null, clientTimeStamp);
-        Scan scan = plan.getContext().getScan();
-        scan.setCacheBlocks(false);
-        scan.setAttribute(BaseScannerRegionObserver.ANALYZE_TABLE, PDataType.TRUE_BYTES);
-        MutationState mutationState = plan.execute();
-        long rowCount = mutationState.getUpdateCount();
-
-        // We need to update the stats table so that client will pull the new one with
-        // the updated stats.
         connection.getQueryServices().clearTableFromCache(tenantIdBytes,
                 Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())),
                 Bytes.toBytes(SchemaUtil.getTableNameFromFullName(physicalName.getString())), clientTimeStamp);
