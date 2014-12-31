@@ -176,6 +176,9 @@ public class QueryServicesOptions {
     public static final int DEFAULT_RETRIES_FOR_SCHEMA_UPDATE_CHECK = 10;
     public static final long DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK = 5 * 1000; // 5 seconds.
     public static final boolean DEFAULT_KEEP_DELETED_CELLS = false;
+
+    // TODO Change this to true as part of PHOENIX-1543
+    public static final boolean DEFAULT_AUTO_COMMIT = false;
     
     private final Configuration config;
 
