@@ -38,32 +38,37 @@ public class JDBCUtilTest {
     }
 
     @Test
-    public void testGetAutoCommit_NotSpecified() {
-        // TODO Make true the default return value once PHOENIX-1543 is in place
-        assertFalse(JDBCUtil.getAutoCommit("localhost", new Properties()));
+    public void testGetAutoCommit_NotSpecified_DefaultTrue() {
+        assertTrue(JDBCUtil.getAutoCommit("localhost", new Properties(), true));
+    }
+
+
+    @Test
+    public void testGetAutoCommit_NotSpecified_DefaultFalse() {
+        assertFalse(JDBCUtil.getAutoCommit("localhost", new Properties(), false));
     }
 
     @Test
     public void testGetAutoCommit_TrueInUrl() {
-        assertTrue(JDBCUtil.getAutoCommit("localhost;AutoCommit=TrUe", new Properties()));
+        assertTrue(JDBCUtil.getAutoCommit("localhost;AutoCommit=TrUe", new Properties(), false));
     }
 
     @Test
     public void testGetAutoCommit_FalseInUrl() {
-        assertFalse(JDBCUtil.getAutoCommit("localhost;AutoCommit=FaLse", new Properties()));
+        assertFalse(JDBCUtil.getAutoCommit("localhost;AutoCommit=FaLse", new Properties(), false));
     }
 
     @Test
     public void testGetAutoCommit_TrueInProperties() {
         Properties props = new Properties();
         props.setProperty("AutoCommit", "true");
-        assertTrue(JDBCUtil.getAutoCommit("localhost", props));
+        assertTrue(JDBCUtil.getAutoCommit("localhost", props, false));
     }
 
     @Test
     public void testGetAutoCommit_FalseInProperties() {
         Properties props = new Properties();
         props.setProperty("AutoCommit", "false");
-        assertFalse(JDBCUtil.getAutoCommit("localhost", props));
+        assertFalse(JDBCUtil.getAutoCommit("localhost", props, false));
     }
 }

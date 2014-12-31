@@ -155,6 +155,9 @@ public class QueryServicesOptions {
     public static final int DEFAULT_COPROCESSOR_PRIORITY = Coprocessor.PRIORITY_SYSTEM/2 + Coprocessor.PRIORITY_USER/2; // Divide individually to prevent any overflow
     public static final boolean DEFAULT_EXPLAIN_CHUNK_COUNT = true;
 
+    // TODO Change this to true as part of PHOENIX-1543
+    public static final boolean DEFAULT_AUTO_COMMIT = false;
+    
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
