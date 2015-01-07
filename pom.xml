@@ -254,7 +254,7 @@
                  <configuration>
                  <encoding>UTF-8</encoding>
                  <forkCount>${numForkedIT}</forkCount>
-                 <reuseForks>false</reuseForks>
+                 <reuseForks>true</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
@@ -270,7 +270,7 @@
                  <configuration>
                  <encoding>UTF-8</encoding>
                  <forkCount>${numForkedIT}</forkCount>
-                 <reuseForks>false</reuseForks>
+                 <reuseForks>true</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
@@ -286,7 +286,7 @@
                  <configuration>
                  <encoding>UTF-8</encoding>
                  <forkCount>${numForkedIT}</forkCount>
-                 <reuseForks>false</reuseForks>
+                 <reuseForks>true</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
