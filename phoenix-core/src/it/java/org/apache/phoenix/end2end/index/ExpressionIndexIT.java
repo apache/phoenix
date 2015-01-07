@@ -363,50 +363,41 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 		ensureTableCreated(getUrl(), dataTable);
 		populateDataTable(conn, dataTable);
 		String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON "
+				+ INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable
 				+ " (long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) )"
                 + " INCLUDE (long_col1, long_col2)";
 		PreparedStatement stmt = conn.prepareStatement(ddl);
 		stmt.execute();
         
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " +INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE);
+        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " +INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable);
         assertTrue(rs.next());
         assertEquals(2,rs.getInt(1));
         rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " +INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + "IDX");
         assertTrue(rs.next());
         assertEquals(2,rs.getInt(1));
         
-        String dml = "DELETE from " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE +
-                " WHERE long_col2 = 4";
+        String dml = "DELETE from " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable +
+                " WHERE long_col2 = 2";
         assertEquals(1,conn.createStatement().executeUpdate(dml));
         conn.commit();
         
-        String query = "SELECT /*+ NO_INDEX */ long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) FROM " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
+        String query = "SELECT /*+ NO_INDEX */ long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) FROM " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(1L, rs.getLong(1));
         assertEquals("varchar1", rs.getString(2));
         assertEquals(2L, rs.getLong(3));
         assertEquals("VARCHAR1", rs.getString(4));
-        assertTrue(rs.next());
-        assertEquals(3L, rs.getLong(1));
-        assertEquals("varchar3", rs.getString(2));
-        assertEquals(4L, rs.getLong(3));
-        assertEquals("VARCHAR3", rs.getString(4));
         assertFalse(rs.next());
         
-        query = "SELECT long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) FROM " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
+        query = "SELECT long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) FROM " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(1L, rs.getLong(1));
         assertEquals("varchar1", rs.getString(2));
         assertEquals(2L, rs.getLong(3));
         assertEquals("VARCHAR1", rs.getString(4));
-        assertTrue(rs.next());
-        assertEquals(3L, rs.getLong(1));
-        assertEquals("varchar3", rs.getString(2));
-        assertEquals(4L, rs.getLong(3));
-        assertEquals("VARCHAR3", rs.getString(4));
         assertFalse(rs.next());
         
         query = "SELECT * FROM " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + "IDX" ;
@@ -417,13 +408,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
         assertEquals("varchar1", rs.getString(2));
         assertEquals(2L, rs.getLong(3));
         assertEquals("VARCHAR1", rs.getString(4));
-        assertTrue(rs.next());
-        assertEquals(3L, rs.getLong(1));
-        assertEquals("varchar3", rs.getString(2));
-        assertEquals(4L, rs.getLong(3));
-        assertEquals("VARCHAR3", rs.getString(4));
         assertFalse(rs.next());
-        
     }
 
 	@Test

@@ -470,12 +470,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         byte[] viewConstant = viewConstantKv == null ? null : viewConstantKv.getValue();
         Cell isViewReferencedKv = colKeyValues[IS_VIEW_REFERENCED_INDEX];
         boolean isViewReferenced = isViewReferencedKv != null && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isViewReferencedKv.getValueArray(), isViewReferencedKv.getValueOffset(), isViewReferencedKv.getValueLength()));
-        PColumn column = new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable, position-1, sortOrder, arraySize, viewConstant, isViewReferenced);
         Cell columnExpressionOrdinalKv = colKeyValues[COLUMN_EXPRESSION_ORDINAL_INDEX];
-        int expressionOrdinal = PDataType.INTEGER.getCodec().decodeInt(columnExpressionOrdinalKv.getValueArray(), columnExpressionOrdinalKv.getValueOffset(), SortOrder.getDefault()) + (isSalted ? 1 : 0);
-        Cell columnExpressionKv = colKeyValues[COLUMN_EXPRESSION_SERIALIZED_INDEX];
         Expression expression = null;
-        if (columnExpressionKv!=null) {
+        if (columnExpressionOrdinalKv!=null) {
+        	int expressionOrdinal = PInteger.INSTANCE.getCodec().decodeInt(columnExpressionOrdinalKv.getValueArray(), columnExpressionOrdinalKv.getValueOffset(), SortOrder.getDefault()) + (isSalted ? 1 : 0);
+            Cell columnExpressionKv = colKeyValues[COLUMN_EXPRESSION_SERIALIZED_INDEX];
 	        expression = ExpressionType.values()[expressionOrdinal].newInstance();
 	        expression.readFields(new DataInputStream(new ByteArrayInputStream(columnExpressionKv.getValue())));
         }

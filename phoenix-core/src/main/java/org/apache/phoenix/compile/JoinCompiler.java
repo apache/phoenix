@@ -787,13 +787,9 @@ public class JoinCompiler {
             PColumnImpl column = new PColumnImpl(name, familyName, sourceColumn.getDataType(), 
                     sourceColumn.getMaxLength(), sourceColumn.getScale(), sourceColumn.isNullable(), 
                     position, sourceColumn.getSortOrder(), sourceColumn.getArraySize(), sourceColumn.getViewConstant(), sourceColumn.isViewReferenced(), null);
-<<<<<<< HEAD
             Expression sourceExpression = isLocalIndexColumnRef ? 
                       NODE_FACTORY.column(TableName.create(schemaName, tableName), "\"" + colName + "\"", null).accept(new ExpressionCompiler(context)) 
                     : new ColumnRef(tableRef, sourceColumn.getPosition()).newColumnExpression();
-=======
-            Expression sourceExpression = new ColumnRef(tableRef, sourceColumn.getPosition()).newColumnExpression();
->>>>>>> Initialial functional index impl
             projectedColumns.add(column);
             sourceExpressions.add(sourceExpression);
         }

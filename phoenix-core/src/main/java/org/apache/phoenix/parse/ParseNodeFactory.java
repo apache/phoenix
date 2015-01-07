@@ -245,10 +245,6 @@ public class ParseNodeFactory {
         return new ColumnParseNode(tableName, columnName, alias);
     }
     
-    public ColumnParseNode column(TableName tableName, String familyName, String columnName, String alias) {
-        return new ColumnParseNode(tableName, familyName, columnName, alias);
-    }
-
     public ColumnName columnName(String columnName) {
         return new ColumnName(columnName);
     }
