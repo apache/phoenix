@@ -971,16 +971,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     @Override
     public void modifyTable(byte[] tableName, HTableDescriptor newDesc) throws IOException,
-            InterruptedException, TimeoutException {
-    	HBaseAdmin admin = new HBaseAdmin(config);
-        if (!allowOnlineTableSchemaUpdate()) {
-            admin.disableTable(tableName);
-            admin.modifyTable(tableName, newDesc);
-            admin.enableTable(tableName);
-        } else {
-            admin.modifyTable(tableName, newDesc);
-            pollForUpdatedTableDescriptor(admin, newDesc, tableName);
-        }
+    InterruptedException, TimeoutException {
+    	try (HBaseAdmin admin = new HBaseAdmin(config)) {
+    		if (!allowOnlineTableSchemaUpdate()) {
+    			admin.disableTable(tableName);
+    			admin.modifyTable(tableName, newDesc);
+    			admin.enableTable(tableName);
+    		} else {
+    			admin.modifyTable(tableName, newDesc);
+    			pollForUpdatedTableDescriptor(admin, newDesc, tableName);
+    		}
+    	}
     }
 
     private static boolean isInvalidMutableIndexConfig(Long serverVersion) {
