@@ -356,6 +356,10 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         
         ResultSet rs;
         
+        String groupBySql = "SELECT int_col2, COUNT(*) FROM " +INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + " GROUP BY int_col2";
+        // TODO fix this
+        rs = conn.createStatement().executeQuery("EXPLAIN " + groupBySql);
+        String explainPlan = QueryUtil.getExplainPlan(rs);
         rs = conn.createStatement().executeQuery("SELECT int_col2, COUNT(*) FROM " +INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + " GROUP BY int_col2");
         assertTrue(rs.next());
         assertEquals(1,rs.getInt(2));

@@ -51,7 +51,7 @@ import com.google.common.collect.Lists;
  * the order is preserved.
  * 
  */
-public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
+public class TrackOrderPreservingExpressionCompiler extends IndexColumnExpressionCompiler {
     public enum Ordering {ORDERED, UNORDERED};
     
     private final List<Entry> entries;
