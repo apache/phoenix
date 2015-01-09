@@ -28,6 +28,7 @@ import static org.junit.Assert.fail;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -38,13 +39,16 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 
-	@Test
+	private static final int NUM_MILLIS_IN_DAY = 86400000;
+
+    @Test
 	public void testImmutableIndexCreationAndUpdate() throws Exception {
 		helpTestCreateAndUpdate(false, false);
 	}
@@ -77,16 +81,20 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 		stmt.setInt(3, i);
 		stmt.setLong(4, i);
 		stmt.setBigDecimal(5, new BigDecimal(Double.valueOf(i)));
-		stmt.setString(6, "a.varchar" + String.valueOf(i));
-		stmt.setString(7, "a.char" + String.valueOf(i));
-		stmt.setInt(8, i);
-		stmt.setLong(9, i);
-		stmt.setBigDecimal(10, new BigDecimal((double) i));
-		stmt.setString(11, "b.varchar" + String.valueOf(i));
-		stmt.setString(12, "b.char" + String.valueOf(i));
-		stmt.setInt(13, i);
-		stmt.setLong(14, i);
-		stmt.setBigDecimal(15, new BigDecimal((double) i));
+		Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime()+(i-1)*NUM_MILLIS_IN_DAY);
+        stmt.setDate(6, date);
+		stmt.setString(7, "a.varchar" + String.valueOf(i));
+		stmt.setString(8, "a.char" + String.valueOf(i));
+		stmt.setInt(9, i);
+		stmt.setLong(10, i);
+		stmt.setBigDecimal(11, new BigDecimal((double) i));
+		stmt.setDate(12, date);
+		stmt.setString(13, "b.varchar" + String.valueOf(i));
+		stmt.setString(14, "b.char" + String.valueOf(i));
+		stmt.setInt(15, i);
+		stmt.setLong(16, i);
+		stmt.setBigDecimal(17, new BigDecimal((double) i));
+		stmt.setDate(18, date);
 		stmt.executeUpdate();
 	}
 
@@ -98,13 +106,17 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 				+ "_A.VARCHAR"+ String.valueOf(i)
 				+ "_"+ StringUtils.rightPad("B.CHAR" + String.valueOf(i),10, ' '), rs.getString(1));
 		assertEquals(i * 4, rs.getInt(2));
-		assertEquals("varchar" + String.valueOf(i), rs.getString(3));
-		assertEquals("char" + String.valueOf(i), rs.getString(4));
-		assertEquals(i, rs.getInt(5));
-		assertEquals(i, rs.getLong(6));
-		assertEquals(i, rs.getDouble(7), 0.000001);
-		assertEquals(i, rs.getLong(8));
+		Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime()+(i)*NUM_MILLIS_IN_DAY);
+		assertEquals(date, rs.getDate(3));
+		assertEquals(date, rs.getDate(4));
+		assertEquals(date, rs.getDate(5));
+		assertEquals("varchar" + String.valueOf(i), rs.getString(6));
+		assertEquals("char" + String.valueOf(i), rs.getString(7));
+		assertEquals(i, rs.getInt(8));
 		assertEquals(i, rs.getLong(9));
+		assertEquals(i, rs.getDouble(10), 0.000001);
+		assertEquals(i, rs.getLong(11));
+		assertEquals(i, rs.getLong(12));
 	}
 
 	protected void helpTestCreateAndUpdate(boolean mutable, boolean localIndex)
@@ -119,21 +131,33 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			populateDataTable(conn, dataTable);
 	
 			// create an expression index
-			String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON " + fullDataTableName + " ((UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(char_col2))," + " (decimal_pk+int_pk+decimal_col2+int_col1) )" + " INCLUDE (long_col1, long_col2)";
+			String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON " + fullDataTableName 
+			        + " ((UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(char_col2))," 
+			        + " (decimal_pk+int_pk+decimal_col2+int_col1),"
+			        + " date_pk+1, date1+1, date2+1 )"
+			        + " INCLUDE (long_col1, long_col2)";
 			PreparedStatement stmt = conn.prepareStatement(ddl);
 			stmt.execute();
 	
 			// run select query with expression in WHERE clause
-			String whereSql = "SELECT long_col1, long_col2 from " + fullDataTableName + " WHERE UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(char_col2) = ? AND decimal_pk+int_pk+decimal_col2+int_col1=?";
+			String whereSql = "SELECT long_col1, long_col2 from " + fullDataTableName + 
+			        " WHERE UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(char_col2) = ?"
+			        +" AND decimal_pk+int_pk+decimal_col2+int_col1=?"
+			        // since a.date1 and b.date2 are NULLABLE and date is fixed width, these expressions are stored as DECIMAL in the index (which is not fixed width)
+			        +" AND date_pk+1=? AND cast (date1+1 as DECIMAL) =? AND cast (date2+1 as DECIMAL)=?";
 			stmt = conn.prepareStatement(whereSql);
 			stmt.setString(1, "VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ");
 			stmt.setInt(2, 4);
+			Date date = DateUtil.parseDate("2015-01-02 00:00:00");
+            stmt.setDate(3, date);
+			stmt.setBigDecimal(4, new BigDecimal(date.getTime()));
+			stmt.setBigDecimal(5, new BigDecimal(date.getTime()));
 	
 			// verify that the query does a range scan on the index table
 			ResultSet rs = stmt.executeQuery("EXPLAIN " + whereSql);
 			assertEquals( localIndex ? 
-			"CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_INDEX_TEST." + dataTable + " [-32768,'VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ',4]\nCLIENT MERGE SORT"
-			: "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST.IDX ['VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ',4]",
+			"CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_INDEX_TEST." + dataTable + " [-32768,'VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ',4,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]\nCLIENT MERGE SORT"
+			: "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST.IDX ['VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ',4,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]",
 			QueryUtil.getExplainPlan(rs));
 			
 			// verify that the correct results are returned
@@ -144,7 +168,11 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			assertFalse(rs.next());
 	
 			// verify all rows in data table are present in index table
-			String indexSelectSql = "SELECT UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(char_col2), " + "decimal_pk+int_pk+decimal_col2+int_col1, " + "varchar_pk, char_pk, int_pk, long_pk, decimal_pk, " + "long_col1, long_col2 " + "from " + fullDataTableName;
+			String indexSelectSql = "SELECT UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(char_col2), " 
+    			+ "decimal_pk+int_pk+decimal_col2+int_col1, " 
+			    + "date_pk+1, date1+1, date2+1, "    
+    			+ "varchar_pk, char_pk, int_pk, long_pk, decimal_pk, " 
+    			+ "long_col1, long_col2 " + "from " + fullDataTableName;
 			rs = conn.createStatement().executeQuery(
 					"EXPLAIN " + indexSelectSql);
 			assertEquals(
@@ -156,7 +184,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			verifyResult(rs, 2);
 	
 			// Insert two more rows to the index data table
-			String upsert = "UPSERT INTO " + fullDataTableName + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+			String upsert = "UPSERT INTO " + fullDataTableName + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 			stmt = conn.prepareStatement(upsert);
 			insertRow(stmt, 3);
 			insertRow(stmt, 4);
@@ -171,7 +199,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			verifyResult(rs, 4);
 	
 			// update the first row
-			upsert = "UPSERT INTO " + fullDataTableName + "(varchar_pk,char_pk,int_pk,long_pk,decimal_pk,a.varchar_col1) VALUES(?, ?, ?, ?, ?, ?)";
+			upsert = "UPSERT INTO " + fullDataTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk, a.varchar_col1) VALUES(?, ?, ?, ?, ?, ?, ?)";
 	
 			stmt = conn.prepareStatement(upsert);
 			stmt.setString(1, "varchar1");
@@ -179,7 +207,8 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			stmt.setInt(3, 1);
 			stmt.setLong(4, 1l);
 			stmt.setBigDecimal(5, new BigDecimal(1.0));
-			stmt.setString(6, "a.varchar_updated");
+			stmt.setDate(6, DateUtil.parseDate("2015-01-01 00:00:00"));
+			stmt.setString(7, "a.varchar_updated");
 			stmt.executeUpdate();
 			conn.commit();
 	
@@ -225,7 +254,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 		ensureTableCreated(getUrl(), dataTable);
 		String upsert = "UPSERT INTO " + INDEX_DATA_SCHEMA
 				+ QueryConstants.NAME_SEPARATOR + dataTable
-				+ " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+				+ " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 		PreparedStatement stmt1 = conn.prepareStatement(upsert);
 		// insert two rows
 		insertRow(stmt1, 1);

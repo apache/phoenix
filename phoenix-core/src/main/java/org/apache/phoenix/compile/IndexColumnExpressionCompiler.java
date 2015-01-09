@@ -126,7 +126,15 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
     @Override
     public Expression visitLeave(ComparisonParseNode node, List<Expression> children) throws SQLException {
     	// if this node matches an expression that is indexed, convert it to a ColumnParseNode and process it 
-    	return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        Expression expression=null;
+        try {
+            expression = matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        }
+        catch (Exception e) {
+            System.err.println(e);
+            throw e;
+        }
+        return expression; 
     }
 
     @Override

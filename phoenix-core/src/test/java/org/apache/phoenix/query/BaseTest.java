@@ -392,8 +392,8 @@ public abstract class BaseTest {
                 "   b.char_col2 CHAR(10), " +
                 "   b.int_col2 INTEGER, " +
                 "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10) " +
-                "   b.date1 DATE, " +
+                "   b.decimal_col2 DECIMAL(31, 10), " +
+                "   b.date2 DATE " +
                 "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) " +
                 "IMMUTABLE_ROWS=true");
         builder.put(MUTABLE_INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + "(" +
@@ -413,8 +413,8 @@ public abstract class BaseTest {
                 "   b.char_col2 CHAR(10), " +
                 "   b.int_col2 INTEGER, " +
                 "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10) " +
-                "   b.date1 DATE, " +
+                "   b.decimal_col2 DECIMAL(31, 10), " +
+                "   b.date2 DATE " +
                 "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) "
                 );
         builder.put("SumDoubleTest","create table SumDoubleTest" +
