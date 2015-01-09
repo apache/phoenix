@@ -945,15 +945,21 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testSetSaltBucketOnAlterTable() throws Exception {
         long ts = nextTimestamp();
-        String query = "ALTER TABLE atable ADD xyz INTEGER SALT_BUCKETS=4";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Connection conn = DriverManager.getConnection(url);
         try {
-            PreparedStatement statement = conn.prepareStatement(query);
+            PreparedStatement statement = conn.prepareStatement("ALTER TABLE atable ADD xyz INTEGER SALT_BUCKETS=4");
             statement.execute();
             fail();
         } catch (SQLException e) { // expected
-            assertTrue(e.getErrorCode() == SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode());
+            assertEquals(SQLExceptionCode.CANNOT_SET_TABLE_PROPERTY_ADD_COLUMN.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            PreparedStatement statement = conn.prepareStatement("ALTER TABLE atable SET SALT_BUCKETS=4");
+            statement.execute();
+            fail();
+        } catch (SQLException e) { // expected
+            assertEquals(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
         }
     }
 
