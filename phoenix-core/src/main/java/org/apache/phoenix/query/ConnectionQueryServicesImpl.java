@@ -573,25 +573,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     private HTableDescriptor generateTableDescriptor(byte[] tableName, HTableDescriptor existingDesc, PTableType tableType, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits) throws SQLException {
         String defaultFamilyName = (String)tableProps.remove(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);                
-        HTableDescriptor descriptor = (existingDesc != null) ? new HTableDescriptor(existingDesc) : 
+        HTableDescriptor tableDescriptor = (existingDesc != null) ? new HTableDescriptor(existingDesc) : 
           new HTableDescriptor(TableName.valueOf(tableName));
         for (Entry<String,Object> entry : tableProps.entrySet()) {
             String key = entry.getKey();
             Object value = entry.getValue();
-            descriptor.setValue(key, value == null ? null : value.toString());
+            tableDescriptor.setValue(key, value == null ? null : value.toString());
         }
         if (families.isEmpty()) {
             if (tableType != PTableType.VIEW) {
                 byte[] defaultFamilyByes = defaultFamilyName == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : Bytes.toBytes(defaultFamilyName);
                 // Add dummy column family so we have key values for tables that 
                 HColumnDescriptor columnDescriptor = generateColumnFamilyDescriptor(new Pair<byte[],Map<String,Object>>(defaultFamilyByes,Collections.<String,Object>emptyMap()), tableType);
-                descriptor.addFamily(columnDescriptor);
+                tableDescriptor.addFamily(columnDescriptor);
             }
         } else {
             for (Pair<byte[],Map<String,Object>> family : families) {
                 // If family is only in phoenix description, add it. otherwise, modify its property accordingly.
                 byte[] familyByte = family.getFirst();
-                if (descriptor.getFamily(familyByte) == null) {
+                if (tableDescriptor.getFamily(familyByte) == null) {
                     if (tableType == PTableType.VIEW) {
                         String fullTableName = Bytes.toString(tableName);
                         throw new ReadOnlyTableException(
@@ -601,16 +601,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 Bytes.toString(familyByte));
                     }
                     HColumnDescriptor columnDescriptor = generateColumnFamilyDescriptor(family, tableType);
-                    descriptor.addFamily(columnDescriptor);
+                    tableDescriptor.addFamily(columnDescriptor);
                 } else {
                     if (tableType != PTableType.VIEW) {
-                        modifyColumnFamilyDescriptor(descriptor.getFamily(familyByte), family);
+                        modifyColumnFamilyDescriptor(tableDescriptor.getFamily(familyByte), family);
                     }
                 }
             }
         }
-        addCoprocessors(tableName, descriptor, tableType);
-        return descriptor;
+        addCoprocessors(tableName, tableDescriptor, tableType);
+        return tableDescriptor;
     }
 
     private void addCoprocessors(byte[] tableName, HTableDescriptor descriptor, PTableType tableType) throws SQLException {
@@ -756,6 +756,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } else {
                 admin.modifyColumn(tableName, newColumnDesc);
             }
+            admin.enableTable(tableName);
         } else {
             if (oldColumnDesc == null) {
                 admin.addColumn(tableName, newColumnDesc);
@@ -937,7 +938,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return existingDesc;
                 }
 
-                modifyTable(tableName, admin, newDesc);
+                modifyTable(tableName, newDesc);
                 return newDesc;
             }
 
@@ -969,15 +970,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return null; // will never make it here
     }
     
-    private void modifyTable(byte[] tableName, HBaseAdmin admin, HTableDescriptor newDesc) throws IOException,
-            InterruptedException, TimeoutException {
-        if (!allowOnlineTableSchemaUpdate()) {
-            admin.disableTable(tableName);
-            admin.modifyTable(tableName, newDesc);
-            admin.enableTable(tableName);
-        } else {
-            admin.modifyTable(tableName, newDesc);
-            pollForUpdatedTableDescriptor(admin, newDesc, tableName);
+    @Override
+    public void modifyTable(byte[] tableName, HTableDescriptor newDesc) throws IOException, InterruptedException,
+            TimeoutException {
+        try (HBaseAdmin admin = new HBaseAdmin(config)) {
+            if (!allowOnlineTableSchemaUpdate()) {
+                admin.disableTable(tableName);
+                admin.modifyTable(tableName, newDesc);
+                admin.enableTable(tableName);
+            } else {
+                admin.modifyTable(tableName, newDesc);
+                pollForUpdatedTableDescriptor(admin, newDesc, tableName);
+            }
         }
     }
 

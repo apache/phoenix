@@ -17,10 +17,12 @@
  */
 package org.apache.phoenix.query;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -110,4 +112,5 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     
     public void clearCache() throws SQLException;
     public int getSequenceSaltBuckets();
+    public void modifyTable(byte[] tableName, HTableDescriptor newDesc) throws IOException, InterruptedException, TimeoutException;
 }
