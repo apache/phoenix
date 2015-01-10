@@ -19,11 +19,13 @@ package org.apache.phoenix.query;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -479,4 +481,9 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         return getProps().getInt(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                 QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
     }
+
+    @Override
+    public void modifyTable(byte[] tableName, HTableDescriptor newDesc) throws IOException,
+            InterruptedException, TimeoutException {
+    } 
 }
