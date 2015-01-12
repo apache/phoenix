@@ -24,12 +24,12 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -82,7 +82,7 @@ public class ServerCacheClient {
     private static final Log LOG = LogFactory.getLog(ServerCacheClient.class);
     private static final Random RANDOM = new Random();
     private final PhoenixConnection connection;
-    private final Map<Integer, TableRef> cacheUsingTableRefMap = new HashMap<Integer, TableRef>();
+    private final Map<Integer, TableRef> cacheUsingTableRefMap = new ConcurrentHashMap<Integer, TableRef>();
 
     /**
      * Construct client used to create a serialized cached snapshot of a table and send it to each region server
