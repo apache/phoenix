@@ -2933,6 +2933,16 @@ public final class PTableProtos {
      * <code>optional int64 statsTimeStamp = 23;</code>
      */
     long getStatsTimeStamp();
+
+    // required bool storeNulls = 24;
+    /**
+     * <code>required bool storeNulls = 24;</code>
+     */
+    boolean hasStoreNulls();
+    /**
+     * <code>required bool storeNulls = 24;</code>
+     */
+    boolean getStoreNulls();
   }
   /**
    * Protobuf type {@code PTable}
@@ -3116,6 +3126,11 @@ public final class PTableProtos {
             case 184: {
               bitField0_ |= 0x00040000;
               statsTimeStamp_ = input.readInt64();
+              break;
+            }
+            case 192: {
+              bitField0_ |= 0x00080000;
+              storeNulls_ = input.readBool();
               break;
             }
           }
@@ -3632,6 +3647,22 @@ public final class PTableProtos {
       return statsTimeStamp_;
     }
 
+    // required bool storeNulls = 24;
+    public static final int STORENULLS_FIELD_NUMBER = 24;
+    private boolean storeNulls_;
+    /**
+     * <code>required bool storeNulls = 24;</code>
+     */
+    public boolean hasStoreNulls() {
+      return ((bitField0_ & 0x00080000) == 0x00080000);
+    }
+    /**
+     * <code>required bool storeNulls = 24;</code>
+     */
+    public boolean getStoreNulls() {
+      return storeNulls_;
+    }
+
     private void initFields() {
       schemaNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       tableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -3656,6 +3687,7 @@ public final class PTableProtos {
       viewIndexId_ = 0;
       indexType_ = com.google.protobuf.ByteString.EMPTY;
       statsTimeStamp_ = 0L;
+      storeNulls_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -3695,6 +3727,10 @@ public final class PTableProtos {
         return false;
       }
       if (!hasMultiTenant()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasStoreNulls()) {
         memoizedIsInitialized = 0;
         return false;
       }
@@ -3791,6 +3827,9 @@ public final class PTableProtos {
       }
       if (((bitField0_ & 0x00040000) == 0x00040000)) {
         output.writeInt64(23, statsTimeStamp_);
+      }
+      if (((bitField0_ & 0x00080000) == 0x00080000)) {
+        output.writeBool(24, storeNulls_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -3897,6 +3936,10 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00040000) == 0x00040000)) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt64Size(23, statsTimeStamp_);
+      }
+      if (((bitField0_ & 0x00080000) == 0x00080000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(24, storeNulls_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -4024,6 +4067,11 @@ public final class PTableProtos {
         result = result && (getStatsTimeStamp()
             == other.getStatsTimeStamp());
       }
+      result = result && (hasStoreNulls() == other.hasStoreNulls());
+      if (hasStoreNulls()) {
+        result = result && (getStoreNulls()
+            == other.getStoreNulls());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -4128,6 +4176,10 @@ public final class PTableProtos {
       if (hasStatsTimeStamp()) {
         hash = (37 * hash) + STATSTIMESTAMP_FIELD_NUMBER;
         hash = (53 * hash) + hashLong(getStatsTimeStamp());
+      }
+      if (hasStoreNulls()) {
+        hash = (37 * hash) + STORENULLS_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getStoreNulls());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -4299,6 +4351,8 @@ public final class PTableProtos {
         bitField0_ = (bitField0_ & ~0x00200000);
         statsTimeStamp_ = 0L;
         bitField0_ = (bitField0_ & ~0x00400000);
+        storeNulls_ = false;
+        bitField0_ = (bitField0_ & ~0x00800000);
         return this;
       }
 
@@ -4435,6 +4489,10 @@ public final class PTableProtos {
           to_bitField0_ |= 0x00040000;
         }
         result.statsTimeStamp_ = statsTimeStamp_;
+        if (((from_bitField0_ & 0x00800000) == 0x00800000)) {
+          to_bitField0_ |= 0x00080000;
+        }
+        result.storeNulls_ = storeNulls_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -4598,6 +4656,9 @@ public final class PTableProtos {
         if (other.hasStatsTimeStamp()) {
           setStatsTimeStamp(other.getStatsTimeStamp());
         }
+        if (other.hasStoreNulls()) {
+          setStoreNulls(other.getStoreNulls());
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
       }
@@ -4636,6 +4697,10 @@ public final class PTableProtos {
           return false;
         }
         if (!hasMultiTenant()) {
+          
+          return false;
+        }
+        if (!hasStoreNulls()) {
           
           return false;
         }
@@ -6169,6 +6234,39 @@ public final class PTableProtos {
         return this;
       }
 
+      // required bool storeNulls = 24;
+      private boolean storeNulls_ ;
+      /**
+       * <code>required bool storeNulls = 24;</code>
+       */
+      public boolean hasStoreNulls() {
+        return ((bitField0_ & 0x00800000) == 0x00800000);
+      }
+      /**
+       * <code>required bool storeNulls = 24;</code>
+       */
+      public boolean getStoreNulls() {
+        return storeNulls_;
+      }
+      /**
+       * <code>required bool storeNulls = 24;</code>
+       */
+      public Builder setStoreNulls(boolean value) {
+        bitField0_ |= 0x00800000;
+        storeNulls_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bool storeNulls = 24;</code>
+       */
+      public Builder clearStoreNulls() {
+        bitField0_ = (bitField0_ & ~0x00800000);
+        storeNulls_ = false;
+        onChanged();
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:PTable)
     }
 
@@ -6214,7 +6312,7 @@ public final class PTableProtos {
       "ats\022\013\n\003key\030\001 \002(\014\022\016\n\006values\030\002 \003(\014\022\033\n\023guid" +
       "ePostsByteCount\030\003 \001(\003\022\025\n\rkeyBytesCount\030\004" +
       " \001(\003\022\027\n\017guidePostsCount\030\005 \001(\005\022!\n\013pGuideP",
-      "osts\030\006 \001(\0132\014.PGuidePosts\"\242\004\n\006PTable\022\027\n\017s" +
+      "osts\030\006 \001(\0132\014.PGuidePosts\"\266\004\n\006PTable\022\027\n\017s" +
       "chemaNameBytes\030\001 \002(\014\022\026\n\016tableNameBytes\030\002" +
       " \002(\014\022\036\n\ttableType\030\003 \002(\0162\013.PTableType\022\022\n\n" +
       "indexState\030\004 \001(\t\022\026\n\016sequenceNumber\030\005 \002(\003" +
@@ -6228,10 +6326,11 @@ public final class PTableProtos {
       "\021 \001(\014\022\025\n\rviewStatement\030\022 \001(\014\022\025\n\rphysical" +
       "Names\030\023 \003(\014\022\020\n\010tenantId\030\024 \001(\014\022\023\n\013viewInd" +
       "exId\030\025 \001(\005\022\021\n\tindexType\030\026 \001(\014\022\026\n\016statsTi" +
-      "meStamp\030\027 \001(\003*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022" +
-      "\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004" +
-      "B@\n(org.apache.phoenix.coprocessor.gener" +
-      "atedB\014PTableProtosH\001\210\001\001\240\001\001"
+      "meStamp\030\027 \001(\003\022\022\n\nstoreNulls\030\030 \002(\010*A\n\nPTa" +
+      "bleType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022" +
+      "\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache.phoen" +
+      "ix.coprocessor.generatedB\014PTableProtosH\001" +
+      "\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -6255,7 +6354,7 @@ public final class PTableProtos {
           internal_static_PTable_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTable_descriptor,
-              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", });
+              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", });
           return null;
         }
       };
