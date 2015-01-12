@@ -37,7 +37,7 @@ enum PTableType {
 message PColumn {
   required bytes columnNameBytes = 1;
   optional bytes familyNameBytes = 2;
-  required string dataType = 3; 
+  required string dataType = 3;
   optional int32 maxLength = 4;
   optional int32 scale = 5;
   required bool nullable = 6;
@@ -81,4 +81,5 @@ message PTable {
   optional int32 viewIndexId = 21;
   optional bytes indexType = 22;
   optional int64 statsTimeStamp = 23;
+  required bool storeNulls = 24;
 }

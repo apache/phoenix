@@ -33,7 +33,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 
 public enum TableProperty {
-	
+
 	IMMUTABLE_ROWS(PhoenixDatabaseMetaData.IMMUTABLE_ROWS, true, true),
 
 	MULTI_TENANT(PhoenixDatabaseMetaData.MULTI_TENANT, true, false),
@@ -44,7 +44,10 @@ public enum TableProperty {
 
 	DEFAULT_COLUMN_FAMILY(DEFAULT_COLUMN_FAMILY_NAME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, false, DEFAULT_COLUMN_FAMILY_ONLY_ON_CREATE_TABLE, false),
 
-	TTL(HColumnDescriptor.TTL, COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL, true, CANNOT_ALTER_PROPERTY, false);
+	TTL(HColumnDescriptor.TTL, COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL, true, CANNOT_ALTER_PROPERTY, false),
+
+    STORE_NULLS(PhoenixDatabaseMetaData.STORE_NULLS, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false);
+
 
 	private final String propertyName;
 	private final SQLExceptionCode colFamSpecifiedException;
@@ -74,7 +77,7 @@ public enum TableProperty {
 
 	public static boolean isPhoenixTableProperty(String property) {
 		try {
-			TableProperty.valueOf(property); 	 
+			TableProperty.valueOf(property);
 		} catch (IllegalArgumentException e) {
 			return false;
 		}
@@ -102,9 +105,9 @@ public enum TableProperty {
 
 	private void checkIfApplicableForView(PTableType tableType)
 			throws SQLException {
-		if (tableType == PTableType.VIEW && !isValidOnView) { 
+		if (tableType == PTableType.VIEW && !isValidOnView) {
 			throw new SQLExceptionInfo.Builder(
-					VIEW_WITH_PROPERTIES).setMessage("Property: " + propertyName).build().buildException(); 
+					VIEW_WITH_PROPERTIES).setMessage("Property: " + propertyName).build().buildException();
 		}
 	}
 

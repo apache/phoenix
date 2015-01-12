@@ -63,6 +63,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REF_GENERATION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REGION_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REMARKS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCOPE_CATALOG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCOPE_SCHEMA;
@@ -105,10 +106,10 @@ import org.apache.phoenix.util.ByteUtil;
 
 
 /**
- * 
+ *
  * Constants used during querying
  *
- * 
+ *
  * @since 0.1
  */
 public interface QueryConstants {
@@ -119,7 +120,7 @@ public interface QueryConstants {
     public static final String NULL_SCHEMA_NAME = "";
     public static final String NULL_DISPLAY_TEXT = "<null>";
     public static final long UNSET_TIMESTAMP = -1;
-    
+
     public enum JoinType {INNER, LEFT_OUTER}
     public final static String SYSTEM_SCHEMA_NAME = "SYSTEM";
     public final static byte[] SYSTEM_SCHEMA_NAME_BYTES = Bytes.toBytes(SYSTEM_SCHEMA_NAME);
@@ -137,7 +138,7 @@ public interface QueryConstants {
     public final static byte[] UNGROUPED_AGG_ROW_KEY = Bytes.toBytes("a");
     public final static PName AGG_COLUMN_NAME = SINGLE_COLUMN_NAME;
     public final static PName AGG_COLUMN_FAMILY_NAME = SINGLE_COLUMN_FAMILY_NAME;
-    
+
     public static final byte[] ARRAY_VALUE_COLUMN_FAMILY = Bytes.toBytes("a");
     // Use empty byte array for column qualifier so as not to accidentally conflict with any other columns
     public static final byte[] ARRAY_VALUE_COLUMN_QUALIFIER = ByteUtil.EMPTY_BYTE_ARRAY;
@@ -150,7 +151,7 @@ public interface QueryConstants {
      */
     public static final byte SEPARATOR_BYTE = (byte) 0;
     public static final byte[] SEPARATOR_BYTE_ARRAY = new byte[] {SEPARATOR_BYTE};
-    
+
     public static final String DEFAULT_COPROCESS_PATH = "phoenix.jar";
     public final static int MILLIS_IN_DAY = 1000 * 60 * 60 * 24;
 
@@ -163,10 +164,10 @@ public interface QueryConstants {
     public static final byte[] DEFAULT_COLUMN_FAMILY_BYTES = Bytes.toBytes(DEFAULT_COLUMN_FAMILY);
     public static final ImmutableBytesPtr DEFAULT_COLUMN_FAMILY_BYTES_PTR = new ImmutableBytesPtr(
             DEFAULT_COLUMN_FAMILY_BYTES);
-    
+
     public static final String ALL_FAMILY_PROPERTIES_KEY = "";
     public static final String SYSTEM_TABLE_PK_NAME = "pk";
-    
+
     public static final double MILLIS_TO_NANOS_CONVERTOR = Math.pow(10, 6);
     public static final BigDecimal BD_MILLIS_NANOS_CONVERSION = BigDecimal.valueOf(MILLIS_TO_NANOS_CONVERTOR);
     public static final BigDecimal BD_MILLIS_IN_DAY = BigDecimal.valueOf(QueryConstants.MILLIS_IN_DAY);
@@ -211,7 +212,7 @@ public interface QueryConstants {
             // Unused
             TYPE_NAME + " VARCHAR," +
             REMARKS + " VARCHAR," +
-            SELF_REFERENCING_COL_NAME + " VARCHAR," + 
+            SELF_REFERENCING_COL_NAME + " VARCHAR," +
             REF_GENERATION + " VARCHAR," +
             BUFFER_LENGTH + " INTEGER," +
             NUM_PREC_RADIX + " INTEGER," +
@@ -227,14 +228,15 @@ public interface QueryConstants {
             IS_AUTOINCREMENT + " VARCHAR," +
             INDEX_TYPE + " UNSIGNED_TINYINT," +
             INDEX_DISABLE_TIMESTAMP + " BIGINT," +
+                    STORE_NULLS + " BOOLEAN," +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ","
             + TABLE_SCHEM + "," + TABLE_NAME + "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" +
             HConstants.VERSIONS + "=" + MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS + ",\n" +
             HColumnDescriptor.KEEP_DELETED_CELLS + "="  + MetaDataProtocol.DEFAULT_META_DATA_KEEP_DELETED_CELLS + ",\n" +
             // Install split policy to prevent a tenant's metadata from being split across regions.
             HTableDescriptor.SPLIT_POLICY + "='" + MetaDataSplitPolicy.class.getName() + "'\n";
-    
-    public static final String CREATE_STATS_TABLE_METADATA = 
+
+    public static final String CREATE_STATS_TABLE_METADATA =
             "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_STATS_TABLE + "\"(\n" +
             // PK columns
             PHYSICAL_NAME  + " VARCHAR NOT NULL," +
@@ -243,7 +245,7 @@ public interface QueryConstants {
             GUIDE_POSTS_COUNT + " BIGINT," +
             GUIDE_POSTS  + " VARBINARY," +
             GUIDE_POSTS_WIDTH + " BIGINT," +
-            MIN_KEY + " VARBINARY," + 
+            MIN_KEY + " VARBINARY," +
             MAX_KEY + " VARBINARY," +
             LAST_STATS_UPDATE_TIME+ " DATE, "+
             GUIDE_POSTS_ROW_COUNT+ " BIGINT, "+
@@ -254,22 +256,22 @@ public interface QueryConstants {
             HColumnDescriptor.KEEP_DELETED_CELLS + "="  + MetaDataProtocol.DEFAULT_META_DATA_KEEP_DELETED_CELLS + ",\n" +
             // Install split policy to prevent a physical table's stats from being split across regions.
             HTableDescriptor.SPLIT_POLICY + "='" + MetaDataSplitPolicy.class.getName() + "'\n";
-            
+
     public static final String CREATE_SEQUENCE_METADATA =
-            "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + TYPE_SEQUENCE + "\"(\n" +                                    
+            "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + TYPE_SEQUENCE + "\"(\n" +
             TENANT_ID + " VARCHAR NULL," +
-            SEQUENCE_SCHEMA + " VARCHAR NULL, \n" + 
+            SEQUENCE_SCHEMA + " VARCHAR NULL, \n" +
             SEQUENCE_NAME +  " VARCHAR NOT NULL, \n" +
-            START_WITH + " BIGINT, \n" + 
-            CURRENT_VALUE + " BIGINT, \n" + 
-            INCREMENT_BY  + " BIGINT, \n" + 
-            CACHE_SIZE  + " BIGINT, \n" + 
+            START_WITH + " BIGINT, \n" +
+            CURRENT_VALUE + " BIGINT, \n" +
+            INCREMENT_BY  + " BIGINT, \n" +
+            CACHE_SIZE  + " BIGINT, \n" +
             //  the following three columns were added in 3.1/4.1
-            MIN_VALUE + " BIGINT, \n" + 
-            MAX_VALUE + " BIGINT, \n" + 
-            CYCLE_FLAG + " BOOLEAN, \n" + 
-            LIMIT_REACHED_FLAG + " BOOLEAN \n" + 
-            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + SEQUENCE_SCHEMA + "," + SEQUENCE_NAME + "))\n" + 
+            MIN_VALUE + " BIGINT, \n" +
+            MAX_VALUE + " BIGINT, \n" +
+            CYCLE_FLAG + " BOOLEAN, \n" +
+            LIMIT_REACHED_FLAG + " BOOLEAN \n" +
+            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + SEQUENCE_SCHEMA + "," + SEQUENCE_NAME + "))\n" +
             HConstants.VERSIONS + "=" + MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS + ",\n" +
             HColumnDescriptor.KEEP_DELETED_CELLS + "="  + MetaDataProtocol.DEFAULT_META_DATA_KEEP_DELETED_CELLS + "\n";
 }

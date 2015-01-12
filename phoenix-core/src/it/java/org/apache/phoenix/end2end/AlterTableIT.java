@@ -33,6 +33,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
@@ -57,14 +58,14 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
- * 
+ *
  * A lot of tests in this class test HBase level properties. As a result,
- * tests need to have non-overlapping table names. The option of 
+ * tests need to have non-overlapping table names. The option of
  * disabling and dropping underlying HBase tables at the end of each test
- * to avoid the overlap makes the test class really slow. By having the 
+ * to avoid the overlap makes the test class really slow. By having the
  * test class run in its own cluster and having non overlapping table names
  * we don't need to worry about dropping the tables between each test
- * or at the end of test class. 
+ * or at the end of test class.
  *
  */
 public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
@@ -75,25 +76,25 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     public static final String DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "T");
     public static final String INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "I");
     public static final String LOCAL_INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "LI");
-    
+
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String, String> props = Collections.emptyMap();
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
-    
+
     @Test
     public void testAlterTableWithVarBinaryKey() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        
+
         try {
             String ddl = "CREATE TABLE test_table " +
                     "  (a_string varchar not null, a_binary varbinary not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary))\n";
             createTestTable(getUrl(), ddl);
-            
+
             ddl = "ALTER TABLE test_table ADD b_string VARCHAR NULL PRIMARY KEY";
             PreparedStatement stmt = conn.prepareStatement(ddl);
             stmt.execute();
@@ -111,9 +112,9 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
- 
+
       try{
-        conn.createStatement().executeUpdate("ALTER TABLE " + PhoenixDatabaseMetaData.SYSTEM_CATALOG + 
+        conn.createStatement().executeUpdate("ALTER TABLE " + PhoenixDatabaseMetaData.SYSTEM_CATALOG +
           " ADD IF NOT EXISTS testNewColumn integer");
         String query = "SELECT testNewColumn FROM " + PhoenixDatabaseMetaData.SYSTEM_CATALOG;
         try {
@@ -149,13 +150,13 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        
+
         try {
             String ddl = "CREATE TABLE test_table " +
                     "  (a_string varchar not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             conn.createStatement().execute(ddl);
-            
+
             String dml = "UPSERT INTO test_table VALUES(?)";
             PreparedStatement stmt = conn.prepareStatement(dml);
             stmt.setString(1, "b");
@@ -163,7 +164,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             stmt.setString(1, "a");
             stmt.execute();
             conn.commit();
-            
+
             String query = "SELECT * FROM test_table";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -171,49 +172,49 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertEquals("b",rs.getString(1));
             assertFalse(rs.next());
-            
+
             ddl = "ALTER TABLE test_table ADD  b_string VARCHAR  NULL PRIMARY KEY  ";
             conn.createStatement().execute(ddl);
-            
+
             query = "SELECT * FROM test_table WHERE a_string = 'a' AND b_string IS NULL";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a",rs.getString(1));
             assertFalse(rs.next());
-            
+
             dml = "UPSERT INTO test_table VALUES(?)";
             stmt = conn.prepareStatement(dml);
             stmt.setString(1, "c");
             stmt.execute();
             conn.commit();
-           
+
             query = "SELECT * FROM test_table WHERE a_string = 'c' AND b_string IS NULL";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("c",rs.getString(1));
             assertFalse(rs.next());
-            
+
             dml = "UPSERT INTO test_table(a_string,col1) VALUES(?,?)";
             stmt = conn.prepareStatement(dml);
             stmt.setString(1, "a");
             stmt.setInt(2, 5);
             stmt.execute();
             conn.commit();
-           
+
             query = "SELECT a_string,col1 FROM test_table WHERE a_string = 'a' AND b_string IS NULL";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a",rs.getString(1));
             assertEquals(5,rs.getInt(2)); // TODO: figure out why this flaps
             assertFalse(rs.next());
-            
+
         } finally {
             conn.close();
         }
     }
-    
 
-    
+
+
     @Test
     public void testSetPropertyAndAddColumnForNewColumnFamily() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -236,22 +237,22 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.close();
         }
     }
-  
+
     private static void assertIndexExists(Connection conn, boolean exists) throws SQLException {
         ResultSet rs = conn.getMetaData().getIndexInfo(null, SCHEMA_NAME, DATA_TABLE_NAME, false, false);
         assertEquals(exists, rs.next());
     }
-    
+
     @Test
     public void testDropIndexedColumn() throws Exception {
         String query;
         ResultSet rs;
         PreparedStatement stmt;
-    
+
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-    
+
         // make sure that the tables are empty, but reachable
         conn.createStatement().execute(
           "CREATE TABLE " + DATA_TABLE_FULL_NAME
@@ -259,7 +260,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
-    
+
         conn.createStatement().execute(
           "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1, v2)");
         conn.createStatement().execute(
@@ -268,7 +269,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
-    
+
         // load some data into the table
         stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
         stmt.setString(1, "a");
@@ -276,25 +277,25 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         stmt.setString(3, "1");
         stmt.execute();
         conn.commit();
-        
+
         assertIndexExists(conn,true);
         conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " DROP COLUMN v1");
         assertIndexExists(conn,false);
-        
+
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("a",rs.getString(1));
         assertEquals("1",rs.getString(2));
         assertFalse(rs.next());
-        
+
         // load some data into the table
         stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?)");
         stmt.setString(1, "a");
         stmt.setString(2, "2");
         stmt.execute();
         conn.commit();
-        
+
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -302,17 +303,17 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertEquals("2",rs.getString(2));
         assertFalse(rs.next());
     }
-    
+
     @Test
     public void testDropCoveredColumn() throws Exception {
         String query;
         ResultSet rs;
         PreparedStatement stmt;
-    
+
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-    
+
         // make sure that the tables are empty, but reachable
         conn.createStatement().execute(
           "CREATE TABLE " + DATA_TABLE_FULL_NAME
@@ -320,7 +321,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
-    
+
         conn.createStatement().execute(
           "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) include (v2, v3)");
         conn.createStatement().execute(
@@ -331,7 +332,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         query = "SELECT * FROM " + LOCAL_INDEX_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
-    
+
         // load some data into the table
         stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?,?)");
         stmt.setString(1, "a");
@@ -340,12 +341,12 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         stmt.setString(4, "j");
         stmt.execute();
         conn.commit();
-        
+
         assertIndexExists(conn,true);
         conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " DROP COLUMN v2");
         // TODO: verify meta data that we get back to confirm our column was dropped
         assertIndexExists(conn,true);
-        
+
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -353,7 +354,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertEquals("x",rs.getString(2));
         assertEquals("j",rs.getString(3));
         assertFalse(rs.next());
-        
+
         // load some data into the table
         stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
         stmt.setString(1, "a");
@@ -361,7 +362,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         stmt.setString(3, "k");
         stmt.execute();
         conn.commit();
-        
+
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -370,17 +371,17 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertEquals("k",rs.getString(3));
         assertFalse(rs.next());
     }
-    
+
     @Test
     public void testAddPKColumnToTableWithIndex() throws Exception {
         String query;
         ResultSet rs;
         PreparedStatement stmt;
-    
+
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-    
+
         // make sure that the tables are empty, but reachable
         conn.createStatement().execute(
           "CREATE TABLE " + DATA_TABLE_FULL_NAME
@@ -388,13 +389,13 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
-    
+
         conn.createStatement().execute(
           "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) include (v2)");
         query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
-    
+
         // load some data into the table
         stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
         stmt.setString(1, "a");
@@ -402,7 +403,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         stmt.setString(3, "1");
         stmt.execute();
         conn.commit();
-        
+
         assertIndexExists(conn,true);
         conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " ADD v3 VARCHAR, k2 DECIMAL PRIMARY KEY");
         rs = conn.getMetaData().getPrimaryKeys("", SCHEMA_NAME, DATA_TABLE_NAME);
@@ -423,9 +424,9 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K2",rs.getString("COLUMN_NAME"));
         assertEquals(3, rs.getShort("KEY_SEQ"));
-        
+
         assertIndexExists(conn,true);
-        
+
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -434,7 +435,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertEquals("1",rs.getString(3));
         assertNull(rs.getBigDecimal(4));
         assertFalse(rs.next());
-        
+
         // load some data into the table
         stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + "(K,K2,V1,V2) VALUES(?,?,?,?)");
         stmt.setString(1, "b");
@@ -443,7 +444,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         stmt.setString(4, "2");
         stmt.execute();
         conn.commit();
-        
+
         query = "SELECT k,k2 FROM " + DATA_TABLE_FULL_NAME + " WHERE v1='y'";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -451,87 +452,87 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertEquals(BigDecimal.valueOf(2),rs.getBigDecimal(2));
         assertFalse(rs.next());
     }
-    
+
     @Test
     public void testSetSaltedTableAsImmutable() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        
+
         try {
-            String ddl = "CREATE TABLE MESSAGES (\n" + 
-            		"        SENDER_ID UNSIGNED_LONG NOT NULL,\n" + 
-            		"        RECIPIENT_ID UNSIGNED_LONG NOT NULL,\n" + 
-            		"        M_TIMESTAMP DATE  NOT NULL,\n" + 
-            		"        ROW_ID UNSIGNED_LONG NOT NULL,\n" + 
-            		"        IS_READ TINYINT,\n" + 
-            		"        IS_DELETED TINYINT,\n" + 
-            		"        VISIBILITY TINYINT,\n" + 
-            		"        B.SENDER_IP VARCHAR,\n" + 
-            		"        B.JSON VARCHAR,\n" + 
-            		"        B.M_TEXT VARCHAR\n" + 
-            		"        CONSTRAINT ROWKEY PRIMARY KEY\n" + 
-            		"(SENDER_ID,RECIPIENT_ID,M_TIMESTAMP DESC,ROW_ID))\n" + 
+            String ddl = "CREATE TABLE MESSAGES (\n" +
+            		"        SENDER_ID UNSIGNED_LONG NOT NULL,\n" +
+            		"        RECIPIENT_ID UNSIGNED_LONG NOT NULL,\n" +
+            		"        M_TIMESTAMP DATE  NOT NULL,\n" +
+            		"        ROW_ID UNSIGNED_LONG NOT NULL,\n" +
+            		"        IS_READ TINYINT,\n" +
+            		"        IS_DELETED TINYINT,\n" +
+            		"        VISIBILITY TINYINT,\n" +
+            		"        B.SENDER_IP VARCHAR,\n" +
+            		"        B.JSON VARCHAR,\n" +
+            		"        B.M_TEXT VARCHAR\n" +
+            		"        CONSTRAINT ROWKEY PRIMARY KEY\n" +
+            		"(SENDER_ID,RECIPIENT_ID,M_TIMESTAMP DESC,ROW_ID))\n" +
             		"SALT_BUCKETS=4";
             conn.createStatement().execute(ddl);
-            
+
             ddl = "ALTER TABLE MESSAGES SET IMMUTABLE_ROWS=true";
             conn.createStatement().execute(ddl);
-            
+
             conn.createStatement().executeQuery("select count(*) from messages").next();
-            
+
         } finally {
             conn.close();
         }
     }
-    
-    
+
+
     @Test
     public void testDropColumnFromSaltedTable() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        
+
         try {
-            String ddl = "CREATE TABLE MESSAGES (\n" + 
-                    "        SENDER_ID UNSIGNED_LONG NOT NULL,\n" + 
-                    "        RECIPIENT_ID UNSIGNED_LONG NOT NULL,\n" + 
-                    "        M_TIMESTAMP DATE  NOT NULL,\n" + 
-                    "        ROW_ID UNSIGNED_LONG NOT NULL,\n" + 
-                    "        IS_READ TINYINT,\n" + 
-                    "        IS_DELETED TINYINT,\n" + 
-                    "        VISIBILITY TINYINT,\n" + 
-                    "        B.SENDER_IP VARCHAR,\n" + 
-                    "        B.JSON VARCHAR,\n" + 
-                    "        B.M_TEXT VARCHAR\n" + 
-                    "        CONSTRAINT ROWKEY PRIMARY KEY\n" + 
-                    "(SENDER_ID,RECIPIENT_ID,M_TIMESTAMP DESC,ROW_ID))\n" + 
+            String ddl = "CREATE TABLE MESSAGES (\n" +
+                    "        SENDER_ID UNSIGNED_LONG NOT NULL,\n" +
+                    "        RECIPIENT_ID UNSIGNED_LONG NOT NULL,\n" +
+                    "        M_TIMESTAMP DATE  NOT NULL,\n" +
+                    "        ROW_ID UNSIGNED_LONG NOT NULL,\n" +
+                    "        IS_READ TINYINT,\n" +
+                    "        IS_DELETED TINYINT,\n" +
+                    "        VISIBILITY TINYINT,\n" +
+                    "        B.SENDER_IP VARCHAR,\n" +
+                    "        B.JSON VARCHAR,\n" +
+                    "        B.M_TEXT VARCHAR\n" +
+                    "        CONSTRAINT ROWKEY PRIMARY KEY\n" +
+                    "(SENDER_ID,RECIPIENT_ID,M_TIMESTAMP DESC,ROW_ID))\n" +
                     "SALT_BUCKETS=4";
             conn.createStatement().execute(ddl);
-            
+
             ddl = "ALTER TABLE MESSAGES DROP COLUMN B.JSON";
             conn.createStatement().execute(ddl);
-            
+
             conn.createStatement().executeQuery("select count(*) from messages").next();
         } finally {
             conn.close();
         }
 
     }
-    
-    
+
+
     @Test
     public void testAddVarCols() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        
+
         try {
             String ddl = "CREATE TABLE test_table " +
                     "  (a_string varchar not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             conn.createStatement().execute(ddl);
-            
+
             String dml = "UPSERT INTO test_table VALUES(?)";
             PreparedStatement stmt = conn.prepareStatement(dml);
             stmt.setString(1, "b");
@@ -539,7 +540,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             stmt.setString(1, "a");
             stmt.execute();
             conn.commit();
-            
+
             String query = "SELECT * FROM test_table";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -547,16 +548,16 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertEquals("b",rs.getString(1));
             assertFalse(rs.next());
-            
-            
+
+
             query = "SELECT * FROM test_table WHERE a_string = 'a' ";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a",rs.getString(1));
-          
+
             ddl = "ALTER TABLE test_table ADD  c1.col2 VARCHAR  , c1.col3 integer , c2.col4 integer";
             conn.createStatement().execute(ddl);
-            
+
             ddl = "ALTER TABLE test_table ADD   col5 integer , c1.col2 VARCHAR";
             try {
                 conn.createStatement().execute(ddl);
@@ -564,18 +565,18 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.COLUMN_EXIST_IN_DEF.getErrorCode(), e.getErrorCode());
             }
-            
+
             query = "SELECT col5 FROM test_table";
             try {
                 conn.createStatement().executeQuery(query);
-                fail(); 
+                fail();
             } catch(SQLException e) {
                 assertTrue(e.getMessage(), e.getMessage().contains("ERROR 504 (42703): Undefined column."));
             }
-       
+
             ddl = "ALTER TABLE test_table ADD IF NOT EXISTS col5 integer , c1.col2 VARCHAR";
             conn.createStatement().execute(ddl);
-            
+
             dml = "UPSERT INTO test_table VALUES(?,?,?,?,?)";
             stmt = conn.prepareStatement(dml);
             stmt.setString(1, "c");
@@ -585,7 +586,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             stmt.setInt(5, 102);
             stmt.execute();
             conn.commit();
-           
+
             query = "SELECT * FROM test_table WHERE a_string = 'c' ";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -595,18 +596,18 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(101,rs.getInt(4));
             assertEquals(102,rs.getInt(5));
             assertFalse(rs.next());
-            
+
             ddl = "ALTER TABLE test_table ADD  col5 integer";
             conn.createStatement().execute(ddl);
-            
+
             query = "SELECT c1.* FROM test_table WHERE a_string = 'c' ";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("d",rs.getString(1));
             assertEquals(101,rs.getInt(2));
             assertFalse(rs.next());
-            
-            
+
+
             dml = "UPSERT INTO test_table(a_string,col1,col5) VALUES(?,?,?)";
             stmt = conn.prepareStatement(dml);
             stmt.setString(1, "e");
@@ -614,8 +615,8 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             stmt.setInt(3, 201);
             stmt.execute();
             conn.commit();
-            
-            
+
+
             query = "SELECT a_string,col1,col5 FROM test_table WHERE a_string = 'e' ";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -623,7 +624,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(200,rs.getInt(2));
             assertEquals(201,rs.getInt(3));
             assertFalse(rs.next());
-            
+
           } finally {
             conn.close();
         }
@@ -648,7 +649,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.close();
         }
     }
-    
+
     @Test
     public void testDisallowAddingNotNullableColumnNotPartOfPkForExistingTable() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -683,7 +684,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         assertEquals(expectedValue, pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isWALDisabled());
     }
-    
+
     @Test
     public void testDisableWAL() throws Exception {
         String fullTableName = "TEST_TABLE";
@@ -714,7 +715,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertFalse(rs.next());
             conn2.close();
             asssertIsWALDisabled(conn,fullIndexName, false);
-            
+
             conn.createStatement().execute("DROP TABLE test_table");
         } finally {
             conn.close();
@@ -773,7 +774,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertFalse(rs.next());
             conn2.close();
             asssertIsWALDisabled(conn,fullIndexName, false);
-            
+
         } finally {
             conn.close();
         }
@@ -828,7 +829,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 
             String ddl = "ALTER TABLE test_table DROP COLUMN IF EXISTS col2,col3";
             conn.createStatement().execute(ddl);
-            
+
             ddl = "ALTER TABLE test_table DROP COLUMN a_string,col1";
             try{
                 conn.createStatement().execute(ddl);
@@ -836,7 +837,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.CANNOT_DROP_PK.getErrorCode(), e.getErrorCode());
             }
-            
+
             ddl = "ALTER TABLE test_table DROP COLUMN col4,col5";
             try {
                 conn.createStatement().execute(ddl);
@@ -844,17 +845,17 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
                 assertTrue(e.getMessage(), e.getMessage().contains("ERROR 504 (42703): Undefined column. columnName=COL5"));
-            } 
+            }
 
             ddl = "ALTER TABLE test_table DROP COLUMN IF EXISTS col1";
             conn.createStatement().execute(ddl);
-            
+
             query = "SELECT * FROM i";
             try {
                 rs = conn.createStatement().executeQuery(query);
                 fail();
             } catch (TableNotFoundException e) {}
-            
+
             query = "select col4 FROM test_table";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -867,12 +868,12 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
             }
-              
+
         } finally {
             conn.close();
         }
     }
-   
+
     @Test
     public void alterTableFromDifferentClient() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -891,7 +892,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 
         // Do the alter through a separate client.
         conn3.createStatement().execute("alter table test_simpletable add field2 BIGINT");
-        
+
         //Connection conn1 = DriverManager.getConnection(getUrl(), props);
         PreparedStatement pstmt2 = conn1.prepareStatement("upsert into test_simpletable (id, field1, field2) values ( ?, ?, ?)");
         pstmt2.setString(1, "key2");
@@ -902,7 +903,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         pstmt2.close();
         conn1.close();
     }
-    
+
     @Test
     public void testAddColumnsUsingNewConnection() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -923,7 +924,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn1.createStatement().execute(ddl);
         conn1.close();
     }
-    
+
     @Test
     public void testAddColumnForNewColumnFamily() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -939,7 +940,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         ddl = "ALTER TABLE T ADD CF.STRING VARCHAR";
         conn1.createStatement().execute(ddl);
     }
-    
+
     @Test
     public void testSetHColumnProperties() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -961,7 +962,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(1, columnFamilies[0].getScope());
         }
     }
-    
+
     @Test
     public void testSetHTableProperties() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -983,7 +984,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(Boolean.toString(false), tableDesc.getValue(HTableDescriptor.COMPACTION_ENABLED));
         }
     }
-    
+
     @Test
     public void testSetHTableAndHColumnProperties() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1007,7 +1008,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(false, tableDesc.isCompactionEnabled());
         }
     }
-    
+
     @Test
     public void testSetHTableHColumnAndPhoenixTableProperties() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1026,28 +1027,28 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         ddl = "ALTER TABLE T3 SET COMPACTION_ENABLED = FALSE, CF1.MIN_VERSIONS = 1, CF2.MIN_VERSIONS = 3, MIN_VERSIONS = 8, IMMUTABLE_ROWS=false";
         conn.createStatement().execute(ddl);
         assertImmutableRows(conn, "T3", false);
-        
+
         try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
             HTableDescriptor tableDesc = admin.getTableDescriptor(Bytes.toBytes("T3"));
             HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
             assertEquals(3, columnFamilies.length);
-            
+
             assertEquals("0", columnFamilies[0].getNameAsString());
             assertEquals(8, columnFamilies[0].getMinVersions());
             assertEquals(10, columnFamilies[0].getMaxVersions());
-            
+
             assertEquals("CF1", columnFamilies[1].getNameAsString());
             assertEquals(1, columnFamilies[1].getMinVersions());
             assertEquals(10, columnFamilies[1].getMaxVersions());
-            
+
             assertEquals("CF2", columnFamilies[2].getNameAsString());
             assertEquals(3, columnFamilies[2].getMinVersions());
             assertEquals(10, columnFamilies[2].getMaxVersions());
-            
+
             assertEquals(Boolean.toString(false), tableDesc.getValue(HTableDescriptor.COMPACTION_ENABLED));
         }
     }
-    
+
     @Test
     public void testSpecifyingColumnFamilyForHTablePropertyFails() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1067,7 +1068,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY.getErrorCode(), e.getErrorCode());
         }
     }
-    
+
     @Test
     public void testSpecifyingColumnFamilyForPhoenixTablePropertyFails() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1087,7 +1088,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY.getErrorCode(), e.getErrorCode());
         }
     }
-    
+
     @Test
     public void testSpecifyingColumnFamilyForTTLFails() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1108,7 +1109,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL.getErrorCode(), e.getErrorCode());
         }
     }
-    
+
     @Test
     public void testSetPropertyNeedsColumnFamilyToExist() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1128,7 +1129,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_FOUND.getErrorCode(), e.getErrorCode());
         }
     }
-    
+
     @Test
     public void testSetDefaultColumnFamilyNotAllowed() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1148,7 +1149,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(SQLExceptionCode.DEFAULT_COLUMN_FAMILY_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
         }
     }
-    
+
     @Test
     public void testSetHColumnOrHTablePropertiesOnViewsNotAllowed() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1176,7 +1177,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(), e.getErrorCode());
         }
     }
-    
+
     @Test
     public void testSetForSomePhoenixTablePropertiesOnViewsAllowed() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1204,7 +1205,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(), e.getErrorCode());
         }
     }
-    
+
     @Test
     public void testSettingPropertiesWhenTableHasDefaultColFamilySpecified() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1234,7 +1235,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(Boolean.toString(false), tableDesc.getValue(HTableDescriptor.COMPACTION_ENABLED));
         }
     }
-    
+
     @Test
     public void testNewColumnFamilyInheritsTTLOfEmptyCF() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1259,12 +1260,12 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(1000, columnFamilies[1].getTimeToLive());
         }
     }
-    
+
     private static void assertImmutableRows(Connection conn, String fullTableName, boolean expectedValue) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         assertEquals(expectedValue, pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isImmutableRows());
     }
-    
+
     @Test
     public void testSetPropertyAndAddColumnForExistingColumnFamily() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1287,7 +1288,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.close();
         }
     }
-    
+
     @Test
     public void testSetPropertyAndAddColumnForNewAndExistingColumnFamily() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1315,7 +1316,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.close();
         }
     }
-    
+
     @Test
     public void testSetPropertyAndAddColumnWhenTableHasExplicitDefaultColumnFamily() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1343,7 +1344,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.close();
         }
     }
-    
+
     @Test
     public void testSetPropertyAndAddColumnFailsForColumnFamilyNotPresentInAddCol() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1363,7 +1364,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     		conn.close();
     	}
     }
-    
+
     @Test
     public void testSetPropertyAndAddColumnForDifferentColumnFamilies() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1394,7 +1395,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     		conn.close();
     	}
     }
-    
+
     @Test
     public void testSetPropertyAndAddColumnUsingDefaultColumnFamilySpecifier() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1420,7 +1421,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.close();
         }
     }
-    
+
     @Test
     public void testSetPropertyAndAddColumnForDefaultColumnFamily() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1442,7 +1443,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     		conn.close();
     	}
     }
-    
+
     @Test
     public void testAddNewColumnFamilyProperties() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1474,7 +1475,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     			assertTrue(columnFamilies[3].isInMemory());
     			assertEquals("CF4", columnFamilies[4].getNameAsString());
     			assertTrue(columnFamilies[4].isInMemory());
-    		}	
+    		}
     	} finally {
     		conn.close();
     	}
@@ -1546,7 +1547,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     		fail();
     	} catch (SQLException e) {
     		assertEquals(SQLExceptionCode.CANNOT_SET_TABLE_PROPERTY_ADD_COLUMN.getErrorCode(), e.getErrorCode());
-    	}		
+    	}
     	try {
     		String ddl = "ALTER TABLE ttl_test add col1 varchar a.ttl=30";
     		conn.createStatement().execute(ddl);
@@ -1557,7 +1558,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     		conn.close();
     	}
     }
-    
+
     @Test
     public void testSetTTLForTableWithOnlyPKCols() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1577,7 +1578,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     			assertEquals(1, columnFamilies.length);
     			assertEquals("XYZ", columnFamilies[0].getNameAsString());
     			assertEquals(86400, columnFamilies[0].getTimeToLive());
-    		} 
+    		}
     		ddl = "ALTER TABLE ttl_test2 SET TTL=30";
     		conn.createStatement().execute(ddl);
     		conn.commit();
@@ -1587,12 +1588,12 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     			assertEquals(1, columnFamilies.length);
     			assertEquals(30, columnFamilies[0].getTimeToLive());
     			assertEquals("XYZ", columnFamilies[0].getNameAsString());
-    		} 
+    		}
     	} finally {
     		conn.close();
     	}
     }
-    
+
     @Test
     public void testSetHColumnPropertyForTableWithOnlyPKCols() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1615,11 +1616,11 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     			assertEquals(1, columnFamilies.length);
     			assertEquals(true, columnFamilies[0].isInMemory());
     			assertEquals("XYZ", columnFamilies[0].getNameAsString());
-    		} 
+    		}
     	} finally {
     		conn.close();
     	}
-    	
+
     	try {
     	   	String ddl = "create table IF NOT EXISTS SETHCPROPPKONLY2 ("
         		    + " id char(1) NOT NULL,"
@@ -1637,12 +1638,12 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     			assertEquals(1, columnFamilies.length);
     			assertEquals(true, columnFamilies[0].isInMemory());
     			assertEquals("0", columnFamilies[0].getNameAsString());
-    		} 
+    		}
     	} finally {
     		conn.close();
     	}
     }
-    
+
     @Test
     public void testSetHColumnPropertyAndAddColumnForDefaultCFForTableWithOnlyPKCols() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1665,12 +1666,12 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     			assertEquals(1, columnFamilies.length);
     			assertEquals(true, columnFamilies[0].isInMemory());
     			assertEquals("XYZ", columnFamilies[0].getNameAsString());
-    		} 
+    		}
     	} finally {
     		conn.close();
     	}
     }
-    
+
     @Test
     public void testSetHColumnPropertyAndAddColumnForNewCFForTableWithOnlyPKCols() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1695,12 +1696,12 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     			assertEquals(true, columnFamilies[0].isInMemory());
     			assertEquals("XYZ", columnFamilies[1].getNameAsString());
     			assertEquals(false, columnFamilies[1].isInMemory());
-    		} 
+    		}
     	} finally {
     		conn.close();
     	}
     }
-    
+
     @Test
     public void testTTLAssignmentForNewEmptyCF() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1728,7 +1729,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     			assertEquals(false, columnFamilies[1].isInMemory());
     			assertEquals(86400, columnFamilies[1].getTimeToLive());
     		}
-    		
+
     		ddl = "ALTER TABLE NEWEMPTYCFTABLE SET TTL=1000";
     		conn.createStatement().execute(ddl);
     		conn.commit();
@@ -1743,11 +1744,11 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     			assertEquals(false, columnFamilies[1].isInMemory());
     			assertEquals(86400, columnFamilies[1].getTimeToLive());
     		}
-    		
-    		// the new column will be assigned to the column family XYZ. With the a KV column getting added for XYZ, 
+
+    		// the new column will be assigned to the column family XYZ. With the a KV column getting added for XYZ,
     		// the column family will start showing up in PTable.getColumnFamilies() after the column is added. Thus
     		// being a new column family for the PTable, it will end up inheriting the TTL of the emptyCF (NEWCF).
-    		ddl = "ALTER TABLE NEWEMPTYCFTABLE ADD COL3 INTEGER"; 
+    		ddl = "ALTER TABLE NEWEMPTYCFTABLE ADD COL3 INTEGER";
     		conn.createStatement().execute(ddl);
     		conn.commit();
     		try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
@@ -1765,12 +1766,12 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     		conn.close();
     	}
     }
-    
+
     @Test
     public void testSettingNotHColumnNorPhoenixPropertyEndsUpAsHTableProperty() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     	Connection conn = DriverManager.getConnection(getUrl(), props);
-    	try {   	
+    	try {
     		String ddl = "create table IF NOT EXISTS RANDMONPROPTABLE ("
     				+ " id char(1) NOT NULL,"
     				+ " col1 integer NOT NULL,"
@@ -1794,5 +1795,31 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     		conn.close();
     	}
     }
-    
+
+    @Test
+    public void testAlterStoreNulls() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE WITH_NULLS (id SMALLINT PRIMARY KEY, name VARCHAR)");
+
+        ResultSet rs = stmt.executeQuery("SELECT STORE_NULLS FROM SYSTEM.CATALOG " +
+                "WHERE table_name = 'WITH_NULLS' AND STORE_NULLS IS NOT NULL");
+        assertTrue(rs.next());
+        assertFalse(rs.getBoolean(1));
+        assertFalse(rs.next());
+        rs.close();
+
+        stmt.execute("ALTER TABLE WITH_NULLS SET STORE_NULLS = true");
+
+        rs = stmt.executeQuery("SELECT STORE_NULLS FROM SYSTEM.CATALOG " +
+                "WHERE table_name = 'WITH_NULLS' AND STORE_NULLS IS NOT NULL");
+        assertTrue(rs.next());
+        assertTrue(rs.getBoolean(1));
+        assertFalse(rs.next());
+        rs.close();
+        stmt.close();
+
+    }
 }
