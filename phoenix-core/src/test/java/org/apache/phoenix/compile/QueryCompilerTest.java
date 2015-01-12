@@ -428,6 +428,11 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     private Scan compileQuery(String query, List<Object> binds) throws SQLException {
+        QueryPlan plan = getQueryPlan(query, binds);
+        return plan.getContext().getScan();
+    }
+    
+    private QueryPlan getQueryPlan(String query, List<Object> binds) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -435,8 +440,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             for (Object bind : binds) {
                 statement.setObject(1, bind);
             }
-            QueryPlan plan = statement.compileQuery(query);
-            return plan.getContext().getScan();
+            return statement.compileQuery(query);
         } finally {
             conn.close();
         }
@@ -455,9 +459,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         };
         List<Object> binds = Collections.emptyList();
         for (String query : queries) {
-            Scan scan = compileQuery(query, binds);
-            assertTrue(query, scan.getAttribute(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS) != null);
-            assertTrue(query, scan.getAttribute(BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS) == null);
+            QueryPlan plan = getQueryPlan(query, binds);
+            assertEquals(plan.getGroupBy().getScanAttribName(), BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS);
         }
     }
 
@@ -638,9 +641,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         };
         List<Object> binds = Collections.emptyList();
         for (String query : queries) {
-            Scan scan = compileQuery(query, binds);
-            assertTrue(query, scan.getAttribute(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS) == null);
-            assertTrue(query, scan.getAttribute(BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS) != null);
+            QueryPlan plan = getQueryPlan(query, binds);
+            assertEquals(plan.getGroupBy().getScanAttribName(), BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS);
         }
     }
     
