@@ -1251,9 +1251,12 @@ public class MetaDataClient {
                 disableWAL = disableWALProp;
             }
 
-            Boolean storeNullsProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData
-                    .STORE_NULLS);
-            storeNulls = storeNullsProp == null ? false : storeNullsProp;
+            Boolean storeNullsProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.STORE_NULLS);
+            storeNulls = storeNullsProp == null
+                    ? connection.getQueryServices().getProps().getBoolean(
+                            QueryServices.DEFAULT_STORE_NULLS_ATTRIB,
+                            QueryServicesOptions.DEFAULT_STORE_NULLS)
+                    : storeNullsProp;
 
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
             if ((statement.getTableType() == PTableType.VIEW || indexId != null) && !tableProps.isEmpty()) {
