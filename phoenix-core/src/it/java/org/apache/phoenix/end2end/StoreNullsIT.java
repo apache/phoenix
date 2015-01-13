@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
@@ -156,6 +157,23 @@ public class StoreNullsIT extends BaseHBaseManagedTimeIT {
         rs.close();
     }
 
+    @Test
+    public void testSetStoreNullsDefaultViaConfig() throws SQLException {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.DEFAULT_STORE_NULLS_ATTRIB, "true");
+        Connection storeNullsConn = DriverManager.getConnection(getUrl(), props);
+
+        Statement stmt = storeNullsConn.createStatement();
+        stmt.execute("CREATE TABLE with_nulls_default (" +
+                "id smallint primary key," +
+                "name varchar)");
+
+        ResultSet rs = stmt.executeQuery("SELECT store_nulls FROM SYSTEM.CATALOG " +
+                "WHERE table_name = 'WITH_NULLS_DEFAULT' AND store_nulls is not null");
+        assertTrue(rs.next());
+        assertTrue(rs.getBoolean(1));
+    }
+
     /**
      * Runs a major compaction, and then waits until the compaction is complete before returning.
      *
@@ -202,6 +220,7 @@ public class StoreNullsIT extends BaseHBaseManagedTimeIT {
         }
 
         htable.close();
-
     }
+
+
 }
