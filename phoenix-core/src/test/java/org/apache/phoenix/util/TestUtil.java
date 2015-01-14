@@ -37,6 +37,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
@@ -79,6 +80,9 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
+import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 import com.google.common.collect.Lists;
@@ -489,7 +493,38 @@ public class TestUtil {
         List<KeyRange> keyRanges = pstmt.getQueryPlan().getSplits();
         return keyRanges;
     }
-    
+
+    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName) throws SQLException {
+        return getGuidePostsList(conn, tableName, null, null, null, null);
+    }
+
+    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName, String where)
+            throws SQLException {
+        return getGuidePostsList(conn, tableName, null, null, null, where);
+    }
+
+    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName, String pkCol,
+            byte[] lowerRange, byte[] upperRange, String whereClauseSuffix) throws SQLException {
+        String whereClauseStart = (lowerRange == null && upperRange == null ? ""
+                : " WHERE "
+                        + ((lowerRange != null ? (pkCol + " >= ? " + (upperRange != null ? " AND " : "")) : "") + (upperRange != null ? (pkCol + " < ?")
+                                : "")));
+        String whereClause = whereClauseSuffix == null ? whereClauseStart
+                : whereClauseStart.length() == 0 ? (" WHERE " + whereClauseSuffix) : (" AND " + whereClauseSuffix);
+        String query = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName + whereClause;
+        PhoenixPreparedStatement pstmt = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
+        if (lowerRange != null) {
+            pstmt.setBytes(1, lowerRange);
+        }
+        if (upperRange != null) {
+            pstmt.setBytes(lowerRange != null ? 2 : 1, upperRange);
+        }
+        pstmt.execute();
+        TableRef tableRef = pstmt.getQueryPlan().getTableRef();
+        PTableStats tableStats = tableRef.getTable().getTableStats();
+        return tableStats.getGuidePosts().values();
+    }
+
     public static List<KeyRange> getSplits(Connection conn, byte[] lowerRange, byte[] upperRange) throws SQLException {
         return getSplits(conn, STABLE_NAME, STABLE_PK_NAME, lowerRange, upperRange, null);
     }

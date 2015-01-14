@@ -59,7 +59,7 @@ import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
@@ -480,10 +480,6 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals("z", rs.getString("V1"));
             
             query = "SELECT v1,sum(k3) from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " where v1 <='z'  group by v1 order by v1";
-            PhoenixPreparedStatement statement = conn1.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
-            QueryPlan plan = statement.compileQuery("EXPLAIN " + query);
-            assertTrue(query, plan.getContext().getScan().getAttribute(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS) == null);
-            assertTrue(query, plan.getContext().getScan().getAttribute(BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS) != null);
             
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             assertEquals(
@@ -492,7 +488,11 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
                         + "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [V1]\nCLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
             
-            rs = conn1.createStatement().executeQuery(query);
+            PhoenixStatement stmt = conn1.createStatement().unwrap(PhoenixStatement.class);
+            rs = stmt.executeQuery(query);
+            QueryPlan plan = stmt.getQueryPlan();
+            assertEquals(TestUtil.DEFAULT_INDEX_TABLE_NAME, plan.getContext().getCurrentTable().getTable().getName().getString());
+            assertEquals(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS, plan.getGroupBy().getScanAttribName());
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
             assertEquals(5, rs.getInt(2));

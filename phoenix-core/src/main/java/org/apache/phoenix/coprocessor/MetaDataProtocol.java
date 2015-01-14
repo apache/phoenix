@@ -35,7 +35,7 @@ import com.google.protobuf.HBaseZeroCopyByteString;
 
 
 /**
- * 
+ *
  * Coprocessor protocol for Phoenix DDL. Phoenix stores the table metadata in
  * an HBase table named SYSTEM.TABLE. Each table is represented by:
  * - one row for the table
@@ -47,21 +47,22 @@ import com.google.protobuf.HBaseZeroCopyByteString;
  * TODO: dynamically prune number of schema version kept based on whether or
  * not the data table still uses it (based on the min time stamp of the data
  * table).
- * 
- * 
+ *
+ *
  * @since 0.1
  */
 public abstract class MetaDataProtocol extends MetaDataService {
     public static final int PHOENIX_MAJOR_VERSION = 4;
     public static final int PHOENIX_MINOR_VERSION = 2;
     public static final int PHOENIX_PATCH_NUMBER = 1;
-    public static final int PHOENIX_VERSION = 
+    public static final int PHOENIX_VERSION =
             VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER);
-    
+
     public static final long MIN_TABLE_TIMESTAMP = 0;
 
     // Incremented from 3 to 4 to salt the sequence table in 3.2/4.2
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_TABLE_TIMESTAMP + 5;
+    // Incremented from 5 to 6 with the addition of the STORE_NULLS table option
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_TABLE_TIMESTAMP + 6;
     public static final int DEFAULT_MAX_META_DATA_VERSIONS = 1000;
     public static final int DEFAULT_MAX_STAT_DATA_VERSIONS = 3;
     public static final boolean DEFAULT_META_DATA_KEEP_DELETED_CELLS = true;
@@ -72,8 +73,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
     // ILLEGAL_MUTATION (+ sql code)
     public enum MutationCode {
         TABLE_ALREADY_EXISTS,
-        TABLE_NOT_FOUND, 
-        COLUMN_NOT_FOUND, 
+        TABLE_NOT_FOUND,
+        COLUMN_NOT_FOUND,
         COLUMN_ALREADY_EXISTS,
         CONCURRENT_TABLE_MUTATION,
         TABLE_NOT_IN_REGION,
@@ -82,7 +83,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
         NO_PK_COLUMNS,
         PARENT_TABLE_NOT_FOUND
     };
-    
+
   public static class MetaDataMutationResult {
         private MutationCode returnCode;
         private long mutationTime;
@@ -91,7 +92,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
         private byte[] columnName;
         private byte[] familyName;
         private boolean wasUpdated;
-        
+
         public MetaDataMutationResult() {
         }
 
@@ -99,59 +100,59 @@ public abstract class MetaDataProtocol extends MetaDataService {
             this(returnCode, currentTime, table);
             if(column != null){
                 this.columnName = column.getName().getBytes();
-                this.familyName = column.getFamilyName().getBytes();    
+                this.familyName = column.getFamilyName().getBytes();
             }
         }
-        
+
         public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table) {
            this(returnCode, currentTime, table, Collections.<byte[]> emptyList());
         }
-        
+
         // For testing, so that connectionless can set wasUpdated so ColumnResolver doesn't complain
         public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table, boolean wasUpdated) {
             this(returnCode, currentTime, table, Collections.<byte[]> emptyList());
             this.wasUpdated = wasUpdated;
          }
-         
+
         public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table, List<byte[]> tableNamesToDelete) {
             this.returnCode = returnCode;
             this.mutationTime = currentTime;
             this.table = table;
             this.tableNamesToDelete = tableNamesToDelete;
         }
-        
+
         public MutationCode getMutationCode() {
             return returnCode;
         }
-        
+
         public long getMutationTime() {
             return mutationTime;
         }
-        
+
         public boolean wasUpdated() {
             return wasUpdated;
         }
-        
+
         public PTable getTable() {
             return table;
         }
- 
+
         public void setTable(PTable table) {
             this.table = table;
         }
- 
+
         public List<byte[]> getTableNamesToDelete() {
             return tableNamesToDelete;
         }
-        
+
         public byte[] getColumnName() {
             return columnName;
         }
-        
+
         public byte[] getFamilyName() {
             return familyName;
-        }        
-        
+        }
+
         public static MetaDataMutationResult constructFromProto(MetaDataResponse proto) {
           MetaDataMutationResult result = new MetaDataMutationResult();
           result.returnCode = MutationCode.values()[proto.getReturnCode().ordinal()];
@@ -176,7 +177,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
           }
           return result;
         }
-    
+
         public static MetaDataResponse toProto(MetaDataMutationResult result) {
           MetaDataProtos.MetaDataResponse.Builder builder =
               MetaDataProtos.MetaDataResponse.newBuilder();

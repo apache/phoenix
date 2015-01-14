@@ -112,7 +112,8 @@ public class ScanPlan extends BaseQueryPlan {
             estRegionSize = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth, desc);
         } else {
             // Region size estimated based on total number of bytes divided by number of regions
-            estRegionSize = gpsInfo.getByteCount() / (gpsInfo.getGuidePosts().size()+1);
+            long totByteSize = gpsInfo.getByteCount();
+            estRegionSize = totByteSize / (gpsInfo.getGuidePosts().size()+1);
         }
         // TODO: configurable number of bytes?
         boolean isSerial = (perScanLimit * estRowSize < estRegionSize);

@@ -29,12 +29,12 @@ import org.apache.phoenix.util.SQLCloseable;
 
 
 /**
- * 
+ *
  * Interface to group together services needed during querying.  The
  * parameters that may be set in {@link org.apache.hadoop.conf.Configuration}
  * are documented here: https://github.com/forcedotcom/phoenix/wiki/Tuning
- *     
- * 
+ *
+ *
  * @since 0.1
  */
 @Immutable
@@ -48,7 +48,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String HBASE_CLIENT_PRINCIPAL = "hbase.myclient.principal";
     public static final String SPOOL_DIRECTORY = "phoenix.spool.directory";
     public static final String AUTO_COMMIT_ATTRIB = "phoenix.connection.autoCommit";
-    
+
     /**
 	 * max size to spool the the result into
 	 * ${java.io.tmpdir}/ResultSpoolerXXX.bin if
@@ -56,10 +56,10 @@ public interface QueryServices extends SQLCloseable {
 	 * <p>
 	 * default is unlimited(-1)
 	 * <p>
-	 * if the threshold is reached, a {@link SpoolTooBigToDiskException } will be thrown 
+	 * if the threshold is reached, a {@link SpoolTooBigToDiskException } will be thrown
 	 */
 	public static final String MAX_SPOOL_TO_DISK_BYTES_ATTRIB = "phoenix.query.maxSpoolToDiskBytes";
-    
+
     /**
      * Number of records to read per chunk when streaming records of a basic scan.
      */
@@ -88,7 +88,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String GROUPBY_ESTIMATED_DISTINCT_VALUES_ATTRIB = "phoenix.groupby.estimatedDistinctValues";
 
     public static final String CALL_QUEUE_PRODUCER_ATTRIB_NAME = "CALL_QUEUE_PRODUCER";
-    
+
     public static final String MASTER_INFO_PORT_ATTRIB = "hbase.master.info.port";
     public static final String REGIONSERVER_INFO_PORT_ATTRIB = "hbase.regionserver.info.port";
     public static final String REGIONSERVER_LEASE_PERIOD_ATTRIB = "hbase.regionserver.lease.period";
@@ -106,19 +106,19 @@ public interface QueryServices extends SQLCloseable {
     public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
     // Mainly for testing to force spilling
     public static final String MAX_MEMORY_SIZE_ATTRIB = "phoenix.query.maxGlobalMemorySize";
-    
+
     // The following config settings is to deal with SYSTEM.CATALOG moves(PHOENIX-916) among region servers
     public static final String CLOCK_SKEW_INTERVAL_ATTRIB = "phoenix.clock.skew.interval";
-    
-    // A master switch if to enable auto rebuild an index which failed to be updated previously 
+
+    // A master switch if to enable auto rebuild an index which failed to be updated previously
     public static final String INDEX_FAILURE_HANDLING_REBUILD_ATTRIB = "phoenix.index.failure.handling.rebuild";
-    
+
     // Time interval to check if there is an index needs to be rebuild
-    public static final String INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB = 
+    public static final String INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB =
         "phoenix.index.failure.handling.rebuild.interval";
-    
-    // Index will be partially re-built from index disable time stamp - following overlap time 
-    public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB = 
+
+    // Index will be partially re-built from index disable time stamp - following overlap time
+    public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB =
         "phoenix.index.failure.handling.rebuild.overlap.time";
     public static final String MIN_INDEX_PRIOIRTY_ATTRIB = "phoenix.regionserver.index.priority.min";
     public static final String MAX_INDEX_PRIOIRTY_ATTRIB = "phoenix.regionserver.index.priority.max";
@@ -147,7 +147,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK = "phoenix.schema.change.retries";
     public static final String DELAY_FOR_SCHEMA_UPDATE_CHECK = "phoenix.schema.change.delay";
     public static final String DEFAULT_KEEP_DELETED_CELLS_ATTRIB = "phoenix.table.default.keep.deleted.cells";
-    
+    public static final String DEFAULT_STORE_NULLS_ATTRIB = "phoenix.table.default.store.nulls";
+
     /**
      * Get executor service used for parallel scans
      */
@@ -156,13 +157,13 @@ public interface QueryServices extends SQLCloseable {
      * Get the memory manager used to track memory usage
      */
     public MemoryManager getMemoryManager();
-    
+
     /**
      * Get the properties from the HBase configuration in a
      * read-only structure that avoids any synchronization
      */
     public ReadOnlyProps getProps();
-    
+
     /**
      * Get query optimizer used to choose the best query plan
      */

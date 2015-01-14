@@ -187,6 +187,11 @@ public class DelegateTable implements PTable {
     }
 
     @Override
+    public boolean getStoreNulls() {
+        return delegate.getStoreNulls();
+    }
+
+    @Override
     public ViewType getViewType() {
         return delegate.getViewType();
     }
@@ -222,7 +227,7 @@ public class DelegateTable implements PTable {
     }
 
     private final PTable delegate;
-    
+
     public DelegateTable(PTable delegate) {
         this.delegate = delegate;
     }

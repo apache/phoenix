@@ -1,0 +1,10 @@
+option java_package = "org.apache.phoenix.coprocessor.generated";
+option java_outer_classname = "PGuidePostsProtos";
+option java_generic_services = true;
+option java_generate_equals_and_hash = true;
+option optimize_for = SPEED;
+message PGuidePosts {
+  repeated bytes guidePosts = 1;
+  optional int64 byteCount = 2;
+  optional int64 rowCount = 3;
+}
