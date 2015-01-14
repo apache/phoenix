@@ -24,8 +24,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CACHE_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHAR_OCTET_LENGTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_EXPRESSION_ORDINAL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_EXPRESSION_SERIALIZED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
@@ -206,8 +204,6 @@ public interface QueryConstants {
             ARRAY_SIZE + " INTEGER,\n" +
             VIEW_CONSTANT + " VARBINARY,\n" +
             IS_VIEW_REFERENCED + " BOOLEAN,\n" +
-            COLUMN_EXPRESSION_ORDINAL + " INTEGER," +
-            COLUMN_EXPRESSION_SERIALIZED + " VARBINARY,\n" +
             KEY_SEQ + " SMALLINT,\n" +
             // Link metadata (only set on rows linking table to index or view)
             LINK_TYPE + " UNSIGNED_TINYINT,\n" +

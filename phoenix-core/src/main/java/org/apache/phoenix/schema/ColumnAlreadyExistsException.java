@@ -38,8 +38,8 @@ public class ColumnAlreadyExistsException extends SQLException {
     private final String tableName;
     private final String columnName;
 
-    public ColumnAlreadyExistsException(String schemaName, String tableName, String columnName, Expression expression) {
-        super(new SQLExceptionInfo.Builder(code).setColumnName(columnName).setExpression(expression)
+    public ColumnAlreadyExistsException(String schemaName, String tableName, String columnName) {
+        super(new SQLExceptionInfo.Builder(code).setColumnName(columnName)
                 .setSchemaName(schemaName).setTableName(tableName).build().toString(),
                 code.getSQLState(), code.getErrorCode(), null);
         this.schemaName = schemaName;

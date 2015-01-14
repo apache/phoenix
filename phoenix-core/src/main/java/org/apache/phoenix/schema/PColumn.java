@@ -53,5 +53,5 @@ public interface PColumn extends PDatum {
     
     int getEstimatedSize();
     
-    Expression getExpression();
+    String getExpressionStr();
 }

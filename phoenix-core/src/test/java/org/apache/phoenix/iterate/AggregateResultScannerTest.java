@@ -126,7 +126,7 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
             }
             
             @Override
-            public Expression getExpression() {
+            public String getExpressionStr() {
                 return null;
             }
         })), null);

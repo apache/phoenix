@@ -46,7 +46,7 @@ public class PColumnImpl implements PColumn {
     private Integer arraySize;
     private byte[] viewConstant;
     private boolean isViewReferenced;
-    private Expression expression;
+    private String expressionStr;
 
     public PColumnImpl() {
     }
@@ -58,13 +58,13 @@ public class PColumnImpl implements PColumn {
                        Integer scale,
                        boolean nullable,
                        int position,
-                       SortOrder sortOrder, Integer arrSize, byte[] viewConstant, boolean isViewReferenced, Expression expression) {
-        init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize, viewConstant, isViewReferenced, expression);
+                       SortOrder sortOrder, Integer arrSize, byte[] viewConstant, boolean isViewReferenced, String expressionStr) {
+        init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize, viewConstant, isViewReferenced, expressionStr);
     }
 
     public PColumnImpl(PColumn column, int position) {
         this(column.getName(), column.getFamilyName(), column.getDataType(), column.getMaxLength(),
-                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpression());
+                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr());
     }
 
     private void init(PName name,
@@ -76,7 +76,7 @@ public class PColumnImpl implements PColumn {
             int position,
             SortOrder sortOrder,
             Integer arrSize,
-            byte[] viewConstant, boolean isViewReferenced, Expression expression) {
+            byte[] viewConstant, boolean isViewReferenced, String expressionStr) {
     	Preconditions.checkNotNull(sortOrder);
         this.dataType = dataType;
         if (familyName == null) {
@@ -98,7 +98,7 @@ public class PColumnImpl implements PColumn {
         this.arraySize = arrSize;
         this.viewConstant = viewConstant;
         this.isViewReferenced = isViewReferenced;
-        this.expression = expression;
+        this.expressionStr = expressionStr;
     }
 
     @Override
@@ -134,8 +134,8 @@ public class PColumnImpl implements PColumn {
     }
     
     @Override
-    public Expression getExpression() {
-        return expression;
+    public String getExpressionStr() {
+        return expressionStr;
     }
 
     @Override
@@ -237,17 +237,12 @@ public class PColumnImpl implements PColumn {
         if (column.hasViewReferenced()) {
             isViewReferenced = column.getViewReferenced();
         }
-        Expression expression = null;
+        String expressionStr = null;
         if (column.hasExpression()) {
-	        int expressionOrdinal = column.getExpressionOrdinal();
-	        expression = ExpressionType.values()[expressionOrdinal].newInstance();
-	        try {
-				expression.readFields(new DataInputStream(new ByteArrayInputStream(column.getExpression().toByteArray())));
-			} catch (IOException e) {
-			}
+	        expressionStr = column.getExpression();
         }
         return new PColumnImpl(columnName, familyName, dataType, maxLength, scale, nullable, position, sortOrder,
-                arraySize, viewConstant, isViewReferenced, expression);
+                arraySize, viewConstant, isViewReferenced, expressionStr);
     }
 
     public static PTableProtos.PColumn toProto(PColumn column) {
@@ -274,15 +269,8 @@ public class PColumnImpl implements PColumn {
         }
         builder.setViewReferenced(column.isViewReferenced());
         
-        if (column.getExpression() != null) {
-	        TrustedByteArrayOutputStream output = new TrustedByteArrayOutputStream(256);
-	        DataOutputStream dataOutputStream = new DataOutputStream(output);
-	        try {
-				column.getExpression().write(dataOutputStream);
-			} catch (IOException e) {
-			}
-	        builder.setExpressionOrdinal(ExpressionType.valueOf(column.getExpression()).ordinal());
-	        builder.setExpression(HBaseZeroCopyByteString.wrap(Arrays.copyOf(output.getBuffer(), dataOutputStream.size())));
+        if (column.getExpressionStr() != null) {
+            builder.setExpression(column.getExpressionStr());
         }
         return builder.build();
     }

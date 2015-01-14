@@ -45,9 +45,11 @@ import org.apache.phoenix.parse.NotParseNode;
 import org.apache.phoenix.parse.OrParseNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.RowValueConstructorParseNode;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.StringConcatParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.IndexUtil;
@@ -75,6 +77,12 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 		super(context, groupBy, resolveViewConstants);
     }
 	
+    /**
+     * Returns the compiled expression
+     * 
+     * @param node
+     *            data table parse node
+     */
 	private Expression getExpression(ParseNode node) throws SQLException {
 		PhoenixConnection connection = this.context.getConnection();
         PTable indexTable = this.context.getCurrentTable().getTable();
@@ -83,41 +91,49 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
         ColumnResolver resolver = FromCompiler.getResolver(dataTableNode, connection);
 		StatementContext context = new StatementContext(this.context.getStatement(), resolver, new Scan(), new SequenceManager(this.context.getStatement()));        
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
-        ParentTableStatementRewriter statementRewriter = new ParentTableStatementRewriter();
-		ParseNode parentParseNode = node.accept(statementRewriter);
-        return parentParseNode.accept(expressionCompiler);		
+        return node.accept(expressionCompiler);		
 	}
 
 	/**
 	 * @return true if there is an expression in the index table that matches the given node
 	 */
-	private boolean matchesIndexedExpression(ParseNode node) {   
+	private boolean matchesIndexedExpression(ParseNode node) throws SQLException {   
 		if (context.getCurrentTable().getTable().getType()!=PTableType.INDEX) {
 			return false;
 		}
-		try {
-			Expression expression = getExpression(node);
-			// ignore regular columns  
-			if (ColumnExpression.class.isAssignableFrom(expression.getClass())) {
-				return false;
-			}
-			this.context.getCurrentTable().getTable().getColumn(expression);
-		}
-		catch (Exception e) {
-			// if we could not find a matching column just process it as a regular FunctionParseNode
+		DataTableStatementRewriter statementRewriter = new DataTableStatementRewriter();
+        ParseNode dataTableParseNode = node.accept(statementRewriter);
+		Expression dataTableExpression = getExpression(dataTableParseNode);
+		// ignore regular columns  
+		if (ColumnExpression.class.isAssignableFrom(dataTableExpression.getClass())) {
 			return false;
 		}
-		return true;
+		try {
+		    for ( PColumn column : this.context.getCurrentTable().getTable().getColumns()) {
+		        if (column.getExpressionStr()!=null) {
+		            ParseNode parseNode = SQLParser.parseCondition(column.getExpressionStr());
+		            Expression expression = getExpression(parseNode);
+		            if (expression.equals(dataTableExpression))
+		                return true;
+		        }
+		    }
+		}
+		catch (Exception e) {
+		    System.err.print(e);
+		}
+		return false;
     }
     
     private Expression convertAndVisitParseNode(ParseNode node) throws SQLException {
-    	Expression expression = getExpression(node);
+        DataTableStatementRewriter statementRewriter = new DataTableStatementRewriter();
+        ParseNode dataTableParseNode = node.accept(statementRewriter);
+    	Expression expression = getExpression(dataTableParseNode);
     	ColumnParseNode columnParseNode = new ColumnParseNode(null, IndexUtil.getIndexColumnName(null,String.valueOf(expression.hashCode())), null);
     	return visit(columnParseNode);
     }
 
 	@Override
-    public boolean visitEnter(ComparisonParseNode node) {
+    public boolean visitEnter(ComparisonParseNode node) throws SQLException {
 		// do not visit this node if it matches an expression that is indexed, 
 		// it will be converted to a ColumnParseNode and processed in visitLeave
 		return matchesIndexedExpression(node) ? false : super.visitEnter(node);

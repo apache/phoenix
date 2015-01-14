@@ -164,6 +164,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String NULLABLE = "NULLABLE";
     public static final byte[] NULLABLE_BYTES = Bytes.toBytes(NULLABLE);
     public static final String COLUMN_DEF = "COLUMN_DEF";
+    public static final byte[] COLUMN_DEF_BYTES = Bytes.toBytes(COLUMN_DEF);
     public static final String SQL_DATA_TYPE = "SQL_DATA_TYPE";
     public static final String SQL_DATETIME_SUB = "SQL_DATETIME_SUB";
     public static final String CHAR_OCTET_LENGTH = "CHAR_OCTET_LENGTH";
@@ -199,10 +200,6 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] VIEW_CONSTANT_BYTES = Bytes.toBytes(VIEW_CONSTANT);
     public static final String IS_VIEW_REFERENCED = "IS_VIEW_REFERENCED";
     public static final byte[] IS_VIEW_REFERENCED_BYTES = Bytes.toBytes(IS_VIEW_REFERENCED);
-    public static final String COLUMN_EXPRESSION_SERIALIZED = "COLUMN_EXPRESSION_SERIALIZED";
-    public static final byte[] COLUMN_EXPRESSION_SERIALIZED_BYTES = Bytes.toBytes(COLUMN_EXPRESSION_SERIALIZED);
-    public static final String COLUMN_EXPRESSION_ORDINAL = "COLUMN_EXPRESSION_ORDINAL";
-    public static final byte[] COLUMN_EXPRESSION_ORDINAL_BYTES = Bytes.toBytes(COLUMN_EXPRESSION_ORDINAL);
     public static final String VIEW_INDEX_ID = "VIEW_INDEX_ID";
     public static final byte[] VIEW_INDEX_ID_BYTES = Bytes.toBytes(VIEW_INDEX_ID);
 

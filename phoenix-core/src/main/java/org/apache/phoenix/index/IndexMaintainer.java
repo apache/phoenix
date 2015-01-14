@@ -23,6 +23,7 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -44,6 +45,10 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.ExpressionCompiler;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -56,6 +61,9 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil.ReferencingColumn;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
@@ -69,6 +77,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
@@ -272,9 +281,24 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int nIndexPKColumns = index.getPKColumns().size() - indexPosOffset;
         // number of expressions that are indexed that are not present in the row key of the data table
         int indexedExpressionCount = 0;
-        for (int i  = indexPosOffset; i<index.getPKColumns().size();i++) {
+        List<Expression> indexPKExpressions =  Lists.newArrayListWithCapacity(index.getPKColumns().size());
+        for (int i = indexPosOffset; i<index.getPKColumns().size();i++) {
         	PColumn indexColumn = index.getPKColumns().get(i);
-        	Expression expression = indexColumn.getExpression();
+        	String expressionStr = indexColumn.getExpressionStr();
+        	if (expressionStr==null) {
+        	    indexPKExpressions.add(null);
+        	    continue;
+        	}
+            Expression expression = null;
+            try {
+                ParseNode parseNode  = SQLParser.parseCondition(expressionStr);
+                ColumnResolver resolver = FromCompiler.getResolver(new TableRef(dataTable));
+                StatementContext context = new StatementContext(new PhoenixStatement(null), resolver);
+                expression = parseNode.accept(new ExpressionCompiler(context));
+                indexPKExpressions.add(expression);
+            } catch (SQLException e) {
+                throw new RuntimeException(e); // Impossible
+            }
             if ( ColumnExpression.class.isAssignableFrom(expression.getClass()) ) {
             	PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
             	if (SchemaUtil.isPKColumn(column)) 
@@ -312,7 +336,42 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // TODO: check whether index is immutable or not. Currently it's always false so checking
         // data table is with immutable rows or not.
         this.immutableRows = dataTable.isImmutableRows();
-        init(dataTable, index);
+        int indexColByteSize = 0;
+        Iterator<Expression> expressionIterator = indexPKExpressions.iterator();
+        for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
+            PColumn indexColumn = index.getPKColumns().get(i);
+            int indexPos = i - indexPosOffset;
+            Expression expression = expressionIterator.next();
+            if ( ColumnExpression.class.isAssignableFrom(expression.getClass()) ) {
+            	// get the column of the data table that corresponds to this index column
+	            PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
+	            boolean isPKColumn = SchemaUtil.isPKColumn(column);
+	            if (isPKColumn) {
+	                int dataPkPos = dataTable.getPKColumns().indexOf(column) - (dataTable.getBucketNum() == null ? 0 : 1) - (this.isMultiTenant ? 1 : 0);
+	                this.rowKeyMetaData.setIndexPkPosition(dataPkPos, indexPos);
+	            } else {
+	                indexColByteSize += column.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(column) : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
+	                this.indexedExpressions.add(expression);
+	            }
+	            if (indexColumn.getSortOrder() == SortOrder.DESC) {
+	                this.rowKeyMetaData.getDescIndexColumnBitSet().set(indexPos);
+	            }
+            }
+            else {
+            	//TODO is this correct for expressions
+            	indexColByteSize += expression.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(expression) : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
+                this.indexedExpressions.add(expression);
+            }
+        }
+        for (int i = 0; i < index.getColumnFamilies().size(); i++) {
+            PColumnFamily family = index.getColumnFamilies().get(i);
+            for (PColumn indexColumn : family.getColumns()) {
+                PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
+                this.coveredColumns.add(new ColumnReference(column.getFamilyName().getBytes(), column.getName().getBytes()));
+            }
+        }
+        this.estimatedIndexRowKeyBytes = estimateIndexRowKeyByteSize(indexColByteSize);
+        initCachedState();
     }
 
     public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr, byte[] regionStartKey, byte[] regionEndKey)  {
@@ -941,45 +1000,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private int estimateIndexRowKeyByteSize(int indexColByteSize) {
         int estimatedIndexRowKeyBytes = indexColByteSize + dataRowKeySchema.getEstimatedValueLength() + (nIndexSaltBuckets == 0 || isLocalIndex || this.isDataTableSalted ? 0 : SaltingUtil.NUM_SALTING_BYTES);
         return estimatedIndexRowKeyBytes;
-    }
-    
-    private void init(PTable dataTable, PTable index) {
-    	int indexPosOffset = (index.getBucketNum() == null ? 0 : 1) + (this.isMultiTenant ? 1 : 0) + (this.viewIndexId == null ? 0 : 1);
-        int indexColByteSize = 0;
-        for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
-            PColumn indexColumn = index.getPKColumns().get(i);
-            int indexPos = i - indexPosOffset;
-            Expression expression = indexColumn.getExpression();
-            if ( ColumnExpression.class.isAssignableFrom(expression.getClass()) ) {
-            	// get the column of the data table that corresponds to this index column
-	            PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
-	            boolean isPKColumn = SchemaUtil.isPKColumn(column);
-	            if (isPKColumn) {
-	                int dataPkPos = dataTable.getPKColumns().indexOf(column) - (dataTable.getBucketNum() == null ? 0 : 1) - (this.isMultiTenant ? 1 : 0);
-	                this.rowKeyMetaData.setIndexPkPosition(dataPkPos, indexPos);
-	            } else {
-	                indexColByteSize += column.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(column) : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
-	                this.indexedExpressions.add(expression);
-	            }
-	            if (indexColumn.getSortOrder() == SortOrder.DESC) {
-	                this.rowKeyMetaData.getDescIndexColumnBitSet().set(indexPos);
-	            }
-            }
-            else {
-            	//TODO figure out how to get the expression size
-//            	indexColByteSize += column.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(column) : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
-                this.indexedExpressions.add(expression);
-            }
-        }
-        for (int i = 0; i < index.getColumnFamilies().size(); i++) {
-            PColumnFamily family = index.getColumnFamilies().get(i);
-            for (PColumn indexColumn : family.getColumns()) {
-                PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
-                this.coveredColumns.add(new ColumnReference(column.getFamilyName().getBytes(), column.getName().getBytes()));
-            }
-        }
-        this.estimatedIndexRowKeyBytes = estimateIndexRowKeyByteSize(indexColByteSize);
-        initCachedState();
     }
     
     /**

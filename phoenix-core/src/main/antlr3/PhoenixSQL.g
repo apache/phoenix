@@ -779,7 +779,9 @@ term returns [ParseNode ret]
     |   field=identifier LPAREN l=zero_or_more_expressions RPAREN wg=(WITHIN GROUP LPAREN ORDER BY l2=one_or_more_expressions (a=ASC | DESC) RPAREN)?
         {
             FunctionParseNode f = wg==null ? factory.function(field, l) : factory.function(field,l,l2,a!=null);
-            contextStack.peek().setAggregate(f.isAggregate());
+            if (!contextStack.isEmpty()) {
+            	contextStack.peek().setAggregate(f.isAggregate());
+            }
             $ret = f;
         } 
     |   field=identifier LPAREN t=ASTERISK RPAREN 
@@ -788,13 +790,17 @@ term returns [ParseNode ret]
                 throwRecognitionException(t); 
             }
             FunctionParseNode f = factory.function(field, LiteralParseNode.STAR);
-            contextStack.peek().setAggregate(f.isAggregate()); 
+            if (!contextStack.isEmpty()) {
+            	contextStack.peek().setAggregate(f.isAggregate());
+            }
             $ret = f;
         } 
     |   field=identifier LPAREN t=DISTINCT l=zero_or_more_expressions RPAREN 
         {
             FunctionParseNode f = factory.functionDistinct(field, l);
-            contextStack.peek().setAggregate(f.isAggregate());
+            if (!contextStack.isEmpty()) {
+            	contextStack.peek().setAggregate(f.isAggregate());
+            }
             $ret = f;
         }
     |   e=case_statement { $ret = e; }

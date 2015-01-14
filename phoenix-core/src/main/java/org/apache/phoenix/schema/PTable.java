@@ -211,16 +211,6 @@ public interface PTable {
     PColumn getColumn(String name) throws ColumnNotFoundException, AmbiguousColumnException;
     
     /**
-     * Get the column with the given expression.
-     * @param expression 
-     * @return the PColumn with the given name
-     * @throws ColumnNotFoundException if no column with the given name
-     * can be found
-     * @throws AmbiguousColumnException if multiple columns are found with the given expression
-     */
-    PColumn getColumn(Expression expression) throws ColumnNotFoundException, AmbiguousColumnException;
-
-    /**
      * Get the PK column with the given name.
      * @param name the column name
      * @return the PColumn with the given name

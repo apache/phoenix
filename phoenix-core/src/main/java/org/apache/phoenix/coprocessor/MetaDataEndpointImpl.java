@@ -19,8 +19,7 @@ package org.apache.phoenix.coprocessor;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_EXPRESSION_ORDINAL_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_EXPRESSION_SERIALIZED_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME_INDEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES;
@@ -95,6 +94,11 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.cache.GlobalCache;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.ExpressionCompiler;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.SequenceManager;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
@@ -114,8 +118,15 @@ import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.metrics.Metrics;
+import org.apache.phoenix.parse.ColumnDef;
+import org.apache.phoenix.parse.NamedTableNode;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -138,6 +149,7 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.SortOrder;
@@ -150,6 +162,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
@@ -246,8 +259,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final KeyValue ARRAY_SIZE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, ARRAY_SIZE_BYTES);
     private static final KeyValue VIEW_CONSTANT_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VIEW_CONSTANT_BYTES);
     private static final KeyValue IS_VIEW_REFERENCED_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, IS_VIEW_REFERENCED_BYTES);
-    private static final KeyValue COLUMN_EXPRESSION_ORDINAL_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_EXPRESSION_ORDINAL_BYTES);
-    private static final KeyValue COLUMN_EXPRESSION_SERIALIZED_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_EXPRESSION_SERIALIZED_BYTES);
+    private static final KeyValue COLUMN_DEF_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_DEF_BYTES);
     private static final List<KeyValue> COLUMN_KV_COLUMNS = Arrays.<KeyValue>asList(
             DECIMAL_DIGITS_KV,
             COLUMN_SIZE_KV,
@@ -259,8 +271,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             ARRAY_SIZE_KV,
             VIEW_CONSTANT_KV,
             IS_VIEW_REFERENCED_KV,
-            COLUMN_EXPRESSION_ORDINAL_KV,
-            COLUMN_EXPRESSION_SERIALIZED_KV
+            COLUMN_DEF_KV
             );
     static {
         Collections.sort(COLUMN_KV_COLUMNS, KeyValue.COMPARATOR);
@@ -274,8 +285,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final int ARRAY_SIZE_INDEX = COLUMN_KV_COLUMNS.indexOf(ARRAY_SIZE_KV);
     private static final int VIEW_CONSTANT_INDEX = COLUMN_KV_COLUMNS.indexOf(VIEW_CONSTANT_KV);
     private static final int IS_VIEW_REFERENCED_INDEX = COLUMN_KV_COLUMNS.indexOf(IS_VIEW_REFERENCED_KV);
-    private static final int COLUMN_EXPRESSION_ORDINAL_INDEX = COLUMN_KV_COLUMNS.indexOf(COLUMN_EXPRESSION_ORDINAL_KV);
-    private static final int COLUMN_EXPRESSION_SERIALIZED_INDEX = COLUMN_KV_COLUMNS.indexOf(COLUMN_EXPRESSION_SERIALIZED_KV);
+    private static final int COLUMN_DEF_INDEX = COLUMN_KV_COLUMNS.indexOf(COLUMN_DEF_KV);
     
     private static final int LINK_TYPE_INDEX = 0;
 
@@ -406,8 +416,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     @SuppressWarnings("deprecation")
-    private void addColumnToTable(List<Cell> results, PName colName, PName famName,
-        Cell[] colKeyValues, List<PColumn> columns, boolean isSalted) throws IOException {
+    private void addColumnToTable(List<Cell> results, PName tenantId, PName schemaName, PName dataTableName, PName colName, PName famName,
+        Cell[] colKeyValues, List<PColumn> columns, boolean isSalted) throws IOException, SQLException {
         int i = 0;
         int j = 0;
         while (i < results.size() && j < COLUMN_KV_COLUMNS.size()) {
@@ -470,15 +480,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         byte[] viewConstant = viewConstantKv == null ? null : viewConstantKv.getValue();
         Cell isViewReferencedKv = colKeyValues[IS_VIEW_REFERENCED_INDEX];
         boolean isViewReferenced = isViewReferencedKv != null && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isViewReferencedKv.getValueArray(), isViewReferencedKv.getValueOffset(), isViewReferencedKv.getValueLength()));
-        Cell columnExpressionOrdinalKv = colKeyValues[COLUMN_EXPRESSION_ORDINAL_INDEX];
-        Expression expression = null;
-        if (columnExpressionOrdinalKv!=null) {
-        	int expressionOrdinal = PInteger.INSTANCE.getCodec().decodeInt(columnExpressionOrdinalKv.getValueArray(), columnExpressionOrdinalKv.getValueOffset(), SortOrder.getDefault()) + (isSalted ? 1 : 0);
-            Cell columnExpressionKv = colKeyValues[COLUMN_EXPRESSION_SERIALIZED_INDEX];
-	        expression = ExpressionType.values()[expressionOrdinal].newInstance();
-	        expression.readFields(new DataInputStream(new ByteArrayInputStream(columnExpressionKv.getValue())));
-        }
-        PColumn column = new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable, position-1, sortOrder, arraySize, viewConstant, isViewReferenced, expression);
+        Cell columnDefKv = colKeyValues[COLUMN_DEF_INDEX];
+        String expressionStr = columnDefKv==null ? null : (String)PVarchar.INSTANCE.toObject(columnDefKv.getValueArray(), columnDefKv.getValueOffset(), columnDefKv.getValueLength());
+        PColumn column = new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable, position-1, sortOrder, arraySize, viewConstant, isViewReferenced, expressionStr);
         columns.add(column);
     }
     
@@ -627,7 +631,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                   physicalTables.add(famName);
               }
           } else {
-              addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
+              addColumnToTable(results, tenantId, schemaName, dataTableName, colName, famName, colKeyValues, columns, saltBucketNum != null);
           }
         }
         PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getTableName(

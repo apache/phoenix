@@ -116,7 +116,7 @@ public class PostIndexDDLCompiler {
             	}
             } catch (ColumnNotFoundException e) {
                 // This column must be an expression
-            	dataColumns.append(col.getExpression().toString()).append(",");
+            	dataColumns.append(col.getExpressionStr()).append(",");
             	indexColumns.append('"').append(indexColumnName).append("\",");
             }
         }

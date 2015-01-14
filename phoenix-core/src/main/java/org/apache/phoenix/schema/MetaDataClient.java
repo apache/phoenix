@@ -24,8 +24,7 @@ import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_EXPRESSION_ORDINAL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_EXPRESSION_SERIALIZED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
@@ -297,9 +296,8 @@ public class MetaDataClient {
         IS_VIEW_REFERENCED + "," + 
         PK_NAME + "," +  // write this both in the column and table rows for access by metadata APIs
         KEY_SEQ + "," +
-        COLUMN_EXPRESSION_ORDINAL + "," +
-        COLUMN_EXPRESSION_SERIALIZED +
-        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        COLUMN_DEF +
+        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String UPDATE_COLUMN_POSITION =
         "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\" ( " + 
         TENANT_ID + "," +
@@ -366,6 +364,7 @@ public class MetaDataClient {
             table = connection.getMetaDataCache().getTable(new PTableKey(tenantId, fullTableName));
             tableTimestamp = table.getTimeStamp();
         } catch (TableNotFoundException e) {
+            System.err.println(e);
             // TODO: Try again on services cache, as we may be looking for
             // a global multi-tenant table
         }
@@ -543,20 +542,10 @@ public class MetaDataClient {
         } else {
             colUpsert.setShort(17, keySeq);
         }
-        if (column.getExpression() == null) {
-        	colUpsert.setNull(18, Types.INTEGER);
-            colUpsert.setNull(19, Types.VARBINARY);
+        if (column.getExpressionStr() == null) {
+            colUpsert.setNull(18, Types.VARCHAR);
         } else {
-        	try {
-        		colUpsert.setInt(18, ExpressionType.valueOf(column.getExpression()).ordinal());
-	        	//TODO set the size correctly
-	            TrustedByteArrayOutputStream output = new TrustedByteArrayOutputStream(256);
-	            DataOutputStream dataOutputStream = new DataOutputStream(output);
-				column.getExpression().write(dataOutputStream);
-	            colUpsert.setBytes(19, Arrays.copyOf(output.getBuffer(), dataOutputStream.size()));
-        	} catch (IOException e) {
-        		throw new SQLException("Could not serialize expression "+column.getExpression().toString(), e);
-        	}
+            colUpsert.setString(18, column.getExpressionStr());
         }
         colUpsert.execute();
     }
@@ -1027,7 +1016,7 @@ public class MetaDataClient {
                 	}
                 	// compile the parseNode to get an expression
 			        PhoenixStatement phoenixStatment = new PhoenixStatement(connection);
-					final StatementContext context = new StatementContext(phoenixStatment, resolver, new Scan(), new SequenceManager(phoenixStatment));
+					final StatementContext context = new StatementContext(phoenixStatment, resolver);
 			        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
 			        Expression expression = parseNode.accept(expressionCompiler);	
                 	
@@ -1037,7 +1026,7 @@ public class MetaDataClient {
                 		ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, String.valueOf(expression.hashCode())));
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, pair.getSecond()));
                     // TODO set the max length and scale correctly
-                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), expression.isNullable(), maxLength, scale, false, pair.getSecond(), expression));
+                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), expression.isNullable(), maxLength, scale, false, pair.getSecond(), expression.toString()));
                 }
                 
                 // Next all the PK columns from the data table that aren't indexed
@@ -1050,7 +1039,7 @@ public class MetaDataClient {
                             allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, col.getSortOrder()));
                             PDataType dataType = IndexUtil.getIndexColumnDataType(col);
                             ColumnRef columnRef = new ColumnRef(new TableRef(dataTable), col.getPosition());
-                            columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, col.getSortOrder(), columnRef.newColumnExpression()));
+                            columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, col.getSortOrder(), columnRef.newColumnExpression().toString()));
                         }
                     }
                 }
@@ -1445,12 +1434,12 @@ public class MetaDataClient {
                             .build().buildException();
                     }
                     if (!pkColumns.add(column)) {
-						throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString(), column.getExpression());
+						throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
                     }
                 }
                 if (tableType == PTableType.VIEW && hasColumnWithSameNameAndFamily(columns, column)) {
                     // we only need to check for dup columns for views because they inherit columns from parent
-                    throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString(), column.getExpression());
+                    throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
                 }
                 columns.add(column);
                 if ((colDef.getDataType() == PVarbinary.INSTANCE || colDef.getDataType().isArrayType())
@@ -1479,7 +1468,7 @@ public class MetaDataClient {
                     ColumnName colName = pkColumnNamesIterator.next().getFirst();
                     ColumnDef colDef = findColumnDefOrNull(colDefs, colName);
                     if (colDef == null) {
-                        throw new ColumnNotFoundException(schemaName, tableName, null, colName.getColumnName(), null);
+                        throw new ColumnNotFoundException(schemaName, tableName, null, colName.getColumnName());
                     }
                     if (colDef.getColumnDefName().getFamilyName() != null) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_WITH_FAMILY_NAME)
@@ -2194,7 +2183,7 @@ public class MetaDataClient {
                                     PDataType indexColDataType = IndexUtil.getIndexColumnDataType(colDef.isNull(), colDef.getDataType());
                                     ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, colDef.getColumnDefName().getColumnName()));
                                     Expression expression = new RowKeyColumnExpression(columns.get(i), new RowKeyValueAccessor(pkColumns, ++pkSlotPosition));
-                                    ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder(), expression);
+                                    ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder(), expression.toString());
                                     PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null, true);
                                     addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString(), index.getPKName() == null ? null : index.getPKName().getString(), ++nextIndexKeySeq, index.getBucketNum() != null);
                                 }
@@ -2331,7 +2320,7 @@ public class MetaDataClient {
                     if (code == MutationCode.COLUMN_ALREADY_EXISTS) {
                         connection.addTable(result.getTable());
                         if (!statement.ifNotExists()) {
-                            throw new ColumnAlreadyExistsException(schemaName, tableName, SchemaUtil.findExistingColumn(result.getTable(), columns), null);
+                            throw new ColumnAlreadyExistsException(schemaName, tableName, SchemaUtil.findExistingColumn(result.getTable(), columns));
                         }
                         return new MutationState(0,connection);
                     }
@@ -2611,7 +2600,7 @@ public class MetaDataClient {
                     if (code == MutationCode.COLUMN_NOT_FOUND) {
                         connection.addTable(result.getTable());
                         if (!statement.ifExists()) {
-                            throw new ColumnNotFoundException(schemaName, tableName, Bytes.toString(result.getFamilyName()), Bytes.toString(result.getColumnName()), null);
+                            throw new ColumnNotFoundException(schemaName, tableName, Bytes.toString(result.getFamilyName()), Bytes.toString(result.getColumnName()));
                         }
                         return new MutationState(0, connection);
                     }

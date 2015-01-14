@@ -30,7 +30,7 @@ import org.apache.phoenix.util.IndexUtil;
  * Used to convert a ColumnParseNode of an index table to the corresponding column 
  * in the data table. 
  */
-public class ParentTableStatementRewriter extends ParseNodeRewriter {
+public class DataTableStatementRewriter extends ParseNodeRewriter {
 
     @Override
     public ParseNode visit(ColumnParseNode indexColNode) throws SQLException {

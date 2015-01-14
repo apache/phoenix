@@ -47,7 +47,6 @@ public class SQLExceptionInfo {
     private final String tableName;
     private final String familyName;
     private final String columnName;
-    private final Expression expression;
 
     public static class Builder {
 
@@ -58,7 +57,6 @@ public class SQLExceptionInfo {
         private String tableName;
         private String familyName;
         private String columnName;
-        private Expression expression;
 
         public Builder(SQLExceptionCode code) {
             this.code = code;
@@ -93,11 +91,6 @@ public class SQLExceptionInfo {
             this.columnName = columnName;
             return this;
         }
-        
-        public Builder setExpression(Expression expression) {
-            this.expression = expression;
-            return this;
-        }
 
         public SQLExceptionInfo build() {
             return new SQLExceptionInfo(this);
@@ -117,7 +110,6 @@ public class SQLExceptionInfo {
         tableName = builder.tableName;
         familyName = builder.familyName;
         columnName = builder.columnName;
-        expression = builder.expression;
     }
 
     @Override
@@ -135,9 +127,7 @@ public class SQLExceptionInfo {
             builder.append(" ").append(TABLE_NAME).append("=").append(columnDisplayName);
         } else if (schemaName != null) {
             builder.append(" ").append(SCHEMA_NAME).append("=").append(columnDisplayName);
-        } else if (expression != null) {
-            builder.append(" ").append(EXPRESSION).append("=").append(expression.toString());
-        }
+        } 
         return builder.toString();
     }
 
@@ -173,8 +163,4 @@ public class SQLExceptionInfo {
         return message;
     }
     
-    public Expression getExpression() {
-    	return expression;
-    }
-
 }

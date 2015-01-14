@@ -290,7 +290,7 @@ public class FromCompiler {
                     if ( ! ( schemaName.equals(resolvedSchemaName)  &&
                              tableName.equals(resolvedTableName) )) {
                         if (!(resolveCF = schemaName.equals(alias))) {
-                            throw new ColumnNotFoundException(schemaName, tableName, null, colName, null);
+                            throw new ColumnNotFoundException(schemaName, tableName, null, colName);
                         }
                     }
 			    } else { // schemaName == null && tableName != null

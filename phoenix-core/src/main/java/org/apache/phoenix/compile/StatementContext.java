@@ -98,11 +98,18 @@ public class StatementContext {
         this.aggregates = new AggregationManager();
         this.expressions = new ExpressionManager();
         PhoenixConnection connection = statement.getConnection();
-        this.dateFormat = connection.getQueryServices().getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
-        this.dateFormatTimeZone = TimeZone.getTimeZone(
-                connection.getQueryServices().getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, DateUtil.DEFAULT_TIME_ZONE_ID));
+        if (connection!=null) {
+            this.dateFormat = connection.getQueryServices().getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
+            this.dateFormatTimeZone = TimeZone.getTimeZone(
+                    connection.getQueryServices().getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, DateUtil.DEFAULT_TIME_ZONE_ID));
+            this.numberFormat = connection.getQueryServices().getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
+        }
+        else {
+            this.dateFormat = DateUtil.DEFAULT_DATE_FORMAT;
+            this.dateFormatTimeZone = TimeZone.getTimeZone(DateUtil.DEFAULT_TIME_ZONE_ID);
+            this.numberFormat = NumberUtil.DEFAULT_NUMBER_FORMAT;
+        }
         this.dateFormatter = DateUtil.getDateFormatter(dateFormat);
-        this.numberFormat = connection.getQueryServices().getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;
         this.whereConditionColumns = new ArrayList<Pair<byte[],byte[]>>();

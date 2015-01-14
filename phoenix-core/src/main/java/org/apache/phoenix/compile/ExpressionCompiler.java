@@ -120,6 +120,7 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PhoenixArray;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
@@ -136,6 +137,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     protected final GroupBy groupBy;
     private int nodeCount;
     private final boolean resolveViewConstants;
+    private final PName tenantId;
 
     //TODO is there a better way than making this public
     public ExpressionCompiler(StatementContext context) {
@@ -154,6 +156,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         this.context = context;
         this.groupBy = groupBy;
         this.resolveViewConstants = resolveViewConstants;
+        this.tenantId = context.getConnection()!=null ? context.getConnection().getTenantId() : null;
     }
 
     public boolean isAggregate() {
@@ -170,7 +173,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     }
 
     @Override
-    public boolean visitEnter(ComparisonParseNode node) {
+    public boolean visitEnter(ComparisonParseNode node) throws SQLException {
         return true;
     }
 
@@ -362,11 +365,11 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         // Disallow explicit reference to salting column, tenant ID column, and index ID column
         if (pkPosition >= 0) {
             boolean isSalted = table.getBucketNum() != null;
-            boolean isMultiTenant = context.getConnection().getTenantId() != null && table.isMultiTenant();
+            boolean isMultiTenant = tenantId != null && table.isMultiTenant();
             boolean isSharedViewIndex = table.getViewIndexId() != null;
             int minPosition = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
             if (pkPosition < minPosition) {
-                throw new ColumnNotFoundException(table.getSchemaName().getString(), table.getTableName().getString(), null, ref.getColumn().getName().getString(), null);
+                throw new ColumnNotFoundException(table.getSchemaName().getString(), table.getTableName().getString(), null, ref.getColumn().getName().getString());
             }
         }
         return ref;

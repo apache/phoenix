@@ -232,9 +232,4 @@ public class DelegateTable implements PTable {
         return delegate.getParentSchemaName();
     }
 
-	@Override
-	public PColumn getColumn(Expression expression)
-			throws ColumnNotFoundException, AmbiguousColumnException {
-		return delegate.getColumn(expression);
-	}
 }
