@@ -774,7 +774,6 @@ term returns [ParseNode ret]
     :   e=literal_or_bind { $ret = e; }
     |   field=identifier { $ret = factory.column(null,field,field); }
     |   ex=ARRAY LSQUARE v=one_or_more_expressions RSQUARE {$ret = factory.upsertStmtArrayNode(v);}
-//TODO for functional indexes the field before DOT refers to column family, figure out how this should this be handled?    
     |   tableName=table_name DOT field=identifier { $ret = factory.column(tableName, field, field); }
     |   field=identifier LPAREN l=zero_or_more_expressions RPAREN wg=(WITHIN GROUP LPAREN ORDER BY l2=one_or_more_expressions (a=ASC | DESC) RPAREN)?
         {

@@ -137,9 +137,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     protected final GroupBy groupBy;
     private int nodeCount;
     private final boolean resolveViewConstants;
-    private final PName tenantId;
 
-    //TODO is there a better way than making this public
     public ExpressionCompiler(StatementContext context) {
         this(context,GroupBy.EMPTY_GROUP_BY, false);
     }
@@ -156,7 +154,6 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         this.context = context;
         this.groupBy = groupBy;
         this.resolveViewConstants = resolveViewConstants;
-        this.tenantId = context.getConnection()!=null ? context.getConnection().getTenantId() : null;
     }
 
     public boolean isAggregate() {
@@ -365,7 +362,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         // Disallow explicit reference to salting column, tenant ID column, and index ID column
         if (pkPosition >= 0) {
             boolean isSalted = table.getBucketNum() != null;
-            boolean isMultiTenant = tenantId != null && table.isMultiTenant();
+            boolean isMultiTenant = context.getConnection()==null ? table.isMultiTenant() :
+                (context.getConnection().getTenantId() != null && table.isMultiTenant());
             boolean isSharedViewIndex = table.getViewIndexId() != null;
             int minPosition = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
             if (pkPosition < minPosition) {
