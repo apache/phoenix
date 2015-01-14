@@ -425,37 +425,3 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         }
     }
 }
-    public void testInClauseWithIndexOnColumnOfUsignedIntType(boolean localIndex) throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
-        populateTestTable();
-        String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                + " (int_col1)";
-        try {
-            try {
-                conn = DriverManager.getConnection(getUrl(), props);
-                conn.setAutoCommit(false);
-                stmt = conn.prepareStatement(ddl);
-                stmt.execute();
-                ResultSet rs = conn.createStatement().executeQuery("SELECT int_col1 FROM " +INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + " where int_col1 IN (1, 2, 3, 4)");
-                assertTrue(rs.next());
-                assertEquals(2, rs.getInt(1));
-                assertTrue(rs.next());
-                assertEquals(3, rs.getInt(1));
-                assertTrue(rs.next());
-                assertEquals(4, rs.getInt(1));
-                assertFalse(rs.next());
-            } finally {
-                if(stmt != null) {
-                    stmt.close();
-                }
-            } 
-        } finally {
-            if(conn != null) {
-                conn.close();
-            }
-        }
-    }
-}
