@@ -91,27 +91,29 @@ public class GuidePostsInfo {
      * @param oldInfo
      */
     public void combine(GuidePostsInfo oldInfo) {
-        byte[] newFirstKey = oldInfo.getGuidePosts().get(0);
-        byte[] existingLastKey;
-        if (!this.getGuidePosts().isEmpty()) {
-            existingLastKey = this.getGuidePosts().get(this.getGuidePosts().size() - 1);
-        } else {
-            existingLastKey = HConstants.EMPTY_BYTE_ARRAY;
+        if (!oldInfo.getGuidePosts().isEmpty()) {
+            byte[] newFirstKey = oldInfo.getGuidePosts().get(0);
+            byte[] existingLastKey;
+            if (!this.getGuidePosts().isEmpty()) {
+                existingLastKey = this.getGuidePosts().get(this.getGuidePosts().size() - 1);
+            } else {
+                existingLastKey = HConstants.EMPTY_BYTE_ARRAY;
+            }
+            int size = oldInfo.getGuidePosts().size();
+            // If the existing guidePosts is lesser than the new RegionInfo that we are combining
+            // then add the new Region info to the end of the current GuidePosts.
+            // If the new region info is smaller than the existing guideposts then add the existing
+            // guide posts after the new guideposts.
+            List<byte[]> newTotalGuidePosts = new ArrayList<byte[]>(this.getGuidePosts().size() + size);
+            if (Bytes.compareTo(existingLastKey, newFirstKey) <= 0) {
+                newTotalGuidePosts.addAll(this.getGuidePosts());
+                newTotalGuidePosts.addAll(oldInfo.getGuidePosts());
+            } else {
+                newTotalGuidePosts.addAll(oldInfo.getGuidePosts());
+                newTotalGuidePosts.addAll(this.getGuidePosts());
+            }
+            this.guidePosts = ImmutableList.copyOf(newTotalGuidePosts);
         }
-        int size = oldInfo.getGuidePosts().size();
-        // If the existing guidePosts is lesser than the new RegionInfo that we are combining
-        // then add the new Region info to the end of the current GuidePosts.
-        // If the new region info is smaller than the existing guideposts then add the existing
-        // guide posts after the new guideposts.
-        List<byte[]> newTotalGuidePosts = new ArrayList<byte[]>(this.getGuidePosts().size() + size);
-        if (Bytes.compareTo(existingLastKey, newFirstKey) <= 0) {
-            newTotalGuidePosts.addAll(this.getGuidePosts());
-            newTotalGuidePosts.addAll(oldInfo.getGuidePosts());
-        } else {
-            newTotalGuidePosts.addAll(oldInfo.getGuidePosts());
-            newTotalGuidePosts.addAll(this.getGuidePosts());
-        }
-        this.guidePosts = ImmutableList.copyOf(newTotalGuidePosts);
         this.byteCount += oldInfo.getByteCount();
         this.keyByteSize += oldInfo.keyByteSize;
         this.rowCount += oldInfo.getRowCount();
