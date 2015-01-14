@@ -81,8 +81,8 @@ import com.google.common.collect.Lists;
 
 /**
  * Validates FROM clause and builds a ColumnResolver for resolving column references
- * 
- * 
+ *
+ *
  * @since 0.1
  */
 public class FromCompiler {
@@ -143,7 +143,7 @@ public class FromCompiler {
     /**
      * Iterate through the nodes in the FROM clause to build a column resolver used to lookup a column given the name
      * and alias.
-     * 
+     *
      * @param statement
      *            the select statement
      * @return the column resolver
@@ -158,7 +158,7 @@ public class FromCompiler {
     	TableNode fromNode = statement.getFrom();
         if (fromNode instanceof NamedTableNode)
             return new SingleTableColumnResolver(connection, (NamedTableNode) fromNode, true, 1);
-        
+
         MultiTableColumnResolver visitor = new MultiTableColumnResolver(connection, 1);
         fromNode.accept(visitor);
         return visitor;
@@ -168,23 +168,23 @@ public class FromCompiler {
         SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true);
         return visitor;
     }
-    
+
     public static ColumnResolver getResolver(SingleTableStatement statement, PhoenixConnection connection)
             throws SQLException {
         SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), true);
         return visitor;
     }
-    
-    public static ColumnResolver getResolverForCompiledDerivedTable(PhoenixConnection connection, TableRef tableRef, RowProjector projector) 
+
+    public static ColumnResolver getResolverForCompiledDerivedTable(PhoenixConnection connection, TableRef tableRef, RowProjector projector)
             throws SQLException {
         List<PColumn> projectedColumns = new ArrayList<PColumn>();
         List<Expression> sourceExpressions = new ArrayList<Expression>();
         PTable table = tableRef.getTable();
         for (PColumn column : table.getColumns()) {
             Expression sourceExpression = projector.getColumnProjector(column.getPosition()).getExpression();
-            PColumnImpl projectedColumn = new PColumnImpl(column.getName(), column.getFamilyName(), 
-                    sourceExpression.getDataType(), sourceExpression.getMaxLength(), sourceExpression.getScale(), sourceExpression.isNullable(), 
-                    column.getPosition(), sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), null);                
+            PColumnImpl projectedColumn = new PColumnImpl(column.getName(), column.getFamilyName(),
+                    sourceExpression.getDataType(), sourceExpression.getMaxLength(), sourceExpression.getScale(), sourceExpression.isNullable(),
+                    column.getPosition(), sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), null);
             projectedColumns.add(projectedColumn);
             sourceExpressions.add(sourceExpression);
         }
@@ -207,11 +207,11 @@ public class FromCompiler {
         SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), false);
         return visitor;
     }
-    
+
     private static class SingleTableColumnResolver extends BaseColumnResolver {
     	private final List<TableRef> tableRefs;
     	private final String alias;
-    	
+
        public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode table, long timeStamp) throws SQLException  {
            super(connection, 0);
            List<PColumnFamily> families = Lists.newArrayListWithExpectedSize(table.getDynamicColumns().size());
@@ -226,7 +226,7 @@ public class FromCompiler {
            alias = null;
            tableRefs = ImmutableList.of(new TableRef(alias, theTable, timeStamp, !table.getDynamicColumns().isEmpty()));
        }
-       
+
         public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode, boolean updateCacheImmediately) throws SQLException {
             this(connection, tableNode, updateCacheImmediately, 0);
         }
@@ -237,7 +237,7 @@ public class FromCompiler {
             TableRef tableRef = createTableRef(tableNode, updateCacheImmediately);
             tableRefs = ImmutableList.of(tableRef);
         }
-        
+
         public SingleTableColumnResolver(PhoenixConnection connection, TableRef tableRef) {
             super(connection, 0);
             alias = tableRef.getTableAlias();
@@ -269,7 +269,7 @@ public class FromCompiler {
                 String resolvedSchemaName = tableRef.getTable().getSchemaName().getString();
                 if (schemaName != null && tableName != null) {
                     if ( ! ( schemaName.equals(resolvedSchemaName)  &&
-                             tableName.equals(resolvedTableName) )  && 
+                             tableName.equals(resolvedTableName) )  &&
                              ! schemaName.equals(alias) ) {
                         throw new TableNotFoundException(schemaName, tableName);
                     }
@@ -298,7 +298,7 @@ public class FromCompiler {
                         resolveCF = true;
                    }
 			    }
-			    
+
 			}
         	PColumn column = resolveCF
         	        ? tableRef.getTable().getColumnFamily(tableName).getColumn(colName)
@@ -315,7 +315,7 @@ public class FromCompiler {
         // on Windows because the millis timestamp granularity is so bad we sometimes won't
         // get the data back that we just upsert.
         private final int tsAddition;
-        
+
         private BaseColumnResolver(PhoenixConnection connection, int tsAddition) {
         	this.connection = connection;
             this.client = connection == null ? null : new MetaDataClient(connection);
@@ -371,7 +371,7 @@ public class FromCompiler {
             }
             return tableRef;
         }
-        
+
         protected PTable addDynamicColumns(List<ColumnDef> dynColumns, PTable theTable)
                 throws SQLException {
             if (!dynColumns.isEmpty()) {
@@ -399,7 +399,7 @@ public class FromCompiler {
             return theTable;
         }
     }
-    
+
     private static class MultiTableColumnResolver extends BaseColumnResolver implements TableNodeVisitor<Void> {
         private final ListMultimap<String, TableRef> tableMap;
         private final List<TableRef> tables;
@@ -455,28 +455,29 @@ public class FromCompiler {
                 String alias = aliasedNode.getAlias();
                 if (alias == null) {
                     ParseNode node = aliasedNode.getNode();
-                    if (node instanceof WildcardParseNode 
+                    if (node instanceof WildcardParseNode
                             || node instanceof TableWildcardParseNode
                             || node instanceof FamilyWildcardParseNode)
                         throw new SQLException("Encountered wildcard in subqueries.");
-                    
+
                     alias = SchemaUtil.normalizeIdentifier(node.getAlias());
                 }
                 if (alias == null) {
-                    // Use position as column name for anonymous columns, which can be 
+                    // Use position as column name for anonymous columns, which can be
                     // referenced by an outer wild-card select.
                     alias = String.valueOf(position);
                 }
-                PColumnImpl column = new PColumnImpl(PNameFactory.newName(alias), 
-                        PNameFactory.newName(QueryConstants.DEFAULT_COLUMN_FAMILY), 
+                PColumnImpl column = new PColumnImpl(PNameFactory.newName(alias),
+                        PNameFactory.newName(QueryConstants.DEFAULT_COLUMN_FAMILY),
                         null, 0, 0, true, position++, SortOrder.ASC, null, null, false, null);
                 columns.add(column);
             }
-            PTable t = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME, 
-                    PTableType.SUBQUERY, null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM, 
-                    null, null, columns, null, null, Collections.<PTable>emptyList(), 
-                    false, Collections.<PName>emptyList(), null, null, false, false, null, null, null);
-            
+            PTable t = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME,
+                    PTableType.SUBQUERY, null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM,
+                    null, null, columns, null, null, Collections.<PTable>emptyList(),
+                    false, Collections.<PName>emptyList(), null, null, false, false, false, null,
+                    null, null);
+
             String alias = subselectNode.getAlias();
             TableRef tableRef = new TableRef(alias, t, MetaDataProtocol.MIN_TABLE_TIMESTAMP, false);
             tableMap.put(alias, tableRef);
