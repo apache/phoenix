@@ -121,14 +121,14 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 
 	protected void helpTestCreateAndUpdate(boolean mutable, boolean localIndex)
 			throws Exception {
-		String dataTable = mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE;
-		String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable;
+		String dataTableName = mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE;
+		String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try 
 		{
 			conn.setAutoCommit(false);
-			populateDataTable(conn, dataTable);
+			populateDataTable(conn, dataTableName);
 	
 			// create an expression index
 			String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON " + fullDataTableName 
@@ -156,7 +156,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			// verify that the query does a range scan on the index table
 			ResultSet rs = stmt.executeQuery("EXPLAIN " + whereSql);
 			assertEquals( localIndex ? 
-			"CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_INDEX_TEST." + dataTable + " [-32768,'VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ',4,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]\nCLIENT MERGE SORT"
+			"CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_INDEX_TEST." + dataTableName + " [-32768,'VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ',4,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]\nCLIENT MERGE SORT"
 			: "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST.IDX ['VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ',4,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]",
 			QueryUtil.getExplainPlan(rs));
 			
@@ -243,6 +243,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			assertTrue(rs.next());
 			assertEquals("VARCHAR4_CHAR4 _A.VARCHAR4_B.CHAR4   ", rs.getString(1));
 			assertFalse(rs.next());	
+			conn.createStatement().execute("DROP INDEX IDX ON " + fullDataTableName);
 		} 
 		finally {
             conn.close();
@@ -284,16 +285,16 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 
 	protected void helpTestDeleteIndexedExpression(boolean mutable, boolean localIndex)
 			throws Exception {
-		String dataTable = mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE;
-		String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable;
+		String dataTableName = mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE;
+		String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
 		String fullIndexTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + "IDX";
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try 
 		{
 			conn.setAutoCommit(false);
-			ensureTableCreated(getUrl(), dataTable);
-			populateDataTable(conn, dataTable);
+			ensureTableCreated(getUrl(), dataTableName);
+			populateDataTable(conn, dataTableName);
 			String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON " + fullDataTableName + " (2*long_col2)";
 			PreparedStatement stmt = conn.prepareStatement(ddl);
 			stmt.execute();
@@ -337,6 +338,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 					"SELECT COUNT(*) FROM " + fullIndexTableName);
 			assertTrue(rs.next());
 			assertEquals(1, rs.getInt(1));
+			conn.createStatement().execute("DROP INDEX IDX ON " + fullDataTableName);
 		} 
 		finally {
             conn.close();
@@ -364,16 +366,16 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 	}
 	
 	protected void helpTestDeleteCoveredCol(boolean mutable, boolean localIndex) throws Exception {
-		String dataTable = mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE;
-		String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable;
+		String dataTableName = mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE;
+		String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
 		String fullIndexTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + "IDX";
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try 
 		{
 			conn.setAutoCommit(false);
-			ensureTableCreated(getUrl(), dataTable);
-			populateDataTable(conn, dataTable);
+			ensureTableCreated(getUrl(), dataTableName);
+			populateDataTable(conn, dataTableName);
 			String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON " + fullDataTableName + " (long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) )" + " INCLUDE (long_col1, long_col2)";
 			PreparedStatement stmt = conn.prepareStatement(ddl);
 			stmt.execute();
@@ -417,6 +419,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 	        assertEquals(2L, rs.getLong(3));
 	        assertEquals("VARCHAR1", rs.getString(4));
 	        assertFalse(rs.next());
+	        conn.createStatement().execute("DROP INDEX IDX ON " + fullDataTableName);
 		} 
 		finally {
             conn.close();
@@ -468,6 +471,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			assertTrue(rs.next());
 			assertEquals(1, rs.getInt(2));
 			assertFalse(rs.next());
+			conn.createStatement().execute("DROP INDEX IDX ON " + fullDataTableName);
 		} 
 		finally {
             conn.close();
@@ -518,6 +522,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			assertTrue(rs.next());
 			assertEquals(3, rs.getInt(1));
 			assertFalse(rs.next());
+			conn.createStatement().execute("DROP INDEX IDX ON " + fullDataTableName);
 		} 
 		finally {
             conn.close();
@@ -566,6 +571,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 	        assertTrue(rs.next());
 	        assertEquals(2, rs.getInt(1));
 	        assertFalse(rs.next());
+	        conn.createStatement().execute("DROP INDEX IDX ON " + fullDataTableName);
 		} 
 		finally {
             conn.close();
@@ -616,6 +622,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(3, rs.getInt(1));
             assertFalse(rs.next());
+            conn.createStatement().execute("DROP INDEX IDX ON " + fullDataTableName);
         } 
         finally {
             conn.close();
