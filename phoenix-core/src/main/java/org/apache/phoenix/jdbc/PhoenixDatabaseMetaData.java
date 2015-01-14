@@ -249,6 +249,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] GUIDE_POSTS_COUNT_BYTES = Bytes.toBytes(GUIDE_POSTS_COUNT);
     public static final String GUIDE_POSTS_WIDTH = "GUIDE_POSTS_WIDTH";
     public static final byte[] GUIDE_POSTS_WIDTH_BYTES = Bytes.toBytes(GUIDE_POSTS_WIDTH);
+    public static final String GUIDE_POSTS_ROW_COUNT = "GUIDE_POSTS_ROW_COUNT";
+    public static final byte[] GUIDE_POSTS_ROW_COUNT_BYTES = Bytes.toBytes(GUIDE_POSTS_ROW_COUNT);
     public static final String MIN_KEY = "MIN_KEY";
     public static final byte[] MIN_KEY_BYTES = Bytes.toBytes(MIN_KEY);
     public static final String MAX_KEY = "MAX_KEY";

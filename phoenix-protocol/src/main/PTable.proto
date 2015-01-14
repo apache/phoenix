@@ -24,6 +24,8 @@ option java_generic_services = true;
 option java_generate_equals_and_hash = true;
 option optimize_for = SPEED;
 
+import "PGuidePosts.proto";
+
 enum PTableType {
   SYSTEM = 0;
   USER = 1;
@@ -52,6 +54,7 @@ message PTableStats {
   optional int64 guidePostsByteCount = 3;
   optional int64 keyBytesCount = 4;
   optional int32 guidePostsCount = 5;
+  optional PGuidePosts pGuidePosts = 6;
 }
 
 message PTable {

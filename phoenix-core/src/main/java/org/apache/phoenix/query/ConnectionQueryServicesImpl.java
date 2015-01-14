@@ -129,6 +129,7 @@ import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
@@ -1719,9 +1720,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 metaConnection.createStatement().executeUpdate(
                                         QueryConstants.CREATE_STATS_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
-
                             } catch(TableAlreadyExistsException ignore) {
-                                
+                                metaConnection = addColumnsIfNotExists(
+                                        metaConnection,
+                                        PhoenixDatabaseMetaData.SYSTEM_STATS_NAME,
+                                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
+                                        PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT + " "
+                                                + PLong.INSTANCE.getSqlTypeName());
                             }
                         } catch (Exception e) {
                             if (e instanceof SQLException) {
