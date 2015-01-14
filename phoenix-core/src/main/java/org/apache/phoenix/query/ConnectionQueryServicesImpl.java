@@ -1727,9 +1727,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 metaConnection.createStatement().executeUpdate(
                                         QueryConstants.CREATE_STATS_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
-
                             } catch(TableAlreadyExistsException ignore) {
-                                
+                                metaConnection = addColumnsIfNotExists(
+                                        metaConnection,
+                                        PhoenixDatabaseMetaData.SYSTEM_STATS_NAME,
+                                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
+                                        PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT + " "
+                                                + PLong.INSTANCE.getSqlTypeName());
                             }
                         } catch (Exception e) {
                             if (e instanceof SQLException) {

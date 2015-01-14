@@ -40,6 +40,8 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.generated.PGuidePostsProtos;
+import org.apache.phoenix.coprocessor.generated.PGuidePostsProtos.PGuidePosts;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -884,12 +886,21 @@ public class PTableImpl implements PTable {
       
       boolean isImmutableRows = table.getIsImmutableRows();
       SortedMap<byte[], GuidePostsInfo> tableGuidePosts = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
-      for (PTableProtos.PTableStats pTableStatsProto : table.getGuidePostsList()) {
-          List<byte[]> value = Lists.newArrayListWithExpectedSize(pTableStatsProto.getValuesCount());
+        for (PTableProtos.PTableStats pTableStatsProto : table.getGuidePostsList()) {
+            List<byte[]> value = Lists.newArrayListWithExpectedSize(pTableStatsProto.getValuesCount());
             for (int j = 0; j < pTableStatsProto.getValuesCount(); j++) {
                 value.add(pTableStatsProto.getValues(j).toByteArray());
             }
-            GuidePostsInfo info = new GuidePostsInfo(pTableStatsProto.getGuidePostsByteCount(), value);
+            // No op
+            pTableStatsProto.getGuidePostsByteCount();
+            value = Lists.newArrayListWithExpectedSize(pTableStatsProto.getValuesCount());
+            PGuidePosts pGuidePosts = pTableStatsProto.getPGuidePosts();
+            for(int j = 0; j < pGuidePosts.getGuidePostsCount(); j++) {
+                value.add(pGuidePosts.getGuidePosts(j).toByteArray());
+            }
+            long guidePostsByteCount = pGuidePosts.getByteCount();
+            long rowCount = pGuidePosts.getRowCount();
+            GuidePostsInfo info = new GuidePostsInfo(guidePostsByteCount, value, rowCount);
             tableGuidePosts.put(pTableStatsProto.getKey().toByteArray(), info);
       }
       PTableStats stats = new PTableStatsImpl(tableGuidePosts, table.getStatsTimeStamp());
@@ -984,6 +995,13 @@ public class PTableImpl implements PTable {
              statsBuilder.addValues(HBaseZeroCopyByteString.wrap(stat));
          }
          statsBuilder.setGuidePostsByteCount(entry.getValue().getByteCount());
+         PGuidePostsProtos.PGuidePosts.Builder guidePstsBuilder = PGuidePostsProtos.PGuidePosts.newBuilder();
+         for (byte[] stat : entry.getValue().getGuidePosts()) {
+             guidePstsBuilder.addGuidePosts(HBaseZeroCopyByteString.wrap(stat));
+         }
+         guidePstsBuilder.setByteCount(entry.getValue().getByteCount());
+         guidePstsBuilder.setRowCount(entry.getValue().getRowCount());
+         statsBuilder.setPGuidePosts(guidePstsBuilder);
          builder.addGuidePosts(statsBuilder.build());
       }
       builder.setStatsTimeStamp(table.getTableStats().getTimestamp());
