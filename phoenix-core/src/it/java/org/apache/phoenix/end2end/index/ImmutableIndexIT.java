@@ -126,12 +126,12 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
         populateTestTable();
         String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                    + " (char_col1 ASC, int_col1 ASC, UPPER(char_col2), 1+int_col1 )"
+                    + " (char_col1 ASC, int_col1 ASC)"
                     + " INCLUDE (long_col1, long_col2)";
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
         
-        String query = "SELECT char_col1, int_col1, UPPER(char_col2), 1+int_col1 from " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
+        String query = "SELECT char_col1, int_col1 from " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         if(localIndex) {
             assertEquals(
@@ -145,27 +145,21 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals("chara", rs.getString(1));
         assertEquals(2, rs.getInt(2));
-        assertEquals("CHARB", rs.getString(3));
-        assertEquals(3, rs.getInt(4));
         assertTrue(rs.next());
         assertEquals("chara", rs.getString(1));
         assertEquals(3, rs.getInt(2));
-        assertEquals("CHARB", rs.getString(3));
-        assertEquals(4, rs.getInt(4));
         assertTrue(rs.next());
         assertEquals("chara", rs.getString(1));
         assertEquals(4, rs.getInt(2));
-        assertEquals("CHARB", rs.getString(3));
-        assertEquals(5, rs.getInt(4));
         assertFalse(rs.next());
         
         conn.createStatement().execute("DROP INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE);
         
-        query = "SELECT char_col1, int_col1, UPPER(char_col2), 1+int_col1 from " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
+        query = "SELECT char_col1, int_col1 from " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         
-        query = "SELECT char_col1, int_col1, UPPER(char_col2) from IDX ";
+        query = "SELECT char_col1, int_col1 from IDX ";
         try{
             rs = conn.createStatement().executeQuery(query);
             fail();
@@ -225,7 +219,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
         populateTestTable();
         String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                    + " (long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) )"
+                    + " (long_pk, varchar_pk)"
                     + " INCLUDE (long_col1, long_col2)";
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
@@ -244,47 +238,28 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         assertEquals(1,conn.createStatement().executeUpdate(dml));
         conn.commit();
         
-        String query = "SELECT /*+ NO_INDEX */ long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) FROM " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
+        String query = "SELECT /*+ NO_INDEX */ long_pk FROM " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(1L, rs.getLong(1));
-        assertEquals("varchar1", rs.getString(2));
-        assertEquals(2L, rs.getLong(3));
-        assertEquals("VARCHAR1", rs.getString(4));
         assertTrue(rs.next());
         assertEquals(3L, rs.getLong(1));
-        assertEquals("varchar3", rs.getString(2));
-        assertEquals(4L, rs.getLong(3));
-        assertEquals("VARCHAR3", rs.getString(4));
         assertFalse(rs.next());
         
-        query = "SELECT long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) FROM " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
+        query = "SELECT long_pk FROM " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(1L, rs.getLong(1));
-        assertEquals("varchar1", rs.getString(2));
-        assertEquals(2L, rs.getLong(3));
-        assertEquals("VARCHAR1", rs.getString(4));
         assertTrue(rs.next());
         assertEquals(3L, rs.getLong(1));
-        assertEquals("varchar3", rs.getString(2));
-        assertEquals(4L, rs.getLong(3));
-        assertEquals("VARCHAR3", rs.getString(4));
         assertFalse(rs.next());
         
         query = "SELECT * FROM " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + "IDX" ;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
-        
         assertEquals(1L, rs.getLong(1));
-        assertEquals("varchar1", rs.getString(2));
-        assertEquals(2L, rs.getLong(3));
-        assertEquals("VARCHAR1", rs.getString(4));
         assertTrue(rs.next());
         assertEquals(3L, rs.getLong(1));
-        assertEquals("varchar3", rs.getString(2));
-        assertEquals(4L, rs.getLong(3));
-        assertEquals("VARCHAR3", rs.getString(4));
         assertFalse(rs.next());
         
         conn.createStatement().execute("DROP INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE);
@@ -329,7 +304,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
         }
-        
+            
         conn.createStatement().execute("DROP TABLE " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE);
     }
     
@@ -350,24 +325,15 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
         populateTestTable();
         String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                + " (int_col2, int_col1)";
+                + " (int_col2)";
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
         
         ResultSet rs;
         
-        String groupBySql = "SELECT int_col2, COUNT(*) FROM " +INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + " GROUP BY int_col2";
-        // TODO fix this
-        rs = conn.createStatement().executeQuery("EXPLAIN " + groupBySql);
-        String explainPlan = QueryUtil.getExplainPlan(rs);
         rs = conn.createStatement().executeQuery("SELECT int_col2, COUNT(*) FROM " +INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + " GROUP BY int_col2");
         assertTrue(rs.next());
         assertEquals(1,rs.getInt(2));
-        assertTrue(rs.next());
-        assertEquals(1,rs.getInt(2));
-        assertTrue(rs.next());
-        assertEquals(1,rs.getInt(2));
-        assertFalse(rs.next());
     }
     
     @Test   
@@ -425,6 +391,40 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         testInClauseWithIndexOnColumnOfUsignedIntType(true);
     }
 
+    public void testInClauseWithIndexOnColumnOfUsignedIntType(boolean localIndex) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
+        populateTestTable();
+        String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
+                + " (int_col1)";
+        try {
+            try {
+                conn = DriverManager.getConnection(getUrl(), props);
+                conn.setAutoCommit(false);
+                stmt = conn.prepareStatement(ddl);
+                stmt.execute();
+                ResultSet rs = conn.createStatement().executeQuery("SELECT int_col1 FROM " +INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + " where int_col1 IN (1, 2, 3, 4)");
+                assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
+                assertTrue(rs.next());
+                assertEquals(3, rs.getInt(1));
+                assertTrue(rs.next());
+                assertEquals(4, rs.getInt(1));
+                assertFalse(rs.next());
+            } finally {
+                if(stmt != null) {
+                    stmt.close();
+                }
+            } 
+        } finally {
+            if(conn != null) {
+                conn.close();
+            }
+        }
+    }
+}
     public void testInClauseWithIndexOnColumnOfUsignedIntType(boolean localIndex) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;

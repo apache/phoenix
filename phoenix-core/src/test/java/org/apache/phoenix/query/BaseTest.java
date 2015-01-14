@@ -372,10 +372,7 @@ public abstract class BaseTest {
         builder.put("KVBigIntValueTest", "create table KVBigIntValueTest" +
                 "   (pk integer not null primary key,\n" +
                 "    kv bigint)\n");
-		builder.put(
-				INDEX_DATA_TABLE,
-				"create table "
-						+ INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + "(" +
+        builder.put(INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + "(" +
                 "   varchar_pk VARCHAR NOT NULL, " +
                 "   char_pk CHAR(6) NOT NULL, " +
                 "   int_pk INTEGER NOT NULL, "+ 

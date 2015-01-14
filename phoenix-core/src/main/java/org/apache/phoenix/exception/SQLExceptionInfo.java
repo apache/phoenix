@@ -19,7 +19,6 @@ package org.apache.phoenix.exception;
 
 import java.sql.SQLException;
 
-import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.util.SchemaUtil;
 
 
@@ -38,7 +37,6 @@ public class SQLExceptionInfo {
     public static final String TABLE_NAME = "tableName";
     public static final String FAMILY_NAME = "familyName";
     public static final String COLUMN_NAME = "columnName";
-    public static final String EXPRESSION = "expressionName";
 
     private final Throwable rootCause;
     private final SQLExceptionCode code; // Should always have one.
@@ -127,7 +125,7 @@ public class SQLExceptionInfo {
             builder.append(" ").append(TABLE_NAME).append("=").append(columnDisplayName);
         } else if (schemaName != null) {
             builder.append(" ").append(SCHEMA_NAME).append("=").append(columnDisplayName);
-        } 
+        }
         return builder.toString();
     }
 
@@ -162,5 +160,5 @@ public class SQLExceptionInfo {
     public String getMessage() {
         return message;
     }
-    
+
 }

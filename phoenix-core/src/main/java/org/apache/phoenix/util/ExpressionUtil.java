@@ -10,7 +10,6 @@
 package org.apache.phoenix.util;
 
 import java.sql.SQLException;
-import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -21,6 +20,7 @@ import org.apache.phoenix.expression.function.CurrentDateFunction;
 import org.apache.phoenix.expression.function.CurrentTimeFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.schema.types.PDataType;
+
 import com.google.common.collect.Lists;
 
 public class ExpressionUtil {
@@ -57,13 +57,5 @@ public class ExpressionUtil {
     public static LiteralExpression getNullExpression(Expression expression) throws SQLException {
         return LiteralExpression.newConstant(null, expression.getDataType(), expression.getDeterminism());
     }
-    
-//    public Expression create(FunctionParseNode functionParseNode) throws SQLException {
-//    	List<Expression> childExpressions = Collections.emptyList();
-//    	for (ParseNode node : functionParseNode.getChildren()) {
-//    		childExpressions.add(create());
-//    	}
-//    	return functionParseNode.create(childExpressions);
-//    }
 
 }

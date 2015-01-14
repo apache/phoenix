@@ -19,7 +19,6 @@ package org.apache.phoenix.schema;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.expression.Expression;
 
 
 /**
