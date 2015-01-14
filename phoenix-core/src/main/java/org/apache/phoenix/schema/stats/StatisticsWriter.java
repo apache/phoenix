@@ -137,7 +137,7 @@ public class StatisticsWriter implements Closeable {
                     midEndIndex = index;
                     midStartIndex = index + 1;
                 }
-                double per = (double)(midEndIndex + 1) / size;
+                double per = (double)(midEndIndex) / size;
                 long leftRowCount = 0;
                 long rightRowCount = 0;
                 long leftByteCount = 0;
@@ -146,21 +146,13 @@ public class StatisticsWriter implements Closeable {
                     rowCount = PLong.INSTANCE.getCodec().decodeLong(rowCountCell.getValueArray(),
                             rowCountCell.getValueOffset(), SortOrder.getDefault());
                     leftRowCount = (long)(per * rowCount);
-                    if (leftRowCount == rowCount) {
-                        leftRowCount = (rightRowCount = rowCount / 2);
-                    } else {
-                        rightRowCount = (long)((1 - per) * rowCount);
-                    }
+                    rightRowCount = (long)((1 - per) * rowCount);
                 }
                 if (byteSizeCell != null) {
                     byteSize = PLong.INSTANCE.getCodec().decodeLong(byteSizeCell.getValueArray(),
                             byteSizeCell.getValueOffset(), SortOrder.getDefault());
                     leftByteCount = (long)(per * byteSize);
-                    if (leftByteCount == byteSize) {
-                        leftByteCount = (rightByteCount = byteSize / 2);
-                    } else {
-                        rightByteCount = (long)((1 - per) * byteSize);
-                    }
+                    rightByteCount = (long)((1 - per) * byteSize);
                 }
 	            if (midEndIndex > 0) {
 	                GuidePostsInfo lguidePosts = new GuidePostsInfo(leftByteCount, guidePostsRegionInfo

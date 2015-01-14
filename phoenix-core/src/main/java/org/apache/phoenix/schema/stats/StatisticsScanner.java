@@ -71,7 +71,9 @@ public class StatisticsScanner implements InternalScanner {
      *            next batch of {@link KeyValue}s
      */
     protected void updateStat(final List<Cell> results) {
-        tracker.collectStatistics(results);
+        if (!results.isEmpty()) {
+            tracker.collectStatistics(results);
+        }
     }
 
     @Override
