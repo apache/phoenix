@@ -17,12 +17,11 @@
  */
 package org.apache.phoenix.query;
 
-import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.TimeoutException;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -118,8 +117,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public MetaDataMutationResult addColumn(List<Mutation> tabeMetaData, List<Pair<byte[],Map<String,Object>>> families, PTable table) throws SQLException {
-        return getDelegate().addColumn(tabeMetaData, families, table);
+    public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded) throws SQLException {
+        return getDelegate().addColumn(tableMetaData, table, properties, colFamiliesForPColumnsToBeAdded);
     }
 
 
@@ -251,10 +250,4 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public int getSequenceSaltBuckets() {
         return getDelegate().getSequenceSaltBuckets();
     }
-
-    @Override
-    public void modifyTable(byte[] tableName, HTableDescriptor newDesc) throws IOException,
-            InterruptedException, TimeoutException {
-        getDelegate().modifyTable(tableName, newDesc);
-    } 
 }
