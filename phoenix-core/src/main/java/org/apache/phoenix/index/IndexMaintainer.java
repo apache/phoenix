@@ -903,6 +903,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         dataEmptyKeyValueCF = Bytes.readByteArray(input);
         emptyKeyValueCFPtr = new ImmutableBytesPtr(Bytes.readByteArray(input));
         
+        int numIndexedExpressions = WritableUtils.readVInt(input);
+        indexedExpressions = Sets.newLinkedHashSetWithExpectedSize(numIndexedExpressions);        
+        for (int i = 0; i < numIndexedExpressions; i++) {
+        	Expression expression = ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
+        	expression.readFields(input);
+        	indexedExpressions.add(expression);
+        }
+        
         rowKeyMetaData = newRowKeyMetaData();
         rowKeyMetaData.readFields(input);
         int nDataCFs = WritableUtils.readVInt(input);
@@ -912,13 +920,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int encodedEstimatedIndexRowKeyBytesAndImmutableRows = WritableUtils.readVInt(input);
         this.immutableRows = encodedEstimatedIndexRowKeyBytesAndImmutableRows < 0;
         this.estimatedIndexRowKeyBytes = Math.abs(encodedEstimatedIndexRowKeyBytesAndImmutableRows);
-        int numIndexedExpressions = WritableUtils.readVInt(input);
-        indexedExpressions = Sets.newLinkedHashSetWithExpectedSize(numIndexedExpressions);        
-        for (int i = 0; i < numIndexedExpressions; i++) {
-            Expression expression = ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
-            expression.readFields(input);
-            indexedExpressions.add(expression);
-        }
         initCachedState();
     }
     
@@ -946,16 +947,17 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         WritableUtils.writeVInt(output,emptyKeyValueCFPtr.getLength());
         output.write(emptyKeyValueCFPtr.get(),emptyKeyValueCFPtr.getOffset(), emptyKeyValueCFPtr.getLength());
         
+        WritableUtils.writeVInt(output, indexedExpressions.size());
+        for (Expression expression : indexedExpressions) {
+        	WritableUtils.writeVInt(output, ExpressionType.valueOf(expression).ordinal());
+        	expression.write(output);
+        }
+        
         rowKeyMetaData.write(output);
         // Encode indexWALDisabled in nDataCFs
         WritableUtils.writeVInt(output, (nDataCFs + 1) * (indexWALDisabled ? -1 : 1));
         // Encode estimatedIndexRowKeyBytes and immutableRows together.
         WritableUtils.writeVInt(output, estimatedIndexRowKeyBytes * (immutableRows ? -1 : 1));
-        WritableUtils.writeVInt(output, indexedExpressions.size());
-        for (Expression expression : indexedExpressions) {
-            WritableUtils.writeVInt(output, ExpressionType.valueOf(expression).ordinal());
-            expression.write(output);
-        }
     }
 
     public int getEstimatedByteSize() {
