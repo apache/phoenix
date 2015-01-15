@@ -400,8 +400,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     @SuppressWarnings("deprecation")
-    private void addColumnToTable(List<Cell> results, PName tenantId, PName schemaName, PName dataTableName, PName colName, PName famName,
-        Cell[] colKeyValues, List<PColumn> columns, boolean isSalted) throws IOException, SQLException {
+    private void addColumnToTable(List<Cell> results, PName colName, PName famName,
+        Cell[] colKeyValues, List<PColumn> columns, boolean isSalted) {
         int i = 0;
         int j = 0;
         while (i < results.size() && j < COLUMN_KV_COLUMNS.size()) {
@@ -618,7 +618,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                   physicalTables.add(famName);
               }
           } else {
-              addColumnToTable(results, tenantId, schemaName, dataTableName, colName, famName, colKeyValues, columns, saltBucketNum != null);
+              addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
           }
         }
         PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getTableName(

@@ -17,19 +17,10 @@
  */
 package org.apache.phoenix.schema;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.util.Arrays;
-
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.SizedUtil;
-import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import com.google.common.base.Preconditions;
 import com.google.protobuf.HBaseZeroCopyByteString;

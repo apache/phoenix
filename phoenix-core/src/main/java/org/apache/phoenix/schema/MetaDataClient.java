@@ -984,7 +984,6 @@ public class MetaDataClient {
                 	// if it is a column 
                 	if (parseNode instanceof ColumnParseNode) {
                 		ColumnParseNode colParseNode = (ColumnParseNode)parseNode;
-                		//TODO the tableName is actually the column family 
 	                    PColumn col = resolver.resolveColumn(null, colParseNode.getTableName(), colParseNode.getName()).getColumn();
 	                    unusedPkColumns.remove(col);
 	                    // Ignore view constants for updatable views as we don't need these in the index
@@ -1424,7 +1423,7 @@ public class MetaDataClient {
                             .build().buildException();
                     }
                     if (!pkColumns.add(column)) {
-						throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
+                        throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
                     }
                 }
                 if (tableType == PTableType.VIEW && hasColumnWithSameNameAndFamily(columns, column)) {

@@ -358,7 +358,7 @@ public class ProjectionCompiler {
                     projectTableColumnFamily(context, cfName, tableRef, projectedExpressions, projectedColumns);
                 }
             } else {
-            	Expression expression = node.accept(selectVisitor);
+                Expression expression = node.accept(selectVisitor);
                 projectedExpressions.add(expression);
                 expression = coerceIfNecessary(index, targetColumns, expression);
                 if (node instanceof BindParseNode) {

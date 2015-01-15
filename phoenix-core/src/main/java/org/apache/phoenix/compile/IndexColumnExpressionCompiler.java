@@ -56,7 +56,7 @@ import org.apache.phoenix.util.IndexUtil;
 
 /**
  * Visitor that checks if nodes other than ColumnParseNode are present as 
- * an expression in a function-based index. If the node is present, then it is 
+ * an expression in an index. If the expression is present, then the node is
  * not visited but processed as a ColumnParseNode.
  */
 public class IndexColumnExpressionCompiler extends ExpressionCompiler {
@@ -95,37 +95,32 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 	}
 
 	/**
-	 * @return true if there is an expression in the index table that matches the given node
+	 * @return true if current table is an index and there is an expression that matches the given node
 	 */
 	private boolean matchesIndexedExpression(ParseNode node) throws SQLException {   
 		if (context.getCurrentTable().getTable().getType()!=PTableType.INDEX) {
 			return false;
 		}
-		DataTableStatementRewriter statementRewriter = new DataTableStatementRewriter();
+		DataTableNodeRewriter statementRewriter = new DataTableNodeRewriter();
         ParseNode dataTableParseNode = node.accept(statementRewriter);
 		Expression dataTableExpression = getExpression(dataTableParseNode);
-		// ignore regular columns  
+		// if the node matches a column expression
 		if (ColumnExpression.class.isAssignableFrom(dataTableExpression.getClass())) {
 			return false;
 		}
-		try {
-		    for ( PColumn column : this.context.getCurrentTable().getTable().getColumns()) {
-		        if (column.getExpressionStr()!=null) {
-		            ParseNode parseNode = SQLParser.parseCondition(column.getExpressionStr());
-		            Expression expression = getExpression(parseNode);
-		            if (expression.equals(dataTableExpression))
-		                return true;
-		        }
-		    }
-		}
-		catch (Exception e) {
-		    System.err.print(e);
-		}
+	    for ( PColumn column : this.context.getCurrentTable().getTable().getColumns()) {
+	        if (column.getExpressionStr()!=null) {
+	            ParseNode parseNode = SQLParser.parseCondition(column.getExpressionStr());
+	            Expression expression = getExpression(parseNode);
+	            if (expression.equals(dataTableExpression))
+	                return true;
+	        }
+	    }
 		return false;
     }
     
     private Expression convertAndVisitParseNode(ParseNode node) throws SQLException {
-        DataTableStatementRewriter statementRewriter = new DataTableStatementRewriter();
+        DataTableNodeRewriter statementRewriter = new DataTableNodeRewriter();
         ParseNode dataTableParseNode = node.accept(statementRewriter);
     	Expression expression = getExpression(dataTableParseNode);
     	ColumnParseNode columnParseNode = new ColumnParseNode(null, IndexUtil.getIndexColumnName(null,String.valueOf(expression.hashCode())), null);
@@ -134,23 +129,14 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
 	@Override
     public boolean visitEnter(ComparisonParseNode node) throws SQLException {
-		// do not visit this node if it matches an expression that is indexed, 
-		// it will be converted to a ColumnParseNode and processed in visitLeave
+		// do not visit this node if it matches an expression that is indexed,  it will be converted to a ColumnParseNode and processed in visitLeave
 		return matchesIndexedExpression(node) ? false : super.visitEnter(node);
     }
 
     @Override
     public Expression visitLeave(ComparisonParseNode node, List<Expression> children) throws SQLException {
     	// if this node matches an expression that is indexed, convert it to a ColumnParseNode and process it 
-        Expression expression=null;
-        try {
-            expression = matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
-        }
-        catch (Exception e) {
-            System.err.println(e);
-            throw e;
-        }
-        return expression; 
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
     }
 
     @Override

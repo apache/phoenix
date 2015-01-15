@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.schema;
 
-import org.apache.phoenix.expression.Expression;
 
 /**
  * Definition of a Phoenix column

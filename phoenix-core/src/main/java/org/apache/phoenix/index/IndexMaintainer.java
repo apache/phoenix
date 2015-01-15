@@ -40,7 +40,6 @@ import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Writable;
@@ -53,26 +52,23 @@ import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
-import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
-import org.apache.phoenix.expression.visitor.TraverseAllExpressionVisitor;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil.ReferencingColumn;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
@@ -80,9 +76,8 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
-import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
-import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.ValueGetterTuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.BitSet;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -233,7 +228,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
     private byte[] viewIndexId;
     private boolean isMultiTenant;
-    // indexed expressions that are not present in the row key of the data table; the expression can also refer to a regular column
+    // indexed expressions that are not present in the row key of the data table, the expression can also refer to a regular column
     private Set<Expression> indexedExpressions;
     // columns required to evaluate all expressions in indexedExpressions (this does not include columns in the data row key)
     private Set<ColumnReference> indexedColumns;
@@ -281,28 +276,19 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int nIndexPKColumns = index.getPKColumns().size() - indexPosOffset;
         // number of expressions that are indexed that are not present in the row key of the data table
         int indexedExpressionCount = 0;
-        List<Expression> indexPKExpressions =  Lists.newArrayListWithCapacity(index.getPKColumns().size());
         for (int i = indexPosOffset; i<index.getPKColumns().size();i++) {
         	PColumn indexColumn = index.getPKColumns().get(i);
-        	String expressionStr = indexColumn.getExpressionStr();
-        	if (expressionStr==null) {
-        	    indexPKExpressions.add(null);
-        	    continue;
-        	}
-            Expression expression = null;
+        	String indexColumnName = indexColumn.getName().getString();
+            String dataFamilyName = IndexUtil.getDataColumnFamilyName(indexColumnName);
+            String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
             try {
-                ParseNode parseNode  = SQLParser.parseCondition(expressionStr);
-                ColumnResolver resolver = FromCompiler.getResolver(new TableRef(dataTable));
-                StatementContext context = new StatementContext(new PhoenixStatement(null), resolver);
-                expression = parseNode.accept(new ExpressionCompiler(context));
-                indexPKExpressions.add(expression);
-            } catch (SQLException e) {
-                throw new RuntimeException(e); // Impossible
-            }
-            if ( ColumnExpression.class.isAssignableFrom(expression.getClass()) ) {
-            	PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
-            	if (SchemaUtil.isPKColumn(column)) 
-                	continue;
+                PColumn dataColumn = dataFamilyName.equals("") ? dataTable.getColumn(dataColumnName) : dataTable.getColumnFamily(dataFamilyName).getColumn(dataColumnName);
+                if (SchemaUtil.isPKColumn(dataColumn)) 
+                    continue;
+            } catch (ColumnNotFoundException e) {
+             // This column must be an expression
+            } catch (Exception e) {
+                throw new IllegalArgumentException(e);
             }
             indexedExpressionCount++;
         }
@@ -337,11 +323,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // data table is with immutable rows or not.
         this.immutableRows = dataTable.isImmutableRows();
         int indexColByteSize = 0;
-        Iterator<Expression> expressionIterator = indexPKExpressions.iterator();
         for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
             PColumn indexColumn = index.getPKColumns().get(i);
             int indexPos = i - indexPosOffset;
-            Expression expression = expressionIterator.next();
+            Expression expression = null;
+            try {
+                ParseNode parseNode  = SQLParser.parseCondition(indexColumn.getExpressionStr());
+                ColumnResolver resolver = FromCompiler.getResolver(new TableRef(dataTable));
+                StatementContext context = new StatementContext(new PhoenixStatement(null), resolver);
+                expression = parseNode.accept(new ExpressionCompiler(context));
+            } catch (SQLException e) {
+                throw new RuntimeException(e); // Impossible
+            }
             if ( ColumnExpression.class.isAssignableFrom(expression.getClass()) ) {
             	// get the column of the data table that corresponds to this index column
 	            PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
@@ -358,7 +351,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 	            }
             }
             else {
-            	//TODO is this correct for expressions
             	indexColByteSize += expression.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(expression) : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
                 this.indexedExpressions.add(expression);
             }
@@ -911,15 +903,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         dataEmptyKeyValueCF = Bytes.readByteArray(input);
         emptyKeyValueCFPtr = new ImmutableBytesPtr(Bytes.readByteArray(input));
         
-        //TODO is this backward compatible
-        int numIndexedExpressions = WritableUtils.readVInt(input);
-        indexedExpressions = Sets.newLinkedHashSetWithExpectedSize(numIndexedExpressions);        
-        for (int i = 0; i < numIndexedExpressions; i++) {
-        	Expression expression = ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
-        	expression.readFields(input);
-        	indexedExpressions.add(expression);
-        }
-        
         rowKeyMetaData = newRowKeyMetaData();
         rowKeyMetaData.readFields(input);
         int nDataCFs = WritableUtils.readVInt(input);
@@ -929,6 +912,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int encodedEstimatedIndexRowKeyBytesAndImmutableRows = WritableUtils.readVInt(input);
         this.immutableRows = encodedEstimatedIndexRowKeyBytesAndImmutableRows < 0;
         this.estimatedIndexRowKeyBytes = Math.abs(encodedEstimatedIndexRowKeyBytesAndImmutableRows);
+        int numIndexedExpressions = WritableUtils.readVInt(input);
+        indexedExpressions = Sets.newLinkedHashSetWithExpectedSize(numIndexedExpressions);        
+        for (int i = 0; i < numIndexedExpressions; i++) {
+            Expression expression = ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
+            expression.readFields(input);
+            indexedExpressions.add(expression);
+        }
         initCachedState();
     }
     
@@ -956,18 +946,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         WritableUtils.writeVInt(output,emptyKeyValueCFPtr.getLength());
         output.write(emptyKeyValueCFPtr.get(),emptyKeyValueCFPtr.getOffset(), emptyKeyValueCFPtr.getLength());
         
-        // TODO is this backward compatible
-        WritableUtils.writeVInt(output, indexedExpressions.size());
-        for (Expression expression : indexedExpressions) {
-        	WritableUtils.writeVInt(output, ExpressionType.valueOf(expression).ordinal());
-        	expression.write(output);
-        }
-        
         rowKeyMetaData.write(output);
         // Encode indexWALDisabled in nDataCFs
         WritableUtils.writeVInt(output, (nDataCFs + 1) * (indexWALDisabled ? -1 : 1));
         // Encode estimatedIndexRowKeyBytes and immutableRows together.
         WritableUtils.writeVInt(output, estimatedIndexRowKeyBytes * (immutableRows ? -1 : 1));
+        WritableUtils.writeVInt(output, indexedExpressions.size());
+        for (Expression expression : indexedExpressions) {
+            WritableUtils.writeVInt(output, ExpressionType.valueOf(expression).ordinal());
+            expression.write(output);
+        }
     }
 
     public int getEstimatedByteSize() {

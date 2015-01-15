@@ -55,8 +55,7 @@ import com.google.common.collect.Maps;
 
 /**
  * 
- * Factory used by parser to construct object model while parsing a SQL
- * statement
+ * Factory used by parser to construct object model while parsing a SQL statement
  * 
  * 
  * @since 0.1

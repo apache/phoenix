@@ -60,7 +60,7 @@ public class PostIndexDDLCompiler {
         StringBuilder indexColumns = new StringBuilder();
         StringBuilder dataColumns = new StringBuilder();
         List<PColumn> dataPKColumns = dataTableRef.getTable().getPKColumns();
-        PTable dataTable = dataTableRef.getTable();      
+        PTable dataTable = dataTableRef.getTable();
         int nPKColumns = dataPKColumns.size();
         boolean isSalted = dataTable.getBucketNum() != null;
         boolean isMultiTenant = connection.getTenantId() != null && dataTable.isMultiTenant();
@@ -99,9 +99,6 @@ public class PostIndexDDLCompiler {
         posOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0);
         for (int i = posOffset; i < nIndexPKColumns; i++) {
             PColumn col = indexPKColumns.get(i);
-            if (!IndexUtil.isIndexColumn(col)) {
-            	continue;
-            }
         	// Translate to the data table column name
             String indexColumnName = col.getName().getString();
             String dataFamilyName = IndexUtil.getDataColumnFamilyName(indexColumnName);
