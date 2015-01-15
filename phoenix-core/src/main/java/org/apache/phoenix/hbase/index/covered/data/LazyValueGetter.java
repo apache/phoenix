@@ -50,7 +50,7 @@ public class LazyValueGetter implements ValueGetter {
   }
 
   @Override
-  public ImmutableBytesPtr getLatestValue(ColumnReference ref) {
+  public ImmutableBytesPtr getLatestValue(ColumnReference ref) throws IOException {
     // ensure we have a backing map
     if (values == null) {
       synchronized (this) {
@@ -61,12 +61,7 @@ public class LazyValueGetter implements ValueGetter {
     // check the value in the map
     ImmutableBytesPtr value = values.get(ref);
     if (value == null) {
-    	//TODO fix this
-      try {
-    	  value = get(ref);
-      }
-      catch (Exception e) {
-      }
+      value = get(ref);
       values.put(ref, value);
     }
 

@@ -51,7 +51,6 @@ import org.apache.phoenix.expression.visitor.SingleAggregateFunctionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.BindParseNode;
-import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
@@ -360,22 +359,6 @@ public class ProjectionCompiler {
                 }
             } else {
             	Expression expression = node.accept(selectVisitor);
-            	//TOOD remove this
-//            	Expression expression = null;
-//            	try {
-//            		expression = node.accept(selectVisitor);
-//            	} 
-//            	catch (ColumnNotFoundException e) {
-//            		// if the node is not a ColumnParseNode, check to see if the expression matches a functional index
-//            		if (!(node instanceof ColumnParseNode) && tableRef.getTable().getType() == PTableType.INDEX ){
-//            			ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, node.toString()));
-//            			ColumnParseNode columnParseNode = new ColumnParseNode(null, colName.toString(), null);
-//            			expression = columnParseNode.accept(selectVisitor);
-//            		}
-//            		else {
-//            			throw e;
-//            		}
-//            	}
                 projectedExpressions.add(expression);
                 expression = coerceIfNecessary(index, targetColumns, expression);
                 if (node instanceof BindParseNode) {

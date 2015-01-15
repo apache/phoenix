@@ -30,9 +30,8 @@ public interface ValueGetter {
    *          keyValue via {@link ColumnReference#matches}
    * @return the stored value for the given {@link ColumnReference}, or <tt>null</tt> if no value is
    *         present.
-   * @throws IOException if there is an error accessing the underlying data storage
    */
-  public ImmutableBytesPtr getLatestValue(ColumnReference ref);
+  public ImmutableBytesPtr getLatestValue(ColumnReference ref) throws IOException;
   
   public byte[] getRowKey();
 }

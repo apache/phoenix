@@ -43,10 +43,6 @@ public class RowKeyColumnExpression  extends ColumnExpression {
     protected final String name;
     private int offset;
     
-    public RowKeyValueAccessor getAcessor() {
-    	return accessor;
-    }
-    
     public RowKeyColumnExpression() {
         name = null; // Only on client
     }
