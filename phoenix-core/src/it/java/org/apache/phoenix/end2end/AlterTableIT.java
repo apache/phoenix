@@ -40,6 +40,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -55,6 +56,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -928,7 +930,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     @Test
     public void testAddColumnForNewColumnFamily() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String ddl = "CREATE TABLE T (\n"
+        String ddl = "CREATE TABLE testAddColumnForNewColumnFamily (\n"
                 +"ID1 VARCHAR(15) NOT NULL,\n"
                 +"ID2 VARCHAR(15) NOT NULL,\n"
                 +"CREATED_DATE DATE,\n"
@@ -937,8 +939,16 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
                 +"CONSTRAINT PK PRIMARY KEY (ID1, ID2)) SALT_BUCKETS = 8";
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
         conn1.createStatement().execute(ddl);
-        ddl = "ALTER TABLE T ADD CF.STRING VARCHAR";
+        ddl = "ALTER TABLE testAddColumnForNewColumnFamily ADD CF.STRING VARCHAR";
         conn1.createStatement().execute(ddl);
+        try (HBaseAdmin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+            HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("testAddColumnForNewColumnFamily".toUpperCase())).getColumnFamilies();
+            assertEquals(2, columnFamilies.length);
+            assertEquals("0", columnFamilies[0].getNameAsString());
+            assertEquals(HColumnDescriptor.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
+            assertEquals("CF", columnFamilies[1].getNameAsString());
+            assertEquals(HColumnDescriptor.DEFAULT_TTL, columnFamilies[1].getTimeToLive());
+        }
     }
 
     @Test
@@ -1024,7 +1034,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertImmutableRows(conn, "T3", true);
         ddl = "ALTER TABLE T3 SET COMPACTION_ENABLED = FALSE, VERSIONS = 10";
         conn.createStatement().execute(ddl);
-        ddl = "ALTER TABLE T3 SET COMPACTION_ENABLED = FALSE, CF1.MIN_VERSIONS = 1, CF2.MIN_VERSIONS = 3, MIN_VERSIONS = 8, IMMUTABLE_ROWS=false";
+        ddl = "ALTER TABLE T3 SET COMPACTION_ENABLED = FALSE, CF1.MIN_VERSIONS = 1, CF2.MIN_VERSIONS = 3, MIN_VERSIONS = 8, IMMUTABLE_ROWS=false, CF1.KEEP_DELETED_CELLS = true, KEEP_DELETED_CELLS = false";
         conn.createStatement().execute(ddl);
         assertImmutableRows(conn, "T3", false);
 
@@ -1036,14 +1046,17 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals("0", columnFamilies[0].getNameAsString());
             assertEquals(8, columnFamilies[0].getMinVersions());
             assertEquals(10, columnFamilies[0].getMaxVersions());
+            assertEquals(KeepDeletedCells.FALSE, columnFamilies[0].getKeepDeletedCells());
 
             assertEquals("CF1", columnFamilies[1].getNameAsString());
             assertEquals(1, columnFamilies[1].getMinVersions());
             assertEquals(10, columnFamilies[1].getMaxVersions());
+            assertEquals(KeepDeletedCells.TRUE, columnFamilies[1].getKeepDeletedCells());
 
             assertEquals("CF2", columnFamilies[2].getNameAsString());
             assertEquals(3, columnFamilies[2].getMinVersions());
             assertEquals(10, columnFamilies[2].getMaxVersions());
+            assertEquals(KeepDeletedCells.FALSE, columnFamilies[2].getKeepDeletedCells());
 
             assertEquals(Boolean.toString(false), tableDesc.getValue(HTableDescriptor.COMPACTION_ENABLED));
         }
@@ -1064,6 +1077,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         ddl = "ALTER TABLE T4 SET CF.COMPACTION_ENABLED = FALSE";
         try {
             conn1.createStatement().execute(ddl);
+            fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY.getErrorCode(), e.getErrorCode());
         }
@@ -1084,6 +1098,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         ddl = "ALTER TABLE T5 SET CF.DISABLE_WAL = TRUE";
         try {
             conn1.createStatement().execute(ddl);
+            fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY.getErrorCode(), e.getErrorCode());
         }
@@ -1125,6 +1140,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         ddl = "ALTER TABLE T7 SET CF.REPLICATION_SCOPE = 1";
         try {
             conn1.createStatement().execute(ddl);
+            fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_FOUND.getErrorCode(), e.getErrorCode());
         }
@@ -1145,6 +1161,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         ddl = "ALTER TABLE T8 SET DEFAULT_COLUMN_FAMILY = 'A'";
         try {
             conn1.createStatement().execute(ddl);
+            fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.DEFAULT_COLUMN_FAMILY_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
         }
@@ -1167,12 +1184,14 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         ddl = "ALTER VIEW v SET REPLICATION_SCOPE = 1";
         try {
             conn1.createStatement().execute(ddl);
+            fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(), e.getErrorCode());
         }
         ddl = "ALTER VIEW v SET COMPACTION_ENABLED = FALSE";
         try {
             conn1.createStatement().execute(ddl);
+            fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(), e.getErrorCode());
         }
@@ -1201,6 +1220,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         ddl = "ALTER VIEW v SET DISABLE_WAL = TRUE";
         try {
             conn1.createStatement().execute(ddl);
+            fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(), e.getErrorCode());
         }
@@ -1369,14 +1389,14 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     public void testSetPropertyAndAddColumnForDifferentColumnFamilies() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     	Connection conn = DriverManager.getConnection(getUrl(), props);
-    	String ddl = "CREATE TABLE SETPROPDIFFCFSTABLE " +
-    			"  (a_string varchar not null, col1 integer, CF1.col2 integer, CF2.col3 integer" +
-    			"  CONSTRAINT pk PRIMARY KEY (a_string)) DEFAULT_COLUMN_FAMILY = 'XYZ'\n";
-    	try {
-    		conn.createStatement().execute(ddl);
-    		conn.createStatement().execute("ALTER TABLE SETPROPDIFFCFSTABLE ADD col4 integer, CF1.col5 integer, CF2.col6 integer, CF3.col7 integer CF1.REPLICATION_SCOPE=1, CF1.IN_MEMORY=false, IN_MEMORY=true ");
-    		try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("SETPROPDIFFCFSTABLE")).getColumnFamilies();
+    	String ddl = "CREATE TABLE XYZ.SETPROPDIFFCFSTABLE " +
+                "  (a_string varchar not null, col1 integer, CF1.col2 integer, CF2.col3 integer" +
+                "  CONSTRAINT pk PRIMARY KEY (a_string)) DEFAULT_COLUMN_FAMILY = 'XYZ'\n";
+        try {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("ALTER TABLE XYZ.SETPROPDIFFCFSTABLE ADD col4 integer, CF1.col5 integer, CF2.col6 integer, CF3.col7 integer CF1.REPLICATION_SCOPE=1, CF1.IN_MEMORY=false, IN_MEMORY=true ");
+            try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+                HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes(SchemaUtil.getTableName("XYZ", "SETPROPDIFFCFSTABLE"))).getColumnFamilies();
                 assertEquals(4, columnFamilies.length);
                 assertEquals("CF1", columnFamilies[0].getNameAsString());
                 assertFalse(columnFamilies[0].isInMemory());
@@ -1553,7 +1573,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     		conn.createStatement().execute(ddl);
     		fail();
     	} catch (SQLException e) {
-    		assertEquals(SQLExceptionCode.CANNOT_SET_TABLE_PROPERTY_ADD_COLUMN.getErrorCode(), e.getErrorCode());
+    		assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL.getErrorCode(), e.getErrorCode());
     	} finally {
     		conn.close();
     	}
@@ -1782,6 +1802,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     		ddl = "ALTER TABLE RANDMONPROPTABLE ADD NEWCF.COL3 INTEGER NEWCF.UNKNOWN_PROP='ABC'";
     		try {
     			conn.createStatement().execute(ddl);
+    			fail();
     		} catch (SQLException e) {
     			assertEquals(SQLExceptionCode.CANNOT_SET_TABLE_PROPERTY_ADD_COLUMN.getErrorCode(), e.getErrorCode());
     		}
@@ -1821,5 +1842,105 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         rs.close();
         stmt.close();
 
+    }
+    
+    @Test
+    @Ignore //FIXME: https://issues.apache.org/jira/browse/PHOENIX-1581
+    public void testTogglingDisableWal() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {       
+            String ddl = "create table IF NOT EXISTS testReenablingWal ("
+                    + " id char(1) NOT NULL,"
+                    + " col1 integer NOT NULL,"
+                    + " col2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
+                    + " )";
+            conn.createStatement().execute(ddl);
+            asssertIsWALDisabled(conn, "testReenablingWal".toUpperCase(), false);
+            
+            ddl = "ALTER TABLE testReenablingWal SET DISABLE_WAL = true";
+            conn.createStatement().execute(ddl);
+            asssertIsWALDisabled(conn, "testReenablingWal".toUpperCase(), true);
+            
+            ddl = "ALTER TABLE testReenablingWal SET DISABLE_WAL = false";
+            conn.createStatement().execute(ddl);
+            asssertIsWALDisabled(conn, "testReenablingWal".toUpperCase(), false);
+            
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testAddingPkColAndSettingProperties() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {       
+            String ddl = "create table IF NOT EXISTS testAddingPkColAndSettingProperties ("
+                    + " k1 char(1) NOT NULL,"
+                    + " k2 integer NOT NULL,"
+                    + " col1 bigint,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (k1, k2)"
+                    + " )";
+            conn.createStatement().execute(ddl);
+
+            // set HTableProperty when adding a pk column should fail
+            ddl = "ALTER TABLE testAddingPkColAndSettingProperties ADD k3 DECIMAL PRIMARY KEY COMPACTION_ENABLED = false";
+            try {
+                conn.createStatement().execute(ddl);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_SET_TABLE_PROPERTY_ADD_COLUMN.getErrorCode(), e.getErrorCode());
+            }
+
+            // set HColumnProperty when adding only a pk column should fail
+            ddl = "ALTER TABLE testAddingPkColAndSettingProperties ADD k3 DECIMAL PRIMARY KEY REPLICATION_SCOPE = 0";
+            try {
+                conn.createStatement().execute(ddl);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.SET_UNSUPPORTED_PROP_ON_ALTER_TABLE.getErrorCode(), e.getErrorCode());
+            }
+
+            // set phoenix table property when adding a pk column should fail
+            ddl = "ALTER TABLE testAddingPkColAndSettingProperties ADD k3 DECIMAL PRIMARY KEY DISABLE_WAL = true";
+            try {
+                conn.createStatement().execute(ddl);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_SET_TABLE_PROPERTY_ADD_COLUMN.getErrorCode(), e.getErrorCode());
+            }
+
+            // set HColumnProperty property when adding a pk column and other key value columns should work
+            ddl = "ALTER TABLE testAddingPkColAndSettingProperties ADD k3 DECIMAL PRIMARY KEY, col2 bigint, CF.col3 bigint IN_MEMORY = true, CF.IN_MEMORY=false, CF.REPLICATION_SCOPE = 1";
+            conn.createStatement().execute(ddl);
+            String tableName = "testAddingPkColAndSettingProperties".toUpperCase();
+            // assert that k3 was added as new pk
+            ResultSet rs = conn.getMetaData().getPrimaryKeys("", "", tableName);
+            assertTrue(rs.next());
+            assertEquals("K1",rs.getString("COLUMN_NAME"));
+            assertEquals(1, rs.getShort("KEY_SEQ"));
+            assertTrue(rs.next());
+            assertEquals("K2",rs.getString("COLUMN_NAME"));
+            assertEquals(2, rs.getShort("KEY_SEQ"));
+            assertTrue(rs.next());
+            assertEquals("K3",rs.getString("COLUMN_NAME"));
+            assertEquals(3, rs.getShort("KEY_SEQ"));
+            assertFalse(rs.next());
+
+            try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+                HTableDescriptor tableDesc = admin.getTableDescriptor(Bytes.toBytes(tableName));
+                HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                assertEquals(2, columnFamilies.length);
+                assertEquals("0", columnFamilies[0].getNameAsString());
+                assertEquals(true, columnFamilies[0].isInMemory());
+                assertEquals(0, columnFamilies[0].getScope());
+                assertEquals("CF", columnFamilies[1].getNameAsString());
+                assertEquals(false, columnFamilies[1].isInMemory());
+                assertEquals(1, columnFamilies[1].getScope());
+            }
+
+        } finally {
+            conn.close();
+        }
     }
 }
