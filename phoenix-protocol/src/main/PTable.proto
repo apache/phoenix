@@ -81,5 +81,5 @@ message PTable {
   optional int32 viewIndexId = 21;
   optional bytes indexType = 22;
   optional int64 statsTimeStamp = 23;
-  required bool storeNulls = 24;
+  optional bool storeNulls = 24;
 }
