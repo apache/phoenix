@@ -2,6 +2,8 @@ package org.apache.phoenix.schema.tuple;
 
 import static org.apache.phoenix.hbase.index.util.ImmutableBytesPtr.copyBytesIfNecessary;
 
+import java.io.IOException;
+
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
@@ -9,7 +11,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.util.ByteUtil;
 
 public class ValueGetterTuple extends BaseTuple {
 	private ValueGetter valueGetter;
@@ -33,7 +34,12 @@ public class ValueGetterTuple extends BaseTuple {
 
     @Override
     public KeyValue getValue(byte[] family, byte[] qualifier) {
-    	ImmutableBytesPtr value = valueGetter.getLatestValue(new ColumnReference(family, qualifier));
+    	ImmutableBytesPtr value = null;
+        try {
+            value = valueGetter.getLatestValue(new ColumnReference(family, qualifier));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     	return new KeyValue(valueGetter.getRowKey(), family, qualifier, HConstants.LATEST_TIMESTAMP, Type.Put, value!=null? copyBytesIfNecessary(value) : null);
     }
 
