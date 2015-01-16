@@ -48,6 +48,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.IndexUtil;
@@ -56,7 +57,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -1845,33 +1845,6 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
     
     @Test
-    @Ignore //FIXME: https://issues.apache.org/jira/browse/PHOENIX-1581
-    public void testTogglingDisableWal() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        try {       
-            String ddl = "create table IF NOT EXISTS testReenablingWal ("
-                    + " id char(1) NOT NULL,"
-                    + " col1 integer NOT NULL,"
-                    + " col2 bigint NOT NULL,"
-                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
-                    + " )";
-            conn.createStatement().execute(ddl);
-            asssertIsWALDisabled(conn, "testReenablingWal".toUpperCase(), false);
-            
-            ddl = "ALTER TABLE testReenablingWal SET DISABLE_WAL = true";
-            conn.createStatement().execute(ddl);
-            asssertIsWALDisabled(conn, "testReenablingWal".toUpperCase(), true);
-            
-            ddl = "ALTER TABLE testReenablingWal SET DISABLE_WAL = false";
-            conn.createStatement().execute(ddl);
-            asssertIsWALDisabled(conn, "testReenablingWal".toUpperCase(), false);
-            
-        } finally {
-            conn.close();
-        }
-    }
-    
-    @Test
     public void testAddingPkColAndSettingProperties() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         try {       
@@ -1939,6 +1912,48 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
                 assertEquals(1, columnFamilies[1].getScope());
             }
 
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testClientCacheUpdatedOnChangingPhoenixTableProperties() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {       
+            String ddl = "create table IF NOT EXISTS TESTCHANGEPHOENIXPROPS ("
+                    + " id char(1) NOT NULL,"
+                    + " col1 integer NOT NULL,"
+                    + " col2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
+                    + " )";
+            conn.createStatement().execute(ddl);
+            asssertIsWALDisabled(conn, "TESTCHANGEPHOENIXPROPS", false);
+            
+            ddl = "ALTER TABLE TESTCHANGEPHOENIXPROPS SET DISABLE_WAL = true";
+            conn.createStatement().execute(ddl);
+            // check metadata cache is updated with DISABLE_WAL = true
+            asssertIsWALDisabled(conn, "TESTCHANGEPHOENIXPROPS", true);
+            
+            ddl = "ALTER TABLE TESTCHANGEPHOENIXPROPS SET DISABLE_WAL = false";
+            conn.createStatement().execute(ddl);
+            // check metadata cache is updated with DISABLE_WAL = false
+            asssertIsWALDisabled(conn, "TESTCHANGEPHOENIXPROPS", false);
+            
+            ddl = "ALTER TABLE TESTCHANGEPHOENIXPROPS SET MULTI_TENANT = true";
+            conn.createStatement().execute(ddl);
+            // check metadata cache is updated with MULTI_TENANT = true
+            PTable t = conn.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null, "TESTCHANGEPHOENIXPROPS"));
+            assertTrue(t.isMultiTenant());
+            
+            // check table metadata updated server side
+            ResultSet rs = conn.createStatement().executeQuery("SELECT DISABLE_WAL, MULTI_TENANT FROM SYSTEM.CATALOG " +
+                    "WHERE table_name = 'TESTCHANGEPHOENIXPROPS' AND DISABLE_WAL IS NOT NULL AND MULTI_TENANT IS NOT NULL");
+            assertTrue(rs.next());
+            assertFalse(rs.getBoolean(1));
+            assertTrue(rs.getBoolean(2));
+            assertFalse(rs.next());
+            rs.close();
         } finally {
             conn.close();
         }
