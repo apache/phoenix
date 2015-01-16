@@ -198,7 +198,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             Expression rhsExpression, List<ImmutableBytesWritable> rhsValues, 
             ImmutableBytesWritable ptr, boolean hasFilters) throws SQLException {
         if (rhsValues.isEmpty())
-            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, Determinism.ALWAYS);
+            return LiteralExpression.newConstant(false, PDataType.BOOLEAN, Determinism.ALWAYS);
         
         PDataType type = rhsExpression.getDataType();
         if (!useInClause(hasFilters)) {
