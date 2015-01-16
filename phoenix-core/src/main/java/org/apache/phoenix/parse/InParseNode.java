@@ -32,14 +32,20 @@ import java.util.List;
  */
 public class InParseNode extends BinaryParseNode {
     private final boolean negate;
+    private final boolean isSubqueryDistinct;
 
-    InParseNode(ParseNode l, ParseNode r, boolean negate) {
+    InParseNode(ParseNode l, ParseNode r, boolean negate, boolean isSubqueryDistinct) {
         super(l, r);
         this.negate = negate;
+        this.isSubqueryDistinct = isSubqueryDistinct;
     }
     
     public boolean isNegate() {
         return negate;
+    }
+    
+    public boolean isSubqueryDistinct() {
+        return isSubqueryDistinct;
     }
 
     @Override

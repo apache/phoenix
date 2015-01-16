@@ -142,7 +142,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         SelectStatement subquery = subqueryNode.getSelectNode();
         String rhsTableAlias = ParseNodeFactory.createTempAlias();
         List<AliasedNode> selectNodes = fixAliasedNodes(subquery.getSelect(), true);
-        subquery = NODE_FACTORY.select(subquery, true, selectNodes);
+        subquery = NODE_FACTORY.select(subquery, !node.isSubqueryDistinct(), selectNodes);
         ParseNode onNode = getJoinConditionNode(l.get(0), selectNodes, rhsTableAlias);
         TableNode rhsTable = NODE_FACTORY.derivedTable(rhsTableAlias, subquery);
         JoinType joinType = isTopNode ? (node.isNegate() ? JoinType.Anti : JoinType.Semi) : JoinType.Left;
