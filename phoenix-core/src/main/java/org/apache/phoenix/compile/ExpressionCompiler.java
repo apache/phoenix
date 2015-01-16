@@ -137,7 +137,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     private int nodeCount;
     private final boolean resolveViewConstants;
 
-    ExpressionCompiler(StatementContext context) {
+    public ExpressionCompiler(StatementContext context) {
         this(context,GroupBy.EMPTY_GROUP_BY, false);
     }
 

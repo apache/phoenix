@@ -22,9 +22,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.SchemaUtil;
 
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Maps;
 
 
@@ -41,7 +44,7 @@ public class RowProjector {
     public static final RowProjector EMPTY_PROJECTOR = new RowProjector(Collections.<ColumnProjector>emptyList(),0, true);
 
     private final List<? extends ColumnProjector> columnProjectors;
-    private final Map<String,Integer> reverseIndex;
+    private final ListMultimap<String,Integer> reverseIndex;
     private final boolean allCaseSensitive;
     private final boolean someCaseSensitive;
     private final int estimatedSize;
@@ -60,7 +63,7 @@ public class RowProjector {
     public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize, boolean isProjectEmptyKeyValue) {
         this.columnProjectors = Collections.unmodifiableList(columnProjectors);
         int position = columnProjectors.size();
-        reverseIndex = Maps.newHashMapWithExpectedSize(position);
+        reverseIndex = ArrayListMultimap.<String, Integer>create();
         boolean allCaseSensitive = true;
         boolean someCaseSensitive = false;
         for (--position; position >= 0; position--) {
@@ -68,6 +71,9 @@ public class RowProjector {
             allCaseSensitive &= colProjector.isCaseSensitive();
             someCaseSensitive |= colProjector.isCaseSensitive();
             reverseIndex.put(colProjector.getName(), position);
+            if (!colProjector.getTableName().isEmpty()) {
+                reverseIndex.put(SchemaUtil.getColumnName(colProjector.getTableName(), colProjector.getName()), position);
+            }
         }
         this.allCaseSensitive = allCaseSensitive;
         this.someCaseSensitive = someCaseSensitive;
@@ -87,17 +93,21 @@ public class RowProjector {
         if (!someCaseSensitive) {
             name = SchemaUtil.normalizeIdentifier(name);
         }
-        Integer index = reverseIndex.get(name);
-        if (index == null) {
+        List<Integer> index = reverseIndex.get(name);
+        if (index.isEmpty()) {
             if (!allCaseSensitive && someCaseSensitive) {
                 name = SchemaUtil.normalizeIdentifier(name);
                 index = reverseIndex.get(name);
             }
-            if (index == null) {
+            if (index.isEmpty()) {
                 throw new ColumnNotFoundException(name);
             }
         }
-        return index;
+        if (index.size() > 1) {
+            throw new AmbiguousColumnException(name);
+        }
+        
+        return index.get(0);
     }
     
     public ColumnProjector getColumnProjector(int index) {
