@@ -203,6 +203,10 @@ public abstract class BaseQueryPlan implements QueryPlan {
         
         // Optimize here when getting explain plan, as queries don't get optimized until after compilation
         QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(context.getStatement(), this);
+        if (!(plan instanceof BaseQueryPlan)) {
+            return plan.getExplainPlan();
+        }
+        
         ResultIterator iterator = plan.iterator();
         List<String> planSteps = Lists.newArrayListWithExpectedSize(5);
         iterator.explain(planSteps);

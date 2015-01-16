@@ -123,6 +123,14 @@ public class HintNode {
         return new HintNode(hints);
     }
     
+    public static HintNode subtract(HintNode hintNode, Hint[] remove) {
+        Map<Hint,String> hints = new HashMap<Hint,String>(hintNode.hints);
+        for (Hint hint : remove) {
+            hints.remove(hint);
+        }
+        return new HintNode(hints);
+    }
+    
     private HintNode() {
         hints = new HashMap<Hint,String>();
     }

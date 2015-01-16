@@ -50,6 +50,18 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
     }
     
     /**
+     * Rewrite the parse node by translating all data table column references to
+     * references to the corresponding index column.
+     * @param node the parse node
+     * @param dataResolver the column resolver
+     * @return new parse node or the same one if nothing was rewritten.
+     * @throws SQLException 
+     */
+    public static ParseNode translate(ParseNode node, ColumnResolver dataResolver) throws SQLException {
+        return rewrite(node, new IndexStatementRewriter(dataResolver, null));
+    }
+    
+    /**
      * Rewrite the select statement by translating all data table column references to
      * references to the corresponding index column.
      * @param statement the select statement

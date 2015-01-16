@@ -142,11 +142,9 @@ public class ProjectionCompiler {
             if (resolveColumn) {
                 if (tableRef.getTableAlias() != null) {
                     ref = resolver.resolveColumn(null, tableRef.getTableAlias(), colName);
-                    colName = SchemaUtil.getColumnName(tableRef.getTableAlias(), colName);
                 } else {
                     String schemaName = table.getSchemaName().getString();
                     ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, table.getTableName().getString(), colName);
-                    colName = SchemaUtil.getColumnName(table.getName().getString(), colName);
                 }
             }
             Expression expression = ref.newColumnExpression();
@@ -157,7 +155,7 @@ public class ProjectionCompiler {
             }
             projectedExpressions.add(expression);
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
-            projectedColumns.add(new ExpressionProjector(colName, table.getName().getString(), expression, isCaseSensitive));
+            projectedColumns.add(new ExpressionProjector(colName, tableRef.getTableAlias() == null ? table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive));
         }
     }
     
@@ -191,11 +189,9 @@ public class ProjectionCompiler {
             if (resolveColumn) {
                 if (tableRef.getTableAlias() != null) {
                     ref = resolver.resolveColumn(null, tableRef.getTableAlias(), indexColName);
-                    colName = SchemaUtil.getColumnName(tableRef.getTableAlias(), colName);
                 } else {
                     String schemaName = index.getSchemaName().getString();
                     ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, index.getTableName().getString(), indexColName);
-                    colName = SchemaUtil.getColumnName(table.getName().getString(), colName);
                 }
             }
             Expression expression = ref.newColumnExpression();
@@ -204,7 +200,7 @@ public class ProjectionCompiler {
             // appear as a column in an index
             projectedExpressions.add(expression);
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
-            ExpressionProjector projector = new ExpressionProjector(colName, table.getName().getString(), expression, isCaseSensitive);
+            ExpressionProjector projector = new ExpressionProjector(colName, tableRef.getTableAlias() == null ? table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive);
             projectedColumns.add(projector);
         }
     }
@@ -218,8 +214,8 @@ public class ProjectionCompiler {
             projectedExpressions.add(expression);
             String colName = column.getName().toString();
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
-            projectedColumns.add(new ExpressionProjector(colName, table.getName()
-                    .getString(), expression, isCaseSensitive));
+            projectedColumns.add(new ExpressionProjector(colName, tableRef.getTableAlias() == null ? 
+                    table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive));
         }
     }
 
@@ -237,7 +233,7 @@ public class ProjectionCompiler {
             String colName = column.getName().toString();
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
             projectedColumns.add(new ExpressionProjector(colName, 
-                    table.getName().getString(), expression, isCaseSensitive));
+                    tableRef.getTableAlias() == null ? table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive));
         }
     }
     
@@ -336,7 +332,7 @@ public class ProjectionCompiler {
                 String columnAlias = aliasedNode.getAlias() != null ? aliasedNode.getAlias() : SchemaUtil.normalizeIdentifier(aliasedNode.getNode().getAlias());
                 boolean isCaseSensitive = aliasedNode.getAlias() != null ? aliasedNode.isCaseSensitve() : (columnAlias != null ? SchemaUtil.isCaseSensitive(aliasedNode.getNode().getAlias()) : selectVisitor.isCaseSensitive);
                 String name = columnAlias == null ? expression.toString() : columnAlias;
-                projectedColumns.add(new ExpressionProjector(name, table.getName().getString(), expression, isCaseSensitive));
+                projectedColumns.add(new ExpressionProjector(name, tableRef.getTableAlias() == null ? table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive));
             }
             if(arrayKVFuncs.size() > 0 && arrayKVRefs.size() > 0) {
                 serailizeArrayIndexInformationAndSetInScan(context, arrayKVFuncs, arrayKVRefs);

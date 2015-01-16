@@ -350,7 +350,7 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         ParseNode normNode = leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
             @Override
             public ParseNode createNode(List<ParseNode> children) {
-                return NODE_FACTORY.in(children.get(0), children.get(1), node.isNegate());
+                return NODE_FACTORY.in(children.get(0), children.get(1), node.isNegate(), node.isSubqueryDistinct());
             }
         });
         return normNode;
