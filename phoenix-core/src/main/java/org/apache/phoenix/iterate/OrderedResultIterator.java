@@ -185,6 +185,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 public Tuple next() throws SQLException {
                     ResultEntry entry = queueEntries.poll();
                     if (entry == null || (limit != null && ++count > limit)) {
+                        resultIterator.close();
                         resultIterator = PeekingResultIterator.EMPTY_ITERATOR;
                         return null;
                     }
@@ -239,7 +240,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
     }
 
     @Override
-    public void close()  {
+    public void close() throws SQLException {
+        resultIterator.close();
         resultIterator = PeekingResultIterator.EMPTY_ITERATOR;
     }
 
