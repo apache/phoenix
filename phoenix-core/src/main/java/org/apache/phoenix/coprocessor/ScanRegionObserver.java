@@ -22,6 +22,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Set;
 
@@ -285,7 +286,16 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                 try {
                     s.close();
                 } finally {
-                    chunk.close();                }
+                    try {
+                        if(iterator != null) {
+                            iterator.close();    
+                        }
+                    } catch (SQLException e) {
+                        ServerUtil.throwIOException(region.getRegionNameAsString(), e);
+                    } finally {
+                        chunk.close();                
+                    }
+                }
             }
 
             @Override
