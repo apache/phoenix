@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.BaseCompoundExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.types.PArrayDataType;
@@ -63,6 +64,11 @@ public class InlineArrayElemRefExpression extends BaseCompoundExpression {
     @Override
     public void write(DataOutput output) throws IOException {
         super.write(output);
+    }
+    
+    @Override
+    public int getEstimatedByteSize() {
+        return super.getEstimatedByteSize();
     }
     
     @Override

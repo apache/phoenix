@@ -99,6 +99,9 @@ public class PostIndexDDLCompiler {
         posOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0);
         for (int i = posOffset; i < nIndexPKColumns; i++) {
             PColumn col = indexPKColumns.get(i);
+            if (!IndexUtil.isIndexColumn(col)) {
+                continue;
+            }
         	// Translate to the data table column name
             String indexColumnName = col.getName().getString();
             String dataFamilyName = IndexUtil.getDataColumnFamilyName(indexColumnName);

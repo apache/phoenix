@@ -182,6 +182,13 @@ public class RoundDateExpression extends ScalarFunction {
     }
     
     @Override
+    public int getEstimatedByteSize() {
+        int size = super.getEstimatedByteSize();
+        size += WritableUtils.getVIntSize(divBy);
+        return size;
+    }
+    
+    @Override
     public Integer getMaxLength() {
         return children.get(0).getMaxLength();
     }

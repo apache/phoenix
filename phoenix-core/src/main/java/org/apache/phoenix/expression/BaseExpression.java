@@ -216,6 +216,11 @@ public abstract class BaseExpression implements Expression {
     @Override
     public void write(DataOutput output) throws IOException {
     }
+    
+    @Override
+    public int getEstimatedByteSize() {
+        return 0;
+    }
 
     @Override
     public void reset() {

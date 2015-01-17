@@ -63,7 +63,14 @@ public abstract class BaseSingleExpression extends BaseExpression {
         WritableUtils.writeVInt(output, ExpressionType.valueOf(children.get(0)).ordinal());
         children.get(0).write(output);
     }
-
+    
+    @Override
+    public int getEstimatedByteSize() {
+        int size = WritableUtils.getVIntSize(ExpressionType.valueOf(children.get(0)).ordinal());
+        size += children.get(0).getEstimatedByteSize();
+        return size;
+    }
+    
     @Override
     public boolean isNullable() {
         return children.get(0).isNullable();

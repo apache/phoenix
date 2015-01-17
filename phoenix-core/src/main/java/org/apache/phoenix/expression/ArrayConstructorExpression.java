@@ -148,6 +148,13 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
     }
     
     @Override
+    public int getEstimatedByteSize() {
+        int size = super.getEstimatedByteSize();
+        size += WritableUtils.getVIntSize(baseType.ordinal());
+        return size;
+    }
+    
+    @Override
     public boolean requiresFinalEvaluation() {
         return true;
     }

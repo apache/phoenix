@@ -88,6 +88,13 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
         output.writeBoolean(literalExprPtr != null);
     }
     
+    @Override
+    public int getEstimatedByteSize() {
+        int size = super.getEstimatedByteSize();
+        size += 1;
+        return size;
+    }
+    
     private void init(boolean isConstant) {
         this.ptrs = new ImmutableBytesWritable[children.size()];
         if(isConstant) {

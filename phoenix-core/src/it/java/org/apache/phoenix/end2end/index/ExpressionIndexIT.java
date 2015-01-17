@@ -144,13 +144,13 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			        " WHERE UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(char_col2) = ?"
 			        +" AND decimal_pk+int_pk+decimal_col2+int_col1=?"
 			        // since a.date1 and b.date2 are NULLABLE and date is fixed width, these expressions are stored as DECIMAL in the index (which is not fixed width)
-			        +" AND date_pk+1=? AND cast (date1+1 as DECIMAL) =? AND cast (date2+1 as DECIMAL)=?";
+			        +" AND date_pk+1=? AND cast (date1+1 as DECIMAL)=? AND cast (date2+1 as DECIMAL)=?";
 			stmt = conn.prepareStatement(whereSql);
 			stmt.setString(1, "VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ");
 			stmt.setInt(2, 4);
 			Date date = DateUtil.parseDate("2015-01-02 00:00:00");
             stmt.setDate(3, date);
-			stmt.setBigDecimal(4, new BigDecimal(date.getTime()));
+            stmt.setBigDecimal(4, new BigDecimal(date.getTime()));
 			stmt.setBigDecimal(5, new BigDecimal(date.getTime()));
 	
 			// verify that the query does a range scan on the index table

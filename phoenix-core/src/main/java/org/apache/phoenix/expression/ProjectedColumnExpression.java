@@ -24,6 +24,7 @@ import java.util.Collection;
 import java.util.Collections;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.KeyValueSchema;
@@ -32,6 +33,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 public class ProjectedColumnExpression extends ColumnExpression {
@@ -136,6 +138,16 @@ public class ProjectedColumnExpression extends ColumnExpression {
         getSchema().write(output);
         output.writeInt(position);
         output.writeUTF(displayName);
+    }
+    
+    @Override
+    public int getEstimatedByteSize() {
+        int size = super.getEstimatedByteSize();
+        size += getSchema().getEstimatedByteSize();
+        size += WritableUtils.getVIntSize(position);
+        size += 2; // length is stored in 2 bytes
+        size += ByteUtil.getSize(displayName);
+        return size;
     }
 
     @Override

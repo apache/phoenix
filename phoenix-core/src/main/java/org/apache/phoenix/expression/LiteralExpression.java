@@ -277,6 +277,14 @@ public class LiteralExpression extends BaseTerminalExpression {
         WritableUtils.writeVInt(output, sortOrderAndDeterminism);
         WritableUtils.writeVInt(output, this.type == null ? -1 : this.type.ordinal());
     }
+    
+    @Override
+    public int getEstimatedByteSize() {
+        int size = WritableUtils.getVIntSize((byteValue.length + 1) * (this.determinism==Determinism.ALWAYS ? 1 : -1));
+        size += WritableUtils.getVIntSize( ((this.determinism.ordinal()+1)<<2) + sortOrder.getSystemValue());
+        size += WritableUtils.getVIntSize(this.type == null ? -1 : this.type.ordinal());
+        return size;
+    }
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {

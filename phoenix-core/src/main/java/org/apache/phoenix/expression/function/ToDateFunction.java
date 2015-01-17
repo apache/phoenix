@@ -25,7 +25,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.*;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
@@ -34,6 +33,7 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 
 
@@ -124,6 +124,13 @@ public class ToDateFunction extends ScalarFunction {
     public void write(DataOutput output) throws IOException {
         super.write(output);
         WritableUtils.writeString(output, dateFormat);
+    }
+    
+    @Override
+    public int getEstimatedByteSize() {
+        int size = super.getEstimatedByteSize();
+        size += ByteUtil.getEstimatedByteSize(dateFormat);
+        return size;
     }
 
     private Expression getExpression() {

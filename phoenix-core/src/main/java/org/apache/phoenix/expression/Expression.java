@@ -88,4 +88,9 @@ public interface Expression extends PDatum, Writable {
      * @return
      */
     boolean requiresFinalEvaluation();
+    
+    /**
+     * @return the estimated size in bytes of the expression when serialized
+     */
+    int getEstimatedByteSize();
 }

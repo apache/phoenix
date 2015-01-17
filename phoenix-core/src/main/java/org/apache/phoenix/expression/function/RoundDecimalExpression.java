@@ -38,7 +38,9 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 import com.google.common.collect.Lists;
+
 import java.util.Collections;
+
 import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.query.KeyRange;
@@ -143,6 +145,13 @@ public class RoundDecimalExpression extends ScalarFunction {
     public void write(DataOutput output) throws IOException {
         super.write(output);
         WritableUtils.writeVInt(output, scale);
+    }
+    
+    @Override
+    public int getEstimatedByteSize() {
+        int size = super.getEstimatedByteSize();
+        size += WritableUtils.getVIntSize(scale);
+        return size;
     }
 
     @Override

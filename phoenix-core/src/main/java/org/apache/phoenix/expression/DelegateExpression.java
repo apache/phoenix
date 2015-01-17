@@ -69,6 +69,11 @@ public class DelegateExpression implements Expression {
     public void write(DataOutput output) throws IOException {
         delegate.write(output);
     }
+    
+    @Override
+    public int getEstimatedByteSize() {
+        return delegate.getEstimatedByteSize();
+    }
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {

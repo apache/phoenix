@@ -268,6 +268,10 @@ public class IndexUtil {
         return column.getName().getString().startsWith(INDEX_COLUMN_NAME_SEP);
     }
     
+    public static boolean isIndexColumn(PColumn column) {
+        return column.getName().getString().contains(INDEX_COLUMN_NAME_SEP);
+    }
+    
     public static boolean getViewConstantValue(PColumn column, ImmutableBytesWritable ptr) {
         byte[] value = column.getViewConstant();
         if (value != null) {

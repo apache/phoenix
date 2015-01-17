@@ -118,7 +118,7 @@ abstract public class ColumnExpression extends BaseTerminalExpression {
         // read/write type ordinal, maxLength presence, scale presence and isNullable bit together to save space
         int typeAndFlag = (isNullable ? 1 : 0) | ((scale != null ? 1 : 0) << 1) | ((maxLength != null ? 1 : 0) << 2)
                 | (type.ordinal() << 3);
-        WritableUtils.writeVInt(output,typeAndFlag);
+        WritableUtils.writeVInt(output, typeAndFlag);
         if (scale != null) {
             WritableUtils.writeVInt(output, scale);
         }
@@ -126,5 +126,21 @@ abstract public class ColumnExpression extends BaseTerminalExpression {
             WritableUtils.writeVInt(output, maxLength);
         }
         WritableUtils.writeVInt(output, sortOrder.getSystemValue());
+    }
+    
+    @Override
+    public int getEstimatedByteSize() {
+        int size = 0;
+        int typeAndFlag = (isNullable ? 1 : 0) | ((scale != null ? 1 : 0) << 1) | ((maxLength != null ? 1 : 0) << 2)
+                | (type.ordinal() << 3);
+        size += WritableUtils.getVIntSize(typeAndFlag);
+        if (scale != null) {
+            size += WritableUtils.getVIntSize(scale);
+        }
+        if (maxLength != null) {
+            size += WritableUtils.getVIntSize(maxLength);
+        }
+        size += WritableUtils.getVIntSize(sortOrder.getSystemValue());
+        return size;
     }
 }

@@ -123,6 +123,18 @@ public abstract class BaseCompoundExpression extends BaseExpression {
             child.write(output);
         }
     }
+    
+    @Override
+    public int getEstimatedByteSize() {
+        int size = 0;
+        size += WritableUtils.getVIntSize(children.size());
+        for (int i = 0; i < children.size(); i++) {
+            Expression child = children.get(i);
+            size += WritableUtils.getVIntSize(ExpressionType.valueOf(child).ordinal());
+            size += child.getEstimatedByteSize();
+        }
+        return size;
+    }
 
     @Override
     public void reset() {
