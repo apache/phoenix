@@ -92,7 +92,6 @@ import com.google.common.collect.Lists;
  */
 public abstract class BaseResultIterators extends ExplainTable implements ResultIterators {
 	private static final Logger logger = LoggerFactory.getLogger(BaseResultIterators.class);
-    private static final int DEFAULT_THREAD_TIMEOUT_MS = 60000; // 1min
     private static final int ESTIMATED_GUIDEPOSTS_PER_REGION = 20;
 
     private final List<List<Scan>> scans;
@@ -516,7 +515,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(numScans);
         allFutures.add(futures);
         SQLException toThrow = null;
-        int queryTimeOut = props.getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, DEFAULT_THREAD_TIMEOUT_MS);
+        // Get query time out from Statement and convert from seconds back to milliseconds
+        int queryTimeOut = context.getStatement().getQueryTimeout() * 1000;
         long maxQueryEndTime = System.currentTimeMillis() + queryTimeOut;
         try {
             submitWork(scans, futures, allIterators, splits.size());
