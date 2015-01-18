@@ -18,6 +18,7 @@
 package org.apache.phoenix.exception;
 
 import java.sql.SQLException;
+import java.sql.SQLTimeoutException;
 import java.util.Map;
 
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
@@ -295,7 +296,13 @@ public enum SQLExceptionCode {
     OUTDATED_JARS(2007, "INT09", "Outdated jars."),
     INDEX_METADATA_NOT_FOUND(2008, "INT10", "Unable to find cached index metadata. "),
     UNKNOWN_ERROR_CODE(2009, "INT11", "Unknown error code"),
-    OPERATION_TIMED_OUT(6000, "TIM01", "Operation timed out")
+    OPERATION_TIMED_OUT(6000, "TIM01", "Operation timed out", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new SQLTimeoutException(OPERATION_TIMED_OUT.getMessage(),
+                    OPERATION_TIMED_OUT.getSQLState(), OPERATION_TIMED_OUT.getErrorCode());
+        }
+    })
     ;
 
     private final int errorCode;
