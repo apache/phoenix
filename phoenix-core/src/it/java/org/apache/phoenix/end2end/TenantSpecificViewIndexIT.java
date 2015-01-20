@@ -120,9 +120,12 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("explain select pk2,col1 from acme where col1='f'");
         if(localIndex){
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_MT_BASE ['a',-32768,'f']\nCLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_MT_BASE ['a',-32768,'f']\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "CLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
         } else {
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_MT_BASE ['a',-32768,'f']",QueryUtil.getExplainPlan(rs));
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_MT_BASE ['a',-32768,'f']\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY",QueryUtil.getExplainPlan(rs));
         }
         
         try {
