@@ -807,7 +807,7 @@ public class JoinCompiler {
                 Expression sourceExpression = rowProjector.getColumnProjector(column.getPosition()).getExpression();
                 PColumnImpl projectedColumn = new PColumnImpl(PNameFactory.newName(colName), PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY),
                         sourceExpression.getDataType(), sourceExpression.getMaxLength(), sourceExpression.getScale(), sourceExpression.isNullable(),
-                        column.getPosition(), sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), null);
+                        column.getPosition(), sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr());
                 projectedColumns.add(projectedColumn);
                 sourceExpressions.add(sourceExpression);
             }
@@ -1367,7 +1367,7 @@ public class JoinCompiler {
                     } else {
                         PColumnImpl column = new PColumnImpl(c.getName(), c.getFamilyName(), c.getDataType(),
                                 c.getMaxLength(), c.getScale(), true, c.getPosition(),
-                                c.getSortOrder(), c.getArraySize(), c.getViewConstant(), c.isViewReferenced(), null);
+                                c.getSortOrder(), c.getArraySize(), c.getViewConstant(), c.isViewReferenced(), c.getExpressionStr());
                         merged.add(column);
                     }
                 }
@@ -1378,7 +1378,7 @@ public class JoinCompiler {
                     PColumnImpl column = new PColumnImpl(c.getName(),
                             PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY), c.getDataType(),
                             c.getMaxLength(), c.getScale(), type == JoinType.Inner ? c.isNullable() : true, position++,
-                            c.getSortOrder(), c.getArraySize(), c.getViewConstant(), c.isViewReferenced(), null);
+                            c.getSortOrder(), c.getArraySize(), c.getViewConstant(), c.isViewReferenced(), c.getExpressionStr());
                     merged.add(column);
                 }
             }
