@@ -2133,7 +2133,7 @@ public enum PDataType {
             return new Date((Long) LONG.getSampleValue(maxLength, arrayLength));
         }
     },
-    UNSIGNED_TIMESTAMP("UNSIGNED_TIMESTAMP", 19, Timestamp.class, null) {
+    UNSIGNED_TIMESTAMP("UNSIGNED_TIMESTAMP", 20, Timestamp.class, null) {
 
         @Override
         public byte[] toBytes(Object object) {
