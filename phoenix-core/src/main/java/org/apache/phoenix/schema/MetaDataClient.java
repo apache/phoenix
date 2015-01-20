@@ -124,6 +124,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
@@ -998,11 +999,16 @@ public class MetaDataClient {
 					final StatementContext context = new StatementContext(phoenixStatment, resolver);
 			        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
 			        Expression expression = parseNode.accept(expressionCompiler);	
+			        if (expressionCompiler.isAggregate()) {
+			            throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
+			        }
+			        if (expression.getDeterminism() != Determinism.ALWAYS) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
+                    }
                 	
                 	PDataType dataType = IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
-                	// use the expression's hashCode as the column name for uniqueness
                 	colName = colName != null ? colName : 
-                		ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, String.valueOf(expression.hashCode())));
+                		ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, expression.toString()));
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, pair.getSecond()));
                     // TODO set the max length and scale correctly
                     columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), expression.isNullable(), maxLength, scale, false, pair.getSecond(), expression.toString()));

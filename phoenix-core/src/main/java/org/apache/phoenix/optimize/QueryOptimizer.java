@@ -245,6 +245,14 @@ public class QueryOptimizer {
              * For now, we just don't use this index (as opposed to trying to join back from
              * the index table to the data table.
              */
+        } catch (Exception e) {
+            System.err.println(e);
+            /* Means that a column is being used that's not in our index, or
+             * an exception was throw while evaluating an expression.
+             * Since we currently don't keep stats, we don't know the selectivity of the index.
+             * For now, we just don't use this index (as opposed to trying to join back from
+             * the index table to the data table.
+             */
         }
         return null;
     }

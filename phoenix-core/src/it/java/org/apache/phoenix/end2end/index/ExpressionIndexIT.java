@@ -463,7 +463,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			String groupBySql = "SELECT (int_col1+int_col2), COUNT(*) FROM " + fullDataTableName + " GROUP BY (int_col1+int_col2)";
 			ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + groupBySql);
 			String expectedPlan = "CLIENT PARALLEL 1-WAY "+ (localIndex? "RANGE SCAN OVER _LOCAL_IDX_"+fullDataTableName+" [-32768]" : "FULL SCAN OVER INDEX_TEST.IDX")
-			+"\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT(-902203296)]\nCLIENT MERGE SORT";
+			+"\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT((A.INT_COL1 + B.INT_COL2))]\nCLIENT MERGE SORT";
             assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
 			rs = conn.createStatement().executeQuery(groupBySql);
 			assertTrue(rs.next());
@@ -514,7 +514,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			String sql = "SELECT distinct int_col1+1 FROM " + fullDataTableName + " where int_col1+1 > 0";
 			ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
 			String expectedPlan = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "+ (localIndex ? "_LOCAL_IDX_"+fullDataTableName+" [-32768,0] - [-32768,*]" : "INDEX_TEST.IDX [0] - [*]")
-			        +"\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT(-471356227)]\nCLIENT MERGE SORT";
+			        +"\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT((A.INT_COL1 + 1))]\nCLIENT MERGE SORT";
             assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
 			rs = conn.createStatement().executeQuery(sql);
 			assertTrue(rs.next());
