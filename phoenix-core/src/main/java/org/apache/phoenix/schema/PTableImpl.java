@@ -200,12 +200,12 @@ public class PTableImpl implements PTable {
                 table.getViewType(), table.getViewIndexId(), table.getTableStats());
     }
 
-    public static PTableImpl makePTable(PTable table, long timeStamp, long sequenceNumber, List<PColumn> columns, boolean isImmutableRows) throws SQLException {
+    public static PTableImpl makePTable(PTable table, long timeStamp, long sequenceNumber, List<PColumn> columns, boolean isImmutableRows, boolean isWalDisabled, boolean isMultiTenant) throws SQLException {
         return new PTableImpl(
                 table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timeStamp, 
                 sequenceNumber, table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(), table.getIndexes(),
-                isImmutableRows, table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(), table.isWALDisabled(),
-                table.isMultiTenant(), table.getViewType(), table.getViewIndexId(), table.getTableStats());
+                isImmutableRows, table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(), isWalDisabled,
+                isMultiTenant, table.getViewType(), table.getViewIndexId(), table.getTableStats());
     }
 
     public static PTableImpl makePTable(PTable table, PIndexState state) throws SQLException {

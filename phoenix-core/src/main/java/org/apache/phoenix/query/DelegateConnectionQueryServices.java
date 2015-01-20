@@ -77,8 +77,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
 
     @Override
     public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
-            long tableSeqNum, boolean isImmutableRows) throws SQLException {
-        return getDelegate().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
+            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant) throws SQLException {
+        return getDelegate().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant);
     }
 
     @Override
