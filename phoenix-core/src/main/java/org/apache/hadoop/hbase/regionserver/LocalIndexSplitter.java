@@ -25,7 +25,9 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.catalog.MetaEditor;
+import org.apache.hadoop.hbase.catalog.MetaReader;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
@@ -36,7 +38,6 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ParseNodeFactory;
-import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.PIndexState;
@@ -63,16 +64,24 @@ public class LocalIndexSplitter extends BaseRegionObserver {
             byte[] splitKey, List<Mutation> metaEntries) throws IOException {
         RegionCoprocessorEnvironment environment = ctx.getEnvironment();
         HTableDescriptor tableDesc = ctx.getEnvironment().getRegion().getTableDesc();
-        if (SchemaUtil.isMetaTable(tableDesc.getName())
-                || SchemaUtil.isSequenceTable(tableDesc.getName())) {
+        if (SchemaUtil.isSystemTable(tableDesc.getName())) {
             return;
         }
         RegionServerServices rss = ctx.getEnvironment().getRegionServerServices();
         if (tableDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) == null
                 || !Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(tableDesc
                         .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+            TableName indexTable =
+                    TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(tableDesc.getName()));
+            if (!MetaReader.tableExists(rss.getCatalogTracker(), indexTable)) return;
+
             HRegion indexRegion = IndexUtil.getIndexRegion(environment);
-            if (indexRegion == null) return;
+            if (indexRegion == null) {
+                LOG.warn("Index region corresponindg to data region " + environment.getRegion()
+                        + " not in the same server. So skipping the split.");
+                ctx.bypass();
+                return;
+            }
             try {
                 int encodedVersion = VersionUtil.encodeVersion(environment.getHBaseVersion());
                 if(encodedVersion >= SPLIT_TXN_MINIMUM_SUPPORTED_VERSION) {
@@ -136,7 +145,7 @@ public class LocalIndexSplitter extends BaseRegionObserver {
             for (PTable index : indexes) {
                 if (index.getIndexType() == IndexType.LOCAL) {
                     AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
-                        TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
+                        org.apache.phoenix.parse.TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
                         dataTable.getTableName().getString(), false, PIndexState.INACTIVE);
                     client.alterIndex(indexStatement);
                 }
