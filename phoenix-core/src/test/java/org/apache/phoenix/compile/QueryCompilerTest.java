@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -1478,6 +1479,19 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
        } finally {
             conn1.close();
         }
+    }
+
+    @Test
+    public void testMultiCFProjection() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE multiCF (k integer primary key, a.a varchar, b.b varchar)";
+        conn.createStatement().execute(ddl);
+        String query = "SELECT COUNT(*) FROM multiCF";
+        QueryPlan plan = getQueryPlan(query,Collections.emptyList());
+        plan.iterator();
+        Scan scan = plan.getContext().getScan();
+        assertTrue(scan.getFilter() instanceof FirstKeyOnlyFilter);
+        assertEquals(1, scan.getFamilyMap().size());
     }
 
 }

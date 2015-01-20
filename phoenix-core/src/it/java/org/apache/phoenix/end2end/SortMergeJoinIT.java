@@ -129,6 +129,7 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 }, {
                 "SORT-MERGE-JOIN (LEFT) TABLES\n" +
                 "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_supplier\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" + 
                 "        SERVER SORTED BY [S.:supplier_id]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND\n" +
@@ -151,6 +152,7 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 }, {
                 "SORT-MERGE-JOIN (LEFT) TABLES\n" +
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + " [-32768]\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" + 
                 "        SERVER SORTED BY [S.:supplier_id]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND\n" +

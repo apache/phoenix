@@ -57,7 +57,7 @@ public class QueryTimeoutIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
     
     @Test
-    public void testUpsertSelectQueryTimeout() throws Exception {
+    public void testQueryTimeout() throws Exception {
         int nRows = 20000;
         Connection conn;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
