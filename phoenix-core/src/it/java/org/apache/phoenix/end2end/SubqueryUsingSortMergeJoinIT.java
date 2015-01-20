@@ -65,7 +65,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public abstract class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
+public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
     
     private SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     private String[] indexDDL;
