@@ -571,7 +571,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 expr =  CastParseNode.convertToRoundExpressionIfNeeded(fromDataType, targetDataType, children);
             }
         }
-        return CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), expr.getMaxLength());  
+        return wrapGroupByExpression(CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), expr.getMaxLength()));  
     }
     
    @Override

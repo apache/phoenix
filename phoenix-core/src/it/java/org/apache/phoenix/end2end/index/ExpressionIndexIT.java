@@ -144,14 +144,14 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			        " WHERE UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(char_col2) = ?"
 			        +" AND decimal_pk+int_pk+decimal_col2+int_col1=?"
 			        // since a.date1 and b.date2 are NULLABLE and date is fixed width, these expressions are stored as DECIMAL in the index (which is not fixed width)
-			        +" AND date_pk+1=? AND cast (date1+1 as DECIMAL)=? AND cast (date2+1 as DECIMAL)=?";
+			        +" AND date_pk+1=? AND date1+1=? AND date2+1=?";
 			stmt = conn.prepareStatement(whereSql);
 			stmt.setString(1, "VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ");
 			stmt.setInt(2, 4);
 			Date date = DateUtil.parseDate("2015-01-02 00:00:00");
             stmt.setDate(3, date);
-            stmt.setBigDecimal(4, new BigDecimal(date.getTime()));
-			stmt.setBigDecimal(5, new BigDecimal(date.getTime()));
+            stmt.setDate(4, date);
+            stmt.setDate(5, date);
 	
 			// verify that the query does a range scan on the index table
 			ResultSet rs = stmt.executeQuery("EXPLAIN " + whereSql);
@@ -463,7 +463,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			String groupBySql = "SELECT (int_col1+int_col2), COUNT(*) FROM " + fullDataTableName + " GROUP BY (int_col1+int_col2)";
 			ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + groupBySql);
 			String expectedPlan = "CLIENT PARALLEL 1-WAY "+ (localIndex? "RANGE SCAN OVER _LOCAL_IDX_"+fullDataTableName+" [-32768]" : "FULL SCAN OVER INDEX_TEST.IDX")
-			+"\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [-902203296]\nCLIENT MERGE SORT";
+			+"\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT(-902203296)]\nCLIENT MERGE SORT";
             assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
 			rs = conn.createStatement().executeQuery(groupBySql);
 			assertTrue(rs.next());
@@ -514,7 +514,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 			String sql = "SELECT distinct int_col1+1 FROM " + fullDataTableName + " where int_col1+1 > 0";
 			ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
 			String expectedPlan = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "+ (localIndex ? "_LOCAL_IDX_"+fullDataTableName+" [-32768,0] - [-32768,*]" : "INDEX_TEST.IDX [0] - [*]")
-			        +"\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [-471356227]\nCLIENT MERGE SORT";
+			        +"\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT(-471356227)]\nCLIENT MERGE SORT";
             assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
 			rs = conn.createStatement().executeQuery(sql);
 			assertTrue(rs.next());

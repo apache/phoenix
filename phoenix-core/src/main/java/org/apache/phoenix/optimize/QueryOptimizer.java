@@ -237,7 +237,8 @@ public class QueryOptimizer {
                     return plan;
                 }
             }
-        } catch (Exception e) {
+        } catch (ColumnNotFoundException e) {
+            System.err.println(e);
             /* Means that a column is being used that's not in our index, or
              * an exception was throw while evaluating an expression.
              * Since we currently don't keep stats, we don't know the selectivity of the index.

@@ -44,14 +44,17 @@ import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.NotParseNode;
 import org.apache.phoenix.parse.OrParseNode;
 import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.RowValueConstructorParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.StringConcatParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.IndexUtil;
 
 /**
@@ -60,6 +63,8 @@ import org.apache.phoenix.util.IndexUtil;
  * not visited but processed as a ColumnParseNode.
  */
 public class IndexColumnExpressionCompiler extends ExpressionCompiler {
+    
+    private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
 	
 	IndexColumnExpressionCompiler(StatementContext context) {
         super(context);
@@ -84,11 +89,10 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
      *            data table parse node
      */
 	private Expression getExpression(ParseNode node) throws SQLException {
-		PhoenixConnection connection = this.context.getConnection();
-        PTable indexTable = this.context.getCurrentTable().getTable();
+		PTable indexTable = this.context.getCurrentTable().getTable();
         NamedTableNode dataTableNode = NamedTableNode.create(null, TableName.create(indexTable.getParentSchemaName().getString(), 
         		indexTable.getParentTableName().getString()), Collections.<ColumnDef>emptyList());
-        ColumnResolver resolver = FromCompiler.getResolver(dataTableNode, connection);
+        ColumnResolver resolver = FromCompiler.getResolver(dataTableNode, this.context.getConnection());
 		StatementContext context = new StatementContext(this.context.getStatement(), resolver, new Scan(), new SequenceManager(this.context.getStatement()));        
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         return node.accept(expressionCompiler);		
@@ -124,6 +128,13 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
         ParseNode dataTableParseNode = node.accept(statementRewriter);
     	Expression expression = getExpression(dataTableParseNode);
     	ColumnParseNode columnParseNode = new ColumnParseNode(null, IndexUtil.getIndexColumnName(null,String.valueOf(expression.hashCode())), null);
+    	PDataType expressionType = expression.getDataType();
+        PDataType indexColType = IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
+        // if data type of expression is different from the index column data type, cast the to expression type
+        if (indexColType != expressionType) { 
+            Expression colExpression = super.visit(columnParseNode);
+            return super.visitLeave(FACTORY.cast(columnParseNode, expressionType, null, null), Collections.<Expression>singletonList(colExpression)); 
+        }      
     	return visit(columnParseNode);
     }
 

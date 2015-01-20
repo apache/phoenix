@@ -347,14 +347,12 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 	                this.rowKeyMetaData.setIndexPkPosition(dataPkPos, indexPos);
 	            } else {
 	                indexColByteSize += column.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(column) : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
-	                this.indexedColumnTypes.add(column.getDataType());
 	                this.indexedExpressions.add(expression);
 	            }
             }
             else {
             	indexColByteSize += expression.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(expression) : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
                 this.indexedExpressions.add(expression);
-                this.indexedColumnTypes.add(expression.getDataType());
             }
             // set the sort order of the expression correctly
             if (indexColumn.getSortOrder() == SortOrder.DESC) {
@@ -1050,6 +1048,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 @Override
                 public Void visit(KeyValueColumnExpression expression) {
                 	indexedColumns.add(new ColumnReference(expression.getColumnFamily(), expression.getColumnName()));
+                    indexedColumnTypes.add(expression.getDataType());
                     return null;
                 }
             };
