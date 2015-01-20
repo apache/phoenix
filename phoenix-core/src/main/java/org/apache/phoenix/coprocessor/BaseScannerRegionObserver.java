@@ -284,7 +284,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                         replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
                     }
                     if (ScanUtil.isLocalIndex(scan) && !ScanUtil.isAnalyzeTable(scan)) {
-                        IndexUtil.wrapResultUsingOffset(result, offset, dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
+                        IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
+                            tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
                     }
                     // There is a scanattribute set to retrieve the specific array element
                     return next;
@@ -305,7 +306,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                         replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
                     }
                     if ((offset > 0 || ScanUtil.isLocalIndex(scan))  && !ScanUtil.isAnalyzeTable(scan)) {
-                        IndexUtil.wrapResultUsingOffset(result, offset, dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
+                        IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
+                            tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
                     }
                     // There is a scanattribute set to retrieve the specific array element
                     return next;

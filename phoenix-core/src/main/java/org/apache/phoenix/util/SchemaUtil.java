@@ -388,6 +388,12 @@ public class SchemaUtil {
         return PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(schemaName) && PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE.equals(tableName);
     }
 
+    public static boolean isSystemTable(byte[] fullTableName) {
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
+        if (QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) return true;
+        return false;
+    }
+
     // Given the splits and the rowKeySchema, find out the keys that 
     public static byte[][] processSplits(byte[][] splits, LinkedHashSet<PColumn> pkColumns, Integer saltBucketNum, boolean defaultRowKeyOrder) throws SQLException {
         // FIXME: shouldn't this return if splits.length == 0?

@@ -26,8 +26,10 @@ import java.util.Map;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.catalog.MetaReader;
 import org.apache.hadoop.hbase.client.HTable;
@@ -45,6 +47,8 @@ import org.apache.hadoop.hbase.io.Reference;
 import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.regionserver.StoreFile.Reader;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AlterIndexStatement;
@@ -73,6 +77,8 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             Reference r, Reader reader) throws IOException {
         TableName tableName = ctx.getEnvironment().getRegion().getTableDesc().getTableName();
         HRegion region = ctx.getEnvironment().getRegion();
+        HRegionInfo childRegion = region.getRegionInfo();
+        byte[] splitKey = null;
         if (reader == null && r != null) {
             Scan scan = MetaReader.getScanForTableName(tableName);
             SingleColumnValueFilter scvf = null;
@@ -86,15 +92,45 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 scvf.setFilterIfMissing(true);
             }
             if(scvf != null) scan.setFilter(scvf);
-            HRegionInfo parentRegion = null;
+            byte[] regionStartKeyInHFile = null;
             HTable metaTable = null;
             PhoenixConnection conn = null;
             try {
                 metaTable = new HTable(ctx.getEnvironment().getConfiguration(), TableName.META_TABLE_NAME);
-                ResultScanner scanner = metaTable.getScanner(scan);
-                Result result = scanner.next();
-                if (result == null || result.isEmpty()) return reader;
-                parentRegion = HRegionInfo.getHRegionInfo(result);
+                ResultScanner scanner = null;
+                Result result = null;
+                try {
+                    scanner = metaTable.getScanner(scan);
+                    result = scanner.next();
+                } finally {
+                    if(scanner != null) scanner.close();
+                }
+                if (result == null || result.isEmpty()) {
+                    Pair<HRegionInfo, HRegionInfo> mergeRegions =
+                            MetaReader.getRegionsFromMergeQualifier(ctx.getEnvironment()
+                                    .getRegionServerServices().getCatalogTracker(),
+                                region.getRegionName());
+                    if (mergeRegions == null || mergeRegions.getFirst() == null) return reader;
+                    byte[] splitRow =
+                            CellUtil.cloneRow(KeyValue.createKeyValueFromKey(r.getSplitKey()));
+                    // We need not change any thing in first region data because first region start key
+                    // is equal to merged region start key. So returning same reader.
+                    if (Bytes.compareTo(mergeRegions.getFirst().getStartKey(), splitRow) == 0) {
+                        return reader;
+                    } else {
+                        childRegion = mergeRegions.getSecond();
+                        regionStartKeyInHFile = mergeRegions.getSecond().getStartKey();
+                    }
+                    splitKey =
+                            KeyValue.createFirstOnRow(
+                                region.getStartKey().length == 0 ? new byte[region.getEndKey().length] : region
+                                        .getStartKey()).getKey();
+                } else {
+                    HRegionInfo parentRegion = HRegionInfo.getHRegionInfo(result);
+                    regionStartKeyInHFile =
+                            parentRegion.getStartKey().length == 0 ? new byte[parentRegion
+                                    .getEndKey().length] : parentRegion.getStartKey();
+                }
             } finally {
                 if (metaTable != null) metaTable.close();
             }
@@ -118,7 +154,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 byte[][] viewConstants = getViewConstants(dataTable);
                 return new IndexHalfStoreFileReader(fs, p, cacheConf, in, size, r, ctx
                         .getEnvironment().getConfiguration(), indexMaintainers, viewConstants,
-                        region.getRegionInfo(), parentRegion);
+                        childRegion, regionStartKeyInHFile, splitKey);
             } catch (ClassNotFoundException e) {
                 throw new IOException(e);
             } catch (SQLException e) {

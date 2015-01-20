@@ -26,16 +26,21 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -288,23 +293,46 @@ public class IndexUtil {
             
         });
     }
-    
-    public static HRegion getIndexRegion(RegionCoprocessorEnvironment environment) throws IOException {
-        HRegion userRegion = environment.getRegion();
-        TableName indexTableName = TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(userRegion.getTableDesc().getName()));
-        List<HRegion> onlineRegions = environment.getRegionServerServices().getOnlineRegions(indexTableName);
+
+    public static HRegion getIndexRegion(RegionCoprocessorEnvironment environment)
+            throws IOException {
+        HRegion dataRegion = environment.getRegion();
+        return getIndexRegion(dataRegion, environment.getRegionServerServices());
+    }
+
+    public static HRegion
+            getIndexRegion(HRegion dataRegion, RegionServerCoprocessorEnvironment env)
+                    throws IOException {
+        return getIndexRegion(dataRegion, env.getRegionServerServices());
+    }
+
+    public static HRegion getDataRegion(RegionCoprocessorEnvironment env) throws IOException {
+        HRegion indexRegion = env.getRegion();
+        return getDataRegion(indexRegion, env.getRegionServerServices());
+    }
+
+    public static HRegion
+            getDataRegion(HRegion indexRegion, RegionServerCoprocessorEnvironment env)
+                    throws IOException {
+        return getDataRegion(indexRegion, env.getRegionServerServices());
+    }
+
+    public static HRegion getIndexRegion(HRegion dataRegion, RegionServerServices rss) throws IOException {
+        TableName indexTableName =
+                TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(dataRegion.getTableDesc()
+                        .getName()));
+        List<HRegion> onlineRegions = rss.getOnlineRegions(indexTableName);
         for(HRegion indexRegion : onlineRegions) {
-            if (Bytes.compareTo(userRegion.getStartKey(), indexRegion.getStartKey()) == 0) {
+            if (Bytes.compareTo(dataRegion.getStartKey(), indexRegion.getStartKey()) == 0) {
                 return indexRegion;
             }
         }
         return null;
     }
 
-    public static HRegion getDataRegion(RegionCoprocessorEnvironment env) throws IOException {
-        HRegion indexRegion = env.getRegion();
+    public static HRegion getDataRegion(HRegion indexRegion, RegionServerServices rss) throws IOException {
         TableName dataTableName = TableName.valueOf(MetaDataUtil.getUserTableName(indexRegion.getTableDesc().getNameAsString()));
-        List<HRegion> onlineRegions = env.getRegionServerServices().getOnlineRegions(dataTableName);
+        List<HRegion> onlineRegions = rss.getOnlineRegions(dataTableName);
         for(HRegion region : onlineRegions) {
             if (Bytes.compareTo(indexRegion.getStartKey(), region.getStartKey()) == 0) {
                 return region;
@@ -422,9 +450,10 @@ public class IndexUtil {
         return QueryUtil.getViewStatement(index.getSchemaName().getString(), index.getTableName().getString(), whereClause);
     }
     
-    public static void wrapResultUsingOffset(List<Cell> result, final int offset,
-            ColumnReference[] dataColumns, TupleProjector tupleProjector, HRegion dataRegion,
-            IndexMaintainer indexMaintainer, byte[][] viewConstants, ImmutableBytesWritable ptr) throws IOException {
+    public static void wrapResultUsingOffset(final ObserverContext<RegionCoprocessorEnvironment> c,
+            List<Cell> result, final int offset, ColumnReference[] dataColumns,
+            TupleProjector tupleProjector, HRegion dataRegion, IndexMaintainer indexMaintainer,
+            byte[][] viewConstants, ImmutableBytesWritable ptr) throws IOException {
         if (tupleProjector != null) {
             // Join back to data table here by issuing a local get projecting
             // all of the cq:cf from the KeyValueColumnExpression into the Get.
@@ -436,7 +465,22 @@ public class IndexUtil {
             for (int i = 0; i < dataColumns.length; i++) {
                 get.addColumn(dataColumns[i].getFamily(), dataColumns[i].getQualifier());
             }
-            Result joinResult = dataRegion.get(get);
+            Result joinResult = null;
+            if (dataRegion != null) {
+                joinResult = dataRegion.get(get);
+            } else {
+                TableName indexTable =
+                        TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(c.getEnvironment()
+                                .getRegion().getTableDesc().getName()));
+                HTableInterface table = null;
+                try {
+                    table = c.getEnvironment().getTable(indexTable);
+                    joinResult = table.get(get);
+                } finally {
+                    if (table != null) table.close();
+                }
+            }
+            
             // TODO: handle null case (but shouldn't happen)
             Tuple joinTuple = new ResultTuple(joinResult);
             // This will create a byte[] that captures all of the values from the data table
