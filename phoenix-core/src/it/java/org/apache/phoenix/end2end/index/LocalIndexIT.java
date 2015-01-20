@@ -845,14 +845,17 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals(
                 "CLIENT PARALLEL " + 3 + "-WAY RANGE SCAN OVER "
                         + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)
-                        + " [-32768]\n" + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                        + " [-32768]\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
 
             query = "SELECT t_id,k1,k3 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME;
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             assertEquals(
                 "CLIENT PARALLEL " + 3 + "-WAY RANGE SCAN OVER "
                         + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)
-                        + " [-32767]\n" + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                        + " [-32767]\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+
             rs = conn1.createStatement().executeQuery(query);
             Thread.sleep(1000);
             for (int j = 0; j < 26; j++) {
