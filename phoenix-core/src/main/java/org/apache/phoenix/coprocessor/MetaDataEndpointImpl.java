@@ -645,9 +645,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         Scan scan = MetaDataUtil.newTableRowsScan(key, clientTimeStamp, HConstants.LATEST_TIMESTAMP);
         scan.setFilter(new FirstKeyOnlyFilter());
         scan.setRaw(true);
-        RegionScanner scanner = region.getScanner(scan);
         List<Cell> results = Lists.<Cell> newArrayList();
-        scanner.next(results);
+        try (RegionScanner scanner = region.getScanner(scan);) {
+          scanner.next(results);
+        }
         // HBase ignores the time range on a raw scan (HBASE-7362)
         if (!results.isEmpty() && results.get(0).getTimestamp() > clientTimeStamp) {
             Cell kv = results.get(0);
@@ -1004,62 +1005,62 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // we want to delete. FIXME: we shouldn't need a scan here, but should be able to
         // use the table to generate the Delete markers.
         Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
-        RegionScanner scanner = region.getScanner(scan);
-        List<Cell> results = Lists.newArrayList();
-        scanner.next(results);
-        if (results.isEmpty()) { // Should not be possible
-            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
-        }
-
-        // Handle any child views that exist
-        TableViewFinderResult tableViewFinderResult = findChildViews(region, tenantId, table);
-        if (tableViewFinderResult.hasViews()) {
-        	if (isCascade) {
-		        if (tableViewFinderResult.allViewsInMultipleRegions()) {
-		            // We don't yet support deleting a table with views where SYSTEM.CATALOG has split and the
-		        	// view metadata spans multiple regions
-		        	return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
-		        } else if (tableViewFinderResult.allViewsInSingleRegion()) {
-		        	// Recursively delete views - safe as all the views as all in the same region
-		        	for (Result viewResult : tableViewFinderResult.getResults()) {
-		                byte[][] rowKeyMetaData = new byte[3][];
-		                getVarChars(viewResult.getRow(), 3, rowKeyMetaData);
-		                byte[] viewTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
-		                byte[] viewSchemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
-		                byte[] viewName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
-		            	byte[] viewKey = SchemaUtil.getTableKey(viewTenantId, viewSchemaName, viewName);
-		                Delete delete = new Delete(viewKey, clientTimeStamp);
-		                rowsToDelete.add(delete);
-		                acquireLock(region, viewKey, locks);
-		                MetaDataMutationResult result =
-		                        doDropTable(viewKey, viewTenantId, viewSchemaName, viewName, null, PTableType.VIEW,
-		                            rowsToDelete, invalidateList, locks, tableNamesToDelete, false);
-		                if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-		                    return result;
-		                }
-					}
-		        }
-        	} else {
-            	// DROP without CASCADE on tables with child views is not permitted
-            	return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
-            }
-        }
-
-        if (tableType != PTableType.VIEW) { // Add to list of HTables to delete, unless it's a view
-            tableNamesToDelete.add(table.getName().getBytes());
-        }
         List<byte[]> indexNames = Lists.newArrayList();
-        invalidateList.add(cacheKey);
-        byte[][] rowKeyMetaData = new byte[5][];
-        do {
+        List<Cell> results = Lists.newArrayList();
+        try (RegionScanner scanner = region.getScanner(scan);) {
+          scanner.next(results);
+          if (results.isEmpty()) { // Should not be possible
+            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
+          }
+
+          // Handle any child views that exist
+          TableViewFinderResult tableViewFinderResult = findChildViews(region, tenantId, table);
+          if (tableViewFinderResult.hasViews()) {
+            if (isCascade) {
+              if (tableViewFinderResult.allViewsInMultipleRegions()) {
+                // We don't yet support deleting a table with views where SYSTEM.CATALOG has split and the
+                // view metadata spans multiple regions
+                return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
+              } else if (tableViewFinderResult.allViewsInSingleRegion()) {
+                // Recursively delete views - safe as all the views as all in the same region
+                for (Result viewResult : tableViewFinderResult.getResults()) {
+                  byte[][] rowKeyMetaData = new byte[3][];
+                  getVarChars(viewResult.getRow(), 3, rowKeyMetaData);
+                  byte[] viewTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
+                  byte[] viewSchemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
+                  byte[] viewName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+                  byte[] viewKey = SchemaUtil.getTableKey(viewTenantId, viewSchemaName, viewName);
+                  Delete delete = new Delete(viewKey, clientTimeStamp);
+                  rowsToDelete.add(delete);
+                  acquireLock(region, viewKey, locks);
+                  MetaDataMutationResult result =
+                      doDropTable(viewKey, viewTenantId, viewSchemaName, viewName, null, PTableType.VIEW,
+                        rowsToDelete, invalidateList, locks, tableNamesToDelete, false);
+                  if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+                    return result;
+                  }
+                }
+              }
+            } else {
+              // DROP without CASCADE on tables with child views is not permitted
+              return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
+            }
+          }
+
+          if (tableType != PTableType.VIEW) { // Add to list of HTables to delete, unless it's a view
+            tableNamesToDelete.add(table.getName().getBytes());
+          }
+          invalidateList.add(cacheKey);
+          byte[][] rowKeyMetaData = new byte[5][];
+          do {
             Cell kv = results.get(LINK_TYPE_INDEX);
             int nColumns = getVarChars(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(), 0, rowKeyMetaData);
             if (nColumns == 5
-                    && rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX].length == 0
-                    && rowKeyMetaData[PhoenixDatabaseMetaData.INDEX_NAME_INDEX].length > 0
-                    && Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), LINK_TYPE_BYTES, 0, LINK_TYPE_BYTES.length) == 0
-                    && LinkType.fromSerializedValue(kv.getValueArray()[kv.getValueOffset()]) == LinkType.INDEX_TABLE) {
-                indexNames.add(rowKeyMetaData[PhoenixDatabaseMetaData.INDEX_NAME_INDEX]);
+                && rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX].length == 0
+                && rowKeyMetaData[PhoenixDatabaseMetaData.INDEX_NAME_INDEX].length > 0
+                && Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), LINK_TYPE_BYTES, 0, LINK_TYPE_BYTES.length) == 0
+                && LinkType.fromSerializedValue(kv.getValueArray()[kv.getValueOffset()]) == LinkType.INDEX_TABLE) {
+              indexNames.add(rowKeyMetaData[PhoenixDatabaseMetaData.INDEX_NAME_INDEX]);
             }
             // FIXME: Remove when unintentionally deprecated method is fixed (HBASE-7870).
             // FIXME: the version of the Delete constructor without the lock args was introduced
@@ -1069,7 +1070,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             rowsToDelete.add(delete);
             results.clear();
             scanner.next(results);
-        } while (!results.isEmpty());
+          } while (!results.isEmpty());
+        }
 
         // Recursively delete indexes
         for (byte[] indexName : indexNames) {
