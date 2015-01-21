@@ -295,6 +295,106 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
+    public void testRandomFunction() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            String ddl = "CREATE TABLE testRandomFunction (pk VARCHAR NOT NULL PRIMARY KEY)";
+            createTestTable(getUrl(), ddl);
+            conn.createStatement().execute("upsert into testRandomFunction values ('x')");
+            conn.createStatement().execute("upsert into testRandomFunction values ('y')");
+            conn.createStatement().execute("upsert into testRandomFunction values ('z')");
+            conn.commit();
+
+            ResultSet rs = conn.createStatement().executeQuery("select rand(), rand(), rand(1), rand(2), rand(1) from testRandomFunction");
+            assertTrue(rs.next());
+            double rand0 = rs.getDouble(1);
+            double rand1 = rs.getDouble(3);
+            double rand2 = rs.getDouble(4);
+            assertTrue(rs.getDouble(1) != rs.getDouble(2));
+            assertTrue(rs.getDouble(2) != rs.getDouble(3));
+            assertTrue(rs.getDouble(3) == rs.getDouble(5));
+            assertTrue(rs.getDouble(4) != rs.getDouble(5));
+            assertTrue(rs.next());
+            assertTrue(rand0 != rs.getDouble(1));
+            assertTrue(rand1 != rs.getDouble(3));
+            assertTrue(rand2 != rs.getDouble(4));
+            double rand01 = rs.getDouble(1);
+            double rand11 = rs.getDouble(3);
+            double rand21 = rs.getDouble(4);
+            assertTrue(rs.getDouble(1) != rs.getDouble(2));
+            assertTrue(rs.getDouble(2) != rs.getDouble(3));
+            assertTrue(rs.getDouble(3) == rs.getDouble(5));
+            assertTrue(rs.getDouble(4) != rs.getDouble(5));
+            assertTrue(rs.next());
+            assertTrue(rand01 != rs.getDouble(1));
+            assertTrue(rand11 != rs.getDouble(3));
+            assertTrue(rand21 != rs.getDouble(4));
+            assertTrue(rs.getDouble(1) != rs.getDouble(2));
+            assertTrue(rs.getDouble(2) != rs.getDouble(3));
+            assertTrue(rs.getDouble(3) == rs.getDouble(5));
+            assertTrue(rs.getDouble(4) != rs.getDouble(5));
+            double rand12 = rs.getDouble(3);
+
+            rs = conn.createStatement().executeQuery("select rand(), rand(), rand(1), rand(2), rand(1) from testRandomFunction");
+            assertTrue(rs.next());
+            assertTrue(rs.getDouble(1) != rs.getDouble(2));
+            assertTrue(rs.getDouble(2) != rs.getDouble(3));
+            assertTrue(rs.getDouble(3) == rs.getDouble(5));
+            assertTrue(rs.getDouble(4) != rs.getDouble(5));
+            assertTrue(rand0 != rs.getDouble(1));
+            assertTrue(rand1 == rs.getDouble(3));
+            assertTrue(rand2 == rs.getDouble(4));
+            assertTrue(rs.next());
+            assertTrue(rand01 != rs.getDouble(1));
+            assertTrue(rand11 == rs.getDouble(3));
+            assertTrue(rand21 == rs.getDouble(4));
+            assertTrue(rs.next());
+            assertTrue(rand12 == rs.getDouble(3));
+
+            ddl = "CREATE TABLE testRandomFunction1 (pk VARCHAR NOT NULL PRIMARY KEY, v1 UNSIGNED_DOUBLE)";
+            createTestTable(getUrl(), ddl);
+            conn.createStatement().execute("upsert into testRandomFunction1 select pk, rand(1) from testRandomFunction");
+            conn.commit();
+
+            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(1)");
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+
+            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(2)");
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+
+            conn.createStatement().execute("delete from testRandomFunction1 where v1 = rand(2)");
+            conn.commit();
+
+            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(1)");
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("upsert into testRandomFunction1 select pk, rand(2) from testRandomFunction1");
+
+            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(1)");
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+
+            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(2)");
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+
+            conn.createStatement().execute("delete from testRandomFunction1 where v1 = rand(2)");
+
+            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(2)");
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
     public void testDecimalArithmeticWithIntAndLong() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
