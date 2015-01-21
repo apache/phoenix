@@ -30,7 +30,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
-import org.apache.phoenix.expression.visitor.TraverseAllExpressionVisitor;
+import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisitor;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 
 
@@ -184,7 +185,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
     
     protected void init() {
         cfSet = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
-        TraverseAllExpressionVisitor<Void> visitor = new TraverseAllExpressionVisitor<Void>() {
+        ExpressionVisitor<Void> visitor = new StatelessTraverseAllExpressionVisitor<Void>() {
             @Override
             public Void visit(KeyValueColumnExpression expression) {
                 inputTuple.addColumn(expression.getColumnFamily(), expression.getColumnName());

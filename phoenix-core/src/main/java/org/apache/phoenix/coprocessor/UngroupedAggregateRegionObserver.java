@@ -75,13 +75,13 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -322,6 +322,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                             }
                             for (Mutation mutation : row.toRowMutations()) {
                                 mutations.add(mutation);
+                            }
+                            for (i = 0; i < selectExpressions.size(); i++) {
+                                selectExpressions.get(i).reset();
                             }
                         } else if (deleteCF != null && deleteCQ != null) {
                             // No need to search for delete column, since we project only it

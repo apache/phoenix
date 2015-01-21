@@ -18,17 +18,19 @@
 package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
+import org.apache.phoenix.expression.Determinism;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.visitor.CloneExpressionVisitor;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Maps;
 
 
 /**
@@ -40,7 +42,7 @@ import com.google.common.collect.Maps;
  * 
  * @since 0.1
  */
-public class RowProjector {
+public class RowProjector implements Cloneable {
     public static final RowProjector EMPTY_PROJECTOR = new RowProjector(Collections.<ColumnProjector>emptyList(),0, true);
 
     private final List<? extends ColumnProjector> columnProjectors;
@@ -49,6 +51,7 @@ public class RowProjector {
     private final boolean someCaseSensitive;
     private final int estimatedSize;
     private final boolean isProjectEmptyKeyValue;
+    private final boolean cloneRequired;
     
     public RowProjector(RowProjector projector, boolean isProjectEmptyKeyValue) {
         this(projector.getColumnProjectors(), projector.getEstimatedRowByteSize(), isProjectEmptyKeyValue);
@@ -79,8 +82,42 @@ public class RowProjector {
         this.someCaseSensitive = someCaseSensitive;
         this.estimatedSize = estimatedRowSize;
         this.isProjectEmptyKeyValue = isProjectEmptyKeyValue;
+        boolean hasPerInvocationExpression = false;
+        for (int i = 0; i < this.columnProjectors.size(); i++) {
+            Expression expression = this.columnProjectors.get(i).getExpression();
+            if (expression.getDeterminism() == Determinism.PER_INVOCATION) {
+                hasPerInvocationExpression = true;
+                break;
+            }
+        }
+        this.cloneRequired = hasPerInvocationExpression;
     }
-    
+
+    @Override
+    public RowProjector clone() {
+        if (!cloneRequired) {
+            return this;
+        }
+        List<ColumnProjector> clonedColProjectors = new ArrayList<ColumnProjector>(columnProjectors.size());
+        for (int i = 0; i < this.columnProjectors.size(); i++) {
+            ColumnProjector colProjector = columnProjectors.get(i);
+            Expression expression = colProjector.getExpression();
+            if (expression.getDeterminism() == Determinism.PER_INVOCATION) {
+                CloneExpressionVisitor visitor = new CloneExpressionVisitor();
+                Expression clonedExpression = expression.accept(visitor);
+                clonedColProjectors.add(new ExpressionProjector(colProjector.getName(),
+                        colProjector.getTableName(), 
+                        clonedExpression,
+                        colProjector.isCaseSensitive()));
+            } else {
+                clonedColProjectors.add(colProjector);
+            }
+        }
+        return new RowProjector(clonedColProjectors, 
+                this.getEstimatedRowByteSize(),
+                this.isProjectEmptyKeyValue());
+    }
+
     public boolean isProjectEmptyKeyValue() {
         return isProjectEmptyKeyValue;
     }
@@ -134,5 +171,14 @@ public class RowProjector {
 
     public int getEstimatedRowByteSize() {
         return estimatedSize;
+    }
+
+    /**
+     * allow individual expressions to reset their state between rows
+     */
+    public void reset() {
+        for (ColumnProjector projector : columnProjectors) {
+            projector.getExpression().reset();
+        }
     }
 }

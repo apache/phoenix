@@ -78,12 +78,12 @@ import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.collect.Lists;
 
@@ -249,7 +249,7 @@ public class TestUtil {
     }
 
     public static Expression constantComparison(CompareOp op, PColumn c, Object o) {
-        return  new ComparisonExpression(op, Arrays.<Expression>asList(new KeyValueColumnExpression(c), LiteralExpression.newConstant(o)));
+        return  new ComparisonExpression(Arrays.<Expression>asList(new KeyValueColumnExpression(c), LiteralExpression.newConstant(o)), op);
     }
 
     public static Expression kvColumn(PColumn c) {
@@ -261,15 +261,15 @@ public class TestUtil {
     }
 
     public static Expression constantComparison(CompareOp op, Expression e, Object o) {
-        return  new ComparisonExpression(op, Arrays.asList(e, LiteralExpression.newConstant(o)));
+        return  new ComparisonExpression(Arrays.asList(e, LiteralExpression.newConstant(o)), op);
     }
 
     public static Expression like(Expression e, Object o) {
-        return  new LikeExpression(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_SENSITIVE);
+        return LikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_SENSITIVE);
     }
 
     public static Expression ilike(Expression e, Object o) {
-      return  new LikeExpression(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_INSENSITIVE);
+      return LikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_INSENSITIVE);
   }
 
     public static Expression substr(Expression e, Object offset, Object length) {
@@ -277,7 +277,7 @@ public class TestUtil {
     }
 
     public static Expression columnComparison(CompareOp op, Expression c1, Expression c2) {
-        return  new ComparisonExpression(op, Arrays.<Expression>asList(c1, c2));
+        return  new ComparisonExpression(Arrays.<Expression>asList(c1, c2), op);
     }
 
     public static SingleKeyValueComparisonFilter singleKVFilter(Expression e) {

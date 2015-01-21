@@ -57,7 +57,7 @@ public abstract class FunctionExpression extends BaseCompoundExpression {
     abstract public String getName();
     
     @Override
-    public final String toString() {
+    public String toString() {
         StringBuilder buf = new StringBuilder(getName() + "(");
         if (children.size()==0)
             return buf.append(")").toString();

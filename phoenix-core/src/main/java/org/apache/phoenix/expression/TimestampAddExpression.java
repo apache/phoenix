@@ -23,15 +23,14 @@ import java.sql.Timestamp;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.DateUtil;
 
 /**
@@ -86,6 +85,11 @@ public class TimestampAddExpression extends AddExpression {
     @Override
     public final PDataType getDataType() {
         return PTimestamp.INSTANCE;
+    }
+
+    @Override
+    public ArithmeticExpression clone(List<Expression> children) {
+        return new TimestampAddExpression(children);
     }
 
 }

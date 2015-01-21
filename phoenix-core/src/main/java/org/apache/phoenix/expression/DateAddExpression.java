@@ -21,15 +21,14 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.tuple.Tuple;
 
 
 public class DateAddExpression extends AddExpression {
@@ -77,6 +76,11 @@ public class DateAddExpression extends AddExpression {
     @Override
     public final PDataType getDataType() {
         return PDate.INSTANCE;
+    }
+
+    @Override
+    public ArithmeticExpression clone(List<Expression> children) {
+        return new DateAddExpression(children);
     }
 
 }

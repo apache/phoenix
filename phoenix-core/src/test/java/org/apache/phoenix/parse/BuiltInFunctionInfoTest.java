@@ -17,24 +17,24 @@
  */
 package org.apache.phoenix.parse;
 
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.function.FunctionExpression;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.tuple.Tuple;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
 
 import java.util.List;
 
-import static org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
-import static org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import static org.apache.phoenix.parse.FunctionParseNode.Argument;
-import static org.junit.Assert.assertEquals;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.function.ScalarFunction;
+import org.apache.phoenix.parse.FunctionParseNode.Argument;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.junit.Test;
 
 public class BuiltInFunctionInfoTest {
 
-    private static BuiltInFunctionInfo getBuiltInFunctionInfo(Class<? extends FunctionExpression> funcClass) {
+    private static BuiltInFunctionInfo getBuiltInFunctionInfo(Class<? extends ScalarFunction> funcClass) {
         return new BuiltInFunctionInfo(funcClass, funcClass.getAnnotation(BuiltInFunction.class));
     }
 
@@ -62,7 +62,7 @@ public class BuiltInFunctionInfoTest {
         assertEquals("WITH_MULTIPLE_DEFAULT_ARGS", funcInfo.getName());
     }
 
-    private static class BaseFunctionAdapter extends FunctionExpression {
+    private static class BaseFunctionAdapter extends ScalarFunction {
 
 
         private final String name;

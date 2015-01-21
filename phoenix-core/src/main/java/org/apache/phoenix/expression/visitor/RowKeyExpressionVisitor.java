@@ -30,7 +30,7 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
  * 
  * @since 0.1
  */
-public abstract class RowKeyExpressionVisitor extends TraverseAllExpressionVisitor<Void> {
+public abstract class RowKeyExpressionVisitor extends StatelessTraverseAllExpressionVisitor<Void> {
     @Override
     abstract public Void visit(RowKeyColumnExpression node);
 }

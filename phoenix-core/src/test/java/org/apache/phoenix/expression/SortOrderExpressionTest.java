@@ -289,16 +289,16 @@ public class SortOrderExpressionTest {
     
     private void runCompareTest(CompareOp op, boolean expectedResult, Object lhsValue, PDataType lhsDataType, Object rhsValue, PDataType rhsDataType) throws Exception {
         List<Expression> args = Lists.newArrayList(getLiteral(lhsValue, lhsDataType), getLiteral(rhsValue, rhsDataType));
-        evaluateAndAssertResult(new ComparisonExpression(op, args), expectedResult, "lhsDataType: " + lhsDataType + " rhsDataType: " + rhsDataType);
+        evaluateAndAssertResult(new ComparisonExpression(args, op), expectedResult, "lhsDataType: " + lhsDataType + " rhsDataType: " + rhsDataType);
         
         args = Lists.newArrayList(getInvertedLiteral(lhsValue, lhsDataType), getLiteral(rhsValue, rhsDataType));
-        evaluateAndAssertResult(new ComparisonExpression(op, args), expectedResult, "lhs (inverted) dataType: " + lhsDataType + " rhsDataType: " + rhsDataType);
+        evaluateAndAssertResult(new ComparisonExpression(args, op), expectedResult, "lhs (inverted) dataType: " + lhsDataType + " rhsDataType: " + rhsDataType);
         
         args = Lists.newArrayList(getLiteral(lhsValue, lhsDataType), getInvertedLiteral(rhsValue, rhsDataType));
-        evaluateAndAssertResult(new ComparisonExpression(op, args), expectedResult, "lhsDataType: " + lhsDataType + " rhs (inverted) dataType: " + rhsDataType);
+        evaluateAndAssertResult(new ComparisonExpression(args, op), expectedResult, "lhsDataType: " + lhsDataType + " rhs (inverted) dataType: " + rhsDataType);
         
         args = Lists.newArrayList(getInvertedLiteral(lhsValue, lhsDataType), getInvertedLiteral(rhsValue, rhsDataType));
-        evaluateAndAssertResult(new ComparisonExpression(op, args), expectedResult, "lhs (inverted) dataType: " + lhsDataType + " rhs (inverted) dataType: " + rhsDataType);                
+        evaluateAndAssertResult(new ComparisonExpression(args, op), expectedResult, "lhs (inverted) dataType: " + lhsDataType + " rhs (inverted) dataType: " + rhsDataType);                
     }
     
     private void evaluateAndAssertResult(Expression expression, Object expectedResult) {

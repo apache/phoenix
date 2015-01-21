@@ -40,7 +40,7 @@ import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
-import org.apache.phoenix.expression.function.InlineArrayElemRefExpression;
+import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.InvertFunction;
 import org.apache.phoenix.expression.function.LTrimFunction;
 import org.apache.phoenix.expression.function.LastValueFunction;
@@ -55,6 +55,7 @@ import org.apache.phoenix.expression.function.PercentRankAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileContAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileDiscAggregateFunction;
 import org.apache.phoenix.expression.function.RTrimFunction;
+import org.apache.phoenix.expression.function.RandomFunction;
 import org.apache.phoenix.expression.function.RegexpReplaceFunction;
 import org.apache.phoenix.expression.function.RegexpSplitFunction;
 import org.apache.phoenix.expression.function.RegexpSubstrFunction;
@@ -180,11 +181,12 @@ public enum ExpressionType {
     LastValueFunction(LastValueFunction.class),
     ArrayAnyComparisonExpression(ArrayAnyComparisonExpression.class),
     ArrayAllComparisonExpression(ArrayAllComparisonExpression.class),
-    InlineArrayElemRefExpression(InlineArrayElemRefExpression.class),
+    InlineArrayElemRefExpression(ArrayElemRefExpression.class),
     SQLIndexTypeFunction(SQLIndexTypeFunction.class),
     ModulusExpression(ModulusExpression.class),
     DistinctValueAggregateFunction(DistinctValueAggregateFunction.class),
-    RegexpSplitFunctiond(RegexpSplitFunction.class);
+    RegexpSplitFunctiond(RegexpSplitFunction.class),
+    RandomFunction(RandomFunction.class);
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }
@@ -211,6 +213,14 @@ public enum ExpressionType {
             throw new IllegalArgumentException("No ExpressionType for " + expression.getClass());
         }
         return type;
+    }
+
+    /**
+     * Return the ExpressionType for a given Expression instance
+     * or null if none exists.
+     */
+    public static ExpressionType valueOfOrNull(Expression expression) {
+        return classToEnumMap.get(expression.getClass());
     }
 
     /**

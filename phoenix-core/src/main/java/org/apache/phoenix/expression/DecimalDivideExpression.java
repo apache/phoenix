@@ -22,10 +22,10 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.util.NumberUtil;
 
 
@@ -73,5 +73,10 @@ public class DecimalDivideExpression extends DivideExpression {
     @Override
     public PDataType getDataType() {
         return PDecimal.INSTANCE;
+    }
+
+    @Override
+    public ArithmeticExpression clone(List<Expression> children) {
+        return new DecimalDivideExpression(children);
     }
 }

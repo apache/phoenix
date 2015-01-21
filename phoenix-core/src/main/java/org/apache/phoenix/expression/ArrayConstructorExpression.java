@@ -18,10 +18,11 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 /**
@@ -46,6 +47,10 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
         init(baseType);
     }
 
+    public ArrayConstructorExpression clone(List<Expression> children) {
+        return new ArrayConstructorExpression(children, this.baseType);
+    }
+    
     private void init(PDataType baseType) {
         this.baseType = baseType;
         elements = new Object[getChildren().size()];
@@ -150,5 +155,15 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
     @Override
     public boolean requiresFinalEvaluation() {
         return true;
+    }
+
+    @Override
+    public final <T> T accept(ExpressionVisitor<T> visitor) {
+        List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
+        T t = visitor.visitLeave(this, l);
+        if (t == null) {
+            t = visitor.defaultReturn(this, l);
+        }
+        return t;
     }
 }
