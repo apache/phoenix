@@ -628,5 +628,56 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }
+	
+	@Test
+    public void testSelectColOnlyInDataTableImmutableIndex() throws Exception {
+	    helpTestSelectColOnlyInDataTable(false, false);
+    }
+    
+    @Test
+    public void testSelectColOnlyInDataTableImmutableLocalIndex() throws Exception {
+        helpTestSelectColOnlyInDataTable(false, true);
+    }
+    
+    @Test
+    public void testSelectColOnlyInDataTableMutableIndex() throws Exception {
+        helpTestSelectColOnlyInDataTable(true, false);
+    }
+    
+    @Test
+    public void testSelectColOnlyInDataTableMutableLocalIndex() throws Exception {
+        helpTestSelectColOnlyInDataTable(true, false);
+    }
+	
+	protected void helpTestSelectColOnlyInDataTable(boolean mutable, boolean localIndex) throws Exception {
+        String dataTableName = mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE;
+        String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try
+        {
+            conn.setAutoCommit(false);
+            populateDataTable(conn, dataTableName);
+            String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON " + fullDataTableName + " (int_col1+1)";
+    
+            conn = DriverManager.getConnection(getUrl(), props);
+            conn.setAutoCommit(false);
+            PreparedStatement stmt = conn.prepareStatement(ddl);
+            stmt.execute();
+            String sql = "SELECT int_col1+1, int_col2 FROM " + fullDataTableName + " WHERE int_col1+1=2" ;
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
+            assertEquals("CLIENT PARALLEL 1-WAY " + ( localIndex ? "RANGE SCAN OVER _LOCAL_IDX_"+fullDataTableName+" [-32768,2]\nCLIENT MERGE SORT" : "FULL SCAN OVER "+ fullDataTableName
+                    + "\n    SERVER FILTER BY (A.INT_COL1 + 1) = 2" ), QueryUtil.getExplainPlan(rs));
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals(1, rs.getInt(2));
+            assertFalse(rs.next());
+            conn.createStatement().execute("DROP INDEX IDX ON " + fullDataTableName);
+        } 
+        finally {
+            conn.close();
+        }
+    }
 
 }

@@ -681,7 +681,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 indexFields[pos] = dataRowKeySchema.getField(i);
             } 
         }
-        int indexedColumnTypesIndex = 0;
         Iterator<Expression> expressionSetItr = indexedExpressions.iterator();
         for (Field indexField : indexFields) {
             if (indexField == null) { // Add field for kv column in index

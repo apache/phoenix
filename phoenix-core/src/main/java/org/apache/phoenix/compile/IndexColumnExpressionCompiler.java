@@ -115,6 +115,10 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
         DataTableNodeRewriter statementRewriter = new DataTableNodeRewriter();
         ParseNode dataTableParseNode = node.accept(statementRewriter);
         Expression dataTableExpression = getExpression(dataTableParseNode);
+        // process regular columns as usual
+        if (dataTableExpression instanceof ColumnExpression) {
+            return false;
+        }
         return expressionMap.containsKey(dataTableExpression.toString());
     }
 
