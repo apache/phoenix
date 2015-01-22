@@ -32,6 +32,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -101,7 +102,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
                 "k3 INTEGER,\n" +
                 "v1 VARCHAR,\n" +
                 "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))\n"
-                        + (saltBuckets != null && splits == null ? (",salt_buckets=" + saltBuckets) : "" 
+                        + (saltBuckets != null && splits == null ? (" salt_buckets=" + saltBuckets) : ""
                         + (saltBuckets == null && splits != null ? (" split on " + splits) : ""));
         conn.createStatement().execute(ddl);
         conn.close();
@@ -779,6 +780,48 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
                     assertEquals(j, rs.getInt("k1"));
                     assertEquals(j+2, rs.getInt("k3"));
                 }
+            }
+       } finally {
+            conn1.close();
+        }
+    }
+
+    @Test
+    public void testLocalIndexScanWithSmallChunks() throws Exception {
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, 3, null);
+        Properties props = new Properties();
+        props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, "2");
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        try{
+            String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
+            for (int i = 0; i < 26; i++) {
+               conn1.createStatement().execute(
+                    "UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('"+strings[i]+"'," + i + ","
+                            + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
+            }
+            conn1.commit();
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + "_2 ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(k3)");
+
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME);
+            assertTrue(rs.next());
+
+            String query = "SELECT t_id,k1,v1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME;
+            rs = conn1.createStatement().executeQuery(query);
+            for (int j = 0; j < 26; j++) {
+                assertTrue(rs.next());
+                assertEquals(strings[25 - j], rs.getString("t_id"));
+                assertEquals(25 - j, rs.getInt("k1"));
+                assertEquals(strings[j], rs.getString("V1"));
+            }
+            query = "SELECT t_id,k1,k3 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME;
+            rs = conn1.createStatement().executeQuery(query);
+            Thread.sleep(1000);
+            for (int j = 0; j < 26; j++) {
+                assertTrue(rs.next());
+                assertEquals(strings[j], rs.getString("t_id"));
+                assertEquals(j, rs.getInt("k1"));
+                assertEquals(j + 2, rs.getInt("k3"));
             }
        } finally {
             conn1.close();
