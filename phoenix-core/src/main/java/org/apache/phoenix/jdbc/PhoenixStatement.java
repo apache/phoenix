@@ -102,12 +102,10 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SortOrder;
@@ -115,6 +113,8 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -185,11 +185,19 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     private boolean isClosed = false;
     private int maxRows;
     private int fetchSize = -1;
+    private int queryTimeout;
     
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
+        this.queryTimeout = getDefaultQueryTimeout();
     }
     
+    private int getDefaultQueryTimeout() {
+        // Convert milliseconds to seconds by taking the CEIL up to the next second
+        return (connection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, 
+            QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS) + 999) / 1000;
+    }
+
     protected List<PhoenixResultSet> getResultSets() {
         return resultSets;
     }
@@ -1132,11 +1140,6 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         return false;
     }
 
-    @Override
-    public int getQueryTimeout() throws SQLException {
-        return connection.getQueryServices().getProps().getInt(QueryServices.KEEP_ALIVE_MS_ATTRIB, 0) / 1000;
-    }
-
     // For testing
     public QueryPlan getQueryPlan() {
         return getLastQueryPlan();
@@ -1236,8 +1239,18 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     @Override
     public void setQueryTimeout(int seconds) throws SQLException {
-        // The Phoenix setting for this is shared across all connections currently
-        throw new SQLFeatureNotSupportedException();
+        if (seconds < 0) {
+            this.queryTimeout = getDefaultQueryTimeout();
+        } else if (seconds == 0) {
+            this.queryTimeout = Integer.MAX_VALUE;
+        } else {
+            this.queryTimeout = seconds;
+        }
+    }
+
+    @Override
+    public int getQueryTimeout() throws SQLException {
+        return queryTimeout;
     }
 
     @Override

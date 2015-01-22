@@ -3099,13 +3099,13 @@ public final class PTableProtos {
      */
     long getStatsTimeStamp();
 
-    // required bool storeNulls = 24;
+    // optional bool storeNulls = 24;
     /**
-     * <code>required bool storeNulls = 24;</code>
+     * <code>optional bool storeNulls = 24;</code>
      */
     boolean hasStoreNulls();
     /**
-     * <code>required bool storeNulls = 24;</code>
+     * <code>optional bool storeNulls = 24;</code>
      */
     boolean getStoreNulls();
   }
@@ -3812,17 +3812,17 @@ public final class PTableProtos {
       return statsTimeStamp_;
     }
 
-    // required bool storeNulls = 24;
+    // optional bool storeNulls = 24;
     public static final int STORENULLS_FIELD_NUMBER = 24;
     private boolean storeNulls_;
     /**
-     * <code>required bool storeNulls = 24;</code>
+     * <code>optional bool storeNulls = 24;</code>
      */
     public boolean hasStoreNulls() {
       return ((bitField0_ & 0x00080000) == 0x00080000);
     }
     /**
-     * <code>required bool storeNulls = 24;</code>
+     * <code>optional bool storeNulls = 24;</code>
      */
     public boolean getStoreNulls() {
       return storeNulls_;
@@ -3892,10 +3892,6 @@ public final class PTableProtos {
         return false;
       }
       if (!hasMultiTenant()) {
-        memoizedIsInitialized = 0;
-        return false;
-      }
-      if (!hasStoreNulls()) {
         memoizedIsInitialized = 0;
         return false;
       }
@@ -4862,10 +4858,6 @@ public final class PTableProtos {
           return false;
         }
         if (!hasMultiTenant()) {
-          
-          return false;
-        }
-        if (!hasStoreNulls()) {
           
           return false;
         }
@@ -6399,22 +6391,22 @@ public final class PTableProtos {
         return this;
       }
 
-      // required bool storeNulls = 24;
+      // optional bool storeNulls = 24;
       private boolean storeNulls_ ;
       /**
-       * <code>required bool storeNulls = 24;</code>
+       * <code>optional bool storeNulls = 24;</code>
        */
       public boolean hasStoreNulls() {
         return ((bitField0_ & 0x00800000) == 0x00800000);
       }
       /**
-       * <code>required bool storeNulls = 24;</code>
+       * <code>optional bool storeNulls = 24;</code>
        */
       public boolean getStoreNulls() {
         return storeNulls_;
       }
       /**
-       * <code>required bool storeNulls = 24;</code>
+       * <code>optional bool storeNulls = 24;</code>
        */
       public Builder setStoreNulls(boolean value) {
         bitField0_ |= 0x00800000;
@@ -6423,7 +6415,7 @@ public final class PTableProtos {
         return this;
       }
       /**
-       * <code>required bool storeNulls = 24;</code>
+       * <code>optional bool storeNulls = 24;</code>
        */
       public Builder clearStoreNulls() {
         bitField0_ = (bitField0_ & ~0x00800000);
@@ -6492,7 +6484,7 @@ public final class PTableProtos {
       "nt\030\022 \001(\014\022\025\n\rphysicalNames\030\023 \003(\014\022\020\n\010tenan" +
       "tId\030\024 \001(\014\022\023\n\013viewIndexId\030\025 \001(\005\022\021\n\tindexT" +
       "ype\030\026 \001(\014\022\026\n\016statsTimeStamp\030\027 \001(\003\022\022\n\nsto" +
-      "reNulls\030\030 \002(\010*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022" +
+      "reNulls\030\030 \001(\010*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022" +
       "\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004" +
       "B@\n(org.apache.phoenix.coprocessor.gener" +
       "atedB\014PTableProtosH\001\210\001\001\240\001\001"

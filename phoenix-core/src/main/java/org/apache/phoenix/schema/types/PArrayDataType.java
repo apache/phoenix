@@ -517,7 +517,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
 	// Follow the above example to understand how this works
     private Object createPhoenixArray(byte[] bytes, int offset, int length, SortOrder sortOrder,
             PDataType baseDataType, Integer maxLength, PDataType desiredDataType) {
-        if (bytes == null || bytes.length == 0) { return null; }
+        if (bytes == null || length == 0) { return null; }
         Object[] elements;
         if (!baseDataType.isFixedWidth()) {
             ByteBuffer buffer = ByteBuffer.wrap(bytes, offset, length);

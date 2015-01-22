@@ -55,6 +55,7 @@ import org.apache.phoenix.expression.function.PercentRankAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileContAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileDiscAggregateFunction;
 import org.apache.phoenix.expression.function.RTrimFunction;
+import org.apache.phoenix.expression.function.RandomFunction;
 import org.apache.phoenix.expression.function.RegexpReplaceFunction;
 import org.apache.phoenix.expression.function.RegexpSplitFunction;
 import org.apache.phoenix.expression.function.RegexpSubstrFunction;
@@ -185,7 +186,8 @@ public enum ExpressionType {
     SQLIndexTypeFunction(SQLIndexTypeFunction.class),
     ModulusExpression(ModulusExpression.class),
     DistinctValueAggregateFunction(DistinctValueAggregateFunction.class),
-    RegexpSplitFunctiond(RegexpSplitFunction.class);
+    RegexpSplitFunctiond(RegexpSplitFunction.class),
+    RandomFunction(RandomFunction.class);
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }

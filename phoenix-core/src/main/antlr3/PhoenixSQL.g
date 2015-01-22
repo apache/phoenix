@@ -716,7 +716,7 @@ boolean_expression returns [ParseNode ret]
                       |        (ILIKE r=value_expression {$ret = factory.like(l,r,n!=null,LikeType.CASE_INSENSITIVE); } )
                       |        (BETWEEN r1=value_expression AND r2=value_expression {$ret = factory.between(l,r1,r2,n!=null); } )
                       |        ((IN ((r=bind_expression {$ret = factory.inList(Arrays.asList(l,r),n!=null);} )
-                                | (LPAREN r=subquery_expression RPAREN {$ret = factory.in(l,r,n!=null);} )
+                                | (LPAREN r=subquery_expression RPAREN {$ret = factory.in(l,r,n!=null,false);} )
                                 | (LPAREN v=one_or_more_expressions RPAREN {List<ParseNode> il = new ArrayList<ParseNode>(v.size() + 1); il.add(l); il.addAll(v); $ret = factory.inList(il,n!=null);})
                                 )))
                       ))

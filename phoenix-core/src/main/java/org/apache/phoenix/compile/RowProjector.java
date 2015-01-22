@@ -17,15 +17,25 @@
  */
 package org.apache.phoenix.compile;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
+import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.ExpressionType;
+import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
-import com.google.common.collect.Maps;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ListMultimap;
 
 
 /**
@@ -37,15 +47,16 @@ import com.google.common.collect.Maps;
  * 
  * @since 0.1
  */
-public class RowProjector {
+public class RowProjector implements Cloneable {
     public static final RowProjector EMPTY_PROJECTOR = new RowProjector(Collections.<ColumnProjector>emptyList(),0, true);
 
     private final List<? extends ColumnProjector> columnProjectors;
-    private final Map<String,Integer> reverseIndex;
+    private final ListMultimap<String,Integer> reverseIndex;
     private final boolean allCaseSensitive;
     private final boolean someCaseSensitive;
     private final int estimatedSize;
     private final boolean isProjectEmptyKeyValue;
+    private volatile List<byte[]> rowExpressions;
     
     public RowProjector(RowProjector projector, boolean isProjectEmptyKeyValue) {
         this(projector.getColumnProjectors(), projector.getEstimatedRowByteSize(), isProjectEmptyKeyValue);
@@ -60,7 +71,7 @@ public class RowProjector {
     public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize, boolean isProjectEmptyKeyValue) {
         this.columnProjectors = Collections.unmodifiableList(columnProjectors);
         int position = columnProjectors.size();
-        reverseIndex = Maps.newHashMapWithExpectedSize(position);
+        reverseIndex = ArrayListMultimap.<String, Integer>create();
         boolean allCaseSensitive = true;
         boolean someCaseSensitive = false;
         for (--position; position >= 0; position--) {
@@ -68,12 +79,63 @@ public class RowProjector {
             allCaseSensitive &= colProjector.isCaseSensitive();
             someCaseSensitive |= colProjector.isCaseSensitive();
             reverseIndex.put(colProjector.getName(), position);
+            if (!colProjector.getTableName().isEmpty()) {
+                reverseIndex.put(SchemaUtil.getColumnName(colProjector.getTableName(), colProjector.getName()), position);
+            }
         }
         this.allCaseSensitive = allCaseSensitive;
         this.someCaseSensitive = someCaseSensitive;
         this.estimatedSize = estimatedRowSize;
         this.isProjectEmptyKeyValue = isProjectEmptyKeyValue;
     }
+
+    @Override
+    public RowProjector clone() {
+        return cloneRowProjector();
+    }
+
+    private RowProjector cloneRowProjector() {
+        if (rowExpressions == null) {
+            synchronized(this) {
+                if (rowExpressions == null) {
+                    List<byte[]> localRowExpressions = new ArrayList<byte[]>(this.getColumnCount());
+                    try {
+                        for (int i = 0; i < this.getColumnCount(); i++) {
+                             TrustedByteArrayOutputStream bytesOut = new TrustedByteArrayOutputStream(1024);
+                             DataOutputStream output = new DataOutputStream(bytesOut);
+                             Expression expression = this.getColumnProjector(i).getExpression();
+                             WritableUtils.writeVInt(output, ExpressionType.valueOf(expression).ordinal());
+                             expression.write(output);
+                             output.flush();
+                             localRowExpressions.add(bytesOut.getBuffer());
+                        }
+                    } catch (IOException io) {
+                        throw new RuntimeException(io);
+                    }
+                    rowExpressions = localRowExpressions;
+                }
+            }
+        }
+        List<ColumnProjector> colProjectors = new ArrayList<ColumnProjector>(rowExpressions.size());
+        try {
+            for (int i=0; i<rowExpressions.size(); i++) {
+                ByteArrayInputStream bytesIn = new ByteArrayInputStream(rowExpressions.get(i));
+                DataInputStream input = new DataInputStream(bytesIn);
+                Expression expression = ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
+                expression.readFields(input);
+                ColumnProjector colProjector = this.getColumnProjector(i);
+                colProjectors.add(new ExpressionProjector(colProjector.getName(),
+                    colProjector.getTableName(), 
+                    expression,
+                    colProjector.isCaseSensitive()));
+            }
+            return new RowProjector(colProjectors, 
+                this.getEstimatedRowByteSize(),
+                this.isProjectEmptyKeyValue());
+        } catch (IOException io) {
+            throw new RuntimeException(io);
+        }
+   }
     
     public boolean isProjectEmptyKeyValue() {
         return isProjectEmptyKeyValue;
@@ -87,17 +149,21 @@ public class RowProjector {
         if (!someCaseSensitive) {
             name = SchemaUtil.normalizeIdentifier(name);
         }
-        Integer index = reverseIndex.get(name);
-        if (index == null) {
+        List<Integer> index = reverseIndex.get(name);
+        if (index.isEmpty()) {
             if (!allCaseSensitive && someCaseSensitive) {
                 name = SchemaUtil.normalizeIdentifier(name);
                 index = reverseIndex.get(name);
             }
-            if (index == null) {
+            if (index.isEmpty()) {
                 throw new ColumnNotFoundException(name);
             }
         }
-        return index;
+        if (index.size() > 1) {
+            throw new AmbiguousColumnException(name);
+        }
+        
+        return index.get(0);
     }
     
     public ColumnProjector getColumnProjector(int index) {
@@ -124,5 +190,14 @@ public class RowProjector {
 
     public int getEstimatedRowByteSize() {
         return estimatedSize;
+    }
+
+    /**
+     * allow individual expressions to reset their state between rows
+     */
+    public void reset() {
+        for (ColumnProjector projector : columnProjectors) {
+            projector.getExpression().reset();
+        }
     }
 }

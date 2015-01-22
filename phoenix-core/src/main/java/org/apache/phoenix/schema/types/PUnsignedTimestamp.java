@@ -17,21 +17,21 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.text.Format;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.DateUtil;
-
-import java.sql.Timestamp;
-import java.sql.Types;
-import java.text.Format;
 
 public class PUnsignedTimestamp extends PDataType<Timestamp> {
 
   public static final PUnsignedTimestamp INSTANCE = new PUnsignedTimestamp();
 
   private PUnsignedTimestamp() {
-    super("UNSIGNED_TIMESTAMP", 19, java.sql.Timestamp.class, null, 12);
+    super("UNSIGNED_TIMESTAMP", 20, java.sql.Timestamp.class, null, 12);
   }
 
   @Override

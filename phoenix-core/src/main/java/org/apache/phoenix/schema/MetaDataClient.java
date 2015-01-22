@@ -48,9 +48,9 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REGION_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
@@ -77,22 +77,17 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Types;
-import java.util.Arrays;
-import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -153,7 +148,6 @@ import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
-import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -172,8 +166,6 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TrustedByteArrayOutputStream;
-import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -182,6 +174,7 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 
 public class MetaDataClient {
@@ -290,9 +283,6 @@ public class MetaDataClient {
         ") VALUES (?, ?, ?, ?, ?, ?)";
 
     private final PhoenixConnection connection;
-
-    private static final HColumnDescriptor defaultColDescriptor = new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
-
 
     public MetaDataClient(PhoenixConnection connection) {
         this.connection = connection;
@@ -1927,6 +1917,7 @@ public class MetaDataClient {
             }
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_TABLE)
                 .setSchemaName(schemaName).setTableName(tableName).setFamilyName(familyName).setColumnName(columnName).setMessage(msg).build().buildException();
+        case NO_OP:
         case COLUMN_ALREADY_EXISTS:
         case COLUMN_NOT_FOUND:
             break;
@@ -2024,76 +2015,34 @@ public class MetaDataClient {
             Boolean disableWALProp = null;
             Boolean storeNullsProp = null;
 
-            // flatten, separate and validate properties
-            ListMultimap<String,Pair<String,Object>> stmtPropsMap = statement.getProps();
-            Map<String, Map<String, Object>> stmtFamiliesPropsMap = new HashMap<>(stmtPropsMap.size());
-            Map<String, Object> tableProps = new HashMap<>(stmtPropsMap.size());
+            ListMultimap<String,Pair<String,Object>> stmtProperties = statement.getProps();
+            Map<String, List<Pair<String, Object>>> properties = new HashMap<>(stmtProperties.size());
             PTable table = FromCompiler.getResolver(statement, connection).getTables().get(0).getTable();
-            Map<String,Object> commonFamilyProps = new HashMap<>();
             List<ColumnDef> columnDefs = statement.getColumnDefs();
             if (columnDefs == null) {
-                columnDefs = Lists.newArrayListWithExpectedSize(1);
+                columnDefs = Collections.emptyList();
             }
-            for (String family : stmtPropsMap.keySet()) {
-                List<Pair<String, Object>> propsList = stmtPropsMap.get(family);
-                Map<String, Object> colFamilyPropsMap = new HashMap<String, Object>(propsList.size());
+            for (String family : stmtProperties.keySet()) {
+                List<Pair<String, Object>> propsList = stmtProperties.get(family);
                 for (Pair<String, Object> prop : propsList) {
                     String propName = prop.getFirst();
-                    if ((isHTableProperty(propName) ||  TableProperty.isPhoenixTableProperty(propName)) && columnDefs.size() > 0) {
-                    	// setting HTable and PhoenixTable properties while adding a column is not allowed.
-                    	throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SET_TABLE_PROPERTY_ADD_COLUMN)
-                    	.setMessage("Property: " + propName).build()
-                    	.buildException();
-                    }
-                    if (isHTableProperty(propName)) {
-                        // Can't have a column family name for a property that's an HTableProperty
-                        if (!family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY)
-                            .setMessage("Column Family: " + family + ", Property: " + propName).build()
-                            .buildException();
+                    if (TableProperty.isPhoenixTableProperty(propName)) {
+                        TableProperty.valueOf(propName).validate(true, !family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY), table.getType());
+                        if (propName.equals(PTable.IS_IMMUTABLE_ROWS_PROP_NAME)) {
+                            isImmutableRowsProp = (Boolean)prop.getSecond();
+                        } else if (propName.equals(PhoenixDatabaseMetaData.MULTI_TENANT)) {
+                            multiTenantProp = (Boolean)prop.getSecond();
+                        } else if (propName.equals(DISABLE_WAL)) {
+                            disableWALProp = (Boolean)prop.getSecond();
+                        } else if (propName.equals(STORE_NULLS)) {
+                            storeNullsProp = (Boolean)prop.getSecond();
                         }
-                        tableProps.put(propName, prop.getSecond());
-                    } else {
-                        if (TableProperty.isPhoenixTableProperty(propName)) {
-                        	TableProperty.valueOf(propName).validate(true, !family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY), table.getType());
-                            if (propName.equals(TTL)) {
-                                // Even though TTL is really a HColumnProperty we treat it specially.
-                                // We enforce that all column families have the same TTL.
-                            	commonFamilyProps.put(propName, prop.getSecond());
-                            } else if (propName.equals(PTable.IS_IMMUTABLE_ROWS_PROP_NAME)) {
-                                isImmutableRowsProp = (Boolean)prop.getSecond();
-                            } else if (propName.equals(PhoenixDatabaseMetaData.MULTI_TENANT)) {
-                                multiTenantProp = (Boolean)prop.getSecond();
-                            } else if (propName.equals(DISABLE_WAL)) {
-                                disableWALProp = (Boolean)prop.getSecond();
-                            } else if (propName.equals(STORE_NULLS)) {
-                                storeNullsProp = (Boolean) prop.getSecond();
-                            }
-                        } else {
-                            if (isHColumnProperty(propName)) {
-                                if (family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
-                                    commonFamilyProps.put(propName, prop.getSecond());
-                                } else {
-                                    colFamilyPropsMap.put(propName, prop.getSecond());
-                                }
-                            } else {
-                                // invalid property - neither of HTableProp, HColumnProp or PhoenixTableProp
-                                // FIXME: This isn't getting triggered as currently a property gets evaluated
-                                // as HTableProp if its neither HColumnProp or PhoenixTableProp.
-                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.SET_UNSUPPORTED_PROP_ON_ALTER_TABLE)
-                                .setMessage("Column Family: " + family + ", Property: " + propName).build()
-                                .buildException();
-                            }
-                        }
-                    }
+                    } 
                 }
-                if (!colFamilyPropsMap.isEmpty()) {
-                    stmtFamiliesPropsMap.put(family, colFamilyPropsMap);
-                }
+                properties.put(family, propsList);
             }
-
-
             boolean retried = false;
+            boolean changingPhoenixTableProperty = false;
             while (true) {
                 ColumnResolver resolver = FromCompiler.getResolver(statement, connection);
                 table = resolver.getTables().get(0).getTable();
@@ -2121,24 +2070,28 @@ public class MetaDataClient {
                 if (isImmutableRowsProp != null) {
                     if (isImmutableRowsProp.booleanValue() != table.isImmutableRows()) {
                         isImmutableRows = isImmutableRowsProp;
+                        changingPhoenixTableProperty = true;
                     }
                 }
                 Boolean multiTenant = null;
                 if (multiTenantProp != null) {
                     if (multiTenantProp.booleanValue() != table.isMultiTenant()) {
                         multiTenant = multiTenantProp;
+                        changingPhoenixTableProperty = true;
                     }
                 }
                 Boolean disableWAL = null;
                 if (disableWALProp != null) {
                     if (disableWALProp.booleanValue() != table.isWALDisabled()) {
                         disableWAL = disableWALProp;
+                        changingPhoenixTableProperty = true;
                     }
                 }
                 Boolean storeNulls = null;
                 if (storeNullsProp != null) {
                     if (storeNullsProp.booleanValue() != table.getStoreNulls()) {
                         storeNulls = storeNullsProp;
+                        changingPhoenixTableProperty = true;
                     }
                 }
 
@@ -2147,7 +2100,7 @@ public class MetaDataClient {
 
                 List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnDefs.size());
                 Set<String> colFamiliesForPColumnsToBeAdded = new LinkedHashSet<>();
-                HashSet<String> existingColumnFamilies = existingColumnFamilies(table);
+                Set<String> families = new LinkedHashSet<>();
                 if (columnDefs.size() > 0 ) {
                     short nextKeySeq = SchemaUtil.getMaxKeySeq(table);
                     for( ColumnDef colDef : columnDefs) {
@@ -2172,8 +2125,9 @@ public class MetaDataClient {
                             pkName = table.getPKName() == null ? null : table.getPKName().getString();
                             keySeq = ++nextKeySeq;
                         } else {
-                            colFamiliesForPColumnsToBeAdded.add(column.getFamilyName().getString());
+                            families.add(column.getFamilyName().getString());
                         }
+                        colFamiliesForPColumnsToBeAdded.add(column.getFamilyName() == null ? null : column.getFamilyName().getString());
                         addColumnMutation(schemaName, tableName, column, colUpsert, null, pkName, keySeq, table.getBucketNum() != null);
                     }
 
@@ -2232,15 +2186,17 @@ public class MetaDataClient {
                     tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
                     connection.rollback();
                 }
-                long seqNum = incrementTableSeqNum(table, statement.getTableType(), 1,
-                        isImmutableRows, disableWAL, multiTenant, storeNulls);
-
-                tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
-                connection.rollback();
+                long seqNum = table.getSequenceNumber();
+                if (changingPhoenixTableProperty || columnDefs.size() > 0) { 
+                    seqNum = incrementTableSeqNum(table, statement.getTableType(), 1, isImmutableRows, disableWAL, multiTenant, storeNulls);
+                    tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
+                    connection.rollback();
+                }
+                
                 // Force the table header row to be first
                 Collections.reverse(tableMetaData);
 
-                byte[] family = colFamiliesForPColumnsToBeAdded.size() > 0 ? colFamiliesForPColumnsToBeAdded.iterator().next().getBytes() : null;
+                byte[] family = families.size() > 0 ? families.iterator().next().getBytes() : null;
 
                 // Figure out if the empty column family is changing as a result of adding the new column
                 byte[] emptyCF = null;
@@ -2258,78 +2214,7 @@ public class MetaDataClient {
                     }
                 }
 
-                Map<String, Map<String, Object>> allFamiliesProps = new HashMap<>(existingColumnFamilies.size() + stmtFamiliesPropsMap.size());
-                commonFamilyProps = Collections.unmodifiableMap(commonFamilyProps);
-                if (columnDefs.size() == 0) {
-                	// Add the common family props to all existing column families
-                	for (String existingColFamily : existingColumnFamilies) {
-                		Map<String, Object> m = new HashMap<String, Object>(commonFamilyProps.size());
-                		m.putAll(commonFamilyProps);
-                		allFamiliesProps.put(existingColFamily, m);
-                	}
-                } else {
-                	// Add the common family props to the column families of the columns being added
-                	for (String colFamily : colFamiliesForPColumnsToBeAdded) {
-                		Map<String, Object> m = new HashMap<String, Object>(commonFamilyProps.size());
-                		m.putAll(commonFamilyProps);
-                		allFamiliesProps.put(colFamily, m);
-                	}
-                }
-
-                if (table.getColumnFamilies().isEmpty() && columnDefs.size() == 0 && !commonFamilyProps.isEmpty()) {
-                	allFamiliesProps.put(Bytes.toString(table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes() ), commonFamilyProps);
-                }
-
-                // Now go through the column family properties specified in the statement
-                // and merge them with the common family properties.
-                for (String f : stmtFamiliesPropsMap.keySet()) {
-                    if (allFamiliesProps.get(f) != null) {
-                        Map<String, Object> props = allFamiliesProps.get(f);
-                        Map<String, Object> stmtProps = stmtFamiliesPropsMap.get(f);
-                        props.putAll(stmtProps);
-                    } else {
-                    	if (columnDefs.size() == 0) {
-                    		throw new ColumnFamilyNotFoundException(f);
-                    	} else {
-                    		if (!existingColumnFamilies.contains(f)) {
-                    			throw new ColumnFamilyNotFoundException(f);
-                    		} else {
-                    			// If the family already exists then an attempt was made to
-                        		// add property for a column family that doesn't have a column
-                        		// being added in the statement.
-                    			throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SET_PROPERTY_FOR_COLUMN_NOT_ADDED).build()
-                                .buildException();
-                    		}
-                    	}
-                    }
-                }
-
-                // Views are not allowed to have any of these properties.
-                if (table.getType() == PTableType.VIEW && (!stmtFamiliesPropsMap.isEmpty() || !commonFamilyProps.isEmpty() || !tableProps.isEmpty())) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WITH_PROPERTIES).build()
-                    .buildException();
-                }
-
-                HTableDescriptor newTableDesc = null;
-                if (!tableProps.isEmpty()) {
-                	newTableDesc = modifyTableProps(tableName, table, tableProps);
-                }
-
-                if (columnDefs.size() > 0) {
-                	// Make sure that all the CFs of the table have the same TTL as the empty CF.
-                	setTTLToEmptyCFTTL(allFamiliesProps, table, newTableDesc);
-                }
-
-                List<Pair<byte[], Map<String, Object>>> families = new ArrayList<>(allFamiliesProps.size());
-                for (Entry<String, Map<String, Object>> entry : allFamiliesProps.entrySet()) {
-                    byte[] cf = entry.getKey().getBytes();
-                    Map<String, Object> props = entry.getValue();
-                    if (!props.isEmpty()) {
-                        families.add(new Pair<>(cf, props));
-                    }
-                }
-
-                MetaDataMutationResult result = connection.getQueryServices().addColumn(tableMetaData, families, table);
+                MetaDataMutationResult result = connection.getQueryServices().addColumn(tableMetaData, table, properties, colFamiliesForPColumnsToBeAdded);
                 try {
                     MutationCode code = processMutationResult(schemaName, tableName, result);
                     if (code == MutationCode.COLUMN_ALREADY_EXISTS) {
@@ -2343,7 +2228,7 @@ public class MetaDataClient {
                     // Only update client side cache if we aren't adding a PK column to a table with indexes.
                     // We could update the cache manually then too, it'd just be a pain.
                     if (numPkColumnsAdded==0 || table.getIndexes().isEmpty()) {
-                        connection.addColumn(tenantId, SchemaUtil.getTableName(schemaName, tableName), columns, result.getMutationTime(), seqNum, isImmutableRows == null ? table.isImmutableRows() : isImmutableRows);
+                        connection.addColumn(tenantId, SchemaUtil.getTableName(schemaName, tableName), columns, result.getMutationTime(), seqNum, isImmutableRows == null ? table.isImmutableRows() : isImmutableRows, disableWAL == null ? table.isWALDisabled() : disableWAL, multiTenant == null ? table.isMultiTenant() : multiTenant, storeNulls == null ? table.getStoreNulls() : storeNulls);
                     }
                     // Delete rows in view index if we haven't dropped it already
                     // We only need to do this if the multiTenant transitioned to false
@@ -2391,48 +2276,6 @@ public class MetaDataClient {
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
-    }
-
-   private void setTTLToEmptyCFTTL(Map<String, Map<String, Object>> familyProps, PTable table,
-		   HTableDescriptor newTableDesc) throws SQLException {
-	   if (!familyProps.isEmpty()) {
-		   int emptyCFTTL = getTTLForEmptyCf(SchemaUtil.getEmptyColumnFamily(table), table.getPhysicalName().getBytes(), newTableDesc);
-		   for (String family : familyProps.keySet()) {
-			   Map<String, Object> props = familyProps.get(family) != null ? familyProps.get(family) : new HashMap<String, Object>();
-			   props.put(TTL, emptyCFTTL);
-		   }
-	   }
-   }
-
-    private HTableDescriptor modifyTableProps(String tableName, PTable table, Map<String, Object> tableProps) throws SQLException {
-    	byte[] tableNameBytes = Bytes.toBytes(tableName);
-    	ConnectionQueryServices services = connection.getQueryServices();
-    	HTableDescriptor existingTableDescriptor = services.getTableDescriptor(tableNameBytes);
-    	HTableDescriptor newTableDescriptor = new HTableDescriptor(existingTableDescriptor);
-    	// add all the table properties to the existing table descriptor
-    	for (Entry<String, Object> entry : tableProps.entrySet()) {
-    		newTableDescriptor.setValue(entry.getKey(), entry.getValue() != null ? entry.getValue().toString() : null);
-    	}
-    	SQLException sqlE = null;
-    	try {
-    		services.modifyTable(tableNameBytes, newTableDescriptor);
-    		return newTableDescriptor;
-    	} catch (IOException e) {
-    		sqlE = ServerUtil.parseServerException(e);
-    		return null;
-    	} catch (InterruptedException e) {
-    		// restore the interrupt status
-    		Thread.currentThread().interrupt();
-    		sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build().buildException();
-    		return null;
-    	} catch (TimeoutException e) {
-    		sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setRootCause(e.getCause() != null ? e.getCause() : e).build().buildException();
-    		return null;
-    	} finally {
-    		if (sqlE != null) {
-    			throw sqlE;
-    		}
-    	}
     }
 
     private String dropColumnMutations(PTable table, List<PColumn> columnsToDrop, List<Mutation> tableMetaData) throws SQLException {
@@ -2595,8 +2438,8 @@ public class MetaDataClient {
                             tableContainingColumnToDrop.getColumnFamily(emptyCF);
                         } catch (ColumnFamilyNotFoundException e) {
                             // Only if it's not already a column family do we need to ensure it's created
-                            List<Pair<byte[],Map<String,Object>>> family = Lists.newArrayListWithExpectedSize(1);
-                            family.add(new Pair<byte[],Map<String,Object>>(emptyCF,Collections.<String,Object>emptyMap()));
+                            Map<String, List<Pair<String,Object>>> family = new HashMap<>(1);
+                            family.put(Bytes.toString(emptyCF), Collections.<Pair<String, Object>>emptyList());
                             // Just use a Put without any key values as the Mutation, as addColumn will treat this specially
                             // TODO: pass through schema name and table name instead to these methods as it's cleaner
                             byte[] tenantIdBytes = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
@@ -2605,7 +2448,8 @@ public class MetaDataClient {
                                     Collections.<Mutation>singletonList(new Put(SchemaUtil.getTableKey
                                             (tenantIdBytes, tableContainingColumnToDrop.getSchemaName().getBytes(),
                                             tableContainingColumnToDrop.getTableName().getBytes()))),
-                                    family,tableContainingColumnToDrop);
+                                            tableContainingColumnToDrop, family, Sets.newHashSet(Bytes.toString(emptyCF)));
+
                         }
                     }
                 }
@@ -2795,36 +2639,6 @@ public class MetaDataClient {
             }
         }
         return table.getTableStats();
-    }
-
-    private boolean isHColumnProperty(String propName) {
-    	return defaultColDescriptor.getValue(propName) != null;
-    }
-
-    private boolean isHTableProperty(String propName) {
-    	return !isHColumnProperty(propName) && !TableProperty.isPhoenixTableProperty(propName);
-    }
-
-    private HashSet<String> existingColumnFamilies(PTable table) {
-    	List<PColumnFamily> cfs = table.getColumnFamilies();
-    	HashSet<String> cfNames = new HashSet<>(cfs.size());
-    	for (PColumnFamily cf : table.getColumnFamilies()) {
-    		cfNames.add(cf.getName().getString());
-    	}
-    	return cfNames;
-    }
-
-    private int getTTLForEmptyCf(byte[] emptyCf, byte[] tableNameBytes, HTableDescriptor tableDescriptor) throws SQLException {
-    	if (tableDescriptor == null) {
-    		tableDescriptor = connection.getQueryServices().getTableDescriptor(tableNameBytes);
-    	}
-    	HColumnDescriptor[] colDescriptors = tableDescriptor.getColumnFamilies();
-    	for (HColumnDescriptor colDesc : colDescriptors) {
-    		if (Bytes.equals(emptyCf, colDesc.getName())) {
-    			return colDesc.getTimeToLive();
-    		}
-    	}
-    	throw new IllegalArgumentException("No match for empty column family found");
     }
 
 }

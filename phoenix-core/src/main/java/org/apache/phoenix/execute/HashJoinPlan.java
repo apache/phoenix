@@ -203,7 +203,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             Expression rhsExpression, List<ImmutableBytesWritable> rhsValues, 
             ImmutableBytesWritable ptr, boolean hasFilters) throws SQLException {
         if (rhsValues.isEmpty())
-            return LiteralExpression.newConstant(null, PBoolean.INSTANCE, Determinism.ALWAYS);
+            return LiteralExpression.newConstant(false, PBoolean.INSTANCE, Determinism.ALWAYS);
         
         PDataType type = rhsExpression.getDataType();
         if (!useInClause(hasFilters)) {
@@ -218,9 +218,6 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 }
             }
             
-            if (minValue.equals(maxValue))
-                return ComparisonExpression.create(CompareOp.EQUAL, Lists.newArrayList(lhsExpression, LiteralExpression.newConstant(type.toObject(minValue), type)), ptr);
-            
             return AndExpression.create(Lists.newArrayList(
                     ComparisonExpression.create(CompareOp.GREATER_OR_EQUAL, Lists.newArrayList(lhsExpression, LiteralExpression.newConstant(type.toObject(minValue), type)), ptr), 
                     ComparisonExpression.create(CompareOp.LESS_OR_EQUAL, Lists.newArrayList(lhsExpression, LiteralExpression.newConstant(type.toObject(maxValue), type)), ptr)));
@@ -231,7 +228,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             children.add(LiteralExpression.newConstant(type.toObject(value), type));
         }
         
-        return InListExpression.create(children, false, ptr);
+        return InListExpression.create(children, false, ptr, false);
     }
     
     private boolean useInClause(boolean hasFilters) {

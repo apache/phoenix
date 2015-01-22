@@ -179,6 +179,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT MERGE SORT\n" +
                 "    AND\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_supplier\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "            SERVER SORTED BY [S.:supplier_id]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    CLIENT SORTED BY [I.:item_id]\n" +
@@ -218,6 +219,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 
                 "SORT-MERGE-JOIN \\(SEMI\\) TABLES\n" +
                 "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_customer\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER SORTED BY \\[Join.idx_customer.:customer_id\\]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND \\(SKIP MERGE\\)\n" +
@@ -247,6 +249,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT MERGE SORT\n" +
                 "    AND\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + " [-32768]\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "            SERVER SORTED BY [S.:supplier_id]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    CLIENT SORTED BY [I.:item_id]\n" +
@@ -287,6 +290,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 
                 "SORT-MERGE-JOIN \\(SEMI\\) TABLES\n" +
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " \\[-32768\\]\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER SORTED BY \\[Join.idx_customer.:customer_id\\]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND \\(SKIP MERGE\\)\n" +
@@ -305,8 +309,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "        AFTER-JOIN SERVER FILTER BY \\(I.0:NAME = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)",
                 }});
         return testCases;
-    }
-    
+    }    
     
     protected void initTableValues() throws Exception {
         ensureTableCreated(getUrl(), JOIN_CUSTOMER_TABLE_FULL_NAME);

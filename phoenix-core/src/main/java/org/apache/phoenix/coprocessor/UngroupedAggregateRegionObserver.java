@@ -41,6 +41,7 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -75,13 +76,13 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -89,6 +90,7 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -133,7 +135,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
       // TODO: should we use the one that is all or none?
       region.batchMutate(mutations.toArray(mutationArray));
     }
-    
+
     public static void serializeIntoScan(Scan scan) {
         scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
     }
@@ -322,6 +324,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                             for (Mutation mutation : row.toRowMutations()) {
                                 mutations.add(mutation);
                             }
+                            for (i = 0; i < selectExpressions.size(); i++) {
+                                selectExpressions.get(i).reset();
+                            }
                         } else if (deleteCF != null && deleteCQ != null) {
                             // No need to search for delete column, since we project only it
                             // if no empty key value is being set
@@ -358,10 +363,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                         }
                         // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                         if (!indexMutations.isEmpty() && batchSize > 0 && indexMutations.size() % batchSize == 0) {
-                            HRegion indexRegion = getIndexRegion(c.getEnvironment());
-                            // Get indexRegion corresponding to data region
-                            commitBatch(indexRegion, indexMutations, null);
-                            indexMutations.clear();
+                            commitIndexMutations(c, region, indexMutations);
                         }
 
                     } catch (ConstraintViolationException e) {
@@ -400,10 +402,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         }
 
         if (!indexMutations.isEmpty()) {
-            HRegion indexRegion = getIndexRegion(c.getEnvironment());
-            // Get indexRegion corresponding to data region
-            commitBatch(indexRegion, indexMutations, null);
-            indexMutations.clear();
+            commitIndexMutations(c, region, indexMutations);
         }
 
         final boolean hadAny = hasAny;
@@ -446,6 +445,30 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             }
         };
         return scanner;
+    }
+
+    private void commitIndexMutations(final ObserverContext<RegionCoprocessorEnvironment> c,
+            HRegion region, List<Mutation> indexMutations) throws IOException {
+        // Get indexRegion corresponding to data region
+        HRegion indexRegion = IndexUtil.getIndexRegion(c.getEnvironment());
+        if (indexRegion != null) {
+            commitBatch(indexRegion, indexMutations, null);
+        } else {
+            TableName indexTable =
+                    TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(region.getTableDesc()
+                            .getName()));
+            HTableInterface table = null;
+            try {
+                table = c.getEnvironment().getTable(indexTable);
+                table.batch(indexMutations);
+            } catch (InterruptedException ie) {
+                ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(),
+                    ie);
+            } finally {
+                if (table != null) table.close();
+             }
+        }
+        indexMutations.clear();
     }
     
     @Override
@@ -502,18 +525,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         } finally {
             if (stats != null) stats.close();
         }
-    }
-
-    private HRegion getIndexRegion(RegionCoprocessorEnvironment environment) throws IOException {
-        HRegion userRegion = environment.getRegion();
-        TableName indexTableName = TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(userRegion.getTableDesc().getName()));
-        List<HRegion> onlineRegions = environment.getRegionServerServices().getOnlineRegions(indexTableName);
-        for(HRegion indexRegion : onlineRegions) {
-            if (Bytes.compareTo(userRegion.getStartKey(), indexRegion.getStartKey()) == 0) {
-                return indexRegion;
-            }
-        }
-        return null;
     }
 
     private static PTable deserializeTable(byte[] b) {

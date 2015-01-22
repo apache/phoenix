@@ -63,7 +63,8 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
         conn.createStatement().execute("CREATE INDEX i1 ON v(v2)");
         
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM v WHERE v2 > 'a' and k2 = 'a' ORDER BY v2,k2");
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T ['me',-32766,'a'] - ['me',-32766,*]",
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T ['me',-32766,'a'] - ['me',-32766,*]\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY",
                 QueryUtil.getExplainPlan(rs));
         
         // Won't use index b/c v1 is not in index, but should optimize out k2 still from the order by

@@ -81,7 +81,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
         NEWER_TABLE_FOUND,
         UNALLOWED_TABLE_MUTATION,
         NO_PK_COLUMNS,
-        PARENT_TABLE_NOT_FOUND
+        PARENT_TABLE_NOT_FOUND,
+        NO_OP
     };
 
   public static class MetaDataMutationResult {

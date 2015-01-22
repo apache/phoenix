@@ -410,8 +410,8 @@ public class ParseNodeFactory {
         return new ExistsParseNode(child, negate);
     }
 
-    public InParseNode in(ParseNode l, ParseNode r, boolean negate) {
-        return new InParseNode(l, r, negate);
+    public InParseNode in(ParseNode l, ParseNode r, boolean negate, boolean isSubqueryDistinct) {
+        return new InParseNode(l, r, negate, isSubqueryDistinct);
     }
 
     public IsNullParseNode isNull(ParseNode child, boolean negate) {
@@ -643,6 +643,12 @@ public class ParseNodeFactory {
         return hint == null || hint.isEmpty() ? statement : select(statement.getFrom(), hint, statement.isDistinct(), statement.getSelect(),
                 statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(),
                 statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
+    }
+
+    public SelectStatement select(SelectStatement statement, HintNode hint, ParseNode where) {
+        return select(statement.getFrom(), hint, statement.isDistinct(), statement.getSelect(), where, statement.getGroupBy(),
+                statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(),
+                statement.hasSequence());
     }
 
     public SelectStatement select(SelectStatement statement, LimitNode limit) {
