@@ -217,6 +217,14 @@ public enum ExpressionType {
     }
 
     /**
+     * Return the ExpressionType for a given Expression instance
+     * or null if none exists.
+     */
+    public static ExpressionType valueOfOrNull(Expression expression) {
+        return classToEnumMap.get(expression.getClass());
+    }
+
+    /**
      * Instantiates a DataAccessor based on its DataAccessorType
      */
     public Expression newInstance() {

@@ -36,6 +36,7 @@ import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
 
 
 /**
@@ -57,6 +58,7 @@ public class RowProjector implements Cloneable {
     private final int estimatedSize;
     private final boolean isProjectEmptyKeyValue;
     private volatile List<byte[]> rowExpressions;
+    private List<Expression> statelessExpressions;
     
     public RowProjector(RowProjector projector, boolean isProjectEmptyKeyValue) {
         this(projector.getColumnProjectors(), projector.getEstimatedRowByteSize(), isProjectEmptyKeyValue);
@@ -104,8 +106,23 @@ public class RowProjector implements Cloneable {
                              TrustedByteArrayOutputStream bytesOut = new TrustedByteArrayOutputStream(1024);
                              DataOutputStream output = new DataOutputStream(bytesOut);
                              Expression expression = this.getColumnProjector(i).getExpression();
-                             WritableUtils.writeVInt(output, ExpressionType.valueOf(expression).ordinal());
-                             expression.write(output);
+                             // Hack to clone expressions by serializing them. Not all expressions
+                             // are serializable. For example NEXT VALUE FOR is client-side only.
+                             // In this case, we keep the original exception and restore it when
+                             // we clone (as we don't need to clone it).
+                             // TODO: visitor that clones based on Determinism of PER_INVOCATION
+                             // instead, that way we'd only be cloning expression trees with RAND.
+                             ExpressionType expressionType = ExpressionType.valueOfOrNull(expression);
+                             if (expressionType == null) {
+                                 if (statelessExpressions == null) {
+                                     statelessExpressions = Lists.newArrayList();
+                                 }
+                                 statelessExpressions.add(expression);
+                                 WritableUtils.writeVInt(output, -statelessExpressions.size());
+                             } else {
+                                 WritableUtils.writeVInt(output, expressionType.ordinal());
+                                 expression.write(output);
+                             }
                              output.flush();
                              localRowExpressions.add(bytesOut.getBuffer());
                         }
@@ -121,8 +138,14 @@ public class RowProjector implements Cloneable {
             for (int i=0; i<rowExpressions.size(); i++) {
                 ByteArrayInputStream bytesIn = new ByteArrayInputStream(rowExpressions.get(i));
                 DataInputStream input = new DataInputStream(bytesIn);
-                Expression expression = ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
-                expression.readFields(input);
+                int ordinal = WritableUtils.readVInt(input);
+                Expression expression;
+                if (ordinal < 0) {
+                    expression = statelessExpressions.get(ordinal+1);
+                } else {
+                    expression = ExpressionType.values()[ordinal].newInstance();
+                    expression.readFields(input);
+                }
                 ColumnProjector colProjector = this.getColumnProjector(i);
                 colProjectors.add(new ExpressionProjector(colProjector.getName(),
                     colProjector.getTableName(), 
