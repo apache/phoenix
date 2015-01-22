@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.STARTKEY_OFFSET;
+
 import java.sql.SQLException;
 import java.util.List;
 
@@ -152,6 +154,9 @@ public class ChunkedResultIterator implements PeekingResultIterator {
                 // be able to start the next chunk on the next row key
                 if (rowCount == chunkSize) {
                     next.getKey(lastKey);
+                    if (scan.getAttribute(STARTKEY_OFFSET) != null) {
+                        addRegionStartKeyToLaskKey();
+                    }
                 } else if (rowCount > chunkSize && rowKeyChanged(next)) {
                     chunkComplete = true;
                     return null;
@@ -178,8 +183,27 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             int offset = lastKey.getOffset();
             int length = lastKey.getLength();
             newTuple.getKey(lastKey);
+            if (scan.getAttribute(STARTKEY_OFFSET) != null) {
+                addRegionStartKeyToLaskKey();
+            }
 
             return Bytes.compareTo(currentKey, offset, length, lastKey.get(), lastKey.getOffset(), lastKey.getLength()) != 0;
+        }
+
+        /**
+         * Prefix region start key to last key to form actual row key in case of local index scan.
+         */
+        private void addRegionStartKeyToLaskKey() {
+            byte[] offsetBytes = scan.getAttribute(STARTKEY_OFFSET);
+            if (offsetBytes != null) {
+                int startKeyOffset = Bytes.toInt(offsetBytes);
+                byte[] actualLastkey =
+                        new byte[startKeyOffset + lastKey.getLength() - lastKey.getOffset()];
+                System.arraycopy(scan.getStartRow(), 0, actualLastkey, 0, startKeyOffset);
+                System.arraycopy(lastKey.get(), lastKey.getOffset(), actualLastkey,
+                    startKeyOffset, lastKey.getLength());
+                lastKey.set(actualLastkey);
+            }
         }
 
 		@Override
