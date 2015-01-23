@@ -17,14 +17,16 @@
  */
 package org.apache.phoenix.expression.visitor;
 
-import java.util.*;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
 
 import org.apache.phoenix.expression.Expression;
 
 
 
 
-public class TraverseAllExpressionVisitor<E> extends BaseExpressionVisitor<E> {
+public abstract class TraverseAllExpressionVisitor<E> extends BaseExpressionVisitor<E> {
 
     @Override
     public Iterator<Expression> defaultIterator(Expression node) {

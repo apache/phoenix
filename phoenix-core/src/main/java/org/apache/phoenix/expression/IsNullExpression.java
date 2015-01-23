@@ -26,10 +26,9 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ExpressionUtil;
 
 
@@ -37,8 +36,6 @@ import org.apache.phoenix.util.ExpressionUtil;
  * 
  * Implementation of IS NULL and IS NOT NULL expression
  *
- * 
- * @since 0.1
  */
 public class IsNullExpression extends BaseSingleExpression {
     private boolean isNegate;
@@ -62,6 +59,15 @@ public class IsNullExpression extends BaseSingleExpression {
         this.isNegate = negate;
     }
 
+    public IsNullExpression(List<Expression> children, boolean negate) {
+        super(children);
+        this.isNegate = negate;
+    }
+
+    public IsNullExpression clone(List<Expression> children) {
+        return new IsNullExpression(children, this.isNegate());
+    }
+    
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         boolean evaluated = getChild().evaluate(tuple, ptr);

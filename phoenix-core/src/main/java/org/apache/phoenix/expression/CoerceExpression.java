@@ -26,11 +26,12 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 
 
 public class CoerceExpression extends BaseSingleExpression {
@@ -61,13 +62,21 @@ public class CoerceExpression extends BaseSingleExpression {
     }
     
     CoerceExpression(Expression expression, PDataType toType, SortOrder toSortOrder, Integer maxLength) {
-        super(expression);
+        this(ImmutableList.of(expression), toType, toSortOrder, maxLength);
+    }
+
+    public CoerceExpression(List<Expression> children, PDataType toType, SortOrder toSortOrder, Integer maxLength) {
+        super(children);
         Preconditions.checkNotNull(toSortOrder);
         this.toType = toType;
         this.toSortOrder = toSortOrder;
         this.maxLength = maxLength;
     }
-
+    
+    public CoerceExpression clone(List<Expression> children) {
+        return new CoerceExpression(children, this.getDataType(), this.getSortOrder(), this.getMaxLength());
+    }
+    
     @Override
     public Integer getMaxLength() {
         return maxLength;

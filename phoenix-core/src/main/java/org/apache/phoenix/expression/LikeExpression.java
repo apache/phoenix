@@ -27,10 +27,10 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -196,6 +196,10 @@ public class LikeExpression extends BaseCompoundExpression {
 //        return sb.toString();
 //    }
 
+    public static LikeExpression create(List<Expression> children, LikeType likeType) {
+        return new LikeExpression(addLikeTypeChild(children,likeType));
+    }
+    
     private static final int LIKE_TYPE_INDEX = 2;
     private static final LiteralExpression[] LIKE_TYPE_LITERAL = new LiteralExpression[LikeType.values().length];
     static {
@@ -215,12 +219,11 @@ public class LikeExpression extends BaseCompoundExpression {
         return newChildren;
     }
     
-    public LikeExpression(List<Expression> children, LikeType likeType) {
-        super(addLikeTypeChild(children,likeType));
-        this.likeType = likeType;
+    public LikeExpression(List<Expression> children) {
+        super(children);
         init();
     }
-
+    
     public LikeType getLikeType () {
       return likeType;
     }

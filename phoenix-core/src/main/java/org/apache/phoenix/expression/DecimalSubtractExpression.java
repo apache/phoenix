@@ -22,11 +22,11 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.util.NumberUtil;
 
 
@@ -111,5 +111,10 @@ public class DecimalSubtractExpression extends SubtractExpression {
     @Override
     public Integer getMaxLength() {
         return maxLength;
+    }
+
+    @Override
+    public ArithmeticExpression clone(List<Expression> children) {
+        return new DecimalSubtractExpression(children);
     }
 }

@@ -29,19 +29,19 @@ import java.util.List;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.expression.function.InlineArrayElemRefExpression;
+import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PUnsignedInt;
-import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PUnsignedInt;
+import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -120,7 +120,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         PDataType lhsExprDataType = lhsExpr.getDataType();
         PDataType rhsExprDataType = rhsExpr.getDataType();
         
-        if ((lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) && !(lhsExpr instanceof InlineArrayElemRefExpression) && !(rhsExpr instanceof InlineArrayElemRefExpression)) {
+        if ((lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) && !(lhsExpr instanceof ArrayElemRefExpression) && !(rhsExpr instanceof ArrayElemRefExpression)) {
             if (op == CompareOp.EQUAL || op == CompareOp.NOT_EQUAL) {
                 List<Expression> andNodes = Lists.<Expression>newArrayListWithExpectedSize(Math.max(lhsExpr.getChildren().size(), rhsExpr.getChildren().size()));
                 rewriteRVCAsEqualityExpression(lhsExpr, rhsExpr, andNodes, ptr);
@@ -262,13 +262,13 @@ public class ComparisonExpression extends BaseCompoundExpression {
                 }
             }
         }
-        return new ComparisonExpression(op, children);
+        return new ComparisonExpression(children, op);
     }
     
     public ComparisonExpression() {
     }
 
-    public ComparisonExpression(CompareOp op, List<Expression> children) {
+    public ComparisonExpression(List<Expression> children, CompareOp op) {
         super(children);
         if (op == null) {
             throw new NullPointerException();
@@ -276,6 +276,10 @@ public class ComparisonExpression extends BaseCompoundExpression {
         this.op = op;
     }
 
+    public ComparisonExpression clone(List<Expression> children) {
+        return new ComparisonExpression(children, this.getFilterOp());
+    }
+    
     @Override
     public int hashCode() {
         final int prime = 31;

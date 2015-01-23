@@ -17,13 +17,13 @@
  */
 package org.apache.phoenix.expression;
 
-import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 
 
 /**
@@ -39,7 +39,7 @@ public class ModulusExpression extends ArithmeticExpression {
 
     public ModulusExpression() { }
 
-    public ModulusExpression(List<Expression> children) throws SQLException {
+    public ModulusExpression(List<Expression> children) {
         super(children);
     }
 
@@ -93,4 +93,18 @@ public class ModulusExpression extends ArithmeticExpression {
         return " % ";
     }
 
+    @Override
+    public final <T> T accept(ExpressionVisitor<T> visitor) {
+        List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
+        T t = visitor.visitLeave(this, l);
+        if (t == null) {
+            t = visitor.defaultReturn(this, l);
+        }
+        return t;
+    }
+
+    @Override
+    public ArithmeticExpression clone(List<Expression> children) {
+        return new ModulusExpression(children);
+    }
 }

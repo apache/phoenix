@@ -20,8 +20,6 @@ package org.apache.phoenix.expression;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-
 
 
 /**
@@ -36,10 +34,4 @@ public abstract class BaseTerminalExpression extends BaseExpression {
     public List<Expression> getChildren() {
         return Collections.emptyList();
     }
-    
-    @Override
-    public <T> T accept(ExpressionVisitor<T> visitor) {
-        return null;
-    }
-
 }

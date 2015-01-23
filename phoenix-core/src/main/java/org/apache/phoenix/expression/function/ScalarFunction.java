@@ -36,6 +36,15 @@ public abstract class ScalarFunction extends FunctionExpression {
         super(children);
     }
     
+    public ScalarFunction clone(List<Expression> children) {
+        try {
+            // FIXME: we could potentially implement this on each subclass and not use reflection
+            return getClass().getConstructor(List.class).newInstance(children);
+        } catch (Exception e) {
+            throw new RuntimeException(e); // Impossible, since it was originally constructed this way
+        }
+    }
+    
     protected static byte[] evaluateExpression(Expression rhs) {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         rhs.evaluate(null, ptr);
