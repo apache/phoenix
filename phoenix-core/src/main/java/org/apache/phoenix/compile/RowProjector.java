@@ -17,26 +17,20 @@
  */
 package org.apache.phoenix.compile;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.ExpressionType;
+import org.apache.phoenix.expression.visitor.CloneExpressionVisitor;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
 
 
 /**
@@ -57,8 +51,7 @@ public class RowProjector implements Cloneable {
     private final boolean someCaseSensitive;
     private final int estimatedSize;
     private final boolean isProjectEmptyKeyValue;
-    private volatile List<byte[]> rowExpressions;
-    private List<Expression> statelessExpressions;
+    private final boolean cloneRequired;
     
     public RowProjector(RowProjector projector, boolean isProjectEmptyKeyValue) {
         this(projector.getColumnProjectors(), projector.getEstimatedRowByteSize(), isProjectEmptyKeyValue);
@@ -89,77 +82,42 @@ public class RowProjector implements Cloneable {
         this.someCaseSensitive = someCaseSensitive;
         this.estimatedSize = estimatedRowSize;
         this.isProjectEmptyKeyValue = isProjectEmptyKeyValue;
+        boolean hasPerInvocationExpression = false;
+        for (int i = 0; i < this.columnProjectors.size(); i++) {
+            Expression expression = this.columnProjectors.get(i).getExpression();
+            if (expression.getDeterminism() == Determinism.PER_INVOCATION) {
+                hasPerInvocationExpression = true;
+                break;
+            }
+        }
+        this.cloneRequired = hasPerInvocationExpression;
     }
 
     @Override
     public RowProjector clone() {
-        return cloneRowProjector();
-    }
-
-    private RowProjector cloneRowProjector() {
-        if (rowExpressions == null) {
-            synchronized(this) {
-                if (rowExpressions == null) {
-                    List<byte[]> localRowExpressions = new ArrayList<byte[]>(this.getColumnCount());
-                    try {
-                        for (int i = 0; i < this.getColumnCount(); i++) {
-                             TrustedByteArrayOutputStream bytesOut = new TrustedByteArrayOutputStream(1024);
-                             DataOutputStream output = new DataOutputStream(bytesOut);
-                             Expression expression = this.getColumnProjector(i).getExpression();
-                             // Hack to clone expressions by serializing them. Not all expressions
-                             // are serializable. For example NEXT VALUE FOR is client-side only.
-                             // In this case, we keep the original exception and restore it when
-                             // we clone (as we don't need to clone it).
-                             // TODO: visitor that clones based on Determinism of PER_INVOCATION
-                             // instead, that way we'd only be cloning expression trees with RAND.
-                             ExpressionType expressionType = ExpressionType.valueOfOrNull(expression);
-                             if (expressionType == null) {
-                                 if (statelessExpressions == null) {
-                                     statelessExpressions = Lists.newArrayList();
-                                 }
-                                 statelessExpressions.add(expression);
-                                 WritableUtils.writeVInt(output, -statelessExpressions.size());
-                             } else {
-                                 WritableUtils.writeVInt(output, expressionType.ordinal());
-                                 expression.write(output);
-                             }
-                             output.flush();
-                             localRowExpressions.add(bytesOut.getBuffer());
-                        }
-                    } catch (IOException io) {
-                        throw new RuntimeException(io);
-                    }
-                    rowExpressions = localRowExpressions;
-                }
+        if (!cloneRequired) {
+            return this;
+        }
+        List<ColumnProjector> clonedColProjectors = new ArrayList<ColumnProjector>(columnProjectors.size());
+        for (int i = 0; i < this.columnProjectors.size(); i++) {
+            ColumnProjector colProjector = columnProjectors.get(i);
+            Expression expression = colProjector.getExpression();
+            if (expression.getDeterminism() == Determinism.PER_INVOCATION) {
+                CloneExpressionVisitor visitor = new CloneExpressionVisitor();
+                Expression clonedExpression = expression.accept(visitor);
+                clonedColProjectors.add(new ExpressionProjector(colProjector.getName(),
+                        colProjector.getTableName(), 
+                        clonedExpression,
+                        colProjector.isCaseSensitive()));
+            } else {
+                clonedColProjectors.add(colProjector);
             }
         }
-        List<ColumnProjector> colProjectors = new ArrayList<ColumnProjector>(rowExpressions.size());
-        try {
-            for (int i=0; i<rowExpressions.size(); i++) {
-                ByteArrayInputStream bytesIn = new ByteArrayInputStream(rowExpressions.get(i));
-                DataInputStream input = new DataInputStream(bytesIn);
-                int ordinal = WritableUtils.readVInt(input);
-                Expression expression;
-                if (ordinal < 0) {
-                    expression = statelessExpressions.get(ordinal+1);
-                } else {
-                    expression = ExpressionType.values()[ordinal].newInstance();
-                    expression.readFields(input);
-                }
-                ColumnProjector colProjector = this.getColumnProjector(i);
-                colProjectors.add(new ExpressionProjector(colProjector.getName(),
-                    colProjector.getTableName(), 
-                    expression,
-                    colProjector.isCaseSensitive()));
-            }
-            return new RowProjector(colProjectors, 
+        return new RowProjector(clonedColProjectors, 
                 this.getEstimatedRowByteSize(),
                 this.isProjectEmptyKeyValue());
-        } catch (IOException io) {
-            throw new RuntimeException(io);
-        }
-   }
-    
+    }
+
     public boolean isProjectEmptyKeyValue() {
         return isProjectEmptyKeyValue;
     }

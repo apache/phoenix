@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.arithmetic;
+package org.apache.phoenix.expression;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -34,9 +34,10 @@ import org.apache.phoenix.expression.DecimalMultiplyExpression;
 import org.apache.phoenix.expression.DecimalSubtractExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.visitor.CloneExpressionVisitor;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PDataType;
 import org.junit.Test;
 
 
@@ -49,36 +50,27 @@ public class ArithmeticOperationTest {
     public void testDecimalAddition() throws Exception {
         LiteralExpression op1, op2, op3;
         List<Expression> children;
-        ImmutableBytesWritable ptr;
         DecimalAddExpression e;
-        boolean evaluated;
 
         op1 = LiteralExpression.newConstant(new BigDecimal("1234567890123456789012345678901"), PDecimal.INSTANCE, 31, 0);
         op2 = LiteralExpression.newConstant(new BigDecimal("12345"), PDecimal.INSTANCE, 5, 0);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalAddExpression(children);
-        ptr = new ImmutableBytesWritable();
-        evaluated = e.evaluate(null, ptr);
-        assertTrue(evaluated);
-        assertEqualValue(PDecimal.INSTANCE, new BigDecimal("1234567890123456789012345691246"), ptr);
+        assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("1234567890123456789012345691246"));
 
         op1 = LiteralExpression.newConstant(new BigDecimal("12345"), PDecimal.INSTANCE, 5, 0);
         op2 = LiteralExpression.newConstant(new BigDecimal("123.45"), PDecimal.INSTANCE, 5, 2);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalAddExpression(children);
-        ptr = new ImmutableBytesWritable();
-        evaluated = e.evaluate(null, ptr);
-        assertTrue(evaluated);
-        assertEqualValue(PDecimal.INSTANCE, new BigDecimal("12468.45"), ptr);
+        assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("12468.45"));
 
         // Exceeds precision.
         op1 = LiteralExpression.newConstant(new BigDecimal("99999999999999999999999999999999999999"), PDecimal.INSTANCE, 38, 0);
         op2 = LiteralExpression.newConstant(new BigDecimal("123"), PDecimal.INSTANCE, 3, 0);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalAddExpression(children);
-        ptr = new ImmutableBytesWritable();
         try {
-            evaluated = e.evaluate(null, ptr);
+            e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
         }
@@ -89,19 +81,15 @@ public class ArithmeticOperationTest {
         op3 = LiteralExpression.newConstant(new BigDecimal("-123"), PDecimal.INSTANCE, 3, 0);
         children = Arrays.<Expression>asList(op1, op2, op3);
         e = new DecimalAddExpression(children);
-        ptr = new ImmutableBytesWritable();
-        evaluated = e.evaluate(null, ptr);
-        assertTrue(evaluated);
-        assertEqualValue(PDecimal.INSTANCE, new BigDecimal("99999999999999999999999999999999999999"), ptr);
+        assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("99999999999999999999999999999999999999"));
 
         // Exceeds scale.
         op1 = LiteralExpression.newConstant(new BigDecimal("12345678901234567890123456789012345678"), PDecimal.INSTANCE, 38, 0);
         op2 = LiteralExpression.newConstant(new BigDecimal("123.45"), PDecimal.INSTANCE, 5, 2);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalAddExpression(children);
-        ptr = new ImmutableBytesWritable();
         try {
-            evaluated = e.evaluate(null, ptr);
+            e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
         }
@@ -111,29 +99,21 @@ public class ArithmeticOperationTest {
         op2 = LiteralExpression.newConstant(new BigDecimal("1.1111"), PDecimal.INSTANCE, 5, 4);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalAddExpression(children);
-        ptr = new ImmutableBytesWritable();
-        evaluated = e.evaluate(null, ptr);
-        assertTrue(evaluated);
-        assertEqualValue(PDecimal.INSTANCE, new BigDecimal("10000.2111"), ptr);
+        assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("10000.2111"));
     }
 
     @Test
     public void testIntPlusDecimal() throws Exception {
         LiteralExpression op1, op2;
         List<Expression> children;
-        ImmutableBytesWritable ptr;
         DecimalAddExpression e;
-        boolean evaluated;
 
         op1 = LiteralExpression.newConstant(new BigDecimal("1234.111"), PDecimal.INSTANCE);
         assertNull(op1.getScale());
         op2 = LiteralExpression.newConstant(1, PInteger.INSTANCE);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalAddExpression(children);
-        ptr = new ImmutableBytesWritable();
-        evaluated = e.evaluate(null, ptr);
-        assertTrue(evaluated);
-        assertEqualValue(PDecimal.INSTANCE, new BigDecimal("1235.111"), ptr);
+        assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("1235.111"));
     }
 
     // Subtraction
@@ -143,36 +123,27 @@ public class ArithmeticOperationTest {
     public void testDecimalSubtraction() throws Exception {
         LiteralExpression op1, op2, op3;
         List<Expression> children;
-        ImmutableBytesWritable ptr;
         DecimalSubtractExpression e;
-        boolean evaluated;
 
         op1 = LiteralExpression.newConstant(new BigDecimal("1234567890123456789012345678901"), PDecimal.INSTANCE, 31, 0);
         op2 = LiteralExpression.newConstant(new BigDecimal("12345"), PDecimal.INSTANCE, 5, 0);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalSubtractExpression(children);
-        ptr = new ImmutableBytesWritable();
-        evaluated = e.evaluate(null, ptr);
-        assertTrue(evaluated);
-        assertEqualValue(PDecimal.INSTANCE, new BigDecimal("1234567890123456789012345666556"), ptr);
+        assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("1234567890123456789012345666556"));
 
         op1 = LiteralExpression.newConstant(new BigDecimal("12345"), PDecimal.INSTANCE, 5, 0);
         op2 = LiteralExpression.newConstant(new BigDecimal("123.45"), PDecimal.INSTANCE, 5, 2);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalSubtractExpression(children);
-        ptr = new ImmutableBytesWritable();
-        evaluated = e.evaluate(null, ptr);
-        assertTrue(evaluated);
-        assertEqualValue(PDecimal.INSTANCE, new BigDecimal("12221.55"), ptr);
+        assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("12221.55"));
 
         // Excceds precision
         op1 = LiteralExpression.newConstant(new BigDecimal("99999999999999999999999999999999999999"), PDecimal.INSTANCE, 38, 0);
         op2 = LiteralExpression.newConstant(new BigDecimal("-123"), PDecimal.INSTANCE, 3, 0);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalSubtractExpression(children);
-        ptr = new ImmutableBytesWritable();
         try {
-            evaluated = e.evaluate(null, ptr);
+            e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
         }
@@ -183,19 +154,15 @@ public class ArithmeticOperationTest {
         op3 = LiteralExpression.newConstant(new BigDecimal("123"), PDecimal.INSTANCE, 3, 0);
         children = Arrays.<Expression>asList(op1, op2, op3);
         e = new DecimalSubtractExpression(children);
-        ptr = new ImmutableBytesWritable();
-        evaluated = e.evaluate(null, ptr);
-        assertTrue(evaluated);
-        assertEqualValue(PDecimal.INSTANCE, new BigDecimal("99999999999999999999999999999999999999"), ptr);
+        assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("99999999999999999999999999999999999999"));
 
         // Exceeds scale.
         op1 = LiteralExpression.newConstant(new BigDecimal("12345678901234567890123456789012345678"), PDecimal.INSTANCE, 38, 0);
         op2 = LiteralExpression.newConstant(new BigDecimal("123.45"), PDecimal.INSTANCE, 5, 2);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalSubtractExpression(children);
-        ptr = new ImmutableBytesWritable();
         try {
-            evaluated = e.evaluate(null, ptr);
+            e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
         }
@@ -205,10 +172,7 @@ public class ArithmeticOperationTest {
         op2 = LiteralExpression.newConstant(new BigDecimal("1.1111"), PDecimal.INSTANCE, 5, 4);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalSubtractExpression(children);
-        ptr = new ImmutableBytesWritable();
-        evaluated = e.evaluate(null, ptr);
-        assertTrue(evaluated);
-        assertEqualValue(PDecimal.INSTANCE, new BigDecimal("1109.9889"), ptr);
+        assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("1109.9889"));
     }
 
     // Multiplication
@@ -218,27 +182,21 @@ public class ArithmeticOperationTest {
     public void testDecimalMultiplication() throws Exception {
         LiteralExpression op1, op2;
         List<Expression> children;
-        ImmutableBytesWritable ptr;
         DecimalMultiplyExpression e;
-        boolean evaluated;
 
         op1 = LiteralExpression.newConstant(new BigDecimal("12345"), PDecimal.INSTANCE, 5, 0);
         op2 = LiteralExpression.newConstant(new BigDecimal("123.45"), PDecimal.INSTANCE, 5, 2);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalMultiplyExpression(children);
-        ptr = new ImmutableBytesWritable();
-        evaluated = e.evaluate(null, ptr);
-        assertTrue(evaluated);
-        assertEqualValue(PDecimal.INSTANCE, new BigDecimal("1523990.25"), ptr);
+        assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("1523990.25"));
 
         // Value too big, exceeds precision.
         op1 = LiteralExpression.newConstant(new BigDecimal("12345678901234567890123456789012345678"), PDecimal.INSTANCE, 38, 0);
         op2 = LiteralExpression.newConstant(new BigDecimal("12345"), PDecimal.INSTANCE, 5, 0);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalMultiplyExpression(children);
-        ptr = new ImmutableBytesWritable();
         try {
-            evaluated = e.evaluate(null, ptr);
+            e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
         }
@@ -248,9 +206,8 @@ public class ArithmeticOperationTest {
         op2 = LiteralExpression.newConstant(new BigDecimal("1.45"), PDecimal.INSTANCE, 3, 2);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalMultiplyExpression(children);
-        ptr = new ImmutableBytesWritable();
         try {
-            evaluated = e.evaluate(null, ptr);
+            e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
         }
@@ -261,10 +218,7 @@ public class ArithmeticOperationTest {
         op2 = LiteralExpression.newConstant(new BigDecimal("1.1111"), PDecimal.INSTANCE, 5, 4);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalMultiplyExpression(children);
-        ptr = new ImmutableBytesWritable();
-        evaluated = e.evaluate(null, ptr);
-        assertTrue(evaluated);
-        assertEqualValue(PDecimal.INSTANCE, new BigDecimal("1234.54321"), ptr);
+        assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("1234.54321"));
     }
 
     // Division
@@ -274,9 +228,7 @@ public class ArithmeticOperationTest {
     public void testDecimalDivision() throws Exception {
         LiteralExpression op1, op2;
         List<Expression> children;
-        ImmutableBytesWritable ptr;
         DecimalDivideExpression e;
-        boolean evaluated;
 
         // The value should be 1234500.0000...00 because we set to scale to be 24. However, in
         // PhoenixResultSet.getBigDecimal, the case to (BigDecimal) actually cause the scale to be eradicated. As
@@ -285,19 +237,15 @@ public class ArithmeticOperationTest {
         op2 = LiteralExpression.newConstant(new BigDecimal("0.01"), PDecimal.INSTANCE, 2, 2);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalDivideExpression(children);
-        ptr = new ImmutableBytesWritable();
-        evaluated = e.evaluate(null, ptr);
-        assertTrue(evaluated);
-        assertEqualValue(PDecimal.INSTANCE, new BigDecimal("1.2345E+6"), ptr);
+        assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("1.2345E+6"));
 
         // Exceeds precision.
         op1 = LiteralExpression.newConstant(new BigDecimal("12345678901234567890123456789012345678"), PDecimal.INSTANCE, 38, 0);
         op2 = LiteralExpression.newConstant(new BigDecimal("0.01"), PDecimal.INSTANCE, 2, 2);
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalDivideExpression(children);
-        ptr = new ImmutableBytesWritable();
         try {
-            evaluated = e.evaluate(null, ptr);
+            e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
         } catch (ValueTypeIncompatibleException ex) {
         }
@@ -308,13 +256,18 @@ public class ArithmeticOperationTest {
         assertEquals(Integer.valueOf(4),op2.getScale());
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalDivideExpression(children);
-        ptr = new ImmutableBytesWritable();
-        evaluated = e.evaluate(null, ptr);
-        assertTrue(evaluated);
-        assertEqualValue(PDecimal.INSTANCE, new BigDecimal("3.3333333333333333333333333333333333333"), ptr);
+        assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("3.3333333333333333333333333333333333333"));
     }
 
-    private static void assertEqualValue(PDataType type, Object value, ImmutableBytesWritable ptr) {
+    private static void assertEqualValue(Expression e, PDataType type, Object value) {
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        boolean evaluated = e.evaluate(null, ptr);
+        assertTrue(evaluated);
+        assertEquals(value, type.toObject(ptr.get()));
+        CloneExpressionVisitor visitor = new CloneExpressionVisitor();
+        Expression clone = e.accept(visitor);
+        evaluated = clone.evaluate(null, ptr);
+        assertTrue(evaluated);
         assertEquals(value, type.toObject(ptr.get()));
     }
 }

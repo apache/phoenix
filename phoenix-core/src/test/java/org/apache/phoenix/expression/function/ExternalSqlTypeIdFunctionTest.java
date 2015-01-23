@@ -17,7 +17,13 @@
  */
 package org.apache.phoenix.expression.function;
 
-import com.google.common.collect.Lists;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.List;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -25,11 +31,7 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PIntegerArray;
 import org.junit.Test;
 
-import java.sql.SQLException;
-import java.sql.Types;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import com.google.common.collect.Lists;
 
 public class ExternalSqlTypeIdFunctionTest {
 
@@ -51,6 +53,17 @@ public class ExternalSqlTypeIdFunctionTest {
         Object returnValue = executeFunction(inputArg);
 
         assertEquals(Types.ARRAY, returnValue);
+    }
+
+    @Test
+    public void testClone() throws SQLException {
+        Expression inputArg = LiteralExpression.newConstant(
+                PIntegerArray.INSTANCE.getSqlType(), PInteger.INSTANCE);
+        List<Expression> args = Lists.newArrayList(inputArg);
+        ExternalSqlTypeIdFunction externalIdFunction =
+                new ExternalSqlTypeIdFunction(args);
+        ScalarFunction clone = externalIdFunction.clone(args);
+        assertEquals(externalIdFunction, clone);
     }
 
     private Object executeFunction(Expression inputArg) throws SQLException {

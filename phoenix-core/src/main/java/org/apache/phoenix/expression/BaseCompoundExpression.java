@@ -25,7 +25,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 
 import com.google.common.collect.ImmutableList;
 
@@ -129,16 +128,6 @@ public abstract class BaseCompoundExpression extends BaseExpression {
         for (int i = 0; i < children.size(); i++) {
             children.get(i).reset();
         }
-    }
-    
-    @Override
-    public <T> T accept(ExpressionVisitor<T> visitor) {
-        List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
-        T t = visitor.visitLeave(this, l);
-        if (t == null) {
-            t = visitor.defaultReturn(this, l);
-        }
-        return t;
     }
     
     @Override

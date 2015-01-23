@@ -30,6 +30,8 @@ public abstract class ArithmeticExpression extends BaseCompoundExpression {
         super(children);
     }
 
+    abstract public ArithmeticExpression clone(List<Expression> children);
+    
     @Override
     public String toString() {
         StringBuilder buf = new StringBuilder("(");

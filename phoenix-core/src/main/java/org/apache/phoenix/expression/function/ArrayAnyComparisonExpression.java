@@ -24,10 +24,11 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.BaseCompoundExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.tuple.Tuple;
 
 public class ArrayAnyComparisonExpression extends BaseCompoundExpression {
     public ArrayAnyComparisonExpression () {
@@ -49,7 +50,7 @@ public class ArrayAnyComparisonExpression extends BaseCompoundExpression {
         for (int i = 0; i < length; i++) {
             Expression comparisonExpr = children.get(1);
             Expression arrayElemRef = ((ComparisonExpression)comparisonExpr).getChildren().get(1);
-            ((InlineArrayElemRefExpression)arrayElemRef).setIndex(i + 1);
+            ((ArrayElemRefExpression)arrayElemRef).setIndex(i + 1);
             comparisonExpr.evaluate(tuple, ptr);
             if (expectedReturnResult(resultFound(ptr))) { return result(); }
             elementAvailable = true;
@@ -75,5 +76,15 @@ public class ArrayAnyComparisonExpression extends BaseCompoundExpression {
     @Override
     public PDataType getDataType() {
         return PBoolean.INSTANCE;
+    }
+
+    @Override
+    public final <T> T accept(ExpressionVisitor<T> visitor) {
+        List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
+        T t = visitor.visitLeave(this, l);
+        if (t == null) {
+            t = visitor.defaultReturn(this, l);
+        }
+        return t;
     }
 }

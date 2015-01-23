@@ -114,7 +114,8 @@ public class RandomFunction extends ScalarFunction {
         return result;
     }
 
-    // take the random object onto account
+    // take the random object onto account, as otherwise we'll potentially collapse two
+    // RAND() calls into a single one.
     @Override
     public boolean equals(Object obj) {
         return super.equals(obj) && random.equals(((RandomFunction)obj).random);

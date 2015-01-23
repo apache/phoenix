@@ -32,7 +32,7 @@ public class LikeExpressionTest {
       LiteralExpression v = LiteralExpression.newConstant(value);
       LiteralExpression p = LiteralExpression.newConstant(expression);
       List<Expression> children = Arrays.<Expression>asList(v,p);
-      LikeExpression e = new LikeExpression(children, LikeType.CASE_SENSITIVE);
+      LikeExpression e = LikeExpression.create(children, LikeType.CASE_SENSITIVE);
       ImmutableBytesWritable ptr = new ImmutableBytesWritable();
       boolean evaluated = e.evaluate(null, ptr);
       Boolean result = (Boolean)e.getDataType().toObject(ptr);

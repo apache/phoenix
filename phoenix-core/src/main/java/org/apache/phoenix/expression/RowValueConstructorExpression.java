@@ -33,9 +33,9 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
@@ -57,6 +57,10 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
         init(isConstant);
     }
 
+    public RowValueConstructorExpression clone(List<Expression> children) {
+        return new RowValueConstructorExpression(children, literalExprPtr != null);
+    }
+    
     public int getEstimatedSize() {
         return estimatedByteSize;
     }

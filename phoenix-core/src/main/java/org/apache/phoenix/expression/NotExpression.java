@@ -22,10 +22,10 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
 
 
 /**
@@ -56,6 +56,10 @@ public class NotExpression extends BaseSingleExpression {
 
     public NotExpression(Expression expression) {
         super(expression);
+    }
+
+    public NotExpression(List<Expression> l) {
+        super(l);
     }
 
     @Override

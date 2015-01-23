@@ -20,6 +20,7 @@ package org.apache.phoenix.expression.visitor;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.phoenix.compile.SequenceValueExpression;
 import org.apache.phoenix.expression.AddExpression;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ArrayConstructorExpression;
@@ -33,6 +34,7 @@ import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.expression.MultiplyExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
@@ -41,6 +43,8 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.SubtractExpression;
+import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
+import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 
@@ -53,28 +57,6 @@ import org.apache.phoenix.expression.function.SingleAggregateFunction;
  * @since 0.1
  */
 public interface ExpressionVisitor<E> {
-    /**
-     * Default visit method when an expression subclass doesn't
-     * define an accept method of its own. This will end up calling
-     * the {@link #defaultIterator(Expression)} to iterate over the
-     * children calling accept on them
-     */
-    public E visit(Expression node);
-    /**
-     * Default visitEnter method when an expression subclass doesn't
-     * define an accept method of its own. This will end up calling
-     * the {@link #defaultIterator(Expression)} to iterate over the
-     * children calling accept on them
-     */
-    public Iterator<Expression> visitEnter(Expression node);
-    /**
-     * Default visitLeave method when an expression subclass doesn't
-     * define an accept method of its own.  This will end up calling
-     * the {@link #defaultReturn(Expression, List)} with the list from
-     * the iteration over the children.
-     */
-    public E visitLeave(Expression node, List<E> l);
-
     public E defaultReturn(Expression node, List<E> l);
     public Iterator<Expression> defaultIterator(Expression node);
     
@@ -130,11 +112,22 @@ public interface ExpressionVisitor<E> {
     public E visit(RowKeyColumnExpression node);
     public E visit(KeyValueColumnExpression node);
     public E visit(ProjectedColumnExpression node);
+    public E visit(SequenceValueExpression node);
     
 	public Iterator<Expression> visitEnter(StringConcatExpression node);
 	public E visitLeave(StringConcatExpression node, List<E> l);
 	
 	public Iterator<Expression> visitEnter(RowValueConstructorExpression node);
     public E visitLeave(RowValueConstructorExpression node, List<E> l);
+
+    public Iterator<Expression> visitEnter(ModulusExpression modulusExpression);
+    public E visitLeave(ModulusExpression node, List<E> l);
+    
+    public Iterator<Expression> visitEnter(ArrayAnyComparisonExpression arrayAnyComparisonExpression);
+    public E visitLeave(ArrayAnyComparisonExpression node, List<E> l);
+    
+    public Iterator<Expression> visitEnter(ArrayElemRefExpression arrayElemRefExpression);
+    public E visitLeave(ArrayElemRefExpression node, List<E> l);
+    
     
 }
