@@ -42,7 +42,7 @@ import com.google.common.collect.ListMultimap;
  * 
  * @since 0.1
  */
-public class RowProjector implements Cloneable {
+public class RowProjector {
     public static final RowProjector EMPTY_PROJECTOR = new RowProjector(Collections.<ColumnProjector>emptyList(),0, true);
 
     private final List<? extends ColumnProjector> columnProjectors;
@@ -93,8 +93,7 @@ public class RowProjector implements Cloneable {
         this.cloneRequired = hasPerInvocationExpression;
     }
 
-    @Override
-    public RowProjector clone() {
+    public RowProjector cloneIfNecessary() {
         if (!cloneRequired) {
             return this;
         }

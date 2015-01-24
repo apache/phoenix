@@ -111,7 +111,7 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
             this.resultIterator = iterator;
             // Clone the row projector as it's not thread safe and would be used simultaneously by
             // multiple threads otherwise.
-            this.resultSet = new PhoenixResultSet(this.resultIterator, queryPlan.getProjector().clone(),queryPlan.getContext().getStatement());
+            this.resultSet = new PhoenixResultSet(this.resultIterator, queryPlan.getProjector().cloneIfNecessary(),queryPlan.getContext().getStatement());
         } catch (SQLException e) {
             LOG.error(String.format(" Error [%s] initializing PhoenixRecordReader. ",e.getMessage()));
             Throwables.propagate(e);
