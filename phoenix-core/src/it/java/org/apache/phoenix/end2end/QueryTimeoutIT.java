@@ -58,7 +58,7 @@ public class QueryTimeoutIT extends BaseOwnClusterHBaseManagedTimeIT {
     
     @Test
     public void testQueryTimeout() throws Exception {
-        int nRows = 20000;
+        int nRows = 30000;
         Connection conn;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
