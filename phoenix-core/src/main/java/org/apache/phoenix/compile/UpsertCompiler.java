@@ -192,7 +192,7 @@ public class UpsertCompiler {
             PhoenixStatement statement = new PhoenixStatement(connection);
             // Clone the row projector as it's not thread safe and would be used simultaneously by
             // multiple threads otherwise.
-            return upsertSelect(statement, tableRef, projector.clone(), iterator, columnIndexes, pkSlotIndexes);
+            return upsertSelect(statement, tableRef, projector.cloneIfNecessary(), iterator, columnIndexes, pkSlotIndexes);
         }
         
         public void setRowProjector(RowProjector projector) {

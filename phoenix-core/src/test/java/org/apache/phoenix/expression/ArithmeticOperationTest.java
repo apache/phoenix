@@ -18,6 +18,7 @@
 package org.apache.phoenix.expression;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -28,12 +29,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
-import org.apache.phoenix.expression.DecimalAddExpression;
-import org.apache.phoenix.expression.DecimalDivideExpression;
-import org.apache.phoenix.expression.DecimalMultiplyExpression;
-import org.apache.phoenix.expression.DecimalSubtractExpression;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.function.RandomFunction;
 import org.apache.phoenix.expression.visitor.CloneExpressionVisitor;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
@@ -257,6 +253,40 @@ public class ArithmeticOperationTest {
         children = Arrays.<Expression>asList(op1, op2);
         e = new DecimalDivideExpression(children);
         assertEqualValue(e, PDecimal.INSTANCE, new BigDecimal("3.3333333333333333333333333333333333333"));
+    }
+
+    @Test
+    public void testPerInvocationClone() throws Exception {
+        LiteralExpression op1, op2, op3, op4;
+        List<Expression> children;
+        Expression e1, e2, e3, e4;
+        ImmutableBytesWritable ptr1 = new ImmutableBytesWritable();
+        ImmutableBytesWritable ptr2 = new ImmutableBytesWritable();
+
+        op1 = LiteralExpression.newConstant(5.0);
+        op2 = LiteralExpression.newConstant(3.0);
+        op3 = LiteralExpression.newConstant(2.0);
+        op4 = LiteralExpression.newConstant(1.0);
+        children = Arrays.<Expression>asList(op1, op2);
+        e1 = new DoubleAddExpression(children);
+        children = Arrays.<Expression>asList(op3, op4);
+        e2 = new DoubleSubtractExpression(children);
+        e3 = new DoubleAddExpression(Arrays.<Expression>asList(e1, e2));
+        e4 = new DoubleAddExpression(Arrays.<Expression>asList(new RandomFunction(Arrays.<Expression>asList(LiteralExpression.newConstant(null))), e3));
+        CloneExpressionVisitor visitor = new CloneExpressionVisitor();
+        Expression clone = e4.accept(visitor);
+        assertTrue(clone != e4);
+        e4.evaluate(null, ptr1);
+        clone.evaluate(null, ptr2);
+        assertNotEquals(ptr1, ptr2);
+        
+        e4 = new DoubleAddExpression(Arrays.<Expression>asList(new RandomFunction(Arrays.<Expression>asList(LiteralExpression.newConstant(1))), e3));
+        visitor = new CloneExpressionVisitor();
+        clone = e4.accept(visitor);
+        assertTrue(clone == e4);
+        e4.evaluate(null, ptr1);
+        clone.evaluate(null, ptr2);
+        assertEquals(ptr1, ptr2);
     }
 
     private static void assertEqualValue(Expression e, PDataType type, Object value) {

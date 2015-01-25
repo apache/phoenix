@@ -13,8 +13,8 @@ import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PUnsignedDouble;
 
 /**
  * Random function that produces a unique value upon each invocation unless a seed is provided.
@@ -74,7 +74,7 @@ public class RandomFunction extends ScalarFunction {
         if (current == null) {
             current = random.nextDouble();
         }
-        ptr.set(PUnsignedDouble.INSTANCE.toBytes(current));
+        ptr.set(PDouble.INSTANCE.toBytes(current));
         return true;
     }
 
@@ -87,7 +87,7 @@ public class RandomFunction extends ScalarFunction {
 
     @Override
     public PDataType<?> getDataType() {
-        return PUnsignedDouble.INSTANCE;
+        return PDouble.INSTANCE;
     }
 
     @Override
@@ -97,7 +97,7 @@ public class RandomFunction extends ScalarFunction {
 
     @Override
     public Determinism getDeterminism() {
-        return Determinism.PER_INVOCATION;
+        return hasSeed ? Determinism.PER_ROW : Determinism.PER_INVOCATION;
     }
 
     @Override
@@ -108,17 +108,15 @@ public class RandomFunction extends ScalarFunction {
     // take the random object onto account
     @Override
     public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + children.hashCode() + random.hashCode();
-        return result;
+        int hashCode = super.hashCode();
+        return hasSeed ? hashCode : (hashCode + random.hashCode());
     }
 
     // take the random object onto account, as otherwise we'll potentially collapse two
     // RAND() calls into a single one.
     @Override
     public boolean equals(Object obj) {
-        return super.equals(obj) && random.equals(((RandomFunction)obj).random);
+        return super.equals(obj) && (hasSeed || random.equals(((RandomFunction)obj).random));
     }
 
     // make sure we do not show the default 'null' parameter
