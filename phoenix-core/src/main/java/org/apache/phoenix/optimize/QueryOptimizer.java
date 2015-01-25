@@ -232,6 +232,7 @@ public class QueryOptimizer {
         // Check index state of now potentially updated index table to make sure it's active
         if (PIndexState.ACTIVE.equals(resolver.getTables().get(0).getTable().getIndexState())) {
             try {
+            	//TODO translate for index select
                 QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager());
                 QueryPlan plan = compiler.compile();
                 // If query doesn't have where clause and some of columns to project are missing

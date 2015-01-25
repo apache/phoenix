@@ -16,7 +16,6 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.AddParseNode;
 import org.apache.phoenix.parse.AndParseNode;
@@ -57,7 +56,8 @@ import com.google.common.collect.Maps;
 public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
-    private final Map<String, Expression> expressionMap;
+    //map from index parse node to the indexed data table expression
+    private final Map<ParseNode, Expression> indexParseNodeToColumnParseNode;
 
     IndexColumnExpressionCompiler(StatementContext context) {
         this(context, GroupBy.EMPTY_GROUP_BY, false);
@@ -73,19 +73,32 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     IndexColumnExpressionCompiler(StatementContext context, GroupBy groupBy, boolean resolveViewConstants) {
         super(context, groupBy, resolveViewConstants);
-        expressionMap = Maps.newHashMapWithExpectedSize(context.getCurrentTable().getTable().getColumns().size());
-        for (PColumn column : context.getCurrentTable().getTable().getColumns()) {
-            if (column.getExpressionStr() != null) {
-                Expression expression = null;
-                try {
-                    ParseNode parseNode = SQLParser.parseCondition(column.getExpressionStr());
-                    expression = getExpression(parseNode);
-                } catch (SQLException e) {
-                    throw new RuntimeException(e);
-                }
-                expressionMap.put(column.getExpressionStr(), expression);
-            }
+        PTable indexTable = context.getCurrentTable().getTable();
+		if (indexTable.getType() != PTableType.INDEX) {
+        	indexParseNodeToColumnParseNode = Maps.newHashMap();
+        	return;
         }
+        indexParseNodeToColumnParseNode = Maps.newHashMapWithExpectedSize(indexTable.getColumns().size());
+        NamedTableNode dataTableNode = NamedTableNode.create(null, TableName.create(indexTable.getParentSchemaName()
+                .getString(), indexTable.getParentTableName().getString()), Collections.<ColumnDef> emptyList());
+        
+        try {
+	        ColumnResolver resolver = FromCompiler.getResolver(dataTableNode, this.context.getConnection());
+	        for (PColumn column : context.getCurrentTable().getTable().getColumns()) {
+	            if (column.getExpressionStr() != null) {
+					ParseNode dataTableParseNode = SQLParser.parseCondition(column.getExpressionStr());
+			        // ignore regular columns
+	                if (dataTableParseNode instanceof ColumnParseNode) 
+	                	continue;
+	                Expression dataTableExpression = getDataTableExpression(dataTableParseNode);
+	                IndexStatementRewriter statementRewriter = new IndexStatementRewriter(resolver, null);
+	                ParseNode indexTableParseNode = dataTableParseNode.accept(statementRewriter);
+	                indexParseNodeToColumnParseNode.put(indexTableParseNode, dataTableExpression);
+	            }
+	        }
+        } catch (SQLException e) {
+			throw new RuntimeException(e);
+		}
     }
 
     /**
@@ -94,7 +107,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
      * @param node
      *            data table parse node
      */
-    private Expression getExpression(ParseNode node) throws SQLException {
+    private Expression getDataTableExpression(ParseNode node) throws SQLException {
         PTable indexTable = this.context.getCurrentTable().getTable();
         NamedTableNode dataTableNode = NamedTableNode.create(null, TableName.create(indexTable.getParentSchemaName()
                 .getString(), indexTable.getParentTableName().getString()), Collections.<ColumnDef> emptyList());
@@ -109,34 +122,19 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
      * @return true if current table is an index and there is an expression that matches the given node
      */
     private boolean matchesIndexedExpression(ParseNode node) throws SQLException {
-        if (context.getCurrentTable().getTable().getType() != PTableType.INDEX) { 
-            return false; 
-        }
-        DataTableNodeRewriter statementRewriter = new DataTableNodeRewriter();
-        ParseNode dataTableParseNode = node.accept(statementRewriter);
-        Expression dataTableExpression = getExpression(dataTableParseNode);
-        // process regular columns as usual
-        if (dataTableExpression instanceof ColumnExpression) {
-            return false;
-        }
-        return expressionMap.containsKey(dataTableExpression.toString());
+        return indexParseNodeToColumnParseNode.containsKey(node);
     }
 
-    private Expression convertAndVisitParseNode(ParseNode node) throws SQLException {
-        DataTableNodeRewriter statementRewriter = new DataTableNodeRewriter();
-        ParseNode dataTableParseNode = node.accept(statementRewriter);
-        Expression expression = getExpression(dataTableParseNode);
-        ColumnParseNode columnParseNode = new ColumnParseNode(null, IndexUtil.getIndexColumnName(null,
-                expression.toString()), null);
-        PDataType expressionType = expression.getDataType();
-        PDataType indexColType = IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
-        // if data type of expression is different from the index column data type, cast the to expression type
+    private Expression convertAndVisitParseNode(ParseNode node, List<Expression> children) throws SQLException {
+        Expression dataTableExpression = indexParseNodeToColumnParseNode.get(node);
+        PDataType expressionType = dataTableExpression.getDataType();
+        PDataType indexColType = IndexUtil.getIndexColumnDataType(dataTableExpression.isNullable(), expressionType);
+        ColumnParseNode columnParseNode = new ColumnParseNode(null, IndexUtil.getIndexColumnName(null,dataTableExpression.toString()));
         if (indexColType != expressionType) {
             Expression colExpression = super.visit(columnParseNode);
-            return super.visitLeave(FACTORY.cast(columnParseNode, expressionType, null, null),
-                    Collections.<Expression> singletonList(colExpression));
+            return super.visitLeave(FACTORY.cast(columnParseNode, expressionType, null, null),Collections.<Expression> singletonList(colExpression));
         }
-        return visit(columnParseNode);
+        return super.visit(columnParseNode);
     }
 
     @Override
@@ -149,7 +147,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
     @Override
     public Expression visitLeave(ComparisonParseNode node, List<Expression> children) throws SQLException {
         // if this node matches an expression that is indexed, convert it to a ColumnParseNode and process it
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -159,7 +157,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(AndParseNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -169,7 +167,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(OrParseNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -179,7 +177,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(FunctionParseNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -189,7 +187,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(CaseParseNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -199,7 +197,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(NotParseNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -209,7 +207,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(CastParseNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -219,7 +217,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(AddParseNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -229,7 +227,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(SubtractParseNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -239,7 +237,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(MultiplyParseNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -249,7 +247,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(DivideParseNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -259,7 +257,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(ModulusParseNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -269,7 +267,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(ArrayAnyComparisonNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -279,7 +277,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(ArrayElemRefNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -289,7 +287,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(ArrayAllComparisonNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -299,7 +297,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(StringConcatParseNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
     @Override
@@ -309,7 +307,7 @@ public class IndexColumnExpressionCompiler extends ExpressionCompiler {
 
     @Override
     public Expression visitLeave(RowValueConstructorParseNode node, List<Expression> children) throws SQLException {
-        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node) : super.visitLeave(node, children);
+        return matchesIndexedExpression(node) ? convertAndVisitParseNode(node, children) : super.visitLeave(node, children);
     }
 
 }

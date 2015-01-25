@@ -85,7 +85,7 @@ public class CoerceExpression extends BaseSingleExpression {
     @Override
     public int hashCode() {
         final int prime = 31;
-        int result = 1;
+        int result = super.hashCode();
         result = prime * result + ((maxLength == null) ? 0 : maxLength.hashCode());
         result = prime * result + ((toSortOrder == null) ? 0 : toSortOrder.hashCode());
         result = prime * result + ((toType == null) ? 0 : toType.hashCode());
@@ -95,14 +95,16 @@ public class CoerceExpression extends BaseSingleExpression {
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
-        if (obj == null) return false;
+        if (!super.equals(obj)) return false;
         if (getClass() != obj.getClass()) return false;
         CoerceExpression other = (CoerceExpression)obj;
         if (maxLength == null) {
             if (other.maxLength != null) return false;
         } else if (!maxLength.equals(other.maxLength)) return false;
         if (toSortOrder != other.toSortOrder) return false;
-        if (toType != other.toType) return false;
+        if (toType == null) {
+            if (other.toType != null) return false;
+        } else if (!toType.equals(other.toType)) return false;
         return true;
     }
 
