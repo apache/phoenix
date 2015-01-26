@@ -39,6 +39,7 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
+
 import com.google.common.collect.Lists;
 
 /**
@@ -51,7 +52,7 @@ import com.google.common.collect.Lists;
  * the order is preserved.
  * 
  */
-public class TrackOrderPreservingExpressionCompiler extends IndexColumnExpressionCompiler {
+public class TrackOrderPreservingExpressionCompiler extends ExpressionCompiler {
     public enum Ordering {ORDERED, UNORDERED};
     
     private final List<Entry> entries;

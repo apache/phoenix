@@ -37,11 +37,12 @@ import org.apache.phoenix.compile.SubqueryRewriter;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AliasedNode;
-import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ColumnParseNode;
+import org.apache.phoenix.parse.ExpressionIndexParseNodeRewriter;
+import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SelectStatement;
@@ -54,9 +55,8 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.SaltingUtil;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.IndexUtil;
 
 import com.google.common.collect.Lists;
@@ -232,8 +232,10 @@ public class QueryOptimizer {
         // Check index state of now potentially updated index table to make sure it's active
         if (PIndexState.ACTIVE.equals(resolver.getTables().get(0).getTable().getIndexState())) {
             try {
-            	//TODO translate for index select
+            	// translate nodes that match expressions that are indexed to the associated column parse node
+                indexSelect = ExpressionIndexParseNodeRewriter.rewrite(indexSelect, index, statement.getConnection());
                 QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager());
+                
                 QueryPlan plan = compiler.compile();
                 // If query doesn't have where clause and some of columns to project are missing
                 // in the index then we need to get missing columns from main table for each row in

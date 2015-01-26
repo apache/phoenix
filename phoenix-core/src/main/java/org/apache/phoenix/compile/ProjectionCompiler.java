@@ -497,7 +497,7 @@ public class ProjectionCompiler {
         context.getScan().setAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX, stream.toByteArray());
     }
 
-    private static class SelectClauseVisitor extends IndexColumnExpressionCompiler {
+    private static class SelectClauseVisitor extends ExpressionCompiler {
         private static int getMinNullableIndex(List<SingleAggregateFunction> aggFuncs, boolean isUngroupedAggregation) {
             int minNullableIndex = aggFuncs.size();
             for (int i = 0; i < aggFuncs.size(); i++) {
