@@ -22,8 +22,6 @@ Release Notes - Phoenix - Version 3.3
     * [PHOENIX-1445] - Add unit test for stats not being maintained correctly through splits
     * [PHOENIX-1496] - Further reduce work in StatsCollector
     * [PHOENIX-1554] - Update join documentation based on many-to-many support
-    * [PHOENIX-1555] - Fallback to many-to-many join if hash join fails due to insufficient memory
-    * [PHOENIX-1556] - Base hash join versus many-to-many decision on how many guideposts will be traversed for RHS table(s)
     * [PHOENIX-1557] - Add hint to force sort merge join
     * [PHOENIX-1558] - Document map-reduce integration
 
