@@ -103,7 +103,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
             PTable table = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName));
             PTable index = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(),fullIndexName));
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-            table.getIndexMaintainers(ptr);
+            table.getIndexMaintainers(ptr, pconn);
             List<IndexMaintainer> c1 = IndexMaintainer.deserialize(ptr, builder);
             assertEquals(1,c1.size());
             IndexMaintainer im1 = c1.get(0);

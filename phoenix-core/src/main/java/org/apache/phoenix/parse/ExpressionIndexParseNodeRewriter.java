@@ -43,7 +43,7 @@ public class ExpressionIndexParseNodeRewriter extends ParseNodeRewriter {
                 TableName.create(index.getParentSchemaName().getString(), index.getParentTableName().getString()),
                 Collections.<ColumnDef> emptyList());
         ColumnResolver dataResolver = FromCompiler.getResolver(tableNode, connection);
-        StatementContext context = new StatementContext(new PhoenixStatement(null), dataResolver);
+        StatementContext context = new StatementContext(new PhoenixStatement(connection), dataResolver);
         IndexStatementRewriter rewriter = new IndexStatementRewriter(dataResolver, null);
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         for (PColumn column : index.getPKColumns()) {

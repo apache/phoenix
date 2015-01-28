@@ -58,17 +58,18 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil.ReferencingColumn;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
@@ -108,11 +109,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     private static final int EXPRESSION_NOT_PRESENT = -1;
 
-	public static IndexMaintainer create(PTable dataTable, PTable index) {
+	public static IndexMaintainer create(PTable dataTable, PTable index, PhoenixConnection connection) {
         if (dataTable.getType() == PTableType.INDEX || index.getType() != PTableType.INDEX || !dataTable.getIndexes().contains(index)) {
             throw new IllegalArgumentException();
         }
-        IndexMaintainer maintainer = new IndexMaintainer(dataTable, index);
+        IndexMaintainer maintainer = new IndexMaintainer(dataTable, index, connection);
         return maintainer;
     }
     
@@ -148,9 +149,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * @param dataTable data table
      * @param ptr bytes pointer to hold returned serialized value
      */
-    public static void serialize(PTable dataTable, ImmutableBytesWritable ptr) {
+    public static void serialize(PTable dataTable, ImmutableBytesWritable ptr, PhoenixConnection connection) {
         List<PTable> indexes = dataTable.getIndexes();
-        serialize(dataTable, ptr, indexes);
+        serialize(dataTable, ptr, indexes, connection);
     }
 
     /**
@@ -160,7 +161,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * @param indexes indexes to serialize
      */
     public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
-            List<PTable> indexes) {
+            List<PTable> indexes, PhoenixConnection connection) {
         Iterator<PTable> indexesItr = nonDisabledIndexIterator(indexes.iterator());
         if ((dataTable.isImmutableRows()) || !indexesItr.hasNext()) {
             indexesItr = enabledLocalIndexIterator(indexesItr);
@@ -174,7 +175,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         while (indexesItr.hasNext()) {
             nIndexes++;
             PTable index = indexesItr.next();
-            estimatedSize += index.getIndexMaintainer(dataTable).getEstimatedByteSize();
+            estimatedSize += index.getIndexMaintainer(dataTable, connection).getEstimatedByteSize();
         }
         TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(estimatedSize + 1);
         DataOutput output = new DataOutputStream(stream);
@@ -187,7 +188,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     dataTable.isImmutableRows() ? enabledLocalIndexIterator(indexes.iterator())
                             : nonDisabledIndexIterator(indexes.iterator());
             while (indexesItr.hasNext()) {
-                    indexesItr.next().getIndexMaintainer(dataTable).write(output);
+                    indexesItr.next().getIndexMaintainer(dataTable, connection).write(output);
             }
         } catch (IOException e) {
             throw new RuntimeException(e); // Impossible
@@ -262,7 +263,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.isDataTableSalted = isDataTableSalted;
     }
 
-    private IndexMaintainer(PTable dataTable, PTable index) {
+    private IndexMaintainer(PTable dataTable, PTable index, PhoenixConnection connection) {
         this(dataTable.getRowKeySchema(), dataTable.getBucketNum() != null);
         this.isMultiTenant = dataTable.isMultiTenant();
         this.viewIndexId = index.getViewIndexId() == null ? null : MetaDataUtil.getViewIndexIdDataType().toBytes(index.getViewIndexId());
@@ -333,7 +334,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             try {
                 ParseNode parseNode  = SQLParser.parseCondition(indexColumn.getExpressionStr());
                 ColumnResolver resolver = FromCompiler.getResolver(new TableRef(dataTable));
-                StatementContext context = new StatementContext(new PhoenixStatement(null), resolver);
+                StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver);
                 expression = parseNode.accept(new ExpressionCompiler(context));
             } catch (SQLException e) {
                 throw new RuntimeException(e); // Impossible

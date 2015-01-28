@@ -603,7 +603,7 @@ public class UpsertCompiler {
                         @Override
                         public MutationState execute() throws SQLException {
                             ImmutableBytesWritable ptr = context.getTempPtr();
-                            tableRef.getTable().getIndexMaintainers(ptr);
+                            tableRef.getTable().getIndexMaintainers(ptr, context.getConnection());
                             ServerCache cache = null;
                             try {
                                 if (ptr.getLength() > 0) {

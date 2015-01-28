@@ -225,7 +225,7 @@ public class MutationState implements SQLCloseable {
                 try {
                     indexMutations =
                             IndexUtil.generateIndexData(tableRef.getTable(), index, mutationsPertainingToIndex,
-                                tempPtr, connection.getKeyValueBuilder());
+                                tempPtr, connection.getKeyValueBuilder(), connection);
                 } catch (SQLException e) {
                     throw new IllegalDataException(e);
                 }
@@ -368,7 +368,7 @@ public class MutationState implements SQLCloseable {
             Map<ImmutableBytesPtr,Map<PColumn,byte[]>> valuesMap = entry.getValue();
             TableRef tableRef = entry.getKey();
             PTable table = tableRef.getTable();
-            table.getIndexMaintainers(tempPtr);
+            table.getIndexMaintainers(tempPtr, connection);
             boolean hasIndexMaintainers = tempPtr.getLength() > 0;
             boolean isDataTable = true;
             long serverTimestamp = serverTimeStamps[i++];

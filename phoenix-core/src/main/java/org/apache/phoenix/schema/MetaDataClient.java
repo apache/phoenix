@@ -777,11 +777,11 @@ public class MetaDataClient {
                 List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
                 // Only build newly created index.
                 indexes.add(index);
-                IndexMaintainer.serialize(dataTable, ptr, indexes);
+                IndexMaintainer.serialize(dataTable, ptr, indexes, plan.getContext().getConnection());
                 scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
                 // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
                 // However, in this case, we need to project all of the data columns that contribute to the index.
-                IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable);
+                IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, connection);
                 for (ColumnReference columnRef : indexMaintainer.getAllColumns()) {
                     scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
                 }

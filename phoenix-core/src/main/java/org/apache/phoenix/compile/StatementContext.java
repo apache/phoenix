@@ -34,7 +34,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -97,18 +96,9 @@ public class StatementContext {
         this.binds = new BindManager(statement.getParameters());
         this.aggregates = new AggregationManager();
         this.expressions = new ExpressionManager();
-        PhoenixConnection connection = statement.getConnection();
-        if (connection!=null) {
-            this.dateFormat = connection.getQueryServices().getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
-            this.dateFormatTimeZone = TimeZone.getTimeZone(
-                    connection.getQueryServices().getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, DateUtil.DEFAULT_TIME_ZONE_ID));
-            this.numberFormat = connection.getQueryServices().getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
-        }
-        else {
-            this.dateFormat = DateUtil.DEFAULT_DATE_FORMAT;
-            this.dateFormatTimeZone = TimeZone.getTimeZone(DateUtil.DEFAULT_TIME_ZONE_ID);
-            this.numberFormat = NumberUtil.DEFAULT_NUMBER_FORMAT;
-        }
+        this.dateFormat = DateUtil.DEFAULT_DATE_FORMAT;
+        this.dateFormatTimeZone = TimeZone.getTimeZone(DateUtil.DEFAULT_TIME_ZONE_ID);
+        this.numberFormat = NumberUtil.DEFAULT_NUMBER_FORMAT;
         this.dateFormatter = DateUtil.getDateFormatter(dateFormat);
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;

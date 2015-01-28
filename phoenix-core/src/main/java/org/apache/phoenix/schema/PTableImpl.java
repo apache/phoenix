@@ -46,6 +46,7 @@ import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
@@ -804,21 +805,21 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable) {
+    public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) {
         if (indexMaintainer == null) {
-            indexMaintainer = IndexMaintainer.create(dataTable, this);
+            indexMaintainer = IndexMaintainer.create(dataTable, this, connection);
         }
         return indexMaintainer;
     }
 
     @Override
-    public synchronized void getIndexMaintainers(ImmutableBytesWritable ptr) {
+    public synchronized void getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
         if (indexMaintainersPtr == null) {
             indexMaintainersPtr = new ImmutableBytesWritable();
             if (indexes.isEmpty()) {
                 indexMaintainersPtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             } else {
-                IndexMaintainer.serialize(this, indexMaintainersPtr);
+                IndexMaintainer.serialize(this, indexMaintainersPtr, connection);
             }
         }
         ptr.set(indexMaintainersPtr.get(), indexMaintainersPtr.getOffset(), indexMaintainersPtr.getLength());

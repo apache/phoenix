@@ -100,7 +100,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         conn.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName).next(); // client side cache will update
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr);
+        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr, pconn);
         assertTrue(ptr.getLength() > 0);
     }
     
@@ -109,7 +109,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         conn.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName).next(); // client side cache will update
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr);
+        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr, pconn);
         assertTrue(ptr.getLength() == 0);
     }
     
