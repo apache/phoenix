@@ -106,7 +106,7 @@ import com.google.common.collect.Sets;
  * @since 2.1.0
  */
 public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
-    
+
     private static final int EXPRESSION_NOT_PRESENT = -1;
 
 	public static IndexMaintainer create(PTable dataTable, PTable index, PhoenixConnection connection) {
@@ -894,8 +894,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         indexedColumnTypes = Lists.newArrayListWithExpectedSize(nIndexedColumns);
         for (int i = 0; i < nIndexedColumns; i++) {
-            int x = WritableUtils.readVInt(input);
-            PDataType type = PDataType.values()[x];
+            PDataType type = PDataType.values()[WritableUtils.readVInt(input)];
             indexedColumnTypes.add(type);
         }
         int encodedCoveredolumnsAndLocalIndex = WritableUtils.readVInt(input);
@@ -910,7 +909,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         indexTableName = Bytes.readByteArray(input);
         dataEmptyKeyValueCF = Bytes.readByteArray(input);
         int len = WritableUtils.readVInt(input);
-        //TODO remove this hack
+        //TODO remove this in the next major release
         boolean isNewClient = false;
         if (len < 0) {
           isNewClient = true;
@@ -928,6 +927,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             	expression.readFields(input);
             	indexedExpressions.add(expression);
             }
+        }
+        else {
+            indexedExpressions = Sets.newLinkedHashSetWithExpectedSize(indexedColumnTypes.size());
+            //TODO figure out how to create indexedExpressions
         }
         
         rowKeyMetaData = newRowKeyMetaData();
@@ -969,7 +972,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         Bytes.writeByteArray(output, indexTableName);
         Bytes.writeByteArray(output, dataEmptyKeyValueCF);
         // TODO in order to maintain b/w compatibility encode emptyKeyValueCFPtr.getLength() as a negative value (so we can distinguish between new and old clients)
-        // when indexedColumnTypes is removed, remove this hack
+        // when indexedColumnTypes is removed, remove this 
         WritableUtils.writeVInt(output,-emptyKeyValueCFPtr.getLength());
         output.write(emptyKeyValueCFPtr.get(),emptyKeyValueCFPtr.getOffset(), emptyKeyValueCFPtr.getLength());
         
@@ -1288,5 +1291,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     public boolean isImmutableRows() {
         return immutableRows;
+    }
+    
+    public Set<ColumnReference> getIndexedColumns() {
+        return indexedColumns;
     }
 }

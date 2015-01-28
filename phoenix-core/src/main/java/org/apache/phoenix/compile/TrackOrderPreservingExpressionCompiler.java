@@ -39,7 +39,6 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
-
 import com.google.common.collect.Lists;
 
 /**

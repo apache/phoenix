@@ -361,8 +361,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         // Disallow explicit reference to salting column, tenant ID column, and index ID column
         if (pkPosition >= 0) {
             boolean isSalted = table.getBucketNum() != null;
-            boolean isMultiTenant = context.getConnection()==null ? table.isMultiTenant() :
-                (context.getConnection().getTenantId() != null && table.isMultiTenant());
+            boolean isMultiTenant = context.getConnection().getTenantId() != null && table.isMultiTenant();
             boolean isSharedViewIndex = table.getViewIndexId() != null;
             int minPosition = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
             if (pkPosition < minPosition) {
