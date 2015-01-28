@@ -89,11 +89,16 @@ public class ColumnRef {
         if (!tableRef.equals(other.tableRef)) return false;
         return true;
     }
-
+    
     public ColumnExpression newColumnExpression() {
+        return newColumnExpression(false, false);
+    }
+
+    public ColumnExpression newColumnExpression(boolean schemaNameCaseSensitive, boolean colNameCaseSensitive) {
         PTable table = tableRef.getTable();
         PColumn column = this.getColumn();
-        String displayName = tableRef.getColumnDisplayName(this);
+        String displayName = tableRef.getColumnDisplayName(this, schemaNameCaseSensitive, colNameCaseSensitive);
+        
         if (SchemaUtil.isPKColumn(column)) {
             return new RowKeyColumnExpression(
                     column, 

@@ -45,6 +45,7 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
+import org.apache.phoenix.parse.ParseNodeRewriter;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.query.QueryServices;
@@ -233,7 +234,7 @@ public class QueryOptimizer {
         if (PIndexState.ACTIVE.equals(resolver.getTables().get(0).getTable().getIndexState())) {
             try {
             	// translate nodes that match expressions that are indexed to the associated column parse node
-                indexSelect = ExpressionIndexParseNodeRewriter.rewrite(indexSelect, index, statement.getConnection());
+                indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  ExpressionIndexParseNodeRewriter(index, statement.getConnection()));
                 QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager());
                 
                 QueryPlan plan = compiler.compile();

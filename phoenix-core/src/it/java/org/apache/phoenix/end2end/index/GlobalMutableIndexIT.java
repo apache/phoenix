@@ -17,18 +17,11 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import org.junit.Test;
 
 public class GlobalMutableIndexIT extends BaseMutableIndexIT {
 
     public GlobalMutableIndexIT() {
         super(false);
     }
-    
-    @Override
-    @Test
-    public void testIndexWithCaseSensitiveCols() throws Exception {
-        super.testIndexWithCaseSensitiveCols();
-    }
-
+ 
 }

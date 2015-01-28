@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Get;
@@ -451,7 +450,7 @@ public class IndexUtil {
         PhoenixStatement statement = new PhoenixStatement(conn);
         TableRef indexTableRef = new TableRef(index) {
             @Override
-            public String getColumnDisplayName(ColumnRef ref) {
+            public String getColumnDisplayName(ColumnRef ref, boolean schemaNameCaseSensitive, boolean colNameCaseSensitive) {
                 return '"' + ref.getColumn().getName().getString() + '"';
             }
         };

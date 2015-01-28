@@ -35,6 +35,10 @@ public abstract class NamedParseNode extends TerminalParseNode{
     NamedParseNode(String name) {
         this.namedNode = new NamedNode(name);
     }
+    
+    NamedParseNode(String name, boolean isCaseSensitive) {
+        this.namedNode = new NamedNode(name, isCaseSensitive);
+    }
 
     public String getName() {
         return namedNode.getName();

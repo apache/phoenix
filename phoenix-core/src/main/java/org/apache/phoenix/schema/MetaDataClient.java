@@ -65,8 +65,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -110,7 +108,6 @@ import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.PostDDLCompiler;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -121,7 +118,6 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -970,8 +966,6 @@ public class MetaDataClient {
                 for (Pair<ParseNode, SortOrder> pair : indexParseNodeAndSortOrderList) {
                 	ParseNode parseNode = pair.getFirst();
                 	ColumnName colName = null;
-                	Integer maxLength = null;
-                	Integer scale = null;
                 	// if it is a column 
                 	if (parseNode instanceof ColumnParseNode) {
                 		ColumnParseNode colParseNode = (ColumnParseNode)parseNode;
@@ -981,27 +975,25 @@ public class MetaDataClient {
 	                    if (col.getViewConstant() != null) 
 	                    	continue;
 	                    colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
-	                    maxLength = col.getMaxLength();
-	                    scale = col.getScale();
                 	}
-                	// compile the parseNode to get an expression
-			        PhoenixStatement phoenixStatment = new PhoenixStatement(connection);
-					final StatementContext context = new StatementContext(phoenixStatment, resolver);
-			        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
-			        Expression expression = parseNode.accept(expressionCompiler);	
-			        if (expressionCompiler.isAggregate()) {
-			            throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
-			        }
-			        if (expression.getDeterminism() != Determinism.ALWAYS) {
+            	    // compile the parseNode to get an expression
+                    PhoenixStatement phoenixStatment = new PhoenixStatement(connection);
+                    final StatementContext context = new StatementContext(phoenixStatment, resolver);
+                    ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
+                    Expression expression = parseNode.accept(expressionCompiler);   
+                    if (expressionCompiler.isAggregate()) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
+                    }
+                    if (expression.getDeterminism() != Determinism.ALWAYS) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
                     }
                 	
                 	PDataType dataType = IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
                 	colName = colName != null ? colName : 
-                		ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, expression.toString()));
+                		ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, expression.toString().replaceAll("\"", "")));
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, pair.getSecond()));
                     // TODO set the max length and scale correctly
-                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), expression.isNullable(), maxLength, scale, false, pair.getSecond(), expression.toString()));
+                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), expression.isNullable(), expression.getMaxLength(), expression.getScale(), false, pair.getSecond(), expression.toString()));
                 }
 
                 // Next all the PK columns from the data table that aren't indexed

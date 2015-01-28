@@ -20,17 +20,13 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 import java.util.List;
 
-import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.SchemaUtil;
 
 
 /**
@@ -71,8 +67,9 @@ public class PostIndexDDLCompiler {
             if (!IndexUtil.isIndexColumn(col)) {
                 continue;
             }
+            String indexColName = col.getName().getString();
             dataColumns.append(col.getExpressionStr()).append(",");
-            indexColumns.append('"').append(col.getName().getString()).append("\",");
+            indexColumns.append('"').append(indexColName).append("\",");
         }
         
         // Add the covered columns

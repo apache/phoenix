@@ -671,5 +671,104 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }
+    
+    @Test
+    public void testIndexWithCaseSensitiveCols() throws Exception {
+        helpTestIndexWithCaseSensitiveCols(false);
+    }
+    
+    @Test
+    public void testLocalIndexWithCaseSensitiveCols() throws Exception {
+        helpTestIndexWithCaseSensitiveCols(true);
+    }
+    
+    protected void helpTestIndexWithCaseSensitiveCols(boolean localIndex) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute("CREATE TABLE cs (k VARCHAR NOT NULL PRIMARY KEY, \"V1\" VARCHAR, \"v2\" VARCHAR)");
+            String query = "SELECT * FROM cs";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+            if (localIndex) {
+                conn.createStatement().execute("CREATE LOCAL INDEX ics ON cs (\"v2\" || '_modified') INCLUDE (\"V1\",\"v2\")");
+            } else {
+                conn.createStatement().execute("CREATE INDEX ics ON cs (\"V1\" || '_' || \"v2\") INCLUDE (\"V1\",\"v2\")");
+            }
+            query = "SELECT * FROM ics";
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO cs VALUES(?,?,?)");
+            stmt.setString(1,"a");
+            stmt.setString(2, "x");
+            stmt.setString(3, "1");
+            stmt.execute();
+            stmt.setString(1,"b");
+            stmt.setString(2, "y");
+            stmt.setString(3, "2");
+            stmt.execute();
+            conn.commit();
+
+            //TODO FIX THIS change this to *
+            query = "SELECT (\"V1\" || '_' || \"v2\"), k, \"V1\", \"v2\"  FROM cs WHERE (\"V1\" || '_' || \"v2\") = 'x_1'";
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            if(localIndex){
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_CS [-32768,'x_1']\n"
+                           + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+            } else {
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER ICS ['x_1']", QueryUtil.getExplainPlan(rs));
+            }
+
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("x_1",rs.getString(1));
+            assertEquals("a",rs.getString(2));
+            assertEquals("x",rs.getString(3));
+            assertEquals("1",rs.getString(4));
+            //TODO figure out why this " " is needed
+            assertEquals("x_1",rs.getString("\"(V1 || '_' || v2)\""));
+            assertEquals("a",rs.getString("k"));
+            assertEquals("x",rs.getString("V1"));
+            assertEquals("1",rs.getString("v2"));
+            assertFalse(rs.next());
+
+            query = "SELECT \"V1\", \"V1\" as foo1, (\"V1\" || '_' || \"v2\") as foo, (\"V1\" || '_' || \"v2\") as \"Foo1\", (\"V1\" || '_' || \"v2\") FROM cs ORDER BY foo";
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            if(localIndex){
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_CS [-32768]\nCLIENT MERGE SORT",
+                    QueryUtil.getExplainPlan(rs));
+            } else {
+                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER ICS", QueryUtil.getExplainPlan(rs));
+            }
+
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("x",rs.getString(1));
+            assertEquals("x",rs.getString("V1"));
+            assertEquals("x",rs.getString(2));
+            assertEquals("x",rs.getString("foo1"));
+            assertEquals("x_1",rs.getString(3));
+            assertEquals("x_1",rs.getString("Foo"));
+            assertEquals("x_1",rs.getString(4));
+            assertEquals("x_1",rs.getString("Foo1"));
+            assertEquals("x_1",rs.getString(5));
+            assertEquals("x_1",rs.getString("\"(V1 || '_' || v2)\""));
+            assertTrue(rs.next());
+            assertEquals("y",rs.getString(1));
+            assertEquals("y",rs.getString("V1"));
+            assertEquals("y",rs.getString(2));
+            assertEquals("y",rs.getString("foo1"));
+            assertEquals("y_2",rs.getString(3));
+            assertEquals("y_2",rs.getString("Foo"));
+            assertEquals("y_2",rs.getString(4));
+            assertEquals("y_2",rs.getString("Foo1"));
+            assertEquals("y_2",rs.getString(5));
+            assertEquals("y_2",rs.getString("\"(V1 || '_' || v2)\""));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
 
 }

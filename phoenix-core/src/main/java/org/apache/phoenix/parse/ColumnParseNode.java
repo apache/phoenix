@@ -28,6 +28,7 @@ import org.apache.phoenix.query.QueryConstants;
  * @since 0.1
  */
 public class ColumnParseNode extends NamedParseNode {
+    // table name can also represent a column family 
     private final TableName tableName;
     private final String fullName;
     private final String alias;
@@ -36,6 +37,13 @@ public class ColumnParseNode extends NamedParseNode {
         // Upper case here so our Maps can depend on this (and we don't have to upper case and create a string on every
         // lookup
         super(name);
+        this.alias = alias;
+        this.tableName = tableName;
+        fullName = tableName == null ? getName() : tableName.toString() + QueryConstants.NAME_SEPARATOR + getName();
+    }
+    
+    public ColumnParseNode(TableName tableName, String name, String alias, boolean caseSensitive) {
+        super(name, caseSensitive);
         this.alias = alias;
         this.tableName = tableName;
         fullName = tableName == null ? getName() : tableName.toString() + QueryConstants.NAME_SEPARATOR + getName();
@@ -56,6 +64,10 @@ public class ColumnParseNode extends NamedParseNode {
 
     public String getSchemaName() {
         return tableName == null ? null : tableName.getSchemaName();
+    }
+    
+    public boolean isTableNameCaseSensitive() {
+        return tableName == null ? false : tableName.isTableNameCaseSensitive();
     }
 
     public String getFullName() {

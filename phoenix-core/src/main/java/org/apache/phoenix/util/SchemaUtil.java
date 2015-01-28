@@ -174,7 +174,7 @@ public class SchemaUtil {
     }
 
     public static boolean isCaseSensitive(String name) {
-        return name.length() > 0 && name.charAt(0)=='"';
+        return name!=null && name.length() > 0 && name.charAt(0)=='"';
     }
     
     public static <T> List<T> concat(List<T> l1, List<T> l2) {

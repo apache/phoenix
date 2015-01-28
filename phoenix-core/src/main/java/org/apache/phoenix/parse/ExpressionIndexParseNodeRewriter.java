@@ -27,7 +27,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.IndexUtil;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 /**
@@ -60,7 +59,8 @@ public class ExpressionIndexParseNodeRewriter extends ParseNodeRewriter {
             PDataType expressionDataType = dataExpression.getDataType();
             ParseNode indexedParseNode = expressionParseNode.accept(rewriter);
             PDataType indexColType = IndexUtil.getIndexColumnDataType(dataExpression.isNullable(), expressionDataType);
-            ParseNode columnParseNode = new ColumnParseNode(null, IndexUtil.getIndexColumnName(null,String.valueOf(dataExpression.toString())), null);
+            // use case sensitive name
+            ParseNode columnParseNode = new ColumnParseNode(null, column.getName().getString(), null, true);
             if ( indexColType != expressionDataType) {
                 columnParseNode = NODE_FACTORY.cast(columnParseNode, expressionDataType, null, null);
             }
@@ -74,33 +74,4 @@ public class ExpressionIndexParseNodeRewriter extends ParseNodeRewriter {
                 : super.leaveCompoundNode(node, children, factory);
     }
 
-    public static SelectStatement rewrite(SelectStatement indexSelect, PTable index, PhoenixConnection connection) throws SQLException {
-        ExpressionIndexParseNodeRewriter rewriter = new ExpressionIndexParseNodeRewriter(index, connection);
-        // rewrite select nodes
-        List<AliasedNode> select = indexSelect.getSelect();
-        List<AliasedNode> rewrittenSelect = Lists.newArrayListWithExpectedSize(select.size());
-        for (AliasedNode aliasedNode : select) {
-            ParseNode node = aliasedNode.getNode();
-            rewrittenSelect.add(NODE_FACTORY.aliasedNode(node.getAlias(), node.accept(rewriter)));
-        }
-        // rewrite where 
-        ParseNode where = indexSelect.getWhere();
-        ParseNode rewrittenWhere = where==null ? null : where.accept(rewriter);
-        // rewrite order by 
-        List<OrderByNode> orderBy = indexSelect.getOrderBy();
-        List<OrderByNode> rewrittenOrderBy = Lists.newArrayListWithExpectedSize(orderBy.size());
-        for (OrderByNode orderByNode : orderBy) {
-            rewrittenOrderBy.add(NODE_FACTORY.orderBy(orderByNode.getNode().accept(rewriter), orderByNode.isNullsLast(), orderByNode.isAscending()));
-        }
-        // rewrite group by 
-        List<ParseNode> groupBy = indexSelect.getGroupBy();
-        List<ParseNode> rewrittenGroupBy = Lists.newArrayListWithExpectedSize(groupBy.size());
-        for (ParseNode node : groupBy) {
-            rewrittenGroupBy.add(node.accept(rewriter));
-        }
-        // rewrite having
-        ParseNode having = indexSelect.getHaving();
-        ParseNode rewrittenHaving = having==null ? null : having.accept(rewriter);
-        return NODE_FACTORY.select(indexSelect, rewrittenSelect, rewrittenWhere, rewrittenGroupBy, rewrittenHaving, rewrittenOrderBy );
-    }
 }
