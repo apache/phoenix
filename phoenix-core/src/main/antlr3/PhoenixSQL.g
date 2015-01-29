@@ -362,8 +362,9 @@ non_select_node returns [BindableStatement ret]
     |	s=create_sequence_node
     |	s=drop_sequence_node
     |   s=update_statistics_node
-    |   s=explain_node) { contextStack.pop();  $ret = s; }
+    |   s=explain_node) { $ret = s; }
     ;
+finally{ contextStack.pop(); }
     
 explain_node returns [BindableStatement ret]
     :   EXPLAIN q=oneStatement {$ret=factory.explain(q);}
@@ -567,8 +568,9 @@ select_node returns [SelectStatement ret]
         (HAVING having=expression)?
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        { ParseContext context = contextStack.pop(); $ret = factory.select(from, null, d!=null, sel, where, group, having, order, l, getBindCount(), context.isAggregate(), context.hasSequences()); }
+        { ParseContext context = contextStack.peek(); $ret = factory.select(from, null, d!=null, sel, where, group, having, order, l, getBindCount(), context.isAggregate(), context.hasSequences()); }
     ;
+finally{ contextStack.pop(); }
 
 // Parse a full select expression structure.
 hinted_select_node returns [SelectStatement ret]
