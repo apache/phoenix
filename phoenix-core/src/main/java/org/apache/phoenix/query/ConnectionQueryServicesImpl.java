@@ -200,8 +200,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private volatile ConcurrentMap<SequenceKey,Sequence> sequenceMap = Maps.newConcurrentMap();
     private KeyValueBuilder kvBuilder;
     
-    private static final HColumnDescriptor defaultColDescriptor = new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
-    
     private PMetaData newEmptyMetaData() {
         long maxSizeBytes = props.getLong(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB,
                 QueryServicesOptions.DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE);
@@ -1673,7 +1671,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     private boolean isHColumnProperty(String propName) {
-        return defaultColDescriptor.getValue(propName) != null;
+        return HColumnDescriptor.getDefaultValues().containsKey(propName);
     }
 
     private boolean isHTableProperty(String propName) {

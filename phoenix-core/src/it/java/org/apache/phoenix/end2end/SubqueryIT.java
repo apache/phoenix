@@ -139,11 +139,11 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER AGGREGATE INTO DISTINCT ROWS BY \\[item_id, NAME\\]\n" +
                 "        CLIENT MERGE SORT\n" +
-                "            PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
+                "            SKIP-SCAN-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[item_id\\]\n" +
                 "                CLIENT MERGE SORT\n" +
-                "            DYNAMIC SERVER FILTER BY item_id BETWEEN MIN/MAX OF \\(\\$\\d+.\\$\\d+\\)\n" +
+                "            DYNAMIC SERVER FILTER BY item_id IN \\(\\$\\d+.\\$\\d+\\)\n" +
                 "    AFTER-JOIN SERVER FILTER BY \\(\\$\\d+.\\$\\d+ IS NOT NULL OR \\$\\d+.\\$\\d+ IS NOT NULL\\)",
                 
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
@@ -165,7 +165,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[item_id\\]\n" +
                 "                CLIENT MERGE SORT\n" +
-                "            DYNAMIC SERVER FILTER BY item_id BETWEEN MIN/MAX OF \\(O.item_id\\)\n" +
+                "            DYNAMIC SERVER FILTER BY item_id IN \\(O.item_id\\)\n" +
                 "            AFTER-JOIN SERVER FILTER BY \\(I.NAME = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)\n" +
                 "    DYNAMIC SERVER FILTER BY customer_id IN \\(\\$\\d+.\\$\\d+\\)"
                 }});
@@ -289,7 +289,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[item_id\\]\n" +
                 "                CLIENT MERGE SORT\n" +
-                "            DYNAMIC SERVER FILTER BY item_id BETWEEN MIN/MAX OF \\(\\$\\d+.\\$\\d+\\)\n" +
+                "            DYNAMIC SERVER FILTER BY item_id IN \\(\\$\\d+.\\$\\d+\\)\n" +
                 "    AFTER-JOIN SERVER FILTER BY \\(\\$\\d+.\\$\\d+ IS NOT NULL OR \\$\\d+.\\$\\d+ IS NOT NULL\\)",
                 
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
@@ -314,7 +314,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[item_id\\]\n" +
                 "                CLIENT MERGE SORT\n" +
-                "            DYNAMIC SERVER FILTER BY item_id BETWEEN MIN/MAX OF \\(O.item_id\\)\n" +
+                "            DYNAMIC SERVER FILTER BY item_id IN \\(O.item_id\\)\n" +
                 "            AFTER-JOIN SERVER FILTER BY \\(I.0:NAME = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)\n" +
                 "    DYNAMIC SERVER FILTER BY customer_id IN \\(\\$\\d+.\\$\\d+\\)"
                 }});

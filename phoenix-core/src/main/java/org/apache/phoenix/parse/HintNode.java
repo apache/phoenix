@@ -47,13 +47,9 @@ public class HintNode {
          */
         SKIP_SCAN,
         /**
-         * Forces a range scan when full or partial primary key is used as join keys.
+         * Prevents the usage of child-parent-join optimization.
          */
-        RANGE_SCAN_HASH_JOIN,
-        /**
-         * Forces a skip scan when full or partial primary key is used as join keys.
-         */
-        SKIP_SCAN_HASH_JOIN,
+        NO_CHILD_PARENT_JOIN_OPTIMIZATION,
         /**
         * Prevents the usage of indexes, forcing usage
         * of the data table for a query.
