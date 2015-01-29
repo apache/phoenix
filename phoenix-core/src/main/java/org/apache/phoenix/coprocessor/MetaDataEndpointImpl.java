@@ -61,6 +61,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
@@ -146,7 +147,6 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -641,6 +641,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 if (statsHTable != null) statsHTable.close();
             }
         }
+        // sort columns by ordinal position
+        Collections.sort(columns, new Comparator<PColumn>() {
+            @Override
+            public int compare(PColumn c1, PColumn c2) {
+                return Integer.compare(c1.getPosition(),c2.getPosition());
+            }
+        });
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp,
             tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? schemaName : null,
             tableType == INDEX ? dataTableName : null, indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement,
@@ -1415,15 +1422,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                         try {
                                             IndexMaintainer indexMaintainer = index.getIndexMaintainer(table, connection);
                                             // get the columns required to create the index 
-                                            Set<ColumnReference> indexColumns = indexMaintainer.getAllColumns();
-                                            String indexColumnName = IndexUtil.getIndexColumnName(columnToDelete);
-                                            PColumn indexColumn = index.getColumn(indexColumnName);
+                                            Set<ColumnReference> indexColumns = indexMaintainer.getIndexedColumns();
+//                                            String indexColumnName = IndexUtil.getIndexColumnName(columnToDelete);
+//                                            PColumn indexColumn = index.getColumn(indexColumnName);
                                             byte[] indexKey =
                                                     SchemaUtil.getTableKey(tenantId, index
                                                             .getSchemaName().getBytes(), index.getTableName().getBytes());
                                             // If index contains the column in it's PK, then drop it
-                                            if (SchemaUtil.isPKColumn(indexColumn) 
-                                                    || indexColumns.contains(new ColumnReference(columnToDelete.getFamilyName().getBytes(), columnToDelete.getName().getBytes()))) {
+//                                            if (SchemaUtil.isPKColumn(indexColumn)) {
+                                            if (indexColumns.contains(new ColumnReference(columnToDelete.getFamilyName().getBytes(), columnToDelete.getName().getBytes()))) {
                                                 // Since we're dropping the index, lock it to ensure
                                                 // that a change in index state doesn't
                                                 // occur while we're dropping it.

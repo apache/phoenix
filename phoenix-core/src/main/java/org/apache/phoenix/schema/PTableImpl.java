@@ -325,7 +325,7 @@ public class PTableImpl implements PTable {
         this.tableStats = stats;
         List<PColumn> pkColumns;
         PColumn[] allColumns;
-
+        
         this.columnsByName = ArrayListMultimap.create(columns.size(), 1);
         if (bucketNum != null) {
             // Add salt column to allColumns and pkColumns, but don't add to

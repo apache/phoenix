@@ -275,12 +275,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         Integer nIndexSaltBuckets = isLocalIndex ? dataTable.getBucketNum() : index.getBucketNum();
         boolean indexWALDisabled = index.isWALDisabled();
         int indexPosOffset = (index.getBucketNum() == null ? 0 : 1) + (this.isMultiTenant ? 1 : 0) + (this.viewIndexId == null ? 0 : 1);
+//        int indexPosOffset = !isLocalIndex && nIndexSaltBuckets > 0 ? 1 : 0;
         int nIndexColumns = index.getColumns().size() - indexPosOffset;
         int nIndexPKColumns = index.getPKColumns().size() - indexPosOffset;
         // number of expressions that are indexed that are not present in the row key of the data table
         int indexedExpressionCount = 0;
         for (int i = indexPosOffset; i<index.getPKColumns().size();i++) {
         	PColumn indexColumn = index.getPKColumns().get(i);
+        	if (!IndexUtil.isIndexColumn(indexColumn)) {
+                continue;
+            }
         	String indexColumnName = indexColumn.getName().getString();
             String dataFamilyName = IndexUtil.getDataColumnFamilyName(indexColumnName);
             String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
@@ -329,6 +333,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int indexColByteSize = 0;
         for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
             PColumn indexColumn = index.getPKColumns().get(i);
+            if (!IndexUtil.isIndexColumn(indexColumn)) {
+                continue;
+            }
             int indexPos = i - indexPosOffset;
             Expression expression = null;
             try {
@@ -929,8 +936,40 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
         }
         else {
-            indexedExpressions = Sets.newLinkedHashSetWithExpectedSize(indexedColumnTypes.size());
-            //TODO figure out how to create indexedExpressions
+            indexedExpressions = Sets.newLinkedHashSetWithExpectedSize(indexedColumns.size());
+            Iterator<ColumnReference> colReferenceIter = indexedColumns.iterator();
+            Iterator<PDataType> dataTypeIter = indexedColumnTypes.iterator();
+            while (colReferenceIter.hasNext()) {
+                ColumnReference colRef = colReferenceIter.next();
+                final PDataType dataType = dataTypeIter.next();
+                indexedExpressions.add(new KeyValueColumnExpression(new PDatum() {
+                    
+                    @Override
+                    public boolean isNullable() {
+                        return true;
+                    }
+                    
+                    @Override
+                    public SortOrder getSortOrder() {
+                        return SortOrder.getDefault();
+                    }
+                    
+                    @Override
+                    public Integer getScale() {
+                        return null;
+                    }
+                    
+                    @Override
+                    public Integer getMaxLength() {
+                        return null;
+                    }
+                    
+                    @Override
+                    public PDataType getDataType() {
+                        return dataType;
+                    }
+                }, colRef.getFamily(), colRef.getQualifier()));
+            }
         }
         
         rowKeyMetaData = newRowKeyMetaData();

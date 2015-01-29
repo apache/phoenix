@@ -673,20 +673,30 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
-    public void testIndexWithCaseSensitiveCols() throws Exception {
-        helpTestIndexWithCaseSensitiveCols(false);
+    public void testImmutableIndexWithCaseSensitiveCols() throws Exception {
+        helpTestIndexWithCaseSensitiveCols(false, false);
     }
     
     @Test
-    public void testLocalIndexWithCaseSensitiveCols() throws Exception {
-        helpTestIndexWithCaseSensitiveCols(true);
+    public void testImmutableLocalIndexWithCaseSensitiveCols() throws Exception {
+        helpTestIndexWithCaseSensitiveCols(true, false);
     }
     
-    protected void helpTestIndexWithCaseSensitiveCols(boolean localIndex) throws Exception {
+    @Test
+    public void testMutableIndexWithCaseSensitiveCols() throws Exception {
+        helpTestIndexWithCaseSensitiveCols(true, false);
+    }
+    
+    @Test
+    public void testMutableLocalIndexWithCaseSensitiveCols() throws Exception {
+        helpTestIndexWithCaseSensitiveCols(true, false);
+    }
+    
+    protected void helpTestIndexWithCaseSensitiveCols(boolean mutable, boolean localIndex) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            conn.createStatement().execute("CREATE TABLE cs (k VARCHAR NOT NULL PRIMARY KEY, \"V1\" VARCHAR, \"v2\" VARCHAR)");
+            conn.createStatement().execute("CREATE TABLE cs (k VARCHAR NOT NULL PRIMARY KEY, \"V1\" VARCHAR, \"v2\" VARCHAR) "+ (mutable ? "IMMUTABLE_ROWS=true" : ""));
             String query = "SELECT * FROM cs";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
@@ -769,6 +779,87 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
         } finally {
             conn.close();
         }
+    }
+    
+    @Test
+    public void testImmutableIndexDropIndexedColumn() throws Exception {
+        helpTestDropIndexedColumn(false, false);
+    }
+    
+    @Test
+    public void testImmutableLocalIndexDropIndexedColumn() throws Exception {
+        helpTestDropIndexedColumn(false, true);
+    }
+    
+    @Test
+    public void testMutableIndexDropIndexedColumn() throws Exception {
+        helpTestDropIndexedColumn(true, false);
+    }
+    
+    @Test
+    public void testMutableLocalIndexDropIndexedColumn() throws Exception {
+        helpTestDropIndexedColumn(true, true);
+    }
+    
+    public void helpTestDropIndexedColumn(boolean mutable, boolean local) throws Exception {
+        String query;
+        ResultSet rs;
+        PreparedStatement stmt;
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+
+        // make sure that the tables are empty, but reachable
+        conn.createStatement().execute(
+          "CREATE TABLE cs (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+        query = "SELECT * FROM cs" ;
+        rs = conn.createStatement().executeQuery(query);
+        assertFalse(rs.next());
+
+        conn.createStatement().execute("CREATE " + ( local ? "LOCAL" : "") + " INDEX ics ON cs (v1 || '_' || v2)");
+
+        query = "SELECT * FROM ics";
+        rs = conn.createStatement().executeQuery(query);
+        assertFalse(rs.next());
+
+        // load some data into the table
+        stmt = conn.prepareStatement("UPSERT INTO cs VALUES(?,?,?)");
+        stmt.setString(1, "a");
+        stmt.setString(2, "x");
+        stmt.setString(3, "1");
+        stmt.execute();
+        conn.commit();
+
+        assertIndexExists(conn,true);
+        conn.createStatement().execute("ALTER TABLE cs DROP COLUMN v1");
+        assertIndexExists(conn,false);
+
+        query = "SELECT * FROM cs";
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("a",rs.getString(1));
+        assertEquals("1",rs.getString(2));
+        assertFalse(rs.next());
+
+        // load some data into the table
+        stmt = conn.prepareStatement("UPSERT INTO cs VALUES(?,?)");
+        stmt.setString(1, "a");
+        stmt.setString(2, "2");
+        stmt.execute();
+        conn.commit();
+
+        query = "SELECT * FROM cs";
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("a",rs.getString(1));
+        assertEquals("2",rs.getString(2));
+        assertFalse(rs.next());
+    }
+    
+    private static void assertIndexExists(Connection conn, boolean exists) throws SQLException {
+        ResultSet rs = conn.getMetaData().getIndexInfo(null, null, "CS", false, false);
+        assertEquals(exists, rs.next());
     }
 
 }
