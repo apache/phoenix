@@ -31,7 +31,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ColumnProjector;
@@ -44,8 +43,6 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.expression.AndExpression;
-import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
@@ -58,7 +55,6 @@ import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.parse.FilterableStatement;
-import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
@@ -82,8 +78,6 @@ public class HashJoinPlan extends DelegateQueryPlan {
     private final HashJoinInfo joinInfo;
     private final SubPlan[] subPlans;
     private final boolean recompileWhereClause;
-    private final boolean forceHashJoinRangeScan;
-    private final boolean forceHashJoinSkipScan;
     private List<SQLCloseable> dependencies;
     private HashCacheClient hashClient;
     private int maxServerCacheTimeToLive;
@@ -115,8 +109,6 @@ public class HashJoinPlan extends DelegateQueryPlan {
         this.joinInfo = joinInfo;
         this.subPlans = subPlans;
         this.recompileWhereClause = recompileWhereClause;
-        this.forceHashJoinRangeScan = plan.getStatement().getHint().hasHint(Hint.RANGE_SCAN_HASH_JOIN);
-        this.forceHashJoinSkipScan = plan.getStatement().getHint().hasHint(Hint.SKIP_SCAN_HASH_JOIN);
     }
 
     @Override
@@ -200,39 +192,14 @@ public class HashJoinPlan extends DelegateQueryPlan {
     }
 
     private Expression createKeyRangeExpression(Expression lhsExpression,
-            Expression rhsExpression, List<ImmutableBytesWritable> rhsValues, 
-            ImmutableBytesWritable ptr, boolean hasFilters) throws SQLException {
+            Expression rhsExpression, List<Expression> rhsValues, 
+            ImmutableBytesWritable ptr) throws SQLException {
         if (rhsValues.isEmpty())
-            return LiteralExpression.newConstant(false, PBoolean.INSTANCE, Determinism.ALWAYS);
+            return LiteralExpression.newConstant(false, PBoolean.INSTANCE, Determinism.ALWAYS);        
         
-        PDataType type = rhsExpression.getDataType();
-        if (!useInClause(hasFilters)) {
-            ImmutableBytesWritable minValue = rhsValues.get(0);
-            ImmutableBytesWritable maxValue = rhsValues.get(0);
-            for (ImmutableBytesWritable value : rhsValues) {
-                if (value.compareTo(minValue) < 0) {
-                    minValue = value;
-                }
-                if (value.compareTo(maxValue) > 0) {
-                    maxValue = value;
-                }
-            }
-            
-            return AndExpression.create(Lists.newArrayList(
-                    ComparisonExpression.create(CompareOp.GREATER_OR_EQUAL, Lists.newArrayList(lhsExpression, LiteralExpression.newConstant(type.toObject(minValue), type)), ptr), 
-                    ComparisonExpression.create(CompareOp.LESS_OR_EQUAL, Lists.newArrayList(lhsExpression, LiteralExpression.newConstant(type.toObject(maxValue), type)), ptr)));
-        }
+        rhsValues.add(0, lhsExpression);
         
-        List<Expression> children = Lists.newArrayList(lhsExpression);
-        for (ImmutableBytesWritable value : rhsValues) {
-            children.add(LiteralExpression.newConstant(type.toObject(value), type));
-        }
-        
-        return InListExpression.create(children, false, ptr, false);
-    }
-    
-    private boolean useInClause(boolean hasFilters) {
-        return this.forceHashJoinSkipScan || (!this.forceHashJoinRangeScan && hasFilters);
+        return InListExpression.create(rhsValues, false, ptr);
     }
 
     @Override
@@ -345,29 +312,26 @@ public class HashJoinPlan extends DelegateQueryPlan {
         private final boolean singleValueOnly;
         private final Expression keyRangeLhsExpression;
         private final Expression keyRangeRhsExpression;
-        private final boolean hasFilters;
         
         public HashSubPlan(int index, QueryPlan subPlan, 
                 List<Expression> hashExpressions,
                 boolean singleValueOnly,
                 Expression keyRangeLhsExpression, 
-                Expression keyRangeRhsExpression, 
-                boolean hasFilters) {
+                Expression keyRangeRhsExpression) {
             this.index = index;
             this.plan = subPlan;
             this.hashExpressions = hashExpressions;
             this.singleValueOnly = singleValueOnly;
             this.keyRangeLhsExpression = keyRangeLhsExpression;
             this.keyRangeRhsExpression = keyRangeRhsExpression;
-            this.hasFilters = hasFilters;
         }
 
         @Override
         public Object execute(HashJoinPlan parent) throws SQLException {
             ScanRanges ranges = parent.delegate.getContext().getScanRanges();
-            List<ImmutableBytesWritable> keyRangeRhsValues = null;
+            List<Expression> keyRangeRhsValues = null;
             if (keyRangeRhsExpression != null) {
-                keyRangeRhsValues = Lists.<ImmutableBytesWritable>newArrayList();
+                keyRangeRhsValues = Lists.<Expression>newArrayList();
             }
             ServerCache cache = null;
             if (hashExpressions != null) {
@@ -383,15 +347,11 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 ResultIterator iterator = plan.iterator();
                 for (Tuple result = iterator.next(); result != null; result = iterator.next()) {
                     // Evaluate key expressions for hash join key range optimization.
-                    ImmutableBytesWritable value = new ImmutableBytesWritable();
-                    keyRangeRhsExpression.reset();
-                    if (keyRangeRhsExpression.evaluate(result, value)) {
-                        keyRangeRhsValues.add(value);
-                    }
+                    keyRangeRhsValues.add(HashCacheClient.evaluateKeyExpression(keyRangeRhsExpression, result, plan.getContext().getTempPtr()));
                 }
             }
             if (keyRangeRhsValues != null) {
-                parent.keyRangeExpressions.add(parent.createKeyRangeExpression(keyRangeLhsExpression, keyRangeRhsExpression, keyRangeRhsValues, plan.getContext().getTempPtr(), hasFilters));
+                parent.keyRangeExpressions.add(parent.createKeyRangeExpression(keyRangeLhsExpression, keyRangeRhsExpression, keyRangeRhsValues, plan.getContext().getTempPtr()));
             }
             return cache;
         }
@@ -430,8 +390,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 return Collections.<String> emptyList();
             
             String step = "    DYNAMIC SERVER FILTER BY " + keyRangeLhsExpression.toString() 
-                    + (parent.useInClause(hasFilters) ? " IN " : " BETWEEN MIN/MAX OF ") 
-                    + "(" + keyRangeRhsExpression.toString() + ")";
+                    + " IN (" + keyRangeRhsExpression.toString() + ")";
             return Collections.<String> singletonList(step);
         }
         

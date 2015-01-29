@@ -667,6 +667,15 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertEquals(2,rs.getInt(1));
 
             assertFalse(rs.next());
+            
+            // count (subquery)
+            query = "SELECT count(*) FROM (SELECT * FROM aTable WHERE (organization_id, entity_id) in (SELECT organization_id, entity_id FROM aTable WHERE a_byte != 8)) AS t";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(8,rs.getInt(1));
+
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }
