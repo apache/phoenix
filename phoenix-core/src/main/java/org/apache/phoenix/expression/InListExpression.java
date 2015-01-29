@@ -57,19 +57,12 @@ public class InListExpression extends BaseSingleExpression {
     private List<Expression> keyExpressions; // client side only
     
     public static Expression create (List<Expression> children, boolean isNegate, ImmutableBytesWritable ptr) throws SQLException {
-        return create(children, isNegate, ptr, true);
-    }
-    
-    public static Expression create (List<Expression> children, boolean isNegate, ImmutableBytesWritable ptr, boolean allowShortcut) throws SQLException {
         Expression firstChild = children.get(0);
         
         if (firstChild.isStateless() && (!firstChild.evaluate(null, ptr) || ptr.getLength() == 0)) {
             return LiteralExpression.newConstant(null, PDataType.BOOLEAN, firstChild.getDeterminism());
         }
-        // We set allowShortcut to false for child/parent join optimization since we 
-        // compare RVC expressions with literal expressions and we want to avoid 
-        // RVC-rewrite operation in ComparisonExpression.create().
-        if (allowShortcut && children.size() == 2) {
+        if (children.size() == 2) {
             return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, children, ptr);
         }
         

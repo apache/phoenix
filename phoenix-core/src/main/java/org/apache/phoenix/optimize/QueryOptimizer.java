@@ -280,7 +280,7 @@ public class QueryOptimizer {
                         if (extractedCondition != null) {
                             outerWhere = FACTORY.and(Lists.newArrayList(outerWhere, extractedCondition));
                         }
-                        HintNode hint = HintNode.combine(HintNode.subtract(indexSelect.getHint(), new Hint[] {Hint.INDEX, Hint.RANGE_SCAN_HASH_JOIN}), FACTORY.hint("NO_INDEX SKIP_SCAN_HASH_JOIN"));
+                        HintNode hint = HintNode.combine(HintNode.subtract(indexSelect.getHint(), new Hint[] {Hint.INDEX, Hint.NO_CHILD_PARENT_JOIN_OPTIMIZATION}), FACTORY.hint("NO_INDEX"));
                         SelectStatement query = FACTORY.select(dataSelect, hint, outerWhere);
                         ColumnResolver queryResolver = FromCompiler.getResolverForQuery(query, statement.getConnection());
                         query = SubqueryRewriter.transform(query, queryResolver, statement.getConnection());

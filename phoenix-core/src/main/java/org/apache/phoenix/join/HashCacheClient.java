@@ -30,17 +30,21 @@ import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
+import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 import org.apache.phoenix.util.TupleUtil;
-
 import org.iq80.snappy.Snappy;
+
+import com.google.common.collect.Lists;
 
 /**
  * 
@@ -70,7 +74,7 @@ public class HashCacheClient  {
      * @throws MaxServerCacheSizeExceededException if size of hash cache exceeds max allowed
      * size
      */
-    public ServerCache addHashCache(ScanRanges keyRanges, ResultIterator iterator, long estimatedSize, List<Expression> onExpressions, boolean singleValueOnly, TableRef cacheUsingTableRef, Expression keyRangeRhsExpression, List<ImmutableBytesWritable> keyRangeRhsValues) throws SQLException {
+    public ServerCache addHashCache(ScanRanges keyRanges, ResultIterator iterator, long estimatedSize, List<Expression> onExpressions, boolean singleValueOnly, TableRef cacheUsingTableRef, Expression keyRangeRhsExpression, List<Expression> keyRangeRhsValues) throws SQLException {
         /**
          * Serialize and compress hashCacheTable
          */
@@ -79,7 +83,7 @@ public class HashCacheClient  {
         return serverCache.addServerCache(keyRanges, ptr, new HashCacheFactory(), cacheUsingTableRef);
     }
     
-    private void serialize(ImmutableBytesWritable ptr, ResultIterator iterator, long estimatedSize, List<Expression> onExpressions, boolean singleValueOnly, Expression keyRangeRhsExpression, List<ImmutableBytesWritable> keyRangeRhsValues) throws SQLException {
+    private void serialize(ImmutableBytesWritable ptr, ResultIterator iterator, long estimatedSize, List<Expression> onExpressions, boolean singleValueOnly, Expression keyRangeRhsExpression, List<Expression> keyRangeRhsValues) throws SQLException {
         long maxSize = serverCache.getConnection().getQueryServices().getProps().getLong(QueryServices.MAX_SERVER_CACHE_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_SIZE);
         estimatedSize = Math.min(estimatedSize, maxSize);
         if (estimatedSize > Integer.MAX_VALUE) {
@@ -98,6 +102,7 @@ public class HashCacheClient  {
             out.writeInt(exprSize * (singleValueOnly ? -1 : 1));
             int nRows = 0;
             out.writeInt(nRows); // In the end will be replaced with total number of rows            
+            ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
             for (Tuple result = iterator.next(); result != null; result = iterator.next()) {
                 TupleUtil.write(result, out);
                 if (baOut.size() > maxSize) {
@@ -105,11 +110,7 @@ public class HashCacheClient  {
                 }
                 // Evaluate key expressions for hash join key range optimization.
                 if (keyRangeRhsExpression != null) {
-                    ImmutableBytesWritable value = new ImmutableBytesWritable();
-                    keyRangeRhsExpression.reset();
-                    if (keyRangeRhsExpression.evaluate(result, value)) {
-                        keyRangeRhsValues.add(value);
-                    }
+                    keyRangeRhsValues.add(evaluateKeyExpression(keyRangeRhsExpression, result, tempPtr));
                 }
                 nRows++;
             }
@@ -135,5 +136,46 @@ public class HashCacheClient  {
         } finally {
             iterator.close();
         }
+    }
+    
+    /**
+     * Evaluate the RHS key expression and wrap the result as a new Expression.
+     * Unlike other types of Expression which will be evaluated and wrapped as a 
+     * single LiteralExpression, RowValueConstructorExpression should be handled 
+     * differently. We should evaluate each child of RVC and wrap them into a new
+     * RVC Expression, in order to make sure that the later coercion between the 
+     * LHS key expression and this RHS key expression will be successful.
+     * 
+     * @param keyExpression the RHS key expression
+     * @param tuple the input tuple
+     * @param ptr the temporary pointer
+     * @return the Expression containing the evaluated result
+     * @throws SQLException 
+     */
+    public static Expression evaluateKeyExpression(Expression keyExpression, Tuple tuple, ImmutableBytesWritable ptr) throws SQLException {
+        if (!(keyExpression instanceof RowValueConstructorExpression)) {
+            PDataType type = keyExpression.getDataType();
+            keyExpression.reset();
+            if (keyExpression.evaluate(tuple, ptr)) {
+                return LiteralExpression.newConstant(type.toObject(ptr), type);
+            }
+            
+            return LiteralExpression.newConstant(null, type);
+        }
+        
+        List<Expression> children = keyExpression.getChildren();
+        List<Expression> values = Lists.newArrayListWithExpectedSize(children.size());
+        for (Expression child : children) {
+            PDataType type = child.getDataType();
+            child.reset();
+            if (child.evaluate(tuple, ptr)) {
+                values.add(LiteralExpression.newConstant(type.toObject(ptr), type));
+            } else {
+                values.add(LiteralExpression.newConstant(null, type));
+            }
+        }
+        // The early evaluation of this constant expression is not necessary, for it
+        // might be coerced later.
+        return new RowValueConstructorExpression(values, false);
     }
 }
