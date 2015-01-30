@@ -210,79 +210,76 @@ public class Indexer extends BaseRegionObserver {
   }
 
   public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
+          MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
 
-    // first group all the updates for a single row into a single update to be processed
-    Map<ImmutableBytesPtr, MultiMutation> mutations =
-        new HashMap<ImmutableBytesPtr, MultiMutation>();
+      // first group all the updates for a single row into a single update to be processed
+      Map<ImmutableBytesPtr, MultiMutation> mutations =
+              new HashMap<ImmutableBytesPtr, MultiMutation>();
 
-    Durability defaultDurability = Durability.SYNC_WAL;
-    if(c.getEnvironment().getRegion() != null) {
-    	defaultDurability = c.getEnvironment().getRegion().getTableDesc().getDurability();
-    	defaultDurability = (defaultDurability == Durability.USE_DEFAULT) ? 
-    			Durability.SYNC_WAL : defaultDurability;
-    }
-    Durability durability = Durability.SKIP_WAL;
-    for (int i = 0; i < miniBatchOp.size(); i++) {
-      Mutation m = miniBatchOp.getOperation(i);
-      // skip this mutation if we aren't enabling indexing
-      // unfortunately, we really should ask if the raw mutation (rather than the combined mutation)
-      // should be indexed, which means we need to expose another method on the builder. Such is the
-      // way optimization go though.
-      if (!this.builder.isEnabled(m)) {
-        continue;
+      Durability defaultDurability = Durability.SYNC_WAL;
+      if(c.getEnvironment().getRegion() != null) {
+          defaultDurability = c.getEnvironment().getRegion().getTableDesc().getDurability();
+          defaultDurability = (defaultDurability == Durability.USE_DEFAULT) ? 
+                  Durability.SYNC_WAL : defaultDurability;
       }
-      
-      Durability effectiveDurablity = (m.getDurability() == Durability.USE_DEFAULT) ? 
-    		  defaultDurability : m.getDurability();
-      if (effectiveDurablity.ordinal() > durability.ordinal()) {
-        durability = effectiveDurablity;
+      Durability durability = Durability.SKIP_WAL;
+      for (int i = 0; i < miniBatchOp.size(); i++) {
+          Mutation m = miniBatchOp.getOperation(i);
+          // skip this mutation if we aren't enabling indexing
+          // unfortunately, we really should ask if the raw mutation (rather than the combined mutation)
+          // should be indexed, which means we need to expose another method on the builder. Such is the
+          // way optimization go though.
+          if (!this.builder.isEnabled(m)) {
+              continue;
+          }
+
+          Durability effectiveDurablity = (m.getDurability() == Durability.USE_DEFAULT) ? 
+                  defaultDurability : m.getDurability();
+          if (effectiveDurablity.ordinal() > durability.ordinal()) {
+              durability = effectiveDurablity;
+          }
+
+          // add the mutation to the batch set
+          ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
+          MultiMutation stored = mutations.get(row);
+          // we haven't seen this row before, so add it
+          if (stored == null) {
+              stored = new MultiMutation(row);
+              mutations.put(row, stored);
+          }
+          stored.addAll(m);
       }
 
-      // add the mutation to the batch set
-      ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
-      MultiMutation stored = mutations.get(row);
-      // we haven't seen this row before, so add it
-      if (stored == null) {
-        stored = new MultiMutation(row);
-        mutations.put(row, stored);
+      // early exit if it turns out we don't have any edits
+      if (mutations.entrySet().size() == 0) {
+          return;
       }
-      stored.addAll(m);
-    }
-    
-    // early exit if it turns out we don't have any edits
-    if (mutations.entrySet().size() == 0) {
-      return;
-    }
 
-    // dump all the index updates into a single WAL. They will get combined in the end anyways, so
-    // don't worry which one we get
-    WALEdit edit = miniBatchOp.getWalEdit(0);
-    if (edit == null) {
-        edit = new WALEdit();
-        miniBatchOp.setWalEdit(0, edit);
-    }
+      // dump all the index updates into a single WAL. They will get combined in the end anyways, so
+      // don't worry which one we get
+      WALEdit edit = miniBatchOp.getWalEdit(0);
+      if (edit == null) {
+          edit = new WALEdit();
+          miniBatchOp.setWalEdit(0, edit);
+      }
 
-        // get the current span, or just use a null-span to avoid a bunch of if statements
-    TraceScope scope = Trace.startSpan("Starting to build index updates");
-        Span current = scope.getSpan();
-        if (current == null) {
-            current = NullSpan.INSTANCE;
-        }
+      // get the current span, or just use a null-span to avoid a bunch of if statements
+      try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
+          Span current = scope.getSpan();
+          if (current == null) {
+              current = NullSpan.INSTANCE;
+          }
 
-    // get the index updates for all elements in this batch
-    Collection<Pair<Mutation, byte[]>> indexUpdates =
-        this.builder.getIndexUpdate(miniBatchOp, mutations.values());
+          // get the index updates for all elements in this batch
+          Collection<Pair<Mutation, byte[]>> indexUpdates =
+                  this.builder.getIndexUpdate(miniBatchOp, mutations.values());
 
-        current.addTimelineAnnotation("Built index updates, doing preStep");
-        TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
+          current.addTimelineAnnotation("Built index updates, doing preStep");
+          TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
 
-    // write them, either to WAL or the index tables
-    doPre(indexUpdates, edit, durability);
-
-        // close the span
-        current.stop();
-        scope.close();
+          // write them, either to WAL or the index tables
+          doPre(indexUpdates, edit, durability);
+      }
   }
 
   private class MultiMutation extends Mutation {
@@ -416,65 +413,59 @@ public class Indexer extends BaseRegionObserver {
   }
 
   private void doPostWithExceptions(WALEdit edit, Mutation m, final Durability durability)
-      throws Exception {
-    //short circuit, if we don't need to do any work
-    if (durability == Durability.SKIP_WAL || !this.builder.isEnabled(m)) {
-      // already did the index update in prePut, so we are done
-      return;
-    }
-
-        // get the current span, or just use a null-span to avoid a bunch of if statements
-    TraceScope scope = Trace.startSpan("Completing index writes");
-        Span current = scope.getSpan();
-        if (current == null) {
-            current = NullSpan.INSTANCE;
-        }
-
-    // there is a little bit of excess here- we iterate all the non-indexed kvs for this check first
-    // and then do it again later when getting out the index updates. This should be pretty minor
-    // though, compared to the rest of the runtime
-    IndexedKeyValue ikv = getFirstIndexedKeyValue(edit);
-
-    /*
-     * early exit - we have nothing to write, so we don't need to do anything else. NOTE: we don't
-     * release the WAL Rolling lock (INDEX_UPDATE_LOCK) since we never take it in doPre if there are
-     * no index updates.
-     */
-    if (ikv == null) {
-            current.stop();
-            scope.close();
-      return;
-    }
-
-    /*
-     * only write the update if we haven't already seen this batch. We only want to write the batch
-     * once (this hook gets called with the same WALEdit for each Put/Delete in a batch, which can
-     * lead to writing all the index updates for each Put/Delete).
-     */
-    if (!ikv.getBatchFinished()) {
-      Collection<Pair<Mutation, byte[]>> indexUpdates = extractIndexUpdate(edit);
-
-      // the WAL edit is kept in memory and we already specified the factory when we created the
-      // references originally - therefore, we just pass in a null factory here and use the ones
-      // already specified on each reference
-      try {
-                current.addTimelineAnnotation("Actually doing index update for first time");
-          writer.writeAndKillYourselfOnFailure(indexUpdates);
-      } finally {
-        // With a custom kill policy, we may throw instead of kill the server.
-        // Without doing this in a finally block (at least with the mini cluster),
-        // the region server never goes down.
-
-        // mark the batch as having been written. In the single-update case, this never gets check
-        // again, but in the batch case, we will check it again (see above).
-        ikv.markBatchFinished();
-
-                // finish the span
-
-                current.stop();
-                scope.close();
+          throws Exception {
+      //short circuit, if we don't need to do any work
+      if (durability == Durability.SKIP_WAL || !this.builder.isEnabled(m)) {
+          // already did the index update in prePut, so we are done
+          return;
       }
-    }
+
+      // get the current span, or just use a null-span to avoid a bunch of if statements
+      try (TraceScope scope = Trace.startSpan("Completing index writes")) {
+          Span current = scope.getSpan();
+          if (current == null) {
+              current = NullSpan.INSTANCE;
+          }
+
+          // there is a little bit of excess here- we iterate all the non-indexed kvs for this check first
+          // and then do it again later when getting out the index updates. This should be pretty minor
+          // though, compared to the rest of the runtime
+          IndexedKeyValue ikv = getFirstIndexedKeyValue(edit);
+
+          /*
+           * early exit - we have nothing to write, so we don't need to do anything else. NOTE: we don't
+           * release the WAL Rolling lock (INDEX_UPDATE_LOCK) since we never take it in doPre if there are
+           * no index updates.
+           */
+          if (ikv == null) {
+              return;
+          }
+
+          /*
+           * only write the update if we haven't already seen this batch. We only want to write the batch
+           * once (this hook gets called with the same WALEdit for each Put/Delete in a batch, which can
+           * lead to writing all the index updates for each Put/Delete).
+           */
+          if (!ikv.getBatchFinished()) {
+              Collection<Pair<Mutation, byte[]>> indexUpdates = extractIndexUpdate(edit);
+
+              // the WAL edit is kept in memory and we already specified the factory when we created the
+              // references originally - therefore, we just pass in a null factory here and use the ones
+              // already specified on each reference
+              try {
+                  current.addTimelineAnnotation("Actually doing index update for first time");
+                  writer.writeAndKillYourselfOnFailure(indexUpdates);
+              } finally {
+                  // With a custom kill policy, we may throw instead of kill the server.
+                  // Without doing this in a finally block (at least with the mini cluster),
+                  // the region server never goes down.
+
+                  // mark the batch as having been written. In the single-update case, this never gets check
+                  // again, but in the batch case, we will check it again (see above).
+                  ikv.markBatchFinished();
+              }
+          }
+      }
   }
 
   /**
