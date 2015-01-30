@@ -776,6 +776,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals("y_2",rs.getString(5));
             assertEquals("y_2",rs.getString("\"(V1 || '_' || v2)\""));
             assertFalse(rs.next());
+            conn.createStatement().execute("DROP INDEX ICS ON CS");
         } finally {
             conn.close();
         }
@@ -855,6 +856,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
         assertEquals("a",rs.getString(1));
         assertEquals("2",rs.getString(2));
         assertFalse(rs.next());
+        conn.createStatement().execute("DROP INDEX ICS ON CS");
     }
     
     private static void assertIndexExists(Connection conn, boolean exists) throws SQLException {

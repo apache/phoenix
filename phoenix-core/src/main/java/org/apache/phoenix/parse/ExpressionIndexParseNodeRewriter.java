@@ -36,6 +36,26 @@ import com.google.common.collect.Maps;
 public class ExpressionIndexParseNodeRewriter extends ParseNodeRewriter {
 
     private final Map<ParseNode, ParseNode> indexedParseNodeToColumnParseNodeMap;
+    
+    private static class ColumnParseNodeVisitor extends StatelessTraverseAllParseNodeVisitor {
+        
+        private boolean isParseNodeCaseSensitive;
+        
+        public void reset() {
+            this.isParseNodeCaseSensitive = false;
+        }
+        
+        @Override
+        public Void visit(ColumnParseNode node) throws SQLException {
+            isParseNodeCaseSensitive = isParseNodeCaseSensitive  || node.isCaseSensitive() || node.isTableNameCaseSensitive();
+            return null;
+        }
+        
+        public boolean isParseNodeCaseSensitive() {
+            return isParseNodeCaseSensitive;
+        }
+        
+    }
 
     public ExpressionIndexParseNodeRewriter(PTable index, PhoenixConnection connection) throws SQLException {
         indexedParseNodeToColumnParseNodeMap = Maps.newHashMapWithExpectedSize(index.getColumns().size());
@@ -46,6 +66,7 @@ public class ExpressionIndexParseNodeRewriter extends ParseNodeRewriter {
         StatementContext context = new StatementContext(new PhoenixStatement(connection), dataResolver);
         IndexStatementRewriter rewriter = new IndexStatementRewriter(dataResolver, null);
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
+        ColumnParseNodeVisitor columnParseNodeVisitor = new ColumnParseNodeVisitor();
         for (PColumn column : index.getPKColumns()) {
             if (column.getExpressionStr()==null) {
                 continue;
@@ -55,12 +76,19 @@ public class ExpressionIndexParseNodeRewriter extends ParseNodeRewriter {
             if (expressionParseNode instanceof ColumnParseNode) {
                 continue;
             }
+            columnParseNodeVisitor.reset();
+            expressionParseNode.accept(columnParseNodeVisitor);
+            String colName = column.getName().getString();
+            if (columnParseNodeVisitor.isParseNodeCaseSensitive()) {
+                // force column name to be case sensitive name by surround with double quotes
+                colName = "\"" + colName + "\"";
+            }
+            
             Expression dataExpression = expressionParseNode.accept(expressionCompiler);
             PDataType expressionDataType = dataExpression.getDataType();
             ParseNode indexedParseNode = expressionParseNode.accept(rewriter);
             PDataType indexColType = IndexUtil.getIndexColumnDataType(dataExpression.isNullable(), expressionDataType);
-            // use case sensitive name
-            ParseNode columnParseNode = new ColumnParseNode(null, column.getName().getString(), null, true);
+            ParseNode columnParseNode = new ColumnParseNode(null, colName, null);
             if ( indexColType != expressionDataType) {
                 columnParseNode = NODE_FACTORY.cast(columnParseNode, expressionDataType, null, null);
             }

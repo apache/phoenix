@@ -91,9 +91,9 @@ public class ColumnRef {
     }
     
     public ColumnExpression newColumnExpression() {
-        return newColumnExpression(false, false);
+        return newColumnExpression(true, true);
     }
-
+    
     public ColumnExpression newColumnExpression(boolean schemaNameCaseSensitive, boolean colNameCaseSensitive) {
         PTable table = tableRef.getTable();
         PColumn column = this.getColumn();

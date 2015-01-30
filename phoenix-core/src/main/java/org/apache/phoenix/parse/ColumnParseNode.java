@@ -41,13 +41,6 @@ public class ColumnParseNode extends NamedParseNode {
         this.tableName = tableName;
         fullName = tableName == null ? getName() : tableName.toString() + QueryConstants.NAME_SEPARATOR + getName();
     }
-    
-    public ColumnParseNode(TableName tableName, String name, String alias, boolean caseSensitive) {
-        super(name, caseSensitive);
-        this.alias = alias;
-        this.tableName = tableName;
-        fullName = tableName == null ? getName() : tableName.toString() + QueryConstants.NAME_SEPARATOR + getName();
-    }
 
     public ColumnParseNode(TableName tableName, String name) {
         this(tableName, name, null);
