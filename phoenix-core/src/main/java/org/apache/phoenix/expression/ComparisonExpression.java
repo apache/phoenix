@@ -356,13 +356,6 @@ public class ComparisonExpression extends BaseCompoundExpression {
     }
     
     @Override
-    public int getEstimatedByteSize() {
-        int size = super.getEstimatedByteSize();
-        size += WritableUtils.getVIntSize(op.ordinal());
-        return size;
-    }
-
-    @Override
     public final <T> T accept(ExpressionVisitor<T> visitor) {
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
         T t = visitor.visitLeave(this, l);

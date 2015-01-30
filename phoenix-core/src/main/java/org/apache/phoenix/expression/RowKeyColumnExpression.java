@@ -22,12 +22,11 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 
 
@@ -143,13 +142,6 @@ public class RowKeyColumnExpression  extends ColumnExpression {
     public void write(DataOutput output) throws IOException {
         super.write(output);
         accessor.write(output);
-    }
-    
-    @Override
-    public int getEstimatedByteSize() {
-        int size = super.getEstimatedByteSize();
-        size += accessor.getEstimatedByteSize();
-        return size;
     }
     
     @Override

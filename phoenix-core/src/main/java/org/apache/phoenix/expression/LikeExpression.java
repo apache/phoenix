@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -308,11 +307,6 @@ public class LikeExpression extends BaseCompoundExpression {
     @Override
     public void write(DataOutput output) throws IOException {
         super.write(output);
-    }
-    
-    @Override
-    public int getEstimatedByteSize() {
-        return super.getEstimatedByteSize();
     }
 
     @Override

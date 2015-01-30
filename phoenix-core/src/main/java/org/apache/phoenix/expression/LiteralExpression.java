@@ -25,14 +25,14 @@ import java.sql.SQLException;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
 
@@ -276,14 +276,6 @@ public class LiteralExpression extends BaseTerminalExpression {
         int sortOrderAndDeterminism = ((this.determinism.ordinal()+1)<<2) + sortOrder.getSystemValue();
         WritableUtils.writeVInt(output, sortOrderAndDeterminism);
         WritableUtils.writeVInt(output, this.type == null ? -1 : this.type.ordinal());
-    }
-    
-    @Override
-    public int getEstimatedByteSize() {
-        int size = WritableUtils.getVIntSize((byteValue.length + 1) * (this.determinism==Determinism.ALWAYS ? 1 : -1));
-        size += WritableUtils.getVIntSize( ((this.determinism.ordinal()+1)<<2) + sortOrder.getSystemValue());
-        size += WritableUtils.getVIntSize(this.type == null ? -1 : this.type.ordinal());
-        return size;
     }
 
     @Override

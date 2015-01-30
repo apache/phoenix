@@ -17,7 +17,9 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.io.*;
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.text.Format;
 import java.text.ParseException;
@@ -26,14 +28,13 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.parse.*;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.parse.ToDateParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.DateUtil;
 
 
@@ -124,13 +125,6 @@ public class ToDateFunction extends ScalarFunction {
     public void write(DataOutput output) throws IOException {
         super.write(output);
         WritableUtils.writeString(output, dateFormat);
-    }
-    
-    @Override
-    public int getEstimatedByteSize() {
-        int size = super.getEstimatedByteSize();
-        size += ByteUtil.getEstimatedByteSize(dateFormat);
-        return size;
     }
 
     private Expression getExpression() {

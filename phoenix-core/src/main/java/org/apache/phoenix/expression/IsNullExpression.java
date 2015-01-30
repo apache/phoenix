@@ -24,7 +24,6 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -97,13 +96,6 @@ public class IsNullExpression extends BaseSingleExpression {
     public void write(DataOutput output) throws IOException {
         super.write(output);
         output.writeBoolean(isNegate);
-    }
-    
-    @Override
-    public int getEstimatedByteSize() {
-        int size = super.getEstimatedByteSize();
-        size += 1;
-        return size;
     }
 
     @Override

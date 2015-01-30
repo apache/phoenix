@@ -233,24 +233,6 @@ public class InListExpression extends BaseSingleExpression {
     }
 
     @Override
-    public int getEstimatedByteSize() {
-        int size=super.getEstimatedByteSize();
-        size+=1;
-        size+=WritableUtils.getVIntSize(fixedWidth);
-        size+=WritableUtils.getVIntSize(valuesByteLength);
-        for (ImmutableBytesPtr ptr : values) {
-            size+=ptr.getLength();
-        }
-        if (fixedWidth == -1) {
-            size+=WritableUtils.getVIntSize(values.size());
-            for (ImmutableBytesPtr ptr : values) {
-                size+=ptr.getLength();
-            }
-        }
-        return size;
-    }
-
-    @Override
     public final <T> T accept(ExpressionVisitor<T> visitor) {
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
         T t = visitor.visitLeave(this, l);

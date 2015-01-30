@@ -108,6 +108,7 @@ import com.google.common.collect.Sets;
 public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
     private static final int EXPRESSION_NOT_PRESENT = -1;
+    private static final int ESTIMATED_EXPRESSION_SIZE = 8;
 
 	public static IndexMaintainer create(PTable dataTable, PTable index, PhoenixConnection connection) {
         if (dataTable.getType() == PTableType.INDEX || index.getType() != PTableType.INDEX || !dataTable.getIndexes().contains(index)) {
@@ -254,6 +255,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     private List<ImmutableBytesPtr> indexQualifiers;
     private int estimatedIndexRowKeyBytes;
+    private int estimatedExpressionSize;
     private int[] dataPkPosition;
     private int maxTrailingNulls;
     private ColumnReference dataEmptyKeyValueRef;
@@ -331,6 +333,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // data table is with immutable rows or not.
         this.immutableRows = dataTable.isImmutableRows();
         int indexColByteSize = 0;
+        ColumnResolver resolver = null;
+        try {
+            resolver = FromCompiler.getResolver(new TableRef(dataTable));
+        } catch (SQLException e) {
+            throw new RuntimeException(e); // Impossible
+        }
+        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver);
+        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
             PColumn indexColumn = index.getPKColumns().get(i);
             if (!IndexUtil.isIndexColumn(indexColumn)) {
@@ -340,9 +350,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             Expression expression = null;
             try {
                 ParseNode parseNode  = SQLParser.parseCondition(indexColumn.getExpressionStr());
-                ColumnResolver resolver = FromCompiler.getResolver(new TableRef(dataTable));
-                StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver);
-                expression = parseNode.accept(new ExpressionCompiler(context));
+                expression = parseNode.accept(expressionCompiler);
             } catch (SQLException e) {
                 throw new RuntimeException(e); // Impossible
             }
@@ -367,6 +375,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 this.rowKeyMetaData.getDescIndexColumnBitSet().set(indexPos);
             }
         }
+        this.estimatedExpressionSize = expressionCompiler.getTotalNodeCount() * ESTIMATED_EXPRESSION_SIZE;
         for (int i = 0; i < index.getColumnFamilies().size(); i++) {
             PColumnFamily family = index.getColumnFamilies().get(i);
             for (PColumn indexColumn : family.getColumns()) {
@@ -1058,8 +1067,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         size += WritableUtils.getVIntSize(indexedExpressions.size());
         for (Expression expression : indexedExpressions) {
             size += WritableUtils.getVIntSize(ExpressionType.valueOf(expression).ordinal());
-            size += expression.getEstimatedByteSize();
         }
+        size += estimatedExpressionSize;
         return size;
     }
     

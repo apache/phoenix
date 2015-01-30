@@ -126,15 +126,6 @@ public class CoerceExpression extends BaseSingleExpression {
     }
     
     @Override
-    public int getEstimatedByteSize() {
-        int size = super.getEstimatedByteSize();
-        size += WritableUtils.getVIntSize(toType.ordinal());
-        size += WritableUtils.getVIntSize(toSortOrder.getSystemValue());
-        size += WritableUtils.getVIntSize(maxLength == null ? -1 : maxLength);
-        return size;
-    }
-
-    @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (getChild().evaluate(tuple, ptr)) {
             getDataType().coerceBytes(ptr, getChild().getDataType(), getChild().getSortOrder(), getSortOrder(),

@@ -24,12 +24,10 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 
@@ -121,14 +119,6 @@ public class KeyValueColumnExpression extends ColumnExpression {
         Bytes.writeByteArray(output, cq);
     }
     
-    @Override
-    public int getEstimatedByteSize() {
-        int size = super.getEstimatedByteSize();
-        size += ByteUtil.getEstimatedByteSize(cf);
-        size += ByteUtil.getEstimatedByteSize(cq);
-        return size;
-    }
-
     @Override
     public final <T> T accept(ExpressionVisitor<T> visitor) {
         return visitor.visit(this);

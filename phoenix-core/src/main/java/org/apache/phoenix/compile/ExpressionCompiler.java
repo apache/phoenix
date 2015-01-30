@@ -135,6 +135,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     protected final StatementContext context;
     protected final GroupBy groupBy;
     private int nodeCount;
+    private int totalNodeCount;
     private final boolean resolveViewConstants;
 
     public ExpressionCompiler(StatementContext context) {
@@ -166,10 +167,11 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     public void reset() {
         this.isAggregate = false;
         this.nodeCount = 0;
+        this.totalNodeCount = 0;
     }
 
     @Override
-    public boolean visitEnter(ComparisonParseNode node) throws SQLException {
+    public boolean visitEnter(ComparisonParseNode node) {
         return true;
     }
 
@@ -420,6 +422,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     @Override
     public void addElement(List<Expression> l, Expression element) {
         nodeCount--;
+        totalNodeCount++;
         l.add(element);
     }
 
@@ -1253,5 +1256,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     public Expression visit(SubqueryParseNode node) throws SQLException {
         Object result = context.getSubqueryResult(node.getSelectNode());
         return LiteralExpression.newConstant(result);
+    }
+    
+    public int getTotalNodeCount() {
+        return totalNodeCount;
     }
 }

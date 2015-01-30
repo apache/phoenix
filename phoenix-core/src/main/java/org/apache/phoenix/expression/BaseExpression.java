@@ -33,12 +33,12 @@ import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 
 import com.google.common.collect.Lists;
 
@@ -217,11 +217,6 @@ public abstract class BaseExpression implements Expression {
     public void write(DataOutput output) throws IOException {
     }
     
-    @Override
-    public int getEstimatedByteSize() {
-        return 0;
-    }
-
     @Override
     public void reset() {
     }

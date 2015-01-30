@@ -22,9 +22,9 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * 
@@ -128,19 +128,4 @@ abstract public class ColumnExpression extends BaseTerminalExpression {
         WritableUtils.writeVInt(output, sortOrder.getSystemValue());
     }
     
-    @Override
-    public int getEstimatedByteSize() {
-        int size = 0;
-        int typeAndFlag = (isNullable ? 1 : 0) | ((scale != null ? 1 : 0) << 1) | ((maxLength != null ? 1 : 0) << 2)
-                | (type.ordinal() << 3);
-        size += WritableUtils.getVIntSize(typeAndFlag);
-        if (scale != null) {
-            size += WritableUtils.getVIntSize(scale);
-        }
-        if (maxLength != null) {
-            size += WritableUtils.getVIntSize(maxLength);
-        }
-        size += WritableUtils.getVIntSize(sortOrder.getSystemValue());
-        return size;
-    }
 }

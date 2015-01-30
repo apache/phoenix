@@ -158,13 +158,6 @@ public class CaseExpression extends BaseCompoundExpression {
         WritableUtils.writeVInt(output, this.returnType.ordinal());
     }
     
-    @Override
-    public int getEstimatedByteSize() {
-        int size = super.getEstimatedByteSize();
-        size += WritableUtils.getVIntSize(this.returnType.ordinal());
-        return size;
-    }
-    
     public int evaluateIndexOf(Tuple tuple, ImmutableBytesWritable ptr) {
         if (foundIndex) {
             return evalIndex;
