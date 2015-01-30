@@ -34,6 +34,7 @@ import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.cloudera.htrace.Span;
+import org.cloudera.htrace.Trace;
 
 
 abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
@@ -138,24 +139,39 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 return s;
             }
             boolean success =false;
-            // turn on tracing, if its enabled
-            final Span child = Tracing.childOnServer(scan, rawConf, SCANNER_OPENED_TRACE_INFO);
+            // Save the current span. When done with the child span, reset the span back to
+            // what it was. Otherwise, this causes the thread local storing the current span 
+            // to not be reset back to null causing catastrophic infinite loops
+            // and region servers to crash. See https://issues.apache.org/jira/browse/PHOENIX-1596
+            // TraceScope can't be used here because closing the scope will end up calling 
+            // currentSpan.stop() and that should happen only when we are closing the scanner.
+            final Span savedSpan = Trace.currentSpan();
+            final Span child = Trace.startSpan(SCANNER_OPENED_TRACE_INFO, savedSpan).getSpan();
             try {
                 RegionScanner scanner = doPostScannerOpen(c, scan, s);
                 scanner = new DelegateRegionScanner(scanner) {
+                    // This isn't very obvious but close() could be called in a thread
+                    // that is different from the thread that created the scanner.
                     @Override
                     public void close() throws IOException {
-                        if (child != null) {
-                            child.stop();
+                        try {
+                            delegate.close();
+                        } finally {
+                            if (child != null) {
+                                child.stop();
+                            }
                         }
-                        delegate.close();
                     }
                 };
                 success = true;
                 return scanner;
             } finally {
-                if (!success && child != null) {
-                    child.stop();
+                try {
+                    if (!success && child != null) {
+                        child.stop();
+                    }
+                } finally {
+                    Trace.continueSpan(savedSpan);
                 }
             }
         } catch (Throwable t) {
