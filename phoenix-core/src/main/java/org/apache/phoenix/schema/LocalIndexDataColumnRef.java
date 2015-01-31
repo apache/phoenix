@@ -61,7 +61,7 @@ public class LocalIndexDataColumnRef extends ColumnRef {
     }
 
     @Override
-    public ColumnExpression newColumnExpression() {
+    public ColumnExpression newColumnExpression(boolean schemaNameCaseSensitive, boolean colNameCaseSensitive) {
         PTable table = this.getTable();
         PColumn column = this.getColumn();
         // TODO: util for this or store in member variable

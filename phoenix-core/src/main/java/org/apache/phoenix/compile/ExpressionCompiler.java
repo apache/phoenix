@@ -387,7 +387,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (tableRef.equals(context.getCurrentTable()) && !SchemaUtil.isPKColumn(column)) { // project only kv columns
             context.getScan().addColumn(column.getFamilyName().getBytes(), column.getName().getBytes());
         }
-        Expression expression = ref.newColumnExpression();
+        Expression expression = ref.newColumnExpression(node.isTableNameCaseSensitive(), node.isCaseSensitive());
         Expression wrappedExpression = wrapGroupByExpression(expression);
         // If we're in an aggregate expression
         // and we're not in the context of an aggregate function
