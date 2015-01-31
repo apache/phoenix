@@ -23,20 +23,30 @@ import org.apache.phoenix.util.SchemaUtil;
 public class TableName {
     private final String tableName;
     private final String schemaName;
+    private final boolean isTableNameCaseSensitive;
+    private final boolean isSchemaNameCaseSensitive;
     
     public static TableName createNormalized(String schemaName, String tableName) {
-        schemaName = schemaName == null ? null : SchemaUtil.normalizeIdentifier(schemaName);
-        tableName = SchemaUtil.normalizeIdentifier(tableName);
-        return new TableName(schemaName, tableName);
+        return new TableName(schemaName, tableName, true);
     }
     
     public static TableName create(String schemaName, String tableName) {
-        return new TableName(schemaName,tableName);
+        return new TableName(schemaName, tableName, false);
     }
     
-    private TableName(String schemaName, String tableName) {
-        this.schemaName = schemaName;
-        this.tableName = tableName;
+    private TableName(String schemaName, String tableName, boolean normalize) {
+        this.schemaName = normalize ? SchemaUtil.normalizeIdentifier(schemaName) : schemaName;
+        this.isSchemaNameCaseSensitive = normalize ? SchemaUtil.isCaseSensitive(schemaName) : false;
+        this.tableName = normalize ? SchemaUtil.normalizeIdentifier(tableName) : tableName;
+        this.isTableNameCaseSensitive = normalize ? SchemaUtil.isCaseSensitive(tableName) : false;
+    }
+    
+    public boolean isTableNameCaseSensitive() {
+        return isTableNameCaseSensitive;
+    }
+
+    public boolean isSchemaNameCaseSensitive() {
+        return isSchemaNameCaseSensitive;
     }
 
     public String getTableName() {

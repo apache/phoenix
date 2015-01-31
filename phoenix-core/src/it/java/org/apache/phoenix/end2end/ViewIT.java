@@ -245,6 +245,33 @@ public class ViewIT extends BaseViewIT {
     }
     
     @Test
+    public void testReadOnlyViewWithCaseSensitiveColumnNames() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE t (\"k\" INTEGER NOT NULL PRIMARY KEY, \"v1\" INTEGER, \"a\".v2 VARCHAR)";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v (v VARCHAR) AS SELECT * FROM t WHERE \"k\" > 5 and \"v1\" > 1";
+        conn.createStatement().execute(ddl);
+        try {
+            conn.createStatement().execute("UPSERT INTO v VALUES(1)");
+            fail();
+        } catch (ReadOnlyTableException e) {
+            
+        }
+        for (int i = 0; i < 10; i++) {
+            conn.createStatement().execute("UPSERT INTO t VALUES(" + i + ", " + (i+10) + ",'A')");
+        }
+        conn.commit();
+        
+        int count = 0;
+        ResultSet rs = conn.createStatement().executeQuery("SELECT \"k\", \"v1\",\"a\".v2 FROM v");
+        while (rs.next()) {
+            count++;
+            assertEquals(count + 5, rs.getInt(1));
+        }
+        assertEquals(4, count);
+    }
+    
+    @Test
     public void testViewAndTableInDifferentSchemas() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE s1.t (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)";

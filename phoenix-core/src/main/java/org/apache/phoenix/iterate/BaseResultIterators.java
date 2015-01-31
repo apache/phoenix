@@ -66,7 +66,6 @@ import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -482,7 +481,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         boolean success = false;
         boolean isReverse = ScanUtil.isReversed(scan);
         final ConnectionQueryServices services = context.getConnection().getQueryServices();
-        ReadOnlyProps props = services.getProps();
         int numScans = size();
         // Capture all iterators so that if something goes wrong, we close them all
         // The iterators list is based on the submission of work, so it may not

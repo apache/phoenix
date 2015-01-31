@@ -111,14 +111,14 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "AND\n" +
                 "    SORT-MERGE-JOIN (INNER) TABLES\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER SORTED BY [I.item_id]\n" +
+                "            SERVER SORTED BY [\"I.item_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    AND (SKIP MERGE)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
-                "            SERVER SORTED BY [O.item_id]\n" +
+                "            SERVER SORTED BY [\"O.item_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    CLIENT SORTED BY [I.supplier_id]",
+                "    CLIENT SORTED BY [\"I.supplier_id\"]",
                 }});
         testCases.add(new String[][] {
                 {
@@ -128,19 +128,19 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 }, {
                 "SORT-MERGE-JOIN (LEFT) TABLES\n" +
                 "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_supplier\n" +
-                "        SERVER SORTED BY [S.:supplier_id]\n" +
+                "        SERVER SORTED BY [\"S.:supplier_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND\n" +
                 "    SORT-MERGE-JOIN (INNER) TABLES\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
-                "            SERVER SORTED BY [I.:item_id]\n" +
+                "            SERVER SORTED BY [\"I.:item_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    AND (SKIP MERGE)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
-                "            SERVER SORTED BY [O.item_id]\n" +
+                "            SERVER SORTED BY [\"O.item_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    CLIENT SORTED BY [I.0:supplier_id]"
+                "    CLIENT SORTED BY [\"I.0:supplier_id\"]"
                 }});
         return testCases;
     }

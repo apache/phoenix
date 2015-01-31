@@ -267,7 +267,7 @@ public class IndexUtil {
         PhoenixStatement statement = new PhoenixStatement(conn);
         TableRef indexTableRef = new TableRef(index) {
             @Override
-            public String getColumnDisplayName(ColumnRef ref) {
+            public String getColumnDisplayName(ColumnRef ref, boolean cfCaseSensitive, boolean cqCaseSensitive) {
                 return '"' + ref.getColumn().getName().getString() + '"';
             }
         };
