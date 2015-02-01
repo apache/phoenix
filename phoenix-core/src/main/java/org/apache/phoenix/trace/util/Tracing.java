@@ -254,6 +254,12 @@ public class Tracing {
         } catch (RuntimeException e) {
             LOG.warn("Tracing will outputs will not be written to any metrics sink! No "
                     + "TraceMetricsSink found on the classpath", e);
+        } catch (IllegalAccessError e) {
+            // This is an issue when we have a class incompatibility error, such as when running
+            // within SquirrelSQL which uses an older incompatible version of commons-collections.
+            // Seeing as this only results in disabling tracing, we swallow this exception and just
+            // continue on without tracing.
+            LOG.warn("Class incompatibility while initializing metrics, metrics will be disabled", e);
         }
         initialized = true;
     }
