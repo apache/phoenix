@@ -194,7 +194,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     private int getDefaultQueryTimeout() {
         // Convert milliseconds to seconds by taking the CEIL up to the next second
-        return (connection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,  
+        return (connection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, 
             QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS) + 999) / 1000;
     }
 
