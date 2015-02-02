@@ -118,7 +118,7 @@ public class KeyValueColumnExpression extends ColumnExpression {
         Bytes.writeByteArray(output, cf);
         Bytes.writeByteArray(output, cq);
     }
-    
+
     @Override
     public final <T> T accept(ExpressionVisitor<T> visitor) {
         return visitor.visit(this);

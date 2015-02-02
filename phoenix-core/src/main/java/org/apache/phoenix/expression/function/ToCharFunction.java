@@ -17,26 +17,24 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.*;
 import java.sql.SQLException;
 import java.text.Format;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
+
+import com.google.common.base.Preconditions;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.parse.ToCharParseNode;
-import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.parse.*;
 import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
-
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.schema.tuple.Tuple;
 
 
 /**

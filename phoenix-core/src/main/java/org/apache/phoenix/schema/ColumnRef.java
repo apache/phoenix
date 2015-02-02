@@ -91,7 +91,7 @@ public class ColumnRef {
     }
     
     public ColumnExpression newColumnExpression() {
-        return newColumnExpression(true, true);
+        return newColumnExpression(false, false);
     }
     
     public ColumnExpression newColumnExpression(boolean schemaNameCaseSensitive, boolean colNameCaseSensitive) {

@@ -24,9 +24,9 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PDataType;
 
 public class DelegateExpression implements Expression {
     private final Expression delegate;

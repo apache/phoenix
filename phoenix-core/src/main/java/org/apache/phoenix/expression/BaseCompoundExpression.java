@@ -122,7 +122,7 @@ public abstract class BaseCompoundExpression extends BaseExpression {
             child.write(output);
         }
     }
-    
+
     @Override
     public void reset() {
         for (int i = 0; i < children.size(); i++) {

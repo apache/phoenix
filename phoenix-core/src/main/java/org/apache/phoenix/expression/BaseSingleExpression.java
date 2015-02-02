@@ -67,7 +67,7 @@ public abstract class BaseSingleExpression extends BaseExpression {
         WritableUtils.writeVInt(output, ExpressionType.valueOf(children.get(0)).ordinal());
         children.get(0).write(output);
     }
-    
+
     @Override
     public boolean isNullable() {
         return children.get(0).isNullable();

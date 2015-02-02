@@ -22,9 +22,9 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * 
@@ -118,7 +118,7 @@ abstract public class ColumnExpression extends BaseTerminalExpression {
         // read/write type ordinal, maxLength presence, scale presence and isNullable bit together to save space
         int typeAndFlag = (isNullable ? 1 : 0) | ((scale != null ? 1 : 0) << 1) | ((maxLength != null ? 1 : 0) << 2)
                 | (type.ordinal() << 3);
-        WritableUtils.writeVInt(output, typeAndFlag);
+        WritableUtils.writeVInt(output,typeAndFlag);
         if (scale != null) {
             WritableUtils.writeVInt(output, scale);
         }
@@ -127,5 +127,4 @@ abstract public class ColumnExpression extends BaseTerminalExpression {
         }
         WritableUtils.writeVInt(output, sortOrder.getSystemValue());
     }
-    
 }

@@ -940,12 +940,6 @@ public class MetaDataClient {
                     PColumn column = pkColumns.get(i);
 					unusedPkColumns.add(new RowKeyColumnExpression(column, new RowKeyValueAccessor(pkColumns, i), column.getName().getString()));
                 }
-//                if (dataTable.getBucketNum() != null) { // Ignore SALT column
-//                    unusedPkColumns = new LinkedHashSet<PColumn>(dataTable.getPKColumns().subList(1, dataTable.getPKColumns().size()));
-//                    posOffset++;
-//                } else {
-//                    unusedPkColumns = new LinkedHashSet<PColumn>(dataTable.getPKColumns());
-//                }
                 List<Pair<ColumnName, SortOrder>> allPkColumns = Lists.newArrayListWithExpectedSize(unusedPkColumns.size());
                 List<ColumnDef> columnDefs = Lists.newArrayListWithExpectedSize(includedColumns.size() + indexParseNodeAndSortOrderList.size());
                 
@@ -975,16 +969,6 @@ public class MetaDataClient {
                 Set<ColumnName> indexedColumnNames = Sets.newHashSetWithExpectedSize(indexParseNodeAndSortOrderList.size());
                 for (Pair<ParseNode, SortOrder> pair : indexParseNodeAndSortOrderList) {
                 	ParseNode parseNode = pair.getFirst();
-//                	// if it is a column 
-//                	if (parseNode instanceof ColumnParseNode) {
-//                		ColumnParseNode colParseNode = (ColumnParseNode)parseNode;
-//	                    PColumn col = resolver.resolveColumn(null, colParseNode.getTableName(), colParseNode.getName()).getColumn();
-//	                    unusedPkColumns.remove(col);
-//	                    // Ignore view constants for updatable views as we don't need these in the index
-//	                    if (col.getViewConstant() != null) 
-//	                    	continue;
-//	                    colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
-//                	}
             	    // compile the parseNode to get an expression
                     PhoenixStatement phoenixStatment = new PhoenixStatement(connection);
                     final StatementContext context = new StatementContext(phoenixStatment, resolver);

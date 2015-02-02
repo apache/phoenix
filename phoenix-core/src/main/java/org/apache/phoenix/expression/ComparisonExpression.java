@@ -354,7 +354,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         WritableUtils.writeVInt(output, op.ordinal());
         super.write(output);
     }
-    
+
     @Override
     public final <T> T accept(ExpressionVisitor<T> visitor) {
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
