@@ -78,6 +78,10 @@ public class RowKeyColumnExpression  extends ColumnExpression {
     public int getPosition() {
         return accessor.getIndex();
     }
+    
+    public String getName() {
+        return name;
+    }
 
     @Override
     public int hashCode() {

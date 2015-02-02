@@ -72,10 +72,6 @@ public class ExpressionIndexParseNodeRewriter extends ParseNodeRewriter {
                 continue;
             }
             ParseNode expressionParseNode = SQLParser.parseCondition(column.getExpressionStr());
-            // ignore regular columns
-            if (expressionParseNode instanceof ColumnParseNode) {
-                continue;
-            }
             columnParseNodeVisitor.reset();
             expressionParseNode.accept(columnParseNodeVisitor);
             String colName = column.getName().getString();

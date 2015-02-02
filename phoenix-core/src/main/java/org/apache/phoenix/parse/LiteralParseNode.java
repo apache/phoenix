@@ -99,16 +99,6 @@ public class LiteralParseNode extends TerminalParseNode {
 		if (getClass() != obj.getClass())
 			return false;
 		LiteralParseNode other = (LiteralParseNode) obj;
-		if (type == null) {
-			if (other.type != null)
-				return false;
-		} else if (!type.equals(other.type))
-			return false;
-		if (value == null) {
-			if (other.value != null)
-				return false;
-		} else if (!value.equals(other.value))
-			return false;
-		return true;
+		return type.isComparableTo(other.type) && type.compareTo(value, other.value, other.type) == 0;
 	}
 }
