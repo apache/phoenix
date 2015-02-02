@@ -26,8 +26,6 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Comparator;
 
-import javax.management.RuntimeErrorException;
-
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -575,28 +573,4 @@ public class ByteUtil {
             throw new IllegalArgumentException("Unknown operator " + op);
         }
     }
-    
-    public static int getEstimatedByteSize(String s) {
-        int stringByteLength = getSize(s);
-        int size = WritableUtils.getVIntSize(stringByteLength);
-        size += stringByteLength;
-        return size;
-    }
-
-    public static int getEstimatedByteSize(Enum<?> enumVal) {
-        return getEstimatedByteSize(enumVal.name());
-    }
-
-    public static int getEstimatedByteSize(byte[] b) {
-        return b == null ? 0 : WritableUtils.getVIntSize(b.length) + b.length;
-    }
-
-    public static int getEstimatedByteSize(int[] intArray, int encodedLength) {
-        int size = WritableUtils.getVIntSize(WritableUtils.getVIntSize(encodedLength));
-        for (int i = 0; i < intArray.length; i++) {
-            size+=WritableUtils.getVIntSize(intArray[i]);
-        }
-        return size;
-    }
-   
 }

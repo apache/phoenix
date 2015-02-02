@@ -150,14 +150,6 @@ public class RowKeyValueAccessor implements Writable   {
         ByteUtil.serializeVIntArray(output, offsets, length);
     }
     
-    public int getEstimatedByteSize() {
-        // Encode hasSeparator and isFixedLength into vint storing offset array length
-        // (since there's plenty of room)
-        int length = offsets.length << 2;
-        length |= (hasSeparator ? 1 << 1 : 0) | (isFixedLength ? 1 : 0);
-        return ByteUtil.getEstimatedByteSize(offsets, length);
-    }
-    
     /**
      * Calculate the byte offset in the row key to the start of the PK column value
      * @param keyBuffer the byte array of the row key
