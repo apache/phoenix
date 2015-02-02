@@ -1423,13 +1423,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                             IndexMaintainer indexMaintainer = index.getIndexMaintainer(table, connection);
                                             // get the columns required to create the index 
                                             Set<ColumnReference> indexColumns = indexMaintainer.getIndexedColumns();
-//                                            String indexColumnName = IndexUtil.getIndexColumnName(columnToDelete);
-//                                            PColumn indexColumn = index.getColumn(indexColumnName);
                                             byte[] indexKey =
                                                     SchemaUtil.getTableKey(tenantId, index
                                                             .getSchemaName().getBytes(), index.getTableName().getBytes());
-                                            // If index contains the column in it's PK, then drop it
-//                                            if (SchemaUtil.isPKColumn(indexColumn)) {
+                                            // If index requires this column, then drop it
                                             if (indexColumns.contains(new ColumnReference(columnToDelete.getFamilyName().getBytes(), columnToDelete.getName().getBytes()))) {
                                                 // Since we're dropping the index, lock it to ensure
                                                 // that a change in index state doesn't
