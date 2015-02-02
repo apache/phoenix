@@ -17,12 +17,6 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -41,6 +35,12 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class CsvBulkLoadToolIT {
@@ -191,17 +191,62 @@ public class CsvBulkLoadToolIT {
         rs.close();
         stmt.close();
     }
-    
+
     @Test
-    public void testImportOneIndexTable() throws Exception {
+    public void testImportWithLocalIndex() throws Exception {
 
         Statement stmt = conn.createStatement();
-        stmt.execute("CREATE TABLE TABLE4 (ID INTEGER NOT NULL PRIMARY KEY, " +
-            "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
-        String ddl = "CREATE INDEX TABLE4_IDX ON TABLE4 "
+        stmt.execute("CREATE TABLE TABLE6 (ID INTEGER NOT NULL PRIMARY KEY, " +
+                "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
+        String ddl = "CREATE LOCAL INDEX TABLE6_IDX ON TABLE6 "
                 + " (FIRST_NAME ASC)";
         stmt.execute(ddl);
-        
+
+        FileSystem fs = FileSystem.get(hbaseTestUtil.getConfiguration());
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input3.csv"));
+        PrintWriter printWriter = new PrintWriter(outputStream);
+        printWriter.println("1,FirstName 1,LastName 1");
+        printWriter.println("2,FirstName 2,LastName 2");
+        printWriter.close();
+
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(hbaseTestUtil.getConfiguration());
+        int exitCode = csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/input3.csv",
+                "--table", "table6",
+                "--zookeeper", zkQuorum});
+        assertEquals(0, exitCode);
+
+        ResultSet rs = stmt.executeQuery("SELECT id, FIRST_NAME FROM TABLE6 where first_name='FirstName 2'");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("FirstName 2", rs.getString(2));
+
+        rs.close();
+        stmt.close();
+    }
+
+    @Test
+    public void testImportOneIndexTable() throws Exception {
+        testImportOneIndexTable("TABLE4", false);
+    }
+
+    @Test
+    public void testImportOneLocalIndexTable() throws Exception {
+        testImportOneIndexTable("TABLE5", true);
+    }
+
+    public void testImportOneIndexTable(String tableName, boolean localIndex) throws Exception {
+
+        String indexTableName = String.format("%s_IDX", tableName);
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE " + tableName + "(ID INTEGER NOT NULL PRIMARY KEY, "
+                + "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
+        String ddl =
+                "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexTableName + " ON "
+                        + tableName + "(FIRST_NAME ASC)";
+        stmt.execute(ddl);
+
         FileSystem fs = FileSystem.get(hbaseTestUtil.getConfiguration());
         FSDataOutputStream outputStream = fs.create(new Path("/tmp/input4.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
@@ -213,14 +258,14 @@ public class CsvBulkLoadToolIT {
         csvBulkLoadTool.setConf(hbaseTestUtil.getConfiguration());
         int exitCode = csvBulkLoadTool.run(new String[] {
                 "--input", "/tmp/input4.csv",
-                "--table", "table4",
-                "--index-table", "TABLE4_IDX",
-                "--zookeeper", zkQuorum});
+                "--table", tableName,
+                "--index-table", indexTableName,
+                "--zookeeper", zkQuorum });
         assertEquals(0, exitCode);
 
-        ResultSet rs = stmt.executeQuery("SELECT * FROM TABLE4");
+        ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
         assertFalse(rs.next());
-        rs = stmt.executeQuery("SELECT FIRST_NAME FROM TABLE4 where FIRST_NAME='FirstName 1'");
+        rs = stmt.executeQuery("SELECT FIRST_NAME FROM " + tableName + " where FIRST_NAME='FirstName 1'");
         assertTrue(rs.next());
         assertEquals("FirstName 1", rs.getString(1));
 
