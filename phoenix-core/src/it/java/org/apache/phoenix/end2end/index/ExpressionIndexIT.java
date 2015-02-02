@@ -856,7 +856,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
         assertEquals("a",rs.getString(1));
         assertEquals("2",rs.getString(2));
         assertFalse(rs.next());
-        conn.createStatement().execute("DROP INDEX ICS ON CS");
+        conn.createStatement().execute("DROP TABLE \"CS\"");
     }
     
     private static void assertIndexExists(Connection conn, boolean exists) throws SQLException {
