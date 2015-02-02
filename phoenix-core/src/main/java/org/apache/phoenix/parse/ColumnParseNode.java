@@ -58,10 +58,6 @@ public class ColumnParseNode extends NamedParseNode {
     public String getSchemaName() {
         return tableName == null ? null : tableName.getSchemaName();
     }
-    
-    public boolean isTableNameCaseSensitive() {
-        return tableName == null ? false : tableName.isTableNameCaseSensitive();
-    }
 
     public String getFullName() {
         return fullName;
@@ -89,5 +85,9 @@ public class ColumnParseNode extends NamedParseNode {
         if (getClass() != obj.getClass()) return false;
         ColumnParseNode other = (ColumnParseNode)obj;
         return fullName.equals(other.fullName);
+    }
+    
+    public boolean isTableNameCaseSensitive() {
+        return tableName == null ? false : tableName.isTableNameCaseSensitive();
     }
 }
