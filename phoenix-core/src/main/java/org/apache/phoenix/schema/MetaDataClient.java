@@ -962,16 +962,17 @@ public class MetaDataClient {
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, SortOrder.getDefault()));
                     columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), false, null, null, false, SortOrder.getDefault(), null));
                 }
-                // First columns are the indexed ones
+                
+                PhoenixStatement phoenixStatment = new PhoenixStatement(connection);
+                StatementContext context = new StatementContext(phoenixStatment, resolver);
+                ExpressionIndexCompiler expressionIndexCompiler = new ExpressionIndexCompiler(context);
                 Set<ColumnName> indexedColumnNames = Sets.newHashSetWithExpectedSize(indexParseNodeAndSortOrderList.size());
                 for (Pair<ParseNode, SortOrder> pair : indexParseNodeAndSortOrderList) {
                 	ParseNode parseNode = pair.getFirst();
-            	    // compile the parseNode to get an expression
-                    PhoenixStatement phoenixStatment = new PhoenixStatement(connection);
-                    final StatementContext context = new StatementContext(phoenixStatment, resolver);
                     // normalize the parse node
                     parseNode = StatementNormalizer.normalize(parseNode, resolver);
-                    ExpressionIndexCompiler expressionIndexCompiler = new ExpressionIndexCompiler(context);
+                    // compile the parseNode to get an expression
+                    expressionIndexCompiler.reset();
                     Expression expression = parseNode.accept(expressionIndexCompiler);   
                     if (expressionIndexCompiler.isAggregate()) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
@@ -987,14 +988,16 @@ public class MetaDataClient {
                     
                     ColumnName colName = null;
                     ColumnRef colRef = expressionIndexCompiler.getColumnRef();
-					if (colRef!=null) {  // if this is a regular column
+					if (colRef!=null) { 
+						// if this is a regular column
 					    PColumn column = colRef.getColumn();
 					    String columnFamilyName = column.getFamilyName()!=null ? column.getFamilyName().getString() : null;
 					    colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(columnFamilyName, column.getName().getString()));
 					}
-					else { // if this is an expression
-					    // TODO name cannot have double quotes, remove this once this is fixed
-					    String name = expression.toString().replaceAll("\"", Matcher.quoteReplacement("\\\""));
+					else { 
+						// if this is an expression
+					    // TODO column names cannot have double quotes, remove this once this PHOENIX-1621 is fixed
+						String name = expression.toString().replaceAll("\"", "'");
                         colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, name));
 					}
 					indexedColumnNames.add(colName);
