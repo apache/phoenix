@@ -23,6 +23,7 @@ import java.text.Format;
 import java.text.ParseException;
 import java.util.List;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 
@@ -53,13 +54,13 @@ import org.apache.phoenix.util.DateUtil;
                 @Argument(allowedTypes={PVarchar.class}, isConstant=true, defaultValue = "null") } )
 public class ToDateFunction extends ScalarFunction {
     public static final String NAME = "TO_DATE";
-    private Format dateParser;
+    private DateUtil.DateTimeParser dateParser;
     private String dateFormat;
 
     public ToDateFunction() {
     }
 
-    public ToDateFunction(List<Expression> children, String dateFormat, Format dateParser) throws SQLException {
+    public ToDateFunction(List<Expression> children, String dateFormat, DateUtil.DateTimeParser dateParser) throws SQLException {
         super(children.subList(0, 1));
         this.dateFormat = dateFormat;
         this.dateParser = dateParser;
@@ -93,14 +94,10 @@ public class ToDateFunction extends ScalarFunction {
         }
         PDataType type = expression.getDataType();
         String dateStr = (String)type.toObject(ptr, expression.getSortOrder());
-        try {
-            Object value = dateParser.parseObject(dateStr);
-            byte[] byteValue = getDataType().toBytes(value);
-            ptr.set(byteValue);
-            return true;
-        } catch (ParseException e) {
-            throw new IllegalStateException("to_date('" + dateStr + ")' did not match expected date format of '" + dateFormat + "'.");
-        }
+        Object value = dateParser.parseDateTime(dateStr);
+        byte[] byteValue = getDataType().toBytes(value);
+        ptr.set(byteValue);
+        return true;
      }
 
     @Override

@@ -20,9 +20,16 @@ package org.apache.phoenix.util.csv;
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PTime;
+import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,9 +38,12 @@ import javax.annotation.Nullable;
 import java.io.Closeable;
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Properties;
+import java.util.TimeZone;
 
 /**
  * Executes upsert statements on a provided {@code PreparedStatement} based on incoming CSV records, notifying a
@@ -175,24 +185,43 @@ public class CsvUpsertExecutor implements Closeable {
                             arrayElementSeparator,
                             PDataType.fromTypeId(dataType.getSqlType() - PDataType.ARRAY_TYPE_BASE)));
         } else {
-            return new SimpleDatatypeConversionFunction(dataType);
+            return new SimpleDatatypeConversionFunction(dataType, this.conn);
         }
     }
 
     /**
      * Performs typed conversion from String values to a given column value type.
      */
-    private static class SimpleDatatypeConversionFunction implements Function<String, Object> {
+    static class SimpleDatatypeConversionFunction implements Function<String, Object> {
 
         private final PDataType dataType;
+        private final DateUtil.DateTimeParser dateTimeParser;
 
-        private SimpleDatatypeConversionFunction(PDataType dataType) {
+        SimpleDatatypeConversionFunction(PDataType dataType, Connection conn) {
+            Properties props = null;
+            try {
+                props = conn.getClientInfo();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
             this.dataType = dataType;
+            if(dataType.equals(PDate.INSTANCE) || dataType.equals(PTime.INSTANCE) || dataType.equals(PTimestamp.INSTANCE)) {
+                String dateFormat = props.getProperty(QueryServices.DATE_FORMAT_ATTRIB,
+                        QueryServicesOptions.DEFAULT_DATE_FORMAT);
+                String timeZoneId = props.getProperty(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
+                        QueryServicesOptions.DEFAULT_DATE_FORMAT_TIMEZONE);
+                this.dateTimeParser = DateUtil.getDateParser(dateFormat, timeZoneId);
+            } else {
+                this.dateTimeParser = null;
+            }
         }
 
         @Nullable
         @Override
         public Object apply(@Nullable String input) {
+            if(dateTimeParser != null) {
+                return dateTimeParser.parseDateTime(input);
+            }
             return dataType.toObject(input);
         }
     }

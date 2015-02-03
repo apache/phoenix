@@ -20,6 +20,7 @@ package org.apache.phoenix.util.csv;
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Properties;
 
 import javax.annotation.Nullable;
 
@@ -29,6 +30,7 @@ import com.google.common.base.Function;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import org.apache.phoenix.util.DateUtil;
 
 /**
  * Converts strings with delimited values into Phoenix arrays.
@@ -38,7 +40,7 @@ class StringToArrayConverter {
     private final Splitter splitter;
     private final Connection conn;
     private final PDataType elementDataType;
-    private final ElementConvertFunction elementConvertFunction;
+    private final CsvUpsertExecutor.SimpleDatatypeConversionFunction elementConvertFunction;
 
     /**
      * Instantiate with the array value separator and data type.
@@ -52,7 +54,7 @@ class StringToArrayConverter {
         this.conn = conn;
         this.splitter = Splitter.on(separatorString);
         this.elementDataType = elementDataType;
-        this.elementConvertFunction = new ElementConvertFunction(elementDataType);
+        this.elementConvertFunction = new CsvUpsertExecutor.SimpleDatatypeConversionFunction(elementDataType, this.conn);
     }
 
     /**
@@ -71,23 +73,5 @@ class StringToArrayConverter {
                         Iterables.transform(
                                 splitter.split(input),
                                 elementConvertFunction)).toArray());
-    }
-
-    /**
-     * Converts incoming string values into their typed equivalent.
-     */
-    private static class ElementConvertFunction implements Function<String, Object> {
-
-        private final PDataType pdataType;
-
-        private ElementConvertFunction(PDataType pdataType) {
-            this.pdataType = pdataType;
-        }
-
-        @Nullable
-        @Override
-        public Object apply(@Nullable String input) {
-            return pdataType.toObject(input);
-        }
     }
 }

@@ -83,6 +83,8 @@ public class PTimestamp extends PDataType<Timestamp> {
           (bd.remainder(BigDecimal.ONE).multiply(QueryConstants.BD_MILLIS_NANOS_CONVERSION))
               .intValue();
       return DateUtil.getTimestamp(ms, nanos);
+    } else if (actualType == PVarchar.INSTANCE) {
+      return new Timestamp(DateUtil.parseDateTime((String) object).getTime());
     }
     return throwConstraintViolationException(actualType, this);
   }

@@ -28,6 +28,9 @@ import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PTime;
+import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.schema.SortOrder;
@@ -160,7 +163,11 @@ public class LiteralExpression extends BaseTerminalExpression {
         PDataType actualType = PDataType.fromLiteral(value);
         // For array we should check individual element in it?
         // It would be costly though!!!!!
-        if (!actualType.isCoercibleTo(type, value)) {
+        // UpsertStatement can try to cast varchar to date type but PVarchar can't CoercibleTo Date or Timestamp
+        // otherwise TO_NUMBER like functions will fail
+        if (!actualType.isCoercibleTo(type, value) &&
+                (!actualType.equals(PVarchar.INSTANCE) ||
+                        !(type.equals(PDate.INSTANCE) || type.equals(PTimestamp.INSTANCE) || type.equals(PTime.INSTANCE)))) {
             throw TypeMismatchException.newException(type, actualType, value.toString());
         }
         value = type.toObject(value, actualType);

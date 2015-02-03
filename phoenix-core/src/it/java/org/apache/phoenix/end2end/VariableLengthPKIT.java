@@ -51,16 +51,11 @@ import org.junit.Test;
 
 
 public class VariableLengthPKIT extends BaseClientManagedTimeIT {
-    private static Format format = DateUtil.getDateParser(DateUtil.DEFAULT_DATE_FORMAT);
     private static final String DS1 = "1970-01-01 00:58:00";
     private static final Date D1 = toDate(DS1);
 
     private static Date toDate(String dateString) {
-        try {
-            return (Date)format.parseObject(dateString);
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        }
+        return DateUtil.parseDateTime(dateString);
     }
 
     protected static void initGroupByRowKeyColumns(long ts) throws Exception {

@@ -17,6 +17,13 @@
  */
 package org.apache.phoenix.mapreduce;
 
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -30,6 +37,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -89,30 +97,33 @@ public class CsvBulkLoadToolIT {
     public void testBasicImport() throws Exception {
 
         Statement stmt = conn.createStatement();
-        stmt.execute("CREATE TABLE TABLE1 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR)");
+        stmt.execute("CREATE TABLE TABLE1 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, T DATE)");
 
         FileSystem fs = FileSystem.get(hbaseTestUtil.getConfiguration());
         FSDataOutputStream outputStream = fs.create(new Path("/tmp/input1.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
-        printWriter.println("1,Name 1");
-        printWriter.println("2,Name 2");
+        printWriter.println("1,Name 1,1970/01/01");
+        printWriter.println("2,Name 2,1970/01/02");
         printWriter.close();
 
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
-        csvBulkLoadTool.setConf(hbaseTestUtil.getConfiguration());
+        csvBulkLoadTool.setConf(new Configuration(hbaseTestUtil.getConfiguration()));
+        csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
         int exitCode = csvBulkLoadTool.run(new String[] {
                 "--input", "/tmp/input1.csv",
                 "--table", "table1",
                 "--zookeeper", zkQuorum});
         assertEquals(0, exitCode);
 
-        ResultSet rs = stmt.executeQuery("SELECT id, name FROM table1 ORDER BY id");
+        ResultSet rs = stmt.executeQuery("SELECT id, name, t FROM table1 ORDER BY id");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals("Name 1", rs.getString(2));
+        assertEquals(DateUtil.parseDateTime("1970-01-01"), rs.getDate(3));
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         assertEquals("Name 2", rs.getString(2));
+        assertEquals(DateUtil.parseDateTime("1970-01-02"), rs.getDate(3));
         assertFalse(rs.next());
 
         rs.close();

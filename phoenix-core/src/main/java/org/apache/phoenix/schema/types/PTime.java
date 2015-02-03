@@ -77,6 +77,8 @@ public class PTime extends PDataType<Time> {
       return new java.sql.Time((Long) object);
     } else if (actualType == PDecimal.INSTANCE) {
       return new java.sql.Time(((BigDecimal) object).longValueExact());
+    } else if (actualType == PVarchar.INSTANCE) {
+      return DateUtil.parseDateTime((String) object);
     }
     return throwConstraintViolationException(actualType, this);
   }
