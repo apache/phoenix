@@ -45,10 +45,9 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ColumnResolver;
-import org.apache.phoenix.compile.ExpressionCompiler;
+import org.apache.phoenix.compile.ExpressionIndexCompiler;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -340,7 +339,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             throw new RuntimeException(e); // Impossible
         }
         StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver);
-        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
+        ExpressionIndexCompiler expressionIndexCompiler = new ExpressionIndexCompiler(context);
         for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
             PColumn indexColumn = index.getPKColumns().get(i);
             if (!IndexUtil.isIndexColumn(indexColumn)) {
@@ -349,12 +348,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             int indexPos = i - indexPosOffset;
             Expression expression = null;
             try {
+                expressionIndexCompiler.reset();
                 ParseNode parseNode  = SQLParser.parseCondition(indexColumn.getExpressionStr());
-                expression = parseNode.accept(expressionCompiler);
+                expression = parseNode.accept(expressionIndexCompiler);
             } catch (SQLException e) {
                 throw new RuntimeException(e); // Impossible
             }
-            if ( ColumnExpression.class.isAssignableFrom(expression.getClass()) ) {
+            if ( expressionIndexCompiler.getColumnRef()!=null ) {
             	// get the column of the data table that corresponds to this index column
 	            PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
 	            boolean isPKColumn = SchemaUtil.isPKColumn(column);
@@ -375,7 +375,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 this.rowKeyMetaData.getDescIndexColumnBitSet().set(indexPos);
             }
         }
-        this.estimatedExpressionSize = expressionCompiler.getTotalNodeCount() * ESTIMATED_EXPRESSION_SIZE;
+        this.estimatedExpressionSize = expressionIndexCompiler.getTotalNodeCount() * ESTIMATED_EXPRESSION_SIZE;
         for (int i = 0; i < index.getColumnFamilies().size(); i++) {
             PColumnFamily family = index.getColumnFamilies().get(i);
             for (PColumn indexColumn : family.getColumns()) {

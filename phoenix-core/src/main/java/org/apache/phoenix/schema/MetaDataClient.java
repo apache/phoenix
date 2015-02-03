@@ -88,7 +88,6 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Matcher;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -104,7 +103,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExpressionCompiler;
+import org.apache.phoenix.compile.ExpressionIndexCompiler;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.PostDDLCompiler;
@@ -121,10 +120,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
-import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
-import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisitor;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -135,7 +131,6 @@ import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnName;
-import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
@@ -976,9 +971,9 @@ public class MetaDataClient {
                     final StatementContext context = new StatementContext(phoenixStatment, resolver);
                     // normalize the parse node
                     parseNode = StatementNormalizer.normalize(parseNode, resolver);
-                    ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
-                    Expression expression = parseNode.accept(expressionCompiler);   
-                    if (expressionCompiler.isAggregate()) {
+                    ExpressionIndexCompiler expressionIndexCompiler = new ExpressionIndexCompiler(context);
+                    Expression expression = parseNode.accept(expressionIndexCompiler);   
+                    if (expressionIndexCompiler.isAggregate()) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
                     }
                     if (expression.getDeterminism() != Determinism.ALWAYS) {
@@ -991,20 +986,17 @@ public class MetaDataClient {
                     unusedPkColumns.remove(expression);
                     
                     ColumnName colName = null;
-					// if expression is KeyValueExpression set the column name correctly
-					if (expression.getChildren().size() == 0) {
-						colName = expression
-								.accept(new StatelessTraverseAllExpressionVisitor<ColumnName>() {
-									@Override
-									public ColumnName visit(
-											KeyValueColumnExpression node) {
-										return ColumnName.caseSensitiveColumnName(Bytes.toString(IndexUtil
-												.getIndexColumnName(node.getColumnFamily(), node.getColumnName())));
-									}
-								});
+                    ColumnRef colRef = expressionIndexCompiler.getColumnRef();
+					if (colRef!=null) {  // if this is a regular column
+					    PColumn column = colRef.getColumn();
+					    String columnFamilyName = column.getFamilyName()!=null ? column.getFamilyName().getString() : null;
+					    colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(columnFamilyName, column.getName().getString()));
 					}
-					// need to remove double quotes from column name
-					colName = colName!=null ? colName : ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, expression.toString().replaceAll("\"", Matcher.quoteReplacement("\\\""))));
+					else { // if this is an expression
+					    // TODO name cannot have double quotes, remove this once this is fixed
+					    String name = expression.toString().replaceAll("\"", Matcher.quoteReplacement("\\\""));
+                        colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, name));
+					}
 					indexedColumnNames.add(colName);
                 	PDataType dataType = IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, pair.getSecond()));
