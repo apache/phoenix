@@ -737,7 +737,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals("x",rs.getString(3));
             assertEquals("1",rs.getString(4));
             //TODO figure out why this " " is needed
-            assertEquals("x_1",rs.getString("\"(V1 || '_' || v2)\""));
+            assertEquals("x_1",rs.getString("\"('V1' || '_' || 'v2')\""));
             assertEquals("a",rs.getString("k"));
             assertEquals("x",rs.getString("V1"));
             assertEquals("1",rs.getString("v2"));
@@ -763,7 +763,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals("x_1",rs.getString(4));
             assertEquals("x_1",rs.getString("Foo1"));
             assertEquals("x_1",rs.getString(5));
-            assertEquals("x_1",rs.getString("\"(V1 || '_' || v2)\""));
+            assertEquals("x_1",rs.getString("\"('V1' || '_' || 'v2')\""));
             assertTrue(rs.next());
             assertEquals("y",rs.getString(1));
             assertEquals("y",rs.getString("V1"));
@@ -774,7 +774,7 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals("y_2",rs.getString(4));
             assertEquals("y_2",rs.getString("Foo1"));
             assertEquals("y_2",rs.getString(5));
-            assertEquals("y_2",rs.getString("\"(V1 || '_' || v2)\""));
+            assertEquals("y_2",rs.getString("\"('V1' || '_' || 'v2')\""));
             assertFalse(rs.next());
             conn.createStatement().execute("DROP INDEX ICS ON CS");
         } finally {
