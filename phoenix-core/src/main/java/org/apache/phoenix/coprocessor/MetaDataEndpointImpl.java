@@ -641,13 +641,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 if (statsHTable != null) statsHTable.close();
             }
         }
-        // sort columns by ordinal position
-        Collections.sort(columns, new Comparator<PColumn>() {
-            @Override
-            public int compare(PColumn c1, PColumn c2) {
-                return Integer.compare(c1.getPosition(),c2.getPosition());
-            }
-        });
+//        // sort columns by ordinal position
+//        Collections.sort(columns, new Comparator<PColumn>() {
+//            @Override
+//            public int compare(PColumn c1, PColumn c2) {
+//                return Integer.compare(c1.getPosition(),c2.getPosition());
+//            }
+//        });
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp,
             tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? schemaName : null,
             tableType == INDEX ? dataTableName : null, indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement,

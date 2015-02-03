@@ -327,23 +327,26 @@ public class PTableImpl implements PTable {
         PColumn[] allColumns;
         
         this.columnsByName = ArrayListMultimap.create(columns.size(), 1);
+        int numPkColumns = 0;
         if (bucketNum != null) {
             // Add salt column to allColumns and pkColumns, but don't add to
             // columnsByName, since it should not be addressable via name.
             allColumns = new PColumn[columns.size()+1];
             allColumns[SALTING_COLUMN.getPosition()] = SALTING_COLUMN;
-            pkColumns = Lists.newArrayListWithExpectedSize(columns.size()+1);
-            pkColumns.add(SALTING_COLUMN);
+//            pkColumns = Lists.newArrayListWithExpectedSize(columns.size()+1);
+//            pkColumns.add(SALTING_COLUMN);
+            ++numPkColumns;
         } else {
             allColumns = new PColumn[columns.size()];
-            pkColumns = Lists.newArrayListWithExpectedSize(columns.size());
+//            pkColumns = Lists.newArrayListWithExpectedSize(columns.size());
         }
         for (int i = 0; i < columns.size(); i++) {
             PColumn column = columns.get(i);
             allColumns[column.getPosition()] = column;
             PName familyName = column.getFamilyName();
             if (familyName == null) {
-                pkColumns.add(column);
+//                pkColumns.add(column);
+            	++numPkColumns;
             }
             String columnName = column.getName().getString();
             if (columnsByName.put(columnName, column)) {
@@ -361,19 +364,21 @@ public class PTableImpl implements PTable {
         estimatedSize += SizedUtil.sizeOfMap(allColumns.length, SizedUtil.POINTER_SIZE, SizedUtil.sizeOfArrayList(1)); // for multi-map
 
         this.bucketNum = bucketNum;
-        this.pkColumns = ImmutableList.copyOf(pkColumns);
+//        this.pkColumns = ImmutableList.copyOf(pkColumns);
+        pkColumns = Lists.newArrayListWithExpectedSize(numPkColumns);
         this.allColumns = ImmutableList.copyOf(allColumns);
-        estimatedSize += SizedUtil.sizeOfMap(pkColumns.size()) + SizedUtil.sizeOfMap(allColumns.length);
+        estimatedSize += SizedUtil.sizeOfMap(numPkColumns) + SizedUtil.sizeOfMap(allColumns.length);
 
-        RowKeySchemaBuilder builder = new RowKeySchemaBuilder(pkColumns.size());
+        RowKeySchemaBuilder builder = new RowKeySchemaBuilder(numPkColumns);
         // Two pass so that column order in column families matches overall column order
         // and to ensure that column family order is constant
-        int maxExpectedSize = allColumns.length - pkColumns.size();
+        int maxExpectedSize = allColumns.length - numPkColumns;
         // Maintain iteration order so that column families are ordered as they are listed
         Map<PName, List<PColumn>> familyMap = Maps.newLinkedHashMap();
         for (PColumn column : allColumns) {
             PName familyName = column.getFamilyName();
             if (familyName == null) {
+            	pkColumns.add(column);
                 estimatedSize += column.getEstimatedSize(); // PK columns
                 builder.addField(column, column.isNullable(), column.getSortOrder());
             } else {
@@ -385,6 +390,7 @@ public class PTableImpl implements PTable {
                 columnsInFamily.add(column);
             }
         }
+        this.pkColumns = ImmutableList.copyOf(pkColumns);
         this.rowKeySchema = builder.build();
         estimatedSize += rowKeySchema.getEstimatedSize();
         Iterator<Map.Entry<PName,List<PColumn>>> iterator = familyMap.entrySet().iterator();

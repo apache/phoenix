@@ -271,7 +271,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                             for (IndexMaintainer maintainer : indexMaintainers) {
                                 if (!results.isEmpty()) {
                                     result.getKey(ptr);
-                                    ValueGetter valueGetter = maintainer.createGetterFromKeyValues(new ImmutableBytesPtr(ptr).copyBytesIfNecessary(),results);
+                                    ValueGetter valueGetter = maintainer.createGetterFromKeyValues(ImmutableBytesPtr.copyBytesIfNecessary(ptr),results);
                                     Put put = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, c.getEnvironment().getRegion().getStartKey(), c.getEnvironment().getRegion().getEndKey());
                                     indexMutations.add(put);
                                 }
