@@ -70,6 +70,8 @@ public class PDate extends PDataType<Date> {
       return new Date((Long) object);
     } else if (actualType == PDecimal.INSTANCE) {
       return new Date(((BigDecimal) object).longValueExact());
+    } else if (actualType == PVarchar.INSTANCE) {
+      return DateUtil.parseDateTime((String) object);
     }
     return throwConstraintViolationException(actualType, this);
   }
@@ -93,7 +95,8 @@ public class PDate extends PDataType<Date> {
 
   @Override
   public boolean isCastableTo(PDataType targetType) {
-    return super.isCastableTo(targetType) || equalsAny(targetType, PDecimal.INSTANCE, PLong.INSTANCE, PUnsignedLong.INSTANCE);
+    return super.isCastableTo(targetType) ||
+            equalsAny(targetType, PDecimal.INSTANCE, PLong.INSTANCE, PUnsignedLong.INSTANCE);
   }
 
   @Override

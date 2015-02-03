@@ -38,21 +38,15 @@ public class ToDateParseNode extends FunctionParseNode {
 
     @Override
     public FunctionExpression create(List<Expression> children, StatementContext context) throws SQLException {
-        Format dateParser;
         String dateFormat = (String) ((LiteralExpression) children.get(1)).getValue();
         String timeZoneId = (String) ((LiteralExpression) children.get(2)).getValue();
-        TimeZone parserTimeZone = context.getDateFormatTimeZone();
         if (dateFormat == null) {
             dateFormat = context.getDateFormat();
         }
         if (timeZoneId == null) {
-            parserTimeZone = context.getDateFormatTimeZone();
-        } else if ("LOCAL".equalsIgnoreCase(timeZoneId)) {
-            parserTimeZone = TimeZone.getDefault();
-        } else {
-            parserTimeZone = TimeZone.getTimeZone(timeZoneId);
+            timeZoneId = context.getDateFormatTimeZone().getID();
         }
-        dateParser = DateUtil.getDateParser(dateFormat, parserTimeZone);
+        DateUtil.DateTimeParser dateParser = DateUtil.getDateParser(dateFormat, timeZoneId);
         return new ToDateFunction(children, dateFormat, dateParser);
     }
 }

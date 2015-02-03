@@ -57,7 +57,6 @@ import com.google.common.collect.Ordering;
 
 
 public class ProductMetricsIT extends BaseClientManagedTimeIT {
-    private static Format format = DateUtil.getDateParser(DateUtil.DEFAULT_DATE_FORMAT);
     private static final String PRODUCT_METRICS_NAME = "PRODUCT_METRICS";
     private static final String PRODUCT_METRICS_SCHEMA_NAME = "";
     private static final String DS1 = "1970-01-01 00:58:00";
@@ -88,11 +87,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     }
     
     private static Date toDate(String dateString) {
-        try {
-            return (Date)format.parseObject(dateString);
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        }
+        return DateUtil.parseDateTime(dateString);
     }
     
     private static void initTable(byte[][] splits, long ts) throws Exception {

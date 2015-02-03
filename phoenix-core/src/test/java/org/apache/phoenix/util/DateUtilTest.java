@@ -69,64 +69,64 @@ public class DateUtilTest {
 
     @Test
     public void testGetDateParser_DefaultTimeZone() throws ParseException {
-        Date date = (Date) DateUtil.getDateParser("yyyy-MM-dd").parseObject("1970-01-01");
+        Date date = (Date) DateUtil.getDateParser("yyyy-MM-dd").parseDateTime("1970-01-01");
         assertEquals(0, date.getTime());
     }
 
     @Test
     public void testGetDateParser_CustomTimeZone() throws ParseException {
         Date date = (Date) DateUtil.getDateParser(
-                "yyyy-MM-dd", TimeZone.getTimeZone("GMT+1")).parseObject("1970-01-01");
+                "yyyy-MM-dd", TimeZone.getTimeZone("GMT+1")).parseDateTime("1970-01-01");
         assertEquals(-ONE_HOUR_IN_MILLIS, date.getTime());
     }
 
     @Test
     public void testGetDateParser_LocalTimeZone() throws ParseException {
         Date date = (Date) DateUtil.getDateParser(
-                "yyyy-MM-dd", TimeZone.getDefault()).parseObject("1970-01-01");
+                "yyyy-MM-dd", TimeZone.getDefault()).parseDateTime("1970-01-01");
         assertEquals(Date.valueOf("1970-01-01"), date);
     }
 
     @Test
     public void testGetTimestampParser_DefaultTimeZone() throws ParseException {
-        Timestamp ts = (Timestamp) DateUtil.getTimestampParser("yyyy-MM-dd HH:mm:ss")
-                .parseObject("1970-01-01 00:00:00");
+        Timestamp ts = new Timestamp(DateUtil.getTimestampParser("yyyy-MM-dd HH:mm:ss")
+                .parseDateTime("1970-01-01 00:00:00").getTime());
         assertEquals(0, ts.getTime());
     }
 
     @Test
     public void testGetTimestampParser_CustomTimeZone() throws ParseException {
-        Timestamp ts = (Timestamp) DateUtil.getTimestampParser("yyyy-MM-dd HH:mm:ss", TimeZone.getTimeZone("GMT+1"))
-                .parseObject("1970-01-01 00:00:00");
+        Timestamp ts = new Timestamp(DateUtil.getTimestampParser("yyyy-MM-dd HH:mm:ss", TimeZone.getTimeZone("GMT+1"))
+                .parseDateTime("1970-01-01 00:00:00").getTime());
         assertEquals(-ONE_HOUR_IN_MILLIS, ts.getTime());
     }
 
     @Test
     public void testGetTimestampParser_LocalTimeZone() throws ParseException {
-        Timestamp ts = (Timestamp) DateUtil.getTimestampParser(
+        Timestamp ts = new Timestamp(DateUtil.getTimestampParser(
                 "yyyy-MM-dd HH:mm:ss",
-                TimeZone.getDefault()).parseObject("1970-01-01 00:00:00");
+                TimeZone.getDefault()).parseDateTime("1970-01-01 00:00:00").getTime());
         assertEquals(Timestamp.valueOf("1970-01-01 00:00:00"), ts);
     }
 
     @Test
     public void testGetTimeParser_DefaultTimeZone() throws ParseException {
-        Time time = (Time) DateUtil.getTimeParser("HH:mm:ss").parseObject("00:00:00");
+        Time time = new Time(DateUtil.getTimeParser("HH:mm:ss").parseDateTime("00:00:00").getTime());
         assertEquals(0, time.getTime());
     }
 
     @Test
     public void testGetTimeParser_CustomTimeZone() throws ParseException {
-        Time time = (Time) DateUtil.getTimeParser(
+        Time time = new Time(DateUtil.getTimeParser(
                 "HH:mm:ss",
-                TimeZone.getTimeZone("GMT+1")).parseObject("00:00:00");
+                TimeZone.getTimeZone("GMT+1")).parseDateTime("00:00:00").getTime());
         assertEquals(-ONE_HOUR_IN_MILLIS, time.getTime());
     }
 
     @Test
     public void testGetTimeParser_LocalTimeZone() throws ParseException {
-        Time time = (Time) DateUtil.getTimeParser(
-                "HH:mm:ss", TimeZone.getDefault()).parseObject("00:00:00");
+        Time time = new Time(DateUtil.getTimeParser(
+                "HH:mm:ss", TimeZone.getDefault()).parseDateTime("00:00:00").getTime());
         assertEquals(Time.valueOf("00:00:00"), time);
     }
 

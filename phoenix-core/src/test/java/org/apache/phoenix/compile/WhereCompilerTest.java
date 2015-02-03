@@ -277,8 +277,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
 
-        Format format = DateUtil.getDateParser(DateUtil.DEFAULT_DATE_FORMAT);
-        Object date = format.parseObject(dateStr);
+        Object date = DateUtil.parseDateTime(dateStr);
 
         assertEquals(
             singleKVFilter(constantComparison(

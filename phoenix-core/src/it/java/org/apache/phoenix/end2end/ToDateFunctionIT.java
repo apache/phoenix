@@ -27,12 +27,14 @@ import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.DateUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 
 public class ToDateFunctionIT extends BaseHBaseManagedTimeIT {
@@ -69,6 +71,19 @@ public class ToDateFunctionIT extends BaseHBaseManagedTimeIT {
     public void testToDate_Default() throws SQLException {
         // Default time zone is GMT, so this is timestamp 0
         assertEquals(0L, callToDateFunction("TO_DATE('1970-01-01 00:00:00')").getTime());
+        assertEquals(0L, callToDateFunction("TO_DATE('1970-01-01 00:00:00.000')").getTime());
+        assertEquals(0L, callToDateFunction("TO_DATE('1970-01-01')").getTime());
+        assertEquals(0L, callToDateFunction("TO_DATE('1970/01/01','yyyy/MM/dd')").getTime());
+
+        // Test other ISO 8601 Date Compliant Formats to verify they can be parsed
+        try {
+            callToDateFunction("TO_DATE('2015-01-27T16:17:57+00:00')");
+            callToDateFunction("TO_DATE('2015-01-27T16:17:57Z')");
+            callToDateFunction("TO_DATE('2015-W05')");
+            callToDateFunction("TO_DATE('2015-W05-2')");
+        } catch (Exception ex) {
+            fail("TO_DATE Parse ISO8601 Time Failed due to:" + ex);
+        }
     }
 
     @Test
