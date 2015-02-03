@@ -86,6 +86,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.regex.Matcher;
 
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
@@ -1003,7 +1004,7 @@ public class MetaDataClient {
 								});
 					}
 					// need to remove double quotes from column name
-					colName = colName!=null ? colName : ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, expression.toString()));
+					colName = colName!=null ? colName : ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, expression.toString().replaceAll("\"", Matcher.quoteReplacement("\\\""))));
 					indexedColumnNames.add(colName);
                 	PDataType dataType = IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, pair.getSecond()));
