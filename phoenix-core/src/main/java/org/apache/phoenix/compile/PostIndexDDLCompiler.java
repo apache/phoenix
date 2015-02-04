@@ -61,12 +61,13 @@ public class PostIndexDDLCompiler {
         int nIndexPKColumns = indexTable.getPKColumns().size();
         boolean isSalted = indexTable.getBucketNum() != null;
         boolean isMultiTenant = connection.getTenantId() != null && indexTable.isMultiTenant();
-        int posOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0);
+        boolean isViewIndex = indexTable.getViewIndexId()!=null;
+        int posOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isViewIndex ? 1 : 0);
         for (int i = posOffset; i < nIndexPKColumns; i++) {
             PColumn col = indexPKColumns.get(i);
-            if (!IndexUtil.isIndexColumn(col)) {
-                continue;
-            }
+//            if (!IndexUtil.isIndexColumn(col)) {
+//                continue;
+//            }
             String indexColName = col.getName().getString();
             dataColumns.append(col.getExpressionStr()).append(",");
             indexColumns.append('"').append(indexColName).append("\",");

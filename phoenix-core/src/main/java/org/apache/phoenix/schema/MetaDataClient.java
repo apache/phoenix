@@ -932,10 +932,16 @@ public class MetaDataClient {
                 }
                 int posOffset = 0;
                 List<PColumn> pkColumns = dataTable.getPKColumns();
-                Set<Expression> unusedPkColumns= Sets.newLinkedHashSetWithExpectedSize(pkColumns.size());
-                for (int i = 0; i < pkColumns.size(); i++) {
+                Set<RowKeyColumnExpression> unusedPkColumns;
+                if (dataTable.getBucketNum() != null) { // Ignore SALT column
+                	unusedPkColumns = Sets.newLinkedHashSetWithExpectedSize(pkColumns.size()-1);
+                	posOffset++;
+                } else {
+                	unusedPkColumns = Sets.newLinkedHashSetWithExpectedSize(pkColumns.size());
+                }
+                for (int i = posOffset; i < pkColumns.size(); i++) {
                     PColumn column = pkColumns.get(i);
-					unusedPkColumns.add(new RowKeyColumnExpression(column, new RowKeyValueAccessor(pkColumns, i), column.getName().getString()));
+					unusedPkColumns.add(new RowKeyColumnExpression(column, new RowKeyValueAccessor(pkColumns, i), "\""+column.getName().getString()+"\""));
                 }
                 List<Pair<ColumnName, SortOrder>> allPkColumns = Lists.newArrayListWithExpectedSize(unusedPkColumns.size());
                 List<ColumnDef> columnDefs = Lists.newArrayListWithExpectedSize(includedColumns.size() + indexParseNodeAndSortOrderList.size());
@@ -943,7 +949,8 @@ public class MetaDataClient {
                 if (dataTable.isMultiTenant()) {
                     // Add tenant ID column as first column in index
                     PColumn col = dataTable.getPKColumns().get(posOffset);
-                    unusedPkColumns.remove(new RowKeyColumnExpression(col, new RowKeyValueAccessor(pkColumns, col.getPosition()), col.getName().getString()));
+                    RowKeyColumnExpression o = new RowKeyColumnExpression(col, new RowKeyValueAccessor(pkColumns, col.getPosition()), col.getName().getString());
+					unusedPkColumns.remove(o);
                     PDataType dataType = IndexUtil.getIndexColumnDataType(col);
                     ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, col.getSortOrder()));
@@ -1008,16 +1015,16 @@ public class MetaDataClient {
 
                 // Next all the PK columns from the data table that aren't indexed
                 if (!unusedPkColumns.isEmpty()) {
-                    for (Expression expression : unusedPkColumns) {
-                    	RowKeyColumnExpression colExpression = (RowKeyColumnExpression)expression;
+                    for (RowKeyColumnExpression colExpression : unusedPkColumns) {
                         // Don't add columns with constant values from updatable views, as
                         // we don't need these in the index
-                        if (!expression.isStateless()) {
-                            ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, colExpression.getName()));
+                        if (!colExpression.isStateless()) {
+                        	PColumn col = dataTable.getPKColumns().get(colExpression.getPosition());
+                            ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
                             allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, colExpression.getSortOrder()));
                             PDataType dataType = IndexUtil.getIndexColumnDataType(colExpression.isNullable(), colExpression.getDataType());
-                            ColumnRef columnRef = new ColumnRef(new TableRef(dataTable), colExpression.getPosition());
-                            columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), colExpression.isNullable(), colExpression.getMaxLength(), colExpression.getScale(), false, colExpression.getSortOrder(), columnRef.newColumnExpression().toString()));
+//                            ColumnRef columnRef = new ColumnRef(new TableRef(dataTable), colExpression.getPosition());
+                            columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), colExpression.isNullable(), colExpression.getMaxLength(), colExpression.getScale(), false, colExpression.getSortOrder(), colExpression.toString()/*columnRef.newColumnExpression().toString()*/));
                         }
                     }
                 }
