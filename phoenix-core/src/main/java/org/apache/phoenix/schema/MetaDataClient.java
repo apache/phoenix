@@ -86,7 +86,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.regex.Matcher;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -1016,10 +1015,10 @@ public class MetaDataClient {
                 // Next all the PK columns from the data table that aren't indexed
                 if (!unusedPkColumns.isEmpty()) {
                     for (RowKeyColumnExpression colExpression : unusedPkColumns) {
+                        PColumn col = dataTable.getPKColumns().get(colExpression.getPosition());
                         // Don't add columns with constant values from updatable views, as
                         // we don't need these in the index
-                        if (!colExpression.isStateless()) {
-                        	PColumn col = dataTable.getPKColumns().get(colExpression.getPosition());
+                        if (col.getViewConstant() == null) {
                             ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
                             allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, colExpression.getSortOrder()));
                             PDataType dataType = IndexUtil.getIndexColumnDataType(colExpression.isNullable(), colExpression.getDataType());
