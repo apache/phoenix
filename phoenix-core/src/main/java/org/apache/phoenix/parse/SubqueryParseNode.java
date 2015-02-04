@@ -49,5 +49,33 @@ public class SubqueryParseNode extends TerminalParseNode {
     public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
         return visitor.visit(this);
     }
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + (expectSingleRow ? 1231 : 1237);
+		result = prime * result + ((select == null) ? 0 : select.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		SubqueryParseNode other = (SubqueryParseNode) obj;
+		if (expectSingleRow != other.expectSingleRow)
+			return false;
+		if (select == null) {
+			if (other.select != null)
+				return false;
+		} else if (!select.equals(other.select))
+			return false;
+		return true;
+	}
     
 }

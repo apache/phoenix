@@ -21,6 +21,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.SchemaUtil;
 
 public class TableName {
+
     private final String tableName;
     private final String schemaName;
     private final boolean isTableNameCaseSensitive;
@@ -61,7 +62,7 @@ public class TableName {
     public String toString() {
         return (schemaName == null ? "" : schemaName + QueryConstants.NAME_SEPARATOR)  + tableName;
     }
-
+    
 	@Override
 	public int hashCode() {
 		final int prime = 31;

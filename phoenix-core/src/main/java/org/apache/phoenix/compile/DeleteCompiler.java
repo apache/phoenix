@@ -65,7 +65,6 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
@@ -75,6 +74,7 @@ import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 
@@ -483,7 +483,7 @@ public class DeleteCompiler {
                     public MutationState execute() throws SQLException {
                         // TODO: share this block of code with UPSERT SELECT
                         ImmutableBytesWritable ptr = context.getTempPtr();
-                        tableRef.getTable().getIndexMaintainers(ptr);
+                        tableRef.getTable().getIndexMaintainers(ptr, context.getConnection());
                         ServerCache cache = null;
                         try {
                             if (ptr.getLength() > 0) {

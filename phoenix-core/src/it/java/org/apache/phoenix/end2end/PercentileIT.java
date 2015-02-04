@@ -50,6 +50,7 @@ import java.sql.Types;
 import java.util.Properties;
 
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -516,15 +517,17 @@ public class PercentileIT extends BaseClientManagedTimeIT {
     private static void populateINDEX_DATA_TABLETable() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        Date date = DateUtil.parseDate("2015-01-01 00:00:00");
         try {
             String upsert = "UPSERT INTO " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                    + " VALUES(?, ?, ?, ?, ?)";
+                    + " VALUES(?, ?, ?, ?, ?, ?)";
             PreparedStatement stmt = conn.prepareStatement(upsert);
             stmt.setString(1, "varchar1");
             stmt.setString(2, "char1");
             stmt.setInt(3, 1);
             stmt.setLong(4, 1L);
             stmt.setBigDecimal(5, new BigDecimal(1.0));
+            stmt.setDate(6, date);
             stmt.executeUpdate();
             
             stmt.setString(1, "varchar2");
@@ -532,6 +535,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
             stmt.setInt(3, 2);
             stmt.setLong(4, 2L);
             stmt.setBigDecimal(5, new BigDecimal(2.0));
+            stmt.setDate(6, date);
             stmt.executeUpdate();
             
             stmt.setString(1, "varchar3");
@@ -539,6 +543,7 @@ public class PercentileIT extends BaseClientManagedTimeIT {
             stmt.setInt(3, 3);
             stmt.setLong(4, 3L);
             stmt.setBigDecimal(5, new BigDecimal(3.0));
+            stmt.setDate(6, date);
             stmt.executeUpdate();
             
             conn.commit();

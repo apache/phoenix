@@ -104,4 +104,42 @@ public class CastParseNode extends UnaryParseNode {
             throw TypeMismatchException.newException(fromDataType, targetDataType, firstChildExpr.toString());
 	    }
 	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = super.hashCode();
+		result = prime * result + ((dt == null) ? 0 : dt.hashCode());
+		result = prime * result
+				+ ((maxLength == null) ? 0 : maxLength.hashCode());
+		result = prime * result + ((scale == null) ? 0 : scale.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (!super.equals(obj))
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		CastParseNode other = (CastParseNode) obj;
+		if (dt == null) {
+			if (other.dt != null)
+				return false;
+		} else if (!dt.equals(other.dt))
+			return false;
+		if (maxLength == null) {
+			if (other.maxLength != null)
+				return false;
+		} else if (!maxLength.equals(other.maxLength))
+			return false;
+		if (scale == null) {
+			if (other.scale != null)
+				return false;
+		} else if (!scale.equals(other.scale))
+			return false;
+		return true;
+	}
 }

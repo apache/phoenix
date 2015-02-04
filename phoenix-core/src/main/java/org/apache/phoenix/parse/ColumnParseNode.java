@@ -28,6 +28,7 @@ import org.apache.phoenix.query.QueryConstants;
  * @since 0.1
  */
 public class ColumnParseNode extends NamedParseNode {
+    // table name can also represent a column family 
     private final TableName tableName;
     private final String fullName;
     private final String alias;

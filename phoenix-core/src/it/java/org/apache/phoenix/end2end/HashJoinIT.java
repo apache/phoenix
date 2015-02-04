@@ -289,7 +289,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            SERVER FILTER BY \"order_id\" != '000000000000003'\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "                    SERVER FILTER BY NAME != 'T3'\n" +
@@ -380,7 +380,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            SERVER FILTER BY \"order_id\" != '000000000000003'\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "                    SERVER FILTER BY NAME != 'T3'\n" +
@@ -655,7 +655,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            SERVER FILTER BY \"order_id\" != '000000000000003'\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "                    SERVER FILTER BY NAME != 'T3'\n" +
@@ -747,7 +747,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            SERVER FILTER BY \"order_id\" != '000000000000003'\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "                    SERVER FILTER BY NAME != 'T3'\n" +
@@ -1039,7 +1039,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            SERVER FILTER BY \"order_id\" != '000000000000003'\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +" [-32768]\n" +
                 "                    SERVER FILTER BY NAME != 'T3'\n" +
@@ -1134,7 +1134,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            SERVER FILTER BY \"order_id\" != '000000000000003'\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +  MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
                 "                    SERVER FILTER BY NAME != 'T3'\n" +

@@ -154,7 +154,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
                 } else {
                     indexUpdate.setTable(maintainer.getIndexTableName());
                 }
-                valueGetter = maintainer.createGetterFromKeyValues(state.getPendingUpdate());
+                valueGetter = maintainer.createGetterFromKeyValues(dataRowKey, state.getPendingUpdate());
             } else {
                 // TODO: if more efficient, I could do this just once with all columns in all indexes
                 Pair<Scanner,IndexUpdate> statePair = state.getIndexedColumnsTableState(maintainer.getAllColumns());

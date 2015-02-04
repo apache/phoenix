@@ -22,6 +22,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.stats.PTableStats;
 
 public class DelegateTable implements PTable {
@@ -161,13 +162,13 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public void getIndexMaintainers(ImmutableBytesWritable ptr) {
-        delegate.getIndexMaintainers(ptr);
+    public void getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
+        delegate.getIndexMaintainers(ptr, connection);
     }
 
     @Override
-    public IndexMaintainer getIndexMaintainer(PTable dataTable) {
-        return delegate.getIndexMaintainer(dataTable);
+    public IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) {
+        return delegate.getIndexMaintainer(dataTable, connection);
     }
 
     @Override
