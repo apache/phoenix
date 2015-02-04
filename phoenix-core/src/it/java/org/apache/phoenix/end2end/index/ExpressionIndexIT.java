@@ -813,19 +813,19 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
 
         // make sure that the tables are empty, but reachable
         conn.createStatement().execute(
-          "CREATE TABLE cs (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-        query = "SELECT * FROM cs" ;
+          "CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+        query = "SELECT * FROM t" ;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
+        String indexName = "it_" + (mutable ? "m" : "im") + "_" + (local ? "l" : "h");
+        conn.createStatement().execute("CREATE " + ( local ? "LOCAL" : "") + " INDEX " + indexName + " ON t (v1 || '_' || v2)");
 
-        conn.createStatement().execute("CREATE " + ( local ? "LOCAL" : "") + " INDEX ics ON cs (v1 || '_' || v2)");
-
-        query = "SELECT * FROM ics";
+        query = "SELECT * FROM t";
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
 
         // load some data into the table
-        stmt = conn.prepareStatement("UPSERT INTO cs VALUES(?,?,?)");
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?,?)");
         stmt.setString(1, "a");
         stmt.setString(2, "x");
         stmt.setString(3, "1");
@@ -833,10 +833,10 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
         conn.commit();
 
         assertIndexExists(conn,true);
-        conn.createStatement().execute("ALTER TABLE cs DROP COLUMN v1");
+        conn.createStatement().execute("ALTER TABLE t DROP COLUMN v1");
         assertIndexExists(conn,false);
 
-        query = "SELECT * FROM cs";
+        query = "SELECT * FROM t";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("a",rs.getString(1));
@@ -844,23 +844,22 @@ public class ExpressionIndexIT extends BaseHBaseManagedTimeIT {
         assertFalse(rs.next());
 
         // load some data into the table
-        stmt = conn.prepareStatement("UPSERT INTO cs VALUES(?,?)");
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?)");
         stmt.setString(1, "a");
         stmt.setString(2, "2");
         stmt.execute();
         conn.commit();
 
-        query = "SELECT * FROM cs";
+        query = "SELECT * FROM t";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("a",rs.getString(1));
         assertEquals("2",rs.getString(2));
         assertFalse(rs.next());
-        conn.createStatement().execute("DROP TABLE \"CS\"");
     }
     
     private static void assertIndexExists(Connection conn, boolean exists) throws SQLException {
-        ResultSet rs = conn.getMetaData().getIndexInfo(null, null, "CS", false, false);
+        ResultSet rs = conn.getMetaData().getIndexInfo(null, null, "T", false, false);
         assertEquals(exists, rs.next());
     }
 
