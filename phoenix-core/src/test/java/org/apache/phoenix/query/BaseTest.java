@@ -376,39 +376,45 @@ public abstract class BaseTest {
                 "    kv bigint)\n");
         builder.put(INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + "(" +
                 "   varchar_pk VARCHAR NOT NULL, " +
-                "   char_pk CHAR(5) NOT NULL, " +
+                "   char_pk CHAR(6) NOT NULL, " +
                 "   int_pk INTEGER NOT NULL, "+ 
                 "   long_pk BIGINT NOT NULL, " +
                 "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
+                "   date_pk DATE NOT NULL, " +
                 "   a.varchar_col1 VARCHAR, " +
-                "   a.char_col1 CHAR(5), " +
+                "   a.char_col1 CHAR(10), " +
                 "   a.int_col1 INTEGER, " +
                 "   a.long_col1 BIGINT, " +
                 "   a.decimal_col1 DECIMAL(31, 10), " +
+                "   a.date1 DATE, " +
                 "   b.varchar_col2 VARCHAR, " +
-                "   b.char_col2 CHAR(5), " +
+                "   b.char_col2 CHAR(10), " +
                 "   b.int_col2 INTEGER, " +
                 "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10) " +
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) " +
+                "   b.decimal_col2 DECIMAL(31, 10), " +
+                "   b.date2 DATE " +
+                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) " +
                 "IMMUTABLE_ROWS=true");
         builder.put(MUTABLE_INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + "(" +
                 "   varchar_pk VARCHAR NOT NULL, " +
-                "   char_pk CHAR(5) NOT NULL, " +
+                "   char_pk CHAR(6) NOT NULL, " +
                 "   int_pk INTEGER NOT NULL, "+ 
                 "   long_pk BIGINT NOT NULL, " +
                 "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
+                "   date_pk DATE NOT NULL, " +
                 "   a.varchar_col1 VARCHAR, " +
-                "   a.char_col1 CHAR(5), " +
+                "   a.char_col1 CHAR(10), " +
                 "   a.int_col1 INTEGER, " +
                 "   a.long_col1 BIGINT, " +
                 "   a.decimal_col1 DECIMAL(31, 10), " +
+                "   a.date1 DATE, " +
                 "   b.varchar_col2 VARCHAR, " +
-                "   b.char_col2 CHAR(5), " +
+                "   b.char_col2 CHAR(10), " +
                 "   b.int_col2 INTEGER, " +
                 "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10) " +
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) "
+                "   b.decimal_col2 DECIMAL(31, 10), " +
+                "   b.date2 DATE " +
+                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) "
                 );
         builder.put("SumDoubleTest","create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");

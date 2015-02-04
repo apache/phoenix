@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
+
 import org.apache.phoenix.util.SizedUtil;
 
 public class DelegateColumn extends DelegateDatum implements PColumn {
@@ -68,5 +69,10 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
     @Override
     public boolean isViewReferenced() {
         return getDelegate().isViewReferenced();
+    }
+    
+    @Override
+    public String getExpressionStr() {
+        return getDelegate().getExpressionStr();
     }
 }

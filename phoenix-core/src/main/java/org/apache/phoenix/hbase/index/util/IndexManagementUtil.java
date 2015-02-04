@@ -20,7 +20,6 @@ package org.apache.phoenix.hbase.index.util;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -34,8 +33,6 @@ import org.apache.phoenix.hbase.index.builder.IndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.covered.data.LazyValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
-
-import com.google.common.collect.Maps;
 
 /**
  * Utility class to help manage indexes
@@ -98,26 +95,6 @@ public class IndexManagementUtil {
                     + indexLogReaderName + " hasn't been installed in hbase-site.xml under " + HLOG_READER_IMPL_KEY);
         }
 
-    }
-
-    @SuppressWarnings("deprecation")
-    public static ValueGetter createGetterFromKeyValues(Collection<KeyValue> pendingUpdates) {
-        final Map<ReferencingColumn, ImmutableBytesPtr> valueMap = Maps.newHashMapWithExpectedSize(pendingUpdates
-                .size());
-        for (KeyValue kv : pendingUpdates) {
-            // create new pointers to each part of the kv
-            ImmutableBytesPtr family = new ImmutableBytesPtr(kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength());
-            ImmutableBytesPtr qual = new ImmutableBytesPtr(kv.getBuffer(), kv.getQualifierOffset(),
-                    kv.getQualifierLength());
-            ImmutableBytesPtr value = new ImmutableBytesPtr(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength());
-            valueMap.put(new ReferencingColumn(family, qual), value);
-        }
-        return new ValueGetter() {
-            @Override
-            public ImmutableBytesPtr getLatestValue(ColumnReference ref) throws IOException {
-                return valueMap.get(ReferencingColumn.wrap(ref));
-            }
-        };
     }
 
     public static class ReferencingColumn {

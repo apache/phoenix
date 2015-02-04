@@ -66,6 +66,7 @@ import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
@@ -270,7 +271,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                             for (IndexMaintainer maintainer : indexMaintainers) {
                                 if (!results.isEmpty()) {
                                     result.getKey(ptr);
-                                    ValueGetter valueGetter = maintainer.createGetterFromKeyValues(results);
+                                    ValueGetter valueGetter = maintainer.createGetterFromKeyValues(ImmutableBytesPtr.copyBytesIfNecessary(ptr),results);
                                     Put put = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, c.getEnvironment().getRegion().getStartKey(), c.getEnvironment().getRegion().getEndKey());
                                     indexMutations.add(put);
                                 }

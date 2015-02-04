@@ -46,6 +46,7 @@ import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
@@ -324,15 +325,16 @@ public class PTableImpl implements PTable {
         this.tableStats = stats;
         List<PColumn> pkColumns;
         PColumn[] allColumns;
-
+        
         this.columnsByName = ArrayListMultimap.create(columns.size(), 1);
+        int numPKColumns = 0;
         if (bucketNum != null) {
             // Add salt column to allColumns and pkColumns, but don't add to
             // columnsByName, since it should not be addressable via name.
             allColumns = new PColumn[columns.size()+1];
             allColumns[SALTING_COLUMN.getPosition()] = SALTING_COLUMN;
             pkColumns = Lists.newArrayListWithExpectedSize(columns.size()+1);
-            pkColumns.add(SALTING_COLUMN);
+            ++numPKColumns;
         } else {
             allColumns = new PColumn[columns.size()];
             pkColumns = Lists.newArrayListWithExpectedSize(columns.size());
@@ -342,7 +344,7 @@ public class PTableImpl implements PTable {
             allColumns[column.getPosition()] = column;
             PName familyName = column.getFamilyName();
             if (familyName == null) {
-                pkColumns.add(column);
+                ++numPKColumns;
             }
             String columnName = column.getName().getString();
             if (columnsByName.put(columnName, column)) {
@@ -360,18 +362,20 @@ public class PTableImpl implements PTable {
         estimatedSize += SizedUtil.sizeOfMap(allColumns.length, SizedUtil.POINTER_SIZE, SizedUtil.sizeOfArrayList(1)); // for multi-map
 
         this.bucketNum = bucketNum;
-        this.pkColumns = ImmutableList.copyOf(pkColumns);
         this.allColumns = ImmutableList.copyOf(allColumns);
-        estimatedSize += SizedUtil.sizeOfMap(pkColumns.size()) + SizedUtil.sizeOfMap(allColumns.length);
+        estimatedSize += SizedUtil.sizeOfMap(numPKColumns) + SizedUtil.sizeOfMap(allColumns.length);
 
-        RowKeySchemaBuilder builder = new RowKeySchemaBuilder(pkColumns.size());
+        RowKeySchemaBuilder builder = new RowKeySchemaBuilder(numPKColumns);
         // Two pass so that column order in column families matches overall column order
         // and to ensure that column family order is constant
-        int maxExpectedSize = allColumns.length - pkColumns.size();
+        int maxExpectedSize = allColumns.length - numPKColumns;
         // Maintain iteration order so that column families are ordered as they are listed
         Map<PName, List<PColumn>> familyMap = Maps.newLinkedHashMap();
         for (PColumn column : allColumns) {
             PName familyName = column.getFamilyName();
+            if (familyName == null) {
+            	 pkColumns.add(column);
+            }
             if (familyName == null) {
                 estimatedSize += column.getEstimatedSize(); // PK columns
                 builder.addField(column, column.isNullable(), column.getSortOrder());
@@ -384,6 +388,7 @@ public class PTableImpl implements PTable {
                 columnsInFamily.add(column);
             }
         }
+        this.pkColumns = ImmutableList.copyOf(pkColumns);
         this.rowKeySchema = builder.build();
         estimatedSize += rowKeySchema.getEstimatedSize();
         Iterator<Map.Entry<PName,List<PColumn>>> iterator = familyMap.entrySet().iterator();
@@ -804,21 +809,21 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable) {
+    public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) {
         if (indexMaintainer == null) {
-            indexMaintainer = IndexMaintainer.create(dataTable, this);
+            indexMaintainer = IndexMaintainer.create(dataTable, this, connection);
         }
         return indexMaintainer;
     }
 
     @Override
-    public synchronized void getIndexMaintainers(ImmutableBytesWritable ptr) {
+    public synchronized void getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
         if (indexMaintainersPtr == null) {
             indexMaintainersPtr = new ImmutableBytesWritable();
             if (indexes.isEmpty()) {
                 indexMaintainersPtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             } else {
-                IndexMaintainer.serialize(this, indexMaintainersPtr);
+                IndexMaintainer.serialize(this, indexMaintainersPtr, connection);
             }
         }
         ptr.set(indexMaintainersPtr.get(), indexMaintainersPtr.getOffset(), indexMaintainersPtr.getLength());

@@ -23,6 +23,7 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -42,15 +43,27 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.IndexExpressionCompiler;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.ExpressionType;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
+import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil.ReferencingColumn;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
@@ -59,8 +72,11 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.tuple.ValueGetterTuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.BitSet;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -88,41 +104,15 @@ import com.google.common.collect.Sets;
  * @since 2.1.0
  */
 public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
-    
-    public static IndexMaintainer create(PTable dataTable, PTable index) {
+
+    private static final int EXPRESSION_NOT_PRESENT = -1;
+    private static final int ESTIMATED_EXPRESSION_SIZE = 8;
+
+	public static IndexMaintainer create(PTable dataTable, PTable index, PhoenixConnection connection) {
         if (dataTable.getType() == PTableType.INDEX || index.getType() != PTableType.INDEX || !dataTable.getIndexes().contains(index)) {
             throw new IllegalArgumentException();
         }
-        IndexMaintainer maintainer = new IndexMaintainer(dataTable, index);
-        int indexPosOffset = (index.getBucketNum() == null ? 0 : 1) + (maintainer.isMultiTenant ? 1 : 0) + (maintainer.viewIndexId == null ? 0 : 1);
-        RowKeyMetaData rowKeyMetaData = maintainer.getRowKeyMetaData();
-        int indexColByteSize = 0;
-        for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
-            PColumn indexColumn = index.getPKColumns().get(i);
-            int indexPos = i - indexPosOffset;
-            PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
-            boolean isPKColumn = SchemaUtil.isPKColumn(column);
-            if (isPKColumn) {
-                int dataPkPos = dataTable.getPKColumns().indexOf(column) - (dataTable.getBucketNum() == null ? 0 : 1) - (maintainer.isMultiTenant ? 1 : 0);
-                rowKeyMetaData.setIndexPkPosition(dataPkPos, indexPos);
-            } else {
-                indexColByteSize += column.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(column) : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
-                maintainer.getIndexedColumnTypes().add(column.getDataType());
-                maintainer.getIndexedColumns().add(new ColumnReference(column.getFamilyName().getBytes(), column.getName().getBytes()));
-            }
-            if (indexColumn.getSortOrder() == SortOrder.DESC) {
-                rowKeyMetaData.getDescIndexColumnBitSet().set(indexPos);
-            }
-        }
-        for (int i = 0; i < index.getColumnFamilies().size(); i++) {
-            PColumnFamily family = index.getColumnFamilies().get(i);
-            for (PColumn indexColumn : family.getColumns()) {
-                PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
-                maintainer.getCoverededColumns().add(new ColumnReference(column.getFamilyName().getBytes(), column.getName().getBytes()));
-            }
-        }
-        maintainer.estimatedIndexRowKeyBytes = maintainer.estimateIndexRowKeyByteSize(indexColByteSize);
-        maintainer.initCachedState();
+        IndexMaintainer maintainer = new IndexMaintainer(dataTable, index, connection);
         return maintainer;
     }
     
@@ -158,9 +148,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * @param dataTable data table
      * @param ptr bytes pointer to hold returned serialized value
      */
-    public static void serialize(PTable dataTable, ImmutableBytesWritable ptr) {
+    public static void serialize(PTable dataTable, ImmutableBytesWritable ptr, PhoenixConnection connection) {
         List<PTable> indexes = dataTable.getIndexes();
-        serialize(dataTable, ptr, indexes);
+        serialize(dataTable, ptr, indexes, connection);
     }
 
     /**
@@ -170,7 +160,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * @param indexes indexes to serialize
      */
     public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
-            List<PTable> indexes) {
+            List<PTable> indexes, PhoenixConnection connection) {
         Iterator<PTable> indexesItr = nonDisabledIndexIterator(indexes.iterator());
         if ((dataTable.isImmutableRows()) || !indexesItr.hasNext()) {
             indexesItr = enabledLocalIndexIterator(indexesItr);
@@ -184,7 +174,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         while (indexesItr.hasNext()) {
             nIndexes++;
             PTable index = indexesItr.next();
-            estimatedSize += index.getIndexMaintainer(dataTable).getEstimatedByteSize();
+            estimatedSize += index.getIndexMaintainer(dataTable, connection).getEstimatedByteSize();
         }
         TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(estimatedSize + 1);
         DataOutput output = new DataOutputStream(stream);
@@ -197,7 +187,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     dataTable.isImmutableRows() ? enabledLocalIndexIterator(indexes.iterator())
                             : nonDisabledIndexIterator(indexes.iterator());
             while (indexesItr.hasNext()) {
-                    indexesItr.next().getIndexMaintainer(dataTable).write(output);
+                    indexesItr.next().getIndexMaintainer(dataTable, connection).write(output);
             }
         } catch (IOException e) {
             throw new RuntimeException(e); // Impossible
@@ -238,9 +228,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
     private byte[] viewIndexId;
     private boolean isMultiTenant;
+    // indexed expressions that are not present in the row key of the data table, the expression can also refer to a regular column
+    private List<Expression> indexedExpressions;
+    // columns required to evaluate all expressions in indexedExpressions (this does not include columns in the data row key)
     private Set<ColumnReference> indexedColumns;
     private Set<ColumnReference> coveredColumns;
+    // columns required to create index row i.e. indexedColumns + coveredColumns  (this does not include columns in the data row key)
     private Set<ColumnReference> allColumns;
+    // TODO remove this in the next major release
     private List<PDataType> indexedColumnTypes;
     private RowKeyMetaData rowKeyMetaData;
     private byte[] indexTableName;
@@ -258,6 +253,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     private List<ImmutableBytesPtr> indexQualifiers;
     private int estimatedIndexRowKeyBytes;
+    private int estimatedExpressionSize;
     private int[] dataPkPosition;
     private int maxTrailingNulls;
     private ColumnReference dataEmptyKeyValueRef;
@@ -267,32 +263,43 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.isDataTableSalted = isDataTableSalted;
     }
 
-    private IndexMaintainer(PTable dataTable, PTable index) {
+    private IndexMaintainer(PTable dataTable, PTable index, PhoenixConnection connection) {
         this(dataTable.getRowKeySchema(), dataTable.getBucketNum() != null);
         this.isMultiTenant = dataTable.isMultiTenant();
         this.viewIndexId = index.getViewIndexId() == null ? null : MetaDataUtil.getViewIndexIdDataType().toBytes(index.getViewIndexId());
         this.isLocalIndex = index.getIndexType() == IndexType.LOCAL;
 
-        RowKeySchema dataRowKeySchema = dataTable.getRowKeySchema();
-        boolean isDataTableSalted = dataTable.getBucketNum() != null;
         byte[] indexTableName = index.getPhysicalName().getBytes();
         // Use this for the nDataSaltBuckets as we need this for local indexes
         // TODO: persist nDataSaltBuckets separately, but maintain b/w compat.
         Integer nIndexSaltBuckets = isLocalIndex ? dataTable.getBucketNum() : index.getBucketNum();
         boolean indexWALDisabled = index.isWALDisabled();
         int indexPosOffset = (index.getBucketNum() == null ? 0 : 1) + (this.isMultiTenant ? 1 : 0) + (this.viewIndexId == null ? 0 : 1);
+//        int indexPosOffset = !isLocalIndex && nIndexSaltBuckets > 0 ? 1 : 0;
         int nIndexColumns = index.getColumns().size() - indexPosOffset;
         int nIndexPKColumns = index.getPKColumns().size() - indexPosOffset;
-        int indexedColumnsCount = 0;
-        for (int i  = indexPosOffset; i<index.getPKColumns().size();i++) {
-            PColumn indexColumn = index.getPKColumns().get(i);
-            PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
-            boolean isPKColumn = SchemaUtil.isPKColumn(column);
-            if (!isPKColumn) {
-                indexedColumnsCount++;
-            } 
+        // number of expressions that are indexed that are not present in the row key of the data table
+        int indexedExpressionCount = 0;
+        for (int i = indexPosOffset; i<index.getPKColumns().size();i++) {
+        	PColumn indexColumn = index.getPKColumns().get(i);
+        	if (!IndexUtil.isIndexColumn(indexColumn)) {
+                continue;
+            }
+        	String indexColumnName = indexColumn.getName().getString();
+            String dataFamilyName = IndexUtil.getDataColumnFamilyName(indexColumnName);
+            String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
+            try {
+                PColumn dataColumn = dataFamilyName.equals("") ? dataTable.getColumn(dataColumnName) : dataTable.getColumnFamily(dataFamilyName).getColumn(dataColumnName);
+                if (SchemaUtil.isPKColumn(dataColumn)) 
+                    continue;
+            } catch (ColumnNotFoundException e) {
+             // This column must be an expression
+            } catch (Exception e) {
+                throw new IllegalArgumentException(e);
+            }
+            indexedExpressionCount++;
         }
-        int indexPkColumnCount = this.dataRowKeySchema.getFieldCount() + indexedColumnsCount - (isDataTableSalted ? 1 : 0) - (isMultiTenant ? 1 : 0);
+        int indexPkColumnCount = this.dataRowKeySchema.getFieldCount() + indexedExpressionCount  - (this.isDataTableSalted ? 1 : 0) - (this.isMultiTenant ? 1 : 0);
         this.rowKeyMetaData = newRowKeyMetaData(indexPkColumnCount);
         BitSet bitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
 
@@ -312,12 +319,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
         }
         this.indexTableName = indexTableName;
-        this.indexedColumns = Sets.newLinkedHashSetWithExpectedSize(nIndexPKColumns-nDataPKColumns);
         this.indexedColumnTypes = Lists.<PDataType>newArrayListWithExpectedSize(nIndexPKColumns-nDataPKColumns);
+        this.indexedExpressions = Lists.newArrayListWithExpectedSize(nIndexPKColumns-nDataPKColumns);
         this.coveredColumns = Sets.newLinkedHashSetWithExpectedSize(nIndexColumns-nIndexPKColumns);
-        this.allColumns = Sets.newLinkedHashSetWithExpectedSize(nDataPKColumns + nIndexColumns);
-        this.allColumns.addAll(indexedColumns);
-        this.allColumns.addAll(coveredColumns);
         this.nIndexSaltBuckets  = nIndexSaltBuckets == null ? 0 : nIndexSaltBuckets;
         this.dataEmptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(dataTable);
         this.emptyKeyValueCFPtr = SchemaUtil.getEmptyColumnFamilyPtr(index);
@@ -326,6 +330,60 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // TODO: check whether index is immutable or not. Currently it's always false so checking
         // data table is with immutable rows or not.
         this.immutableRows = dataTable.isImmutableRows();
+        int indexColByteSize = 0;
+        ColumnResolver resolver = null;
+        try {
+            resolver = FromCompiler.getResolver(new TableRef(dataTable));
+        } catch (SQLException e) {
+            throw new RuntimeException(e); // Impossible
+        }
+        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver);
+        IndexExpressionCompiler expressionIndexCompiler = new IndexExpressionCompiler(context);
+        for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
+            PColumn indexColumn = index.getPKColumns().get(i);
+            if (!IndexUtil.isIndexColumn(indexColumn)) {
+                continue;
+            }
+            int indexPos = i - indexPosOffset;
+            Expression expression = null;
+            try {
+                expressionIndexCompiler.reset();
+                ParseNode parseNode  = SQLParser.parseCondition(indexColumn.getExpressionStr());
+                expression = parseNode.accept(expressionIndexCompiler);
+            } catch (SQLException e) {
+                throw new RuntimeException(e); // Impossible
+            }
+            if ( expressionIndexCompiler.getColumnRef()!=null ) {
+            	// get the column of the data table that corresponds to this index column
+	            PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
+	            boolean isPKColumn = SchemaUtil.isPKColumn(column);
+	            if (isPKColumn) {
+	                int dataPkPos = dataTable.getPKColumns().indexOf(column) - (dataTable.getBucketNum() == null ? 0 : 1) - (this.isMultiTenant ? 1 : 0);
+	                this.rowKeyMetaData.setIndexPkPosition(dataPkPos, indexPos);
+	            } else {
+	                indexColByteSize += column.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(column) : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
+	                this.indexedExpressions.add(expression);
+	            }
+            }
+            else {
+            	indexColByteSize += expression.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(expression) : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
+                this.indexedExpressions.add(expression);
+            }
+            // set the sort order of the expression correctly
+            if (indexColumn.getSortOrder() == SortOrder.DESC) {
+                this.rowKeyMetaData.getDescIndexColumnBitSet().set(indexPos);
+            }
+        }
+        this.estimatedExpressionSize = expressionIndexCompiler.getTotalNodeCount() * ESTIMATED_EXPRESSION_SIZE;
+        for (int i = 0; i < index.getColumnFamilies().size(); i++) {
+            PColumnFamily family = index.getColumnFamilies().get(i);
+            for (PColumn indexColumn : family.getColumns()) {
+                PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
+                this.coveredColumns.add(new ColumnReference(column.getFamilyName().getBytes(), column.getName().getBytes()));
+            }
+        }
+        this.estimatedIndexRowKeyBytes = estimateIndexRowKeyByteSize(indexColByteSize);
+        initCachedState();
     }
 
     public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr, byte[] regionStartKey, byte[] regionEndKey)  {
@@ -388,30 +446,26 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 } 
             }
             BitSet descIndexColumnBitSet = rowKeyMetaData.getDescIndexColumnBitSet();
-            int j = 0;
-            Iterator<ColumnReference> iterator = indexedColumns.iterator();
+            Iterator<Expression> expressionIterator = indexedExpressions.iterator();
             for (int i = 0; i < nIndexedColumns; i++) {
                 PDataType dataColumnType;
-                boolean isNullable = true;
-                boolean isDataColumnInverted = false;
-                SortOrder dataSortOrder = SortOrder.getDefault();
-                if (dataPkPosition[i] == -1) {
-                    dataColumnType = indexedColumnTypes.get(j);
-                    ImmutableBytesPtr value = valueGetter.getLatestValue(iterator.next());
-                    if (value == null) {
-                        ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-                    } else {
-                        ptr.set(value.copyBytesIfNecessary());
-                    }
-                    j++;
-               } else {
+                boolean isNullable;
+                SortOrder dataSortOrder;
+                if (dataPkPosition[i] == EXPRESSION_NOT_PRESENT) {
+                	Expression expression = expressionIterator.next();
+                	dataColumnType = expression.getDataType();
+                	dataSortOrder = expression.getSortOrder();
+                    isNullable = expression.isNullable();
+                	expression.evaluate(new ValueGetterTuple(valueGetter), ptr);
+                }
+                else {
                     Field field = dataRowKeySchema.getField(dataPkPosition[i]);
                     dataColumnType = field.getDataType();
                     ptr.set(rowKeyPtr.get(), dataRowKeyLocator[0][i], dataRowKeyLocator[1][i]);
                     dataSortOrder = field.getSortOrder();
-                    isDataColumnInverted = dataSortOrder != SortOrder.ASC;
                     isNullable = field.isNullable();
                 }
+                boolean isDataColumnInverted = dataSortOrder != SortOrder.ASC;
                 PDataType indexColumnType = IndexUtil.getIndexColumnDataType(isNullable, dataColumnType);
                 boolean isBytesComparable = dataColumnType.isBytesComparableWith(indexColumnType) ;
                 if (isBytesComparable && isDataColumnInverted == descIndexColumnBitSet.get(i)) {
@@ -643,10 +697,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 indexFields[pos] = dataRowKeySchema.getField(i);
             } 
         }
-        int indexedColumnTypesIndex = 0;
+        Iterator<Expression> expressionSetItr = indexedExpressions.iterator();
         for (Field indexField : indexFields) {
             if (indexField == null) { // Add field for kv column in index
-                final PDataType dataType = indexedColumnTypes.get(indexedColumnTypesIndex++);
+                final PDataType dataType = expressionSetItr.next().getDataType();
                 builder.addField(new PDatum() {
 
                     @Override
@@ -823,10 +877,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return coveredColumns;
     }
 
-    public Set<ColumnReference> getIndexedColumns() {
-        return indexedColumns;
-    }
-
     public Set<ColumnReference> getAllColumns() {
         return allColumns;
     }
@@ -836,14 +886,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // we can infer this based on the family of the first covered column
         // If if there are no covered columns, we know it's our default name
         return emptyKeyValueCFPtr;
-    }
-
-    private RowKeyMetaData getRowKeyMetaData() {
-        return rowKeyMetaData;
-    }
-    
-    private List<PDataType> getIndexedColumnTypes() {
-        return indexedColumnTypes;
     }
 
     @Override
@@ -881,7 +923,62 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         indexTableName = Bytes.readByteArray(input);
         dataEmptyKeyValueCF = Bytes.readByteArray(input);
-        emptyKeyValueCFPtr = new ImmutableBytesPtr(Bytes.readByteArray(input));
+        int len = WritableUtils.readVInt(input);
+        //TODO remove this in the next major release
+        boolean isNewClient = false;
+        if (len < 0) {
+          isNewClient = true;
+          len=Math.abs(len);
+        }
+        byte [] emptyKeyValueCF = new byte[len];
+        input.readFully(emptyKeyValueCF, 0, len);
+        emptyKeyValueCFPtr = new ImmutableBytesPtr(emptyKeyValueCF);
+        
+        if (isNewClient) {
+            int numIndexedExpressions = WritableUtils.readVInt(input);
+            indexedExpressions = Lists.newArrayListWithExpectedSize(numIndexedExpressions);        
+            for (int i = 0; i < numIndexedExpressions; i++) {
+            	Expression expression = ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
+            	expression.readFields(input);
+            	indexedExpressions.add(expression);
+            }
+        }
+        else {
+            indexedExpressions = Lists.newArrayListWithExpectedSize(indexedColumns.size());
+            Iterator<ColumnReference> colReferenceIter = indexedColumns.iterator();
+            Iterator<PDataType> dataTypeIter = indexedColumnTypes.iterator();
+            while (colReferenceIter.hasNext()) {
+                ColumnReference colRef = colReferenceIter.next();
+                final PDataType dataType = dataTypeIter.next();
+                indexedExpressions.add(new KeyValueColumnExpression(new PDatum() {
+                    
+                    @Override
+                    public boolean isNullable() {
+                        return true;
+                    }
+                    
+                    @Override
+                    public SortOrder getSortOrder() {
+                        return SortOrder.getDefault();
+                    }
+                    
+                    @Override
+                    public Integer getScale() {
+                        return null;
+                    }
+                    
+                    @Override
+                    public Integer getMaxLength() {
+                        return null;
+                    }
+                    
+                    @Override
+                    public PDataType getDataType() {
+                        return dataType;
+                    }
+                }, colRef.getFamily(), colRef.getQualifier()));
+            }
+        }
         
         rowKeyMetaData = newRowKeyMetaData();
         rowKeyMetaData.readFields(input);
@@ -908,6 +1005,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             Bytes.writeByteArray(output, ref.getFamily());
             Bytes.writeByteArray(output, ref.getQualifier());
         }
+        //TODO remove indexedColumnTypes in the next major release
         for (int i = 0; i < indexedColumnTypes.size(); i++) {
             PDataType type = indexedColumnTypes.get(i);
             WritableUtils.writeVInt(output, type.ordinal());
@@ -920,8 +1018,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         Bytes.writeByteArray(output, indexTableName);
         Bytes.writeByteArray(output, dataEmptyKeyValueCF);
-        WritableUtils.writeVInt(output,emptyKeyValueCFPtr.getLength());
+        // TODO in order to maintain b/w compatibility encode emptyKeyValueCFPtr.getLength() as a negative value (so we can distinguish between new and old clients)
+        // when indexedColumnTypes is removed, remove this 
+        WritableUtils.writeVInt(output,-emptyKeyValueCFPtr.getLength());
         output.write(emptyKeyValueCFPtr.get(),emptyKeyValueCFPtr.getOffset(), emptyKeyValueCFPtr.getLength());
+        
+        WritableUtils.writeVInt(output, indexedExpressions.size());
+        for (Expression expression : indexedExpressions) {
+        	WritableUtils.writeVInt(output, ExpressionType.valueOf(expression).ordinal());
+        	expression.write(output);
+        }
         
         rowKeyMetaData.write(output);
         // Encode indexWALDisabled in nDataCFs
@@ -941,7 +1047,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             size += WritableUtils.getVIntSize(ref.getQualifier().length);
             size += ref.getQualifier().length;
         }
-        size += indexedColumnTypes.size();
+        for (int i = 0; i < indexedColumnTypes.size(); i++) {
+            PDataType type = indexedColumnTypes.get(i);
+            size += WritableUtils.getVIntSize(type.ordinal());
+        }
         size += WritableUtils.getVIntSize(coveredColumns.size());
         for (ColumnReference ref : coveredColumns) {
             size += WritableUtils.getVIntSize(ref.getFamily().length);
@@ -954,13 +1063,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         size += dataEmptyKeyValueCF.length + WritableUtils.getVIntSize(dataEmptyKeyValueCF.length);
         size += emptyKeyValueCFPtr.getLength() + WritableUtils.getVIntSize(emptyKeyValueCFPtr.getLength());
         size += WritableUtils.getVIntSize(nDataCFs+1);
+        size += WritableUtils.getVIntSize(indexedExpressions.size());
+        for (Expression expression : indexedExpressions) {
+            size += WritableUtils.getVIntSize(ExpressionType.valueOf(expression).ordinal());
+        }
+        size += estimatedExpressionSize;
         return size;
     }
     
     private int estimateIndexRowKeyByteSize(int indexColByteSize) {
         int estimatedIndexRowKeyBytes = indexColByteSize + dataRowKeySchema.getEstimatedValueLength() + (nIndexSaltBuckets == 0 || isLocalIndex || this.isDataTableSalted ? 0 : SaltingUtil.NUM_SALTING_BYTES);
         return estimatedIndexRowKeyBytes;
-   }
+    }
     
     /**
      * Init calculated state reading/creating
@@ -976,20 +1090,33 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 ref.getFamily(), ref.getQualifier())));
         }
 
-        this.allColumns = Sets.newLinkedHashSetWithExpectedSize(indexedColumns.size() + coveredColumns.size());
+        this.allColumns = Sets.newLinkedHashSetWithExpectedSize(indexedExpressions.size() + coveredColumns.size());
+        // columns that are required to evaluate all expressions in indexedExpressions (not including columns in data row key)
+        this.indexedColumns = Sets.newLinkedHashSetWithExpectedSize(indexedExpressions.size());
+        for (Expression expression : indexedExpressions) {
+        	KeyValueExpressionVisitor visitor = new KeyValueExpressionVisitor() {
+                @Override
+                public Void visit(KeyValueColumnExpression expression) {
+                	indexedColumns.add(new ColumnReference(expression.getColumnFamily(), expression.getColumnName()));
+                    indexedColumnTypes.add(expression.getDataType());
+                    return null;
+                }
+            };
+            expression.accept(visitor);
+        }
         allColumns.addAll(indexedColumns);
         allColumns.addAll(coveredColumns);
         
         int dataPkOffset = (isDataTableSalted ? 1 : 0) + (isMultiTenant ? 1 : 0);
         int nIndexPkColumns = getIndexPkColumnCount();
         dataPkPosition = new int[nIndexPkColumns];
-        Arrays.fill(dataPkPosition, -1);
+        Arrays.fill(dataPkPosition, EXPRESSION_NOT_PRESENT);
         int numViewConstantColumns = 0;
         BitSet viewConstantColumnBitSet = rowKeyMetaData.getViewConstantColumnBitSet();
         for (int i = dataPkOffset; i < dataRowKeySchema.getFieldCount(); i++) {
             if (!viewConstantColumnBitSet.get(i)) {
-                int dataPkPosition = rowKeyMetaData.getIndexPkPosition(i-dataPkOffset);
-                this.dataPkPosition[dataPkPosition] = i;
+                int indexPkPosition = rowKeyMetaData.getIndexPkPosition(i-dataPkOffset);
+                this.dataPkPosition[indexPkPosition] = i;
             } else {
                 numViewConstantColumns++;
             }
@@ -998,15 +1125,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // Calculate the max number of trailing nulls that we should get rid of after building the index row key.
         // We only get rid of nulls for variable length types, so we have to be careful to consider the type of the
         // index table, not the data type of the data table
-        int indexedColumnTypesPos = indexedColumnTypes.size()-1;
+        int expressionsPos = indexedExpressions.size();
         int indexPkPos = nIndexPkColumns - numViewConstantColumns - 1;
         while (indexPkPos >= 0) {
             int dataPkPos = dataPkPosition[indexPkPos];
             boolean isDataNullable;
             PDataType dataType;
-            if (dataPkPos == -1) {
+            if (dataPkPos == EXPRESSION_NOT_PRESENT) {
                 isDataNullable = true;
-                dataType = indexedColumnTypes.get(indexedColumnTypesPos--);
+                dataType = indexedExpressions.get(--expressionsPos).getDataType();
             } else {
                 Field dataField = dataRowKeySchema.getField(dataPkPos);
                 dataType = dataField.getDataType();
@@ -1022,7 +1149,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
 
     private int getIndexPkColumnCount() {
-        return dataRowKeySchema.getFieldCount() + indexedColumns.size() - (isDataTableSalted ? 1 : 0) - (isMultiTenant ? 1 : 0);
+        return dataRowKeySchema.getFieldCount() + indexedExpressions.size() - (isDataTableSalted ? 1 : 0) - (isMultiTenant ? 1 : 0);
     }
     
     private RowKeyMetaData newRowKeyMetaData() {
@@ -1178,7 +1305,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return allColumns.iterator();
     }
 
-    public ValueGetter createGetterFromKeyValues(Collection<? extends Cell> pendingUpdates) {
+    public ValueGetter createGetterFromKeyValues(final byte[] rowKey, Collection<? extends Cell> pendingUpdates) {
         final Map<ReferencingColumn, ImmutableBytesPtr> valueMap = Maps.newHashMapWithExpectedSize(pendingUpdates
                 .size());
         for (Cell kv : pendingUpdates) {
@@ -1190,9 +1317,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         return new ValueGetter() {
             @Override
-            public ImmutableBytesPtr getLatestValue(ColumnReference ref) throws IOException {
+            public ImmutableBytesPtr getLatestValue(ColumnReference ref) {
                 if(ref.equals(dataEmptyKeyValueRef)) return null;
                 return valueMap.get(ReferencingColumn.wrap(ref));
+            }
+            @Override
+            public byte[] getRowKey() {
+            	return rowKey;
             }
         };
     }
@@ -1207,5 +1338,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     public boolean isImmutableRows() {
         return immutableRows;
+    }
+    
+    public Set<ColumnReference> getIndexedColumns() {
+        return indexedColumns;
     }
 }

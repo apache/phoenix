@@ -31,7 +31,8 @@ import java.util.List;
  * @since 0.1
  */
 public abstract class CompoundParseNode extends ParseNode {
-    private final List<ParseNode> children;
+
+	private final List<ParseNode> children;
     private final boolean isStateless;
     
     CompoundParseNode(List<ParseNode> children) {
@@ -70,4 +71,33 @@ public abstract class CompoundParseNode extends ParseNode {
     public String toString() {
         return this.getClass().getName() + children.toString();
     }
+    
+    @Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result
+				+ ((children == null) ? 0 : children.hashCode());
+		result = prime * result + (isStateless ? 1231 : 1237);
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		CompoundParseNode other = (CompoundParseNode) obj;
+		if (children == null) {
+			if (other.children != null)
+				return false;
+		} else if (!children.equals(other.children))
+			return false;
+		if (isStateless != other.isStateless)
+			return false;
+		return true;
+	}
 }

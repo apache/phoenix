@@ -207,10 +207,10 @@ public class IndexUtil {
     }
 
     public static List<Mutation> generateIndexData(final PTable table, PTable index,
-            List<Mutation> dataMutations, ImmutableBytesWritable ptr, final KeyValueBuilder kvBuilder)
+            List<Mutation> dataMutations, ImmutableBytesWritable ptr, final KeyValueBuilder kvBuilder, PhoenixConnection connection)
             throws SQLException {
         try {
-            IndexMaintainer maintainer = index.getIndexMaintainer(table);
+            IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
             List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
            for (final Mutation dataMutation : dataMutations) {
                 long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
@@ -225,6 +225,11 @@ public class IndexUtil {
                     // TODO: is this more efficient than looking in our mutation map
                     // using the key plus finding the PColumn?
                     ValueGetter valueGetter = new ValueGetter() {
+                    	
+                    	@Override
+                        public byte[] getRowKey() {
+                    		return dataMutation.getRow();
+                    	}
         
                         @Override
                         public ImmutableBytesPtr getLatestValue(ColumnReference ref) {
@@ -263,6 +268,10 @@ public class IndexUtil {
 
     public static boolean isDataPKColumn(PColumn column) {
         return column.getName().getString().startsWith(INDEX_COLUMN_NAME_SEP);
+    }
+    
+    public static boolean isIndexColumn(PColumn column) {
+        return column.getName().getString().contains(INDEX_COLUMN_NAME_SEP);
     }
     
     public static boolean getViewConstantValue(PColumn column, ImmutableBytesWritable ptr) {
@@ -439,7 +448,7 @@ public class IndexUtil {
         PhoenixStatement statement = new PhoenixStatement(conn);
         TableRef indexTableRef = new TableRef(index) {
             @Override
-            public String getColumnDisplayName(ColumnRef ref, boolean cfCaseSensitive, boolean cqCaseSensitive) {
+            public String getColumnDisplayName(ColumnRef ref, boolean schemaNameCaseSensitive, boolean colNameCaseSensitive) {
                 return '"' + ref.getColumn().getName().getString() + '"';
             }
         };

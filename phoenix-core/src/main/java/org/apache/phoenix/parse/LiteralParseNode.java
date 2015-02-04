@@ -80,4 +80,25 @@ public class LiteralParseNode extends TerminalParseNode {
     public String toString() {
         return type == PVarchar.INSTANCE ? ("'" + value.toString() + "'") : value == null ? "null" : value.toString();
     }
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((type == null) ? 0 : type.hashCode());
+		result = prime * result + ((value == null) ? 0 : value.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		LiteralParseNode other = (LiteralParseNode) obj;
+		return type.isComparableTo(other.type) && type.compareTo(value, other.value, other.type) == 0;
+	}
 }
