@@ -101,24 +101,6 @@ public class IndexManagementUtil {
 
     }
 
-    public static ValueGetter createGetterFromKeyValues(Collection<Cell> pendingUpdates) {
-        final Map<ReferencingColumn, ImmutableBytesPtr> valueMap = Maps.newHashMapWithExpectedSize(pendingUpdates
-                .size());
-        for (Cell kv : pendingUpdates) {
-            // create new pointers to each part of the kv
-            ImmutableBytesPtr family = new ImmutableBytesPtr(kv.getRowArray(),kv.getFamilyOffset(),kv.getFamilyLength());
-            ImmutableBytesPtr qual = new ImmutableBytesPtr(kv.getRowArray(), kv.getQualifierOffset(), kv.getQualifierLength());
-            ImmutableBytesPtr value = new ImmutableBytesPtr(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
-            valueMap.put(new ReferencingColumn(family, qual), value);
-        }
-        return new ValueGetter() {
-            @Override
-            public ImmutableBytesPtr getLatestValue(ColumnReference ref) throws IOException {
-                return valueMap.get(ReferencingColumn.wrap(ref));
-            }
-        };
-    }
-
     public static class ReferencingColumn {
         ImmutableBytesPtr family;
         ImmutableBytesPtr qual;

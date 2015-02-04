@@ -59,4 +59,30 @@ public class LikeParseNode extends BinaryParseNode {
         }
         return visitor.visitLeave(this, l);
     }
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = super.hashCode();
+		result = prime * result
+				+ ((likeType == null) ? 0 : likeType.hashCode());
+		result = prime * result + (negate ? 1231 : 1237);
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (!super.equals(obj))
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		LikeParseNode other = (LikeParseNode) obj;
+		if (likeType != other.likeType)
+			return false;
+		if (negate != other.negate)
+			return false;
+		return true;
+	}
 }

@@ -57,8 +57,8 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -144,7 +144,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                         new HashMap<ImmutableBytesWritable, IndexMaintainer>();
                 for (PTable index : indexes) {
                     if (index.getIndexType() == IndexType.LOCAL) {
-                        IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable);
+                        IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, conn);
                         indexMaintainers.put(new ImmutableBytesWritable(MetaDataUtil
                                 .getViewIndexIdDataType().toBytes(index.getViewIndexId())),
                             indexMaintainer);

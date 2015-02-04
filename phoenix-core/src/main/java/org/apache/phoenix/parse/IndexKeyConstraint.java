@@ -17,21 +17,25 @@
  */
 package org.apache.phoenix.parse;
 
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
 
 import com.google.common.collect.ImmutableList;
+
 import org.apache.phoenix.schema.SortOrder;
 
 public class IndexKeyConstraint {
-    private final List<Pair<ColumnParseNode, SortOrder>> columnNameToSortOrder;
+	public static final IndexKeyConstraint EMPTY = new IndexKeyConstraint(Collections.<Pair<ParseNode, SortOrder>>emptyList());
+
+    private final List<Pair<ParseNode, SortOrder>> columnNameToSortOrder;
     
-    IndexKeyConstraint(List<Pair<ColumnParseNode, SortOrder>> columnNameAndSortOrder) {
-        this.columnNameToSortOrder = ImmutableList.copyOf(columnNameAndSortOrder);
+    IndexKeyConstraint(List<Pair<ParseNode, SortOrder>> parseNodeAndSortOrder) {
+        this.columnNameToSortOrder = ImmutableList.copyOf(parseNodeAndSortOrder);
     }
 
-    public List<Pair<ColumnParseNode, SortOrder>> getColumns() {
+    public List<Pair<ParseNode, SortOrder>> getParseNodeAndSortOrderList() {
         return columnNameToSortOrder;
     }
 }

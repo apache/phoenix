@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
+
 /**
  * Definition of a Phoenix column
  *
@@ -50,4 +51,6 @@ public interface PColumn extends PDatum {
     boolean isViewReferenced();
     
     int getEstimatedSize();
+    
+    String getExpressionStr();
 }

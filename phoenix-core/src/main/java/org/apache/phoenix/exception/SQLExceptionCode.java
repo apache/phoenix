@@ -150,6 +150,12 @@ public enum SQLExceptionCode {
      READ_ONLY_CONNECTION(518,"25502","Mutations are not permitted for a read-only connection."),
  
      VARBINARY_ARRAY_NOT_SUPPORTED(519, "42896", "VARBINARY ARRAY is not supported"),
+    
+     /**
+      *  Expression Index exceptions.
+      */
+     AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX(520, "42897", "Aggreagaate expression are not allowed in an index"),
+     NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX(521, "42898", "Non-deterministic expression are not allowed in an index"),
 
      /** 
      * HBase and Phoenix specific implementation defined sub-classes.

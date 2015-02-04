@@ -84,4 +84,9 @@ public class LazyValueGetter implements ValueGetter {
     }
     return null;
   }
+
+  @Override
+  public byte[] getRowKey() {
+	return this.row; 
+  }
 }

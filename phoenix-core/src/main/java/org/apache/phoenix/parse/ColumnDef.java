@@ -36,7 +36,7 @@ import com.google.common.base.Preconditions;
 /**
  * 
  * Represents a column definition during DDL
- *
+ * 
  * 
  * @since 0.1
  */
@@ -50,9 +50,10 @@ public class ColumnDef {
     private final SortOrder sortOrder;
     private final boolean isArray;
     private final Integer arrSize;
+    private final String expressionStr;
  
     ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength,
-    		            Integer scale, boolean isPK, SortOrder sortOrder) {
+    		            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr) {
    	 try {
          Preconditions.checkNotNull(sortOrder);
    	     PDataType localType = null;
@@ -133,13 +134,14 @@ public class ColumnDef {
          if(this.isArray) {
              this.dataType = localType;
          }
+         this.expressionStr = expressionStr;
      } catch (SQLException e) {
          throw new ParseException(e);
      }
     }
     ColumnDef(ColumnName columnDefName, String sqlTypeName, Boolean isNull, Integer maxLength,
-            Integer scale, boolean isPK, SortOrder sortOrder) {
-    	this(columnDefName, sqlTypeName, false, 0, isNull, maxLength, scale, isPK, sortOrder);
+            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr) {
+    	this(columnDefName, sqlTypeName, false, 0, isNull, maxLength, scale, isPK, sortOrder, expressionStr);
     }
 
     public ColumnName getColumnDefName() {
@@ -182,5 +184,9 @@ public class ColumnDef {
 
 	public Integer getArraySize() {
 		return arrSize;
+	}
+
+	public String getExpression() {
+		return expressionStr;
 	}
 }
