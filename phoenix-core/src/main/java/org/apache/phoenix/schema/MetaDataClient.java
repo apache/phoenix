@@ -953,7 +953,7 @@ public class MetaDataClient {
                     PDataType dataType = IndexUtil.getIndexColumnDataType(col);
                     ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, col.getSortOrder()));
-                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, SortOrder.getDefault(), null));
+                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, SortOrder.getDefault(), col.getName().getString()));
                 }
                 /*
                  * Allocate an index ID in two circumstances:

@@ -67,7 +67,10 @@ public class ExpressionIndexParseNodeRewriter extends ParseNodeRewriter {
         IndexStatementRewriter rewriter = new IndexStatementRewriter(dataResolver, null);
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         ColumnParseNodeVisitor columnParseNodeVisitor = new ColumnParseNodeVisitor();
-        for (PColumn column : index.getPKColumns()) {
+        int indexPosOffset = (index.getBucketNum() == null ? 0 : 1) + (index.isMultiTenant() ? 1 : 0) + (index.getViewIndexId() == null ? 0 : 1);
+        List<PColumn> pkColumns = index.getPKColumns();
+		for (int i=indexPosOffset; i<pkColumns.size(); ++i) {
+        	PColumn column = pkColumns.get(i);
             if (column.getExpressionStr()==null) {
                 continue;
             }
