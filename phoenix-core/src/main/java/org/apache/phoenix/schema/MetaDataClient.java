@@ -948,8 +948,8 @@ public class MetaDataClient {
                 if (dataTable.isMultiTenant()) {
                     // Add tenant ID column as first column in index
                     PColumn col = dataTable.getPKColumns().get(posOffset);
-                    RowKeyColumnExpression o = new RowKeyColumnExpression(col, new RowKeyValueAccessor(pkColumns, col.getPosition()), col.getName().getString());
-					unusedPkColumns.remove(o);
+                    RowKeyColumnExpression columnExpression = new RowKeyColumnExpression(col, new RowKeyValueAccessor(pkColumns, posOffset), col.getName().getString());
+					unusedPkColumns.remove(columnExpression);
                     PDataType dataType = IndexUtil.getIndexColumnDataType(col);
                     ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, col.getSortOrder()));
