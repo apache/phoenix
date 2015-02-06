@@ -54,8 +54,8 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.Sequence;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
 
@@ -79,9 +79,13 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     private final String query;
 
-    public PhoenixPreparedStatement(PhoenixConnection connection, PhoenixStatementParser parser) throws SQLException,
+    public PhoenixPreparedStatement(PhoenixConnection connection, PhoenixStatementParser parser) throws SQLException, IOException {
+    	this(connection, parser, ORDER_IN_CONNECTION_UNDEFINED);
+    }
+    
+    public PhoenixPreparedStatement(PhoenixConnection connection, PhoenixStatementParser parser, int orderInConnection) throws SQLException,
             IOException {
-        super(connection);
+        super(connection, orderInConnection);
         this.statement = parser.nextStatement(new ExecutableNodeFactory());
         if (this.statement == null) { throw new EOFException(); }
         this.query = null; // TODO: add toString on SQLStatement
@@ -89,9 +93,13 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         this.parameters = Arrays.asList(new Object[statement.getBindCount()]);
         Collections.fill(parameters, BindManager.UNBOUND_PARAMETER);
     }
-
+    
     public PhoenixPreparedStatement(PhoenixConnection connection, String query) throws SQLException {
-        super(connection);
+    	this(connection, query, ORDER_IN_CONNECTION_UNDEFINED);
+    }
+
+    public PhoenixPreparedStatement(PhoenixConnection connection, String query, int orderInConnection) throws SQLException {
+        super(connection, orderInConnection);
         this.query = query;
         this.statement = parseStatement(query);
         this.parameterCount = statement.getBindCount();
@@ -100,7 +108,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     }
 
     public PhoenixPreparedStatement(PhoenixPreparedStatement statement) throws SQLException {
-        super(statement.connection);
+        super(statement.connection, statement.getOrderInConnection());
         this.query = statement.query;
         this.statement = statement.statement;
         this.parameterCount = statement.parameters.size();

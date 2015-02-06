@@ -18,24 +18,28 @@
 package org.apache.phoenix.execute;
 
 import java.sql.SQLException;
+import java.util.Set;
+
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+
+import com.google.common.collect.ImmutableSet;
 
 public class CommitException extends SQLException {
-    private static final long serialVersionUID = 1L;
-    private final MutationState uncommittedState;
-    private final MutationState committedState;
+    private static final long serialVersionUID = 2L;
+    private final Set<Integer> failures;
 
-    public CommitException(Exception e, MutationState uncommittedState, MutationState committedState) {
+    public CommitException(Exception e, Set<Integer> failures) {
         super(e);
-        this.uncommittedState = uncommittedState;
-        this.committedState = committedState;
+        this.failures = ImmutableSet.copyOf(failures);
     }
 
-    public MutationState getUncommittedState() {
-        return uncommittedState;
+    /**
+     * Returns indexes of UPSERT and DELETE statements that have failed. Indexes returned
+     * correspond to each failed statement's order of creation within a {@link PhoenixConnection}.
+     * @see PhoenixStatement#getOrderInConnection()
+     */
+    public Set<Integer> getFailures() {
+    	return failures;
     }
-
-    public MutationState getCommittedState() {
-        return committedState;
-    }
-
 }

@@ -450,7 +450,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public Statement createStatement() throws SQLException {
-        PhoenixStatement statement = new PhoenixStatement(this);
+        PhoenixStatement statement = new PhoenixStatement(this, statements.size());
         statements.add(statement);
         return statement;
     }
@@ -574,7 +574,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public PreparedStatement prepareStatement(String sql) throws SQLException {
-        PhoenixPreparedStatement statement = new PhoenixPreparedStatement(this, sql);
+        PhoenixPreparedStatement statement = new PhoenixPreparedStatement(this, sql, statements.size());
         statements.add(statement);
         return statement;
     }
