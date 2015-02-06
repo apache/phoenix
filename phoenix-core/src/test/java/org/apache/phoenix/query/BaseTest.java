@@ -821,14 +821,28 @@ public abstract class BaseTest {
         }
     }
     
-    private static void deletePriorSequences(long ts, Connection conn) throws Exception {
+    private static void deletePriorSequences(long ts, Connection globalConn) throws Exception {
         // TODO: drop tenant-specific sequences too
-        ResultSet rs = conn.createStatement().executeQuery("SELECT " 
+        ResultSet rs = globalConn.createStatement().executeQuery("SELECT " 
+                + PhoenixDatabaseMetaData.TENANT_ID + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + "," 
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME 
                 + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED);
+        String lastTenantId = null;
+        Connection conn = globalConn;
         while (rs.next()) {
-            conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(1), rs.getString(2)));
+            String tenantId = rs.getString(1);
+            if (tenantId != null && !tenantId.equals(lastTenantId))  {
+                if (lastTenantId != null) {
+                    conn.close();
+                }
+                // Open tenant-specific connection when we find a new one
+                Properties props = new Properties(globalConn.getClientInfo());
+                props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                conn = DriverManager.getConnection(url, props);
+                lastTenantId = tenantId;
+            }
+            conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
         }
     }
     

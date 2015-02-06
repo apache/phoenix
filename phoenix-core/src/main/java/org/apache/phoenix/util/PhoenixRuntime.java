@@ -28,6 +28,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -56,6 +57,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryConstants;
@@ -66,13 +68,15 @@ import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
+import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
@@ -926,6 +930,39 @@ public class PhoenixRuntime {
             pColumn = table.getColumn(columnName);
         }
         return pColumn;
+    }
+    
+    /**
+     * Get expression that may be used to evaluate the tenant ID of a given row in a
+     * multi-tenant table. Both the SYSTEM.CATALOG table and the SYSTEM.SEQUENCE
+     * table are considered multi-tenant.
+     * @param conn open Phoenix connection
+     * @param fullTableName full table name
+     * @return An expression that may be evaluated for a row in the provided table or
+     * null if the table is not a multi-tenant table. 
+     * @throws SQLException if the table name is not found, a TableNotFoundException
+     * is thrown. If a multi-tenant local index is supplied a SQLFeatureNotSupportedException
+     * is thrown.
+     */
+    public static Expression getTenantIdExpression(Connection conn, String fullTableName) throws SQLException {
+        PTable table = getTable(conn, fullTableName);
+        // TODO: consider setting MULTI_TENANT = true for SYSTEM.CATALOG and SYSTEM.SEQUENCE
+        if (!SchemaUtil.isMetaTable(table) && !SchemaUtil.isSequenceTable(table) && !table.isMultiTenant()) {
+            return null;
+        }
+        if (table.getIndexType() == IndexType.LOCAL) {
+            /*
+             * With some hackery, we could deduce the tenant ID from a multi-tenant local index,
+             * however it's not clear that we'd want to maintain the same prefixing of the region
+             * start key, as the region boundaries may end up being different on a cluster being
+             * replicated/backed-up to (which is the use case driving the method).
+             */
+            throw new SQLFeatureNotSupportedException();
+        }
+        
+        int pkPosition = table.getBucketNum() == null ? 0 : 1;
+        List<PColumn> pkColumns = table.getPKColumns();
+        return new RowKeyColumnExpression(pkColumns.get(pkPosition), new RowKeyValueAccessor(pkColumns, pkPosition));
     }
 
 }

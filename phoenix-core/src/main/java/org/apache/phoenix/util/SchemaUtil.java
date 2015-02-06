@@ -376,6 +376,10 @@ public class SchemaUtil {
         return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES) == 0;
     }
 
+    public static boolean isSequenceTable(PTable table) {
+        return PhoenixDatabaseMetaData.SEQUENCE_FULLNAME.equals(table.getName().getString());
+    }
+
     public static boolean isMetaTable(PTable table) {
         return PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(table.getSchemaName().getString()) && PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE.equals(table.getTableName().getString());
     }
