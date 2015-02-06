@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 
 import org.apache.hadoop.hbase.client.HConnection;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 
 /**
@@ -49,7 +48,7 @@ public interface HTableFactory {
         @SuppressWarnings("deprecation")
         @Override
         public HTableInterface getTable(byte[] tableName, HConnection connection, ExecutorService pool) throws IOException {
-            return new HTable(tableName, connection, pool);
+            return connection.getTable(tableName, pool);
         }
     }
 }

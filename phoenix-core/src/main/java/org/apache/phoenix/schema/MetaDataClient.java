@@ -909,6 +909,16 @@ public class MetaDataClient {
         boolean retry = true;
         Short indexId = null;
         boolean allocateIndexId = false;
+        boolean isLocalIndex = statement.getIndexType() == IndexType.LOCAL;
+        int hbaseVersion = connection.getQueryServices().getLowestClusterHBaseVersion();
+        if (isLocalIndex) {
+            if (!connection.getQueryServices().getProps().getBoolean(QueryServices.ALLOW_LOCAL_INDEX_ATTRIB, QueryServicesOptions.DEFAULT_ALLOW_LOCAL_INDEX)) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNALLOWED_LOCAL_INDEXES).setTableName(indexTableName.getTableName()).build().buildException();
+            }
+            if (hbaseVersion < PhoenixDatabaseMetaData.LOCAL_SI_VERSION_THRESHOLD) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_LOCAL_INDEXES).setTableName(indexTableName.getTableName()).build().buildException();
+            }
+        }
         while (true) {
             try {
                 ColumnResolver resolver = FromCompiler.getResolver(statement, connection);
@@ -920,7 +930,6 @@ public class MetaDataClient {
                         throw new SQLFeatureNotSupportedException("An index may only be created for a VIEW through a tenant-specific connection");
                     }
                 }
-                int hbaseVersion = connection.getQueryServices().getLowestClusterHBaseVersion();
                 if (!dataTable.isImmutableRows()) {
                     if (hbaseVersion < PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_MUTABLE_INDEXES).setTableName(indexTableName.getTableName()).build().buildException();
@@ -960,7 +969,7 @@ public class MetaDataClient {
                  * 1) for a local index, as all local indexes will reside in the same HBase table
                  * 2) for a view on an index.
                  */
-                if (statement.getIndexType() == IndexType.LOCAL || (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED)) {
+                if (isLocalIndex || (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED)) {
                     allocateIndexId = true;
                     // Next add index ID column
                     PDataType dataType = MetaDataUtil.getViewIndexIdDataType();

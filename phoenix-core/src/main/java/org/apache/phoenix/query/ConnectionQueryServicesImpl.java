@@ -1069,6 +1069,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private void ensureLocalIndexTableCreated(byte[] physicalTableName, Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits) throws SQLException, TableAlreadyExistsException {
+        
+        // If we're not allowing local indexes or the hbase version is too low,
+        // don't create the local index table
+        if (   !this.getProps().getBoolean(QueryServices.ALLOW_LOCAL_INDEX_ATTRIB, QueryServicesOptions.DEFAULT_ALLOW_LOCAL_INDEX) 
+            || getLowestClusterHBaseVersion() < PhoenixDatabaseMetaData.LOCAL_SI_VERSION_THRESHOLD) {
+                    return;
+        }
+        
         tableProps.put(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME, TRUE_BYTES_AS_STRING);
         HTableDescriptor desc = ensureTableCreated(physicalTableName, PTableType.TABLE, tableProps, families, splits, true);
         if (desc != null) {
