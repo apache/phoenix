@@ -136,6 +136,7 @@ import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
@@ -1757,8 +1758,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     }
 
-    // Keeping this to use for further upgrades
-    protected PhoenixConnection addColumnsIfNotExists(PhoenixConnection oldMetaConnection,
+    /** 
+     * Keeping this to use for further upgrades. This method closes the oldMetaConnection.
+     */
+    private PhoenixConnection addColumnsIfNotExists(PhoenixConnection oldMetaConnection,
         String tableName, long timestamp, String columns) throws SQLException {
 
         Properties props = new Properties(oldMetaConnection.getClientInfo());
@@ -1826,7 +1829,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             } catch (NewerTableAlreadyExistsException ignore) {
                                 // Ignore, as this will happen if the SYSTEM.CATALOG already exists at this fixed timestamp.
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
-                            } catch (TableAlreadyExistsException ignore) {
+                            } catch (TableAlreadyExistsException e) {
+                                // This will occur if we have an older SYSTEM.CATALOG and we need to update it to include
+                                // any new columns we've added.
+                                long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
+                                
+                                // We know that we always need to add the STORE_NULLS column for 4.3 release
+                                String columnsToAdd = PhoenixDatabaseMetaData.STORE_NULLS + " " + PBoolean.INSTANCE.getSqlTypeName();
+                                
+                                // If the server side schema is 4 versions behind then we need to add INDEX_TYPE 
+                                // and INDEX_DISABLE_TIMESTAMP columns too. 
+                                // TODO: Once https://issues.apache.org/jira/browse/PHOENIX-1614 is fixed, 
+                                // we should just have a ALTER TABLE ADD IF NOT EXISTS statement with all 
+                                // the column names that have been added to SYSTEM.CATALOG since 4.0. 
+                                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP - 4) {
+                                    columnsToAdd += ", " + PhoenixDatabaseMetaData.INDEX_TYPE + " " + PUnsignedTinyint.INSTANCE.getSqlTypeName()
+                                            + ", " + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName();
+                                }
+                                
+                                // Ugh..need to assign to another local variable to keep eclipse happy.
+                                PhoenixConnection newMetaConnection = addColumnsIfNotExists(metaConnection,
+                                        PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
+                                metaConnection = newMetaConnection;
                             }
                             int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                                     QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
@@ -1840,20 +1865,34 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 Integer sequenceSaltBuckets = e.getTable().getBucketNum();
                                 nSequenceSaltBuckets = sequenceSaltBuckets == null ? 0 : sequenceSaltBuckets;
                             } catch (TableAlreadyExistsException e) {
-                                // This will occur if we have an older SYSTEM.SEQUENCE, so we need to update it to include
+                                // This will occur if we have an older SYSTEM.SEQUENCE and we need to update it to include
                                 // any new columns we've added.
-                                if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSaltBuckets, e.getTable())) {
-                                    metaConnection.removeTable(null,
-                                            PhoenixDatabaseMetaData.SEQUENCE_SCHEMA_NAME,
-                                            PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME,
-                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
-                                    clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY,
-                                            PhoenixDatabaseMetaData.SEQUENCE_SCHEMA_NAME_BYTES,
-                                            PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES,
-                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
-                                    clearTableRegionCache(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+                                long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
+                                // if the table is at a timestamp corresponding to before 4.2.1 then run the upgrade script
+                                if (currentServerSideTableTimeStamp <= MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP - 2) {
+                                    if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSaltBuckets, e.getTable())) {
+                                        metaConnection.removeTable(null,
+                                                PhoenixDatabaseMetaData.SEQUENCE_SCHEMA_NAME,
+                                                PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME,
+                                                MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
+                                        clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY,
+                                                PhoenixDatabaseMetaData.SEQUENCE_SCHEMA_NAME_BYTES,
+                                                PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES,
+                                                MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
+                                        clearTableRegionCache(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+                                    }
+                                    nSequenceSaltBuckets = nSaltBuckets;
+                                } 
+                                if (currentServerSideTableTimeStamp <= MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP - 3) {
+                                    // If the table time stamp is before 4.1.0 then we need to add below columns
+                                    // to the SYSTEM.SEQUENCE table.
+                                    String columnsToAdd = PhoenixDatabaseMetaData.MIN_VALUE + " " + PLong.INSTANCE.getSqlTypeName() 
+                                            + ", " + PhoenixDatabaseMetaData.MAX_VALUE + " " + PLong.INSTANCE.getSqlTypeName()
+                                            + ", " + PhoenixDatabaseMetaData.CYCLE_FLAG + " " + PBoolean.INSTANCE.getSqlTypeName()
+                                            + ", " + PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG + " " + PBoolean.INSTANCE.getSqlTypeName();
+                                    addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
                                 }
-                                nSequenceSaltBuckets = nSaltBuckets;
                             }
                             try {
                                 metaConnection.createStatement().executeUpdate(
