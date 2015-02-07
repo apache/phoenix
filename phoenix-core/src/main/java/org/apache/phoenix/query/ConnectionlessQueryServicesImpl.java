@@ -457,7 +457,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public boolean supportsFeature(Feature feature) {
-        return false;
+        return true;
     }
 
     @Override

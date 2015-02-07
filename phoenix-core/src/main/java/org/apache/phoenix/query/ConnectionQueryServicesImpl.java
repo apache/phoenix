@@ -156,6 +156,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -200,6 +201,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     // setting this member variable guarded by "connectionCountLock"
     private volatile ConcurrentMap<SequenceKey,Sequence> sequenceMap = Maps.newConcurrentMap();
     private KeyValueBuilder kvBuilder;
+
+    private static interface FeatureSupported {
+        boolean isSupported(ConnectionQueryServices services);
+    }
+    
+    private final Map<Feature, FeatureSupported> featureMap = ImmutableMap.<Feature, FeatureSupported>of(
+            Feature.LOCAL_INDEX, new FeatureSupported(){
+                @Override
+                public boolean isSupported(ConnectionQueryServices services) {
+                    int hbaseVersion = services.getLowestClusterHBaseVersion();
+                    return hbaseVersion < PhoenixDatabaseMetaData.MIN_LOCAL_SI_VERSION_DISALLOW || hbaseVersion > PhoenixDatabaseMetaData.MAX_LOCAL_SI_VERSION_DISALLOW;
+                }
+            });
     
     private PMetaData newEmptyMetaData() {
         long maxSizeBytes = props.getLong(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB,
@@ -1074,7 +1088,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // If we're not allowing local indexes or the hbase version is too low,
         // don't create the local index table
         if (   !this.getProps().getBoolean(QueryServices.ALLOW_LOCAL_INDEX_ATTRIB, QueryServicesOptions.DEFAULT_ALLOW_LOCAL_INDEX) 
-            || getLowestClusterHBaseVersion() < PhoenixDatabaseMetaData.LOCAL_SI_VERSION_THRESHOLD) {
+            || !this.supportsFeature(Feature.LOCAL_INDEX)) {
                     return;
         }
         
@@ -2428,9 +2442,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public boolean supportsFeature(Feature feature) {
-        // TODO: Keep map of Feature -> min HBase version
-        // For now, only Feature is REVERSE_SCAN and it's not supported in any version yet
-        return false;
+        FeatureSupported supported = featureMap.get(feature);
+        if (supported == null) {
+            return false;
+        }
+        return supported.isSupported(this);
     }
 
     @Override
