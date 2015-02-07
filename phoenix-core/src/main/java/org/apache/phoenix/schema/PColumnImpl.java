@@ -38,7 +38,7 @@ public class PColumnImpl implements PColumn {
     private byte[] viewConstant;
     private boolean isViewReferenced;
     private String expressionStr;
-
+    
     public PColumnImpl() {
     }
 
