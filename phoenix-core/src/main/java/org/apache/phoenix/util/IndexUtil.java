@@ -137,12 +137,9 @@ public class IndexUtil {
         return name.substring(0,name.indexOf(INDEX_COLUMN_NAME_SEP));
     }
 
-    public static String getDataColumnFullName(String name) {
+    public static String getCaseSensitiveDataColumnFullName(String name) {
         int index = name.indexOf(INDEX_COLUMN_NAME_SEP) ;
-        if (index == 0) {
-            return name.substring(index+1);
-        }
-        return SchemaUtil.getColumnDisplayName(name.substring(0, index), name.substring(index+1));
+        return SchemaUtil.getCaseSensitiveColumnDisplayName(name.substring(0, index), name.substring(index+1));
     }
 
     public static String getIndexColumnName(String dataColumnFamilyName, String dataColumnName) {
@@ -272,8 +269,8 @@ public class IndexUtil {
         return column.getName().getString().startsWith(INDEX_COLUMN_NAME_SEP);
     }
     
-    public static boolean isIndexColumn(PColumn column) {
-        return column.getName().getString().contains(INDEX_COLUMN_NAME_SEP);
+    public static boolean isIndexColumn(String name) {
+        return name.contains(INDEX_COLUMN_NAME_SEP);
     }
     
     public static boolean getViewConstantValue(PColumn column, ImmutableBytesWritable ptr) {
@@ -626,5 +623,10 @@ public class IndexUtil {
             // Wrap cell in cell that offsets row key
             result.set(i, newCell);
         }
+    }
+    
+    public static String getIndexColumnExpressionStr(PColumn col) {
+        return col.getExpressionStr() == null ? IndexUtil.getCaseSensitiveDataColumnFullName(col.getName().getString())
+                : col.getExpressionStr();
     }
 }

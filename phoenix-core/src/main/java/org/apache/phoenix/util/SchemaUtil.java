@@ -206,14 +206,16 @@ public class SchemaUtil {
     }
 
     public static String getTableName(String schemaName, String tableName) {
-        return getName(schemaName,tableName);
+        return getName(schemaName,tableName, false);
     }
 
-    private static String getName(String optionalQualifier, String name) {
+    private static String getName(String optionalQualifier, String name, boolean caseSensitive) {
+        String cq = caseSensitive ? "\"" + name + "\"" : name;
         if (optionalQualifier == null || optionalQualifier.isEmpty()) {
-            return name;
+            return cq;
         }
-        return optionalQualifier + QueryConstants.NAME_SEPARATOR + name;
+        String cf = caseSensitive ? "\"" + optionalQualifier + "\"" : optionalQualifier;
+        return cf + QueryConstants.NAME_SEPARATOR + cq;
     }
 
     public static String getTableName(byte[] schemaName, byte[] tableName) {
@@ -225,21 +227,25 @@ public class SchemaUtil {
     }
 
     public static String getColumnDisplayName(String cf, String cq) {
-        return getName(cf == null || cf.isEmpty() ? null : cf, cq);
+        return getName(cf == null || cf.isEmpty() ? null : cf, cq, false);
+    }
+    
+    public static String getCaseSensitiveColumnDisplayName(String cf, String cq) {
+        return getName(cf == null || cf.isEmpty() ? null : cf, cq, true);
     }
 
     public static String getMetaDataEntityName(String schemaName, String tableName, String familyName, String columnName) {
         if ((schemaName == null || schemaName.isEmpty()) && (tableName == null || tableName.isEmpty())) {
-            return getName(familyName, columnName);
+            return getName(familyName, columnName, false);
         }
         if ((familyName == null || familyName.isEmpty()) && (columnName == null || columnName.isEmpty())) {
-            return getName(schemaName, tableName);
+            return getName(schemaName, tableName, false);
         }
-        return getName(getName(schemaName, tableName), getName(familyName, columnName));
+        return getName(getName(schemaName, tableName, false), getName(familyName, columnName, false), false);
     }
 
     public static String getColumnName(String familyName, String columnName) {
-        return getName(familyName, columnName);
+        return getName(familyName, columnName, false);
     }
 
     public static byte[] getTableNameAsBytes(String schemaName, String tableName) {
