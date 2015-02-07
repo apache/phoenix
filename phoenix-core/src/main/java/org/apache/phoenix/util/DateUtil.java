@@ -155,10 +155,6 @@ public class DateUtil {
         private String datePattern;
         private SimpleDateFormat parser;
 
-        public SimpleDateFormatParser(String pattern) {
-            this(pattern, DEFAULT_TIME_ZONE);
-        }
-
         public SimpleDateFormatParser(String pattern, TimeZone timeZone) {
             datePattern = pattern;
             parser = new SimpleDateFormat(pattern) {
@@ -171,6 +167,7 @@ public class DateUtil {
             parser.setTimeZone(timeZone);
         }
 
+        @Override
         public Date parseDateTime(String dateTimeString) throws IllegalDataException {
             try {
                 java.util.Date date =parser.parse(dateTimeString);
