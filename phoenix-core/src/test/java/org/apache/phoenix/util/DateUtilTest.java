@@ -17,6 +17,10 @@
  */
 package org.apache.phoenix.util;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
@@ -25,11 +29,6 @@ import java.util.TimeZone;
 
 import org.apache.phoenix.schema.IllegalDataException;
 import org.junit.Test;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 /**
  * Test class for {@link DateUtil}
@@ -69,20 +68,20 @@ public class DateUtilTest {
 
     @Test
     public void testGetDateParser_DefaultTimeZone() throws ParseException {
-        Date date = (Date) DateUtil.getDateParser("yyyy-MM-dd").parseDateTime("1970-01-01");
+        Date date = DateUtil.getDateParser("yyyy-MM-dd").parseDateTime("1970-01-01");
         assertEquals(0, date.getTime());
     }
 
     @Test
     public void testGetDateParser_CustomTimeZone() throws ParseException {
-        Date date = (Date) DateUtil.getDateParser(
+        Date date = DateUtil.getDateParser(
                 "yyyy-MM-dd", TimeZone.getTimeZone("GMT+1")).parseDateTime("1970-01-01");
         assertEquals(-ONE_HOUR_IN_MILLIS, date.getTime());
     }
 
     @Test
     public void testGetDateParser_LocalTimeZone() throws ParseException {
-        Date date = (Date) DateUtil.getDateParser(
+        Date date = DateUtil.getDateParser(
                 "yyyy-MM-dd", TimeZone.getDefault()).parseDateTime("1970-01-01");
         assertEquals(Date.valueOf("1970-01-01"), date);
     }
