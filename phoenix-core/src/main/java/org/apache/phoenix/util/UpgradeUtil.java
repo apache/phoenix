@@ -220,14 +220,15 @@ public class UpgradeUtil {
                     preSplitSequenceTable(conn, nSaltBuckets);
                     return true;
                 }
-                // We can detect upgrade from 4.2.0 -> 4.2.1 based on the timestamp of the table row
-                if (oldTable.getTimeStamp() == MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP-1) {
+                // If upgrading from 4.2.0, then we need this special case of pre-splitting the table.
+                // This is needed as a fix for https://issues.apache.org/jira/browse/PHOENIX-1401 
+                if (oldTable.getTimeStamp() == MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_2_0) {
                     byte[] oldSeqNum = PLong.INSTANCE.toBytes(oldTable.getSequenceNumber());
                     KeyValue seqNumKV = KeyValueUtil.newKeyValue(seqTableKey, 
                             PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                             PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES,
                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
-                            PLong.INSTANCE.toBytes(oldTable.getSequenceNumber()+1));
+                            PLong.INSTANCE.toBytes(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
                     Put seqNumPut = new Put(seqTableKey);
                     seqNumPut.add(seqNumKV);
                     // Increment TABLE_SEQ_NUM in checkAndPut as semaphore so that only single client
@@ -243,8 +244,9 @@ public class UpgradeUtil {
                 return false;
             }
             
-            // if the SYSTEM.SEQUENCE table is for 4.1.0 or before then we need to salt the table
-            if (oldTable.getTimeStamp() <= MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP - 3) {
+            // if the SYSTEM.SEQUENCE table is at 4.1.0 or before then we need to salt the table
+            // and pre-split it.
+            if (oldTable.getTimeStamp() <= MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0) {
                 int batchSizeBytes = 100 * 1024; // 100K chunks
                 int sizeBytes = 0;
                 List<Mutation> mutations =  Lists.newArrayListWithExpectedSize(10000);
