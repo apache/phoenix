@@ -31,8 +31,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
-import java.text.Format;
-import java.text.ParseException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -87,7 +85,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     }
     
     private static Date toDate(String dateString) {
-        return DateUtil.parseDateTime(dateString);
+        return DateUtil.parseDate(dateString);
     }
     
     private static void initTable(byte[][] splits, long ts) throws Exception {

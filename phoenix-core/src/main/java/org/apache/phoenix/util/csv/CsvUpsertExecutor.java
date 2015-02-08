@@ -17,16 +17,22 @@
  */
 package org.apache.phoenix.util.csv;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
+import java.io.Closeable;
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.List;
+import java.util.Properties;
+
+import javax.annotation.Nullable;
+
 import org.apache.commons.csv.CSVRecord;
-import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.DateUtil;
@@ -34,16 +40,8 @@ import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nullable;
-import java.io.Closeable;
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.Date;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.util.List;
-import java.util.Properties;
-import java.util.TimeZone;
+import com.google.common.base.Function;
+import com.google.common.collect.Lists;
 
 /**
  * Executes upsert statements on a provided {@code PreparedStatement} based on incoming CSV records, notifying a
@@ -205,12 +203,23 @@ public class CsvUpsertExecutor implements Closeable {
                 throw new RuntimeException(e);
             }
             this.dataType = dataType;
-            if(dataType.equals(PDate.INSTANCE) || dataType.equals(PTime.INSTANCE) || dataType.equals(PTimestamp.INSTANCE)) {
-                String dateFormat = props.getProperty(QueryServices.DATE_FORMAT_ATTRIB,
-                        QueryServicesOptions.DEFAULT_DATE_FORMAT);
+            if(dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
+                // TODO: move to DateUtil
+                String dateFormat;
+                int dateSqlType = dataType.getResultSetSqlType();
+                if (dateSqlType == Types.DATE) {
+                    dateFormat = props.getProperty(QueryServices.DATE_FORMAT_ATTRIB,
+                            DateUtil.DEFAULT_DATE_FORMAT);
+                } else if (dateSqlType == Types.TIME) {
+                    dateFormat = props.getProperty(QueryServices.TIME_FORMAT_ATTRIB,
+                            DateUtil.DEFAULT_TIME_FORMAT);
+                } else {
+                    dateFormat = props.getProperty(QueryServices.TIMESTAMP_FORMAT_ATTRIB,
+                            DateUtil.DEFAULT_TIMESTAMP_FORMAT);                    
+                }
                 String timeZoneId = props.getProperty(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
                         QueryServicesOptions.DEFAULT_DATE_FORMAT_TIMEZONE);
-                this.dateTimeParser = DateUtil.getDateParser(dateFormat, timeZoneId);
+                this.dateTimeParser = DateUtil.getDateTimeParser(dateFormat, dataType, timeZoneId);
             } else {
                 this.dateTimeParser = null;
             }
@@ -220,7 +229,10 @@ public class CsvUpsertExecutor implements Closeable {
         @Override
         public Object apply(@Nullable String input) {
             if(dateTimeParser != null) {
-                return dateTimeParser.parseDateTime(input);
+                long epochTime = dateTimeParser.parseDateTime(input);
+                byte[] byteValue = new byte[dataType.getByteSize()];
+                dataType.getCodec().encodeLong(epochTime, byteValue, 0);
+                return dataType.toObject(byteValue);
             }
             return dataType.toObject(input);
         }

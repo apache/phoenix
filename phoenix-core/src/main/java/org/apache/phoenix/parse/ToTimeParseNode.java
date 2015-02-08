@@ -24,12 +24,12 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.FunctionExpression;
-import org.apache.phoenix.expression.function.ToDateFunction;
+import org.apache.phoenix.expression.function.ToTimeFunction;
 
 
-public class ToDateParseNode extends FunctionParseNode {
+public class ToTimeParseNode extends FunctionParseNode { 
 
-    public ToDateParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
+    public ToTimeParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
         super(name, children, info);
     }
 
@@ -38,11 +38,11 @@ public class ToDateParseNode extends FunctionParseNode {
         String dateFormat = (String) ((LiteralExpression) children.get(1)).getValue();
         String timeZoneId = (String) ((LiteralExpression) children.get(2)).getValue();
         if (dateFormat == null) {
-            dateFormat = context.getDateFormat();
+            dateFormat = context.getTimeFormat();
         }
         if (timeZoneId == null) {
             timeZoneId = context.getDateFormatTimeZone().getID();
         }
-        return new ToDateFunction(children, dateFormat, timeZoneId);
+        return new ToTimeFunction(children, dateFormat, timeZoneId);
     }
 }

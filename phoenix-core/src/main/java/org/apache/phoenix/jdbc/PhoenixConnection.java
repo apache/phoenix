@@ -128,6 +128,8 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private PMetaData metaData;
     private final PName tenantId;
     private final String datePattern;
+    private final String timePattern;
+    private final String timestampPattern;
     
     private boolean isClosed = false;
     private Sampler<?> sampler;
@@ -204,15 +206,19 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this.tenantId = tenantId;
         this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
         datePattern = this.services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
+        timePattern = this.services.getProps().get(QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
+        timestampPattern = this.services.getProps().get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
         String numberPattern = this.services.getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         int maxSize = this.services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        Format dateTimeFormat = DateUtil.getDateFormatter(datePattern);
-        formatters.put(PDate.INSTANCE, dateTimeFormat);
-        formatters.put(PTime.INSTANCE, dateTimeFormat);
-        formatters.put(PTimestamp.INSTANCE, dateTimeFormat);
-        formatters.put(PUnsignedDate.INSTANCE, dateTimeFormat);
-        formatters.put(PUnsignedTime.INSTANCE, dateTimeFormat);
-        formatters.put(PUnsignedTimestamp.INSTANCE, dateTimeFormat);
+        Format dateFormat = DateUtil.getDateFormatter(datePattern);
+        Format timeFormat = DateUtil.getDateFormatter(timePattern);
+        Format timestampFormat = DateUtil.getDateFormatter(timestampPattern);
+        formatters.put(PDate.INSTANCE, dateFormat);
+        formatters.put(PTime.INSTANCE, timeFormat);
+        formatters.put(PTimestamp.INSTANCE, timestampFormat);
+        formatters.put(PUnsignedDate.INSTANCE, dateFormat);
+        formatters.put(PUnsignedTime.INSTANCE, timeFormat);
+        formatters.put(PUnsignedTimestamp.INSTANCE, timestampFormat);
         formatters.put(PDecimal.INSTANCE, FunctionArgumentType.NUMERIC.getFormatter(numberPattern));
         // We do not limit the metaData on a connection less than the global one,
         // as there's not much that will be cached here.

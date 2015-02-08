@@ -33,8 +33,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Timestamp;
 import java.sql.Time;
+import java.sql.Timestamp;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -156,7 +156,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         ResultSet rs = conn.createStatement().executeQuery("select k,to_char(date) from UpsertDateTest");
         assertTrue(rs.next());
         assertEquals("a", rs.getString(1));
-        assertEquals("2013-06-08 00:00:00", rs.getString(2));
+        assertEquals("2013-06-08 00:00:00.000", rs.getString(2));
     }
 
     @Test
@@ -548,7 +548,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
     }
     
     private static Date toDate(String dateString) {
-        return DateUtil.parseDateTime(dateString);
+        return DateUtil.parseDate(dateString);
     }
     
     @Test

@@ -17,15 +17,15 @@
  */
 package org.apache.phoenix.schema.types;
 
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.util.DateUtil;
-
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Types;
 import java.text.Format;
+
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.DateUtil;
 
 public class PDate extends PDataType<Date> {
 
@@ -71,7 +71,7 @@ public class PDate extends PDataType<Date> {
     } else if (actualType == PDecimal.INSTANCE) {
       return new Date(((BigDecimal) object).longValueExact());
     } else if (actualType == PVarchar.INSTANCE) {
-      return DateUtil.parseDateTime((String) object);
+      return DateUtil.parseDate((String) object);
     }
     return throwConstraintViolationException(actualType, this);
   }
