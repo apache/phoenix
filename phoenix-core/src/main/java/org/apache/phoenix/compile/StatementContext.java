@@ -60,8 +60,12 @@ public class StatementContext {
     private final ExpressionManager expressions;
     private final AggregationManager aggregates;
     private final String dateFormat;
-    private final TimeZone dateFormatTimeZone;
     private final Format dateFormatter;
+    private final String timeFormat;
+    private final Format timeFormatter;
+    private final String timestampFormat;
+    private final Format timestampFormatter;
+    private final TimeZone dateFormatTimeZone;
     private final String numberFormat;
     private final ImmutableBytesWritable tempPtr;
     private final PhoenixStatement statement;
@@ -99,9 +103,13 @@ public class StatementContext {
         this.expressions = new ExpressionManager();
         PhoenixConnection connection = statement.getConnection();
         this.dateFormat = connection.getQueryServices().getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
+        this.dateFormatter = DateUtil.getDateFormatter(dateFormat);
+        this.timeFormat = connection.getQueryServices().getProps().get(QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
+        this.timeFormatter = DateUtil.getTimeFormatter(timeFormat);
+        this.timestampFormat = connection.getQueryServices().getProps().get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
+        this.timestampFormatter = DateUtil.getTimestampFormatter(timestampFormat);
         this.dateFormatTimeZone = TimeZone.getTimeZone(
                 connection.getQueryServices().getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, DateUtil.DEFAULT_TIME_ZONE_ID));
-        this.dateFormatter = DateUtil.getDateFormatter(dateFormat);
         this.numberFormat = connection.getQueryServices().getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;
@@ -149,6 +157,22 @@ public class StatementContext {
 
     public Format getDateFormatter() {
         return dateFormatter;
+    }
+
+    public String getTimeFormat() {
+        return timeFormat;
+    }
+
+    public Format getTimeFormatter() {
+        return timeFormatter;
+    }
+
+    public String getTimestampFormat() {
+        return timestampFormat;
+    }
+
+    public Format getTimestampFormatter() {
+        return timestampFormatter;
     }
 
     public String getNumberFormat() {

@@ -18,23 +18,24 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Time;
+import java.sql.Timestamp;
 import java.util.Properties;
 
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.DateUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 
 public class ToDateFunctionIT extends BaseHBaseManagedTimeIT {
@@ -53,18 +54,26 @@ public class ToDateFunctionIT extends BaseHBaseManagedTimeIT {
         conn.close();
     }
 
-    private static Date callToDateFunction(Connection conn, String invocation) throws SQLException {
+    private static java.util.Date callToDateFunction(Connection conn, String invocation) throws SQLException {
         Statement stmt = conn.createStatement();
-        ResultSet rs = stmt.executeQuery(String.format("SELECT %s FROM SYSTEM.CATALOG", invocation));
+        ResultSet rs = stmt.executeQuery(String.format("SELECT %s FROM SYSTEM.CATALOG LIMIT 1", invocation));
         assertTrue(rs.next());
-        Date returnValue = rs.getDate(1);
+        java.util.Date returnValue = (java.util.Date)rs.getObject(1);
         rs.close();
         stmt.close();
         return returnValue;
     }
 
     private Date callToDateFunction(String invocation) throws SQLException {
-        return callToDateFunction(conn, invocation);
+        return (Date)callToDateFunction(conn, invocation);
+    }
+
+    private Time callToTimeFunction(String invocation) throws SQLException {
+        return (Time)callToDateFunction(conn, invocation);
+    }
+
+    private Timestamp callToTimestampFunction(String invocation) throws SQLException {
+        return (Timestamp)callToDateFunction(conn, invocation);
     }
 
     @Test
@@ -83,6 +92,44 @@ public class ToDateFunctionIT extends BaseHBaseManagedTimeIT {
             callToDateFunction("TO_DATE('2015-W05-2')");
         } catch (Exception ex) {
             fail("TO_DATE Parse ISO8601 Time Failed due to:" + ex);
+        }
+    }
+
+    @Test
+    public void testToTime_Default() throws SQLException {
+        // Default time zone is GMT, so this is timestamp 0
+        assertEquals(0L, callToTimeFunction("TO_TIME('1970-01-01 00:00:00')").getTime());
+        assertEquals(0L, callToTimeFunction("TO_TIME('1970-01-01 00:00:00.000')").getTime());
+        assertEquals(0L, callToTimeFunction("TO_TIME('1970-01-01')").getTime());
+        assertEquals(0L, callToTimeFunction("TO_TIME('1970/01/01','yyyy/MM/dd')").getTime());
+
+        // Test other ISO 8601 Date Compliant Formats to verify they can be parsed
+        try {
+            callToTimeFunction("TO_TIME('2015-01-27T16:17:57+00:00')");
+            callToTimeFunction("TO_TIME('2015-01-27T16:17:57Z')");
+            callToTimeFunction("TO_TIME('2015-W05')");
+            callToTimeFunction("TO_TIME('2015-W05-2')");
+        } catch (Exception ex) {
+            fail("TO_TIME Parse ISO8601 Time Failed due to:" + ex);
+        }
+    }
+
+    @Test
+    public void testToTimestamp_Default() throws SQLException {
+        // Default time zone is GMT, so this is timestamp 0
+        assertEquals(0L, callToTimestampFunction("TO_TIMESTAMP('1970-01-01 00:00:00')").getTime());
+        assertEquals(0L, callToTimestampFunction("TO_TIMESTAMP('1970-01-01 00:00:00.000')").getTime());
+        assertEquals(0L, callToTimestampFunction("TO_TIMESTAMP('1970-01-01')").getTime());
+        assertEquals(0L, callToTimestampFunction("TO_TIMESTAMP('1970/01/01','yyyy/MM/dd')").getTime());
+
+        // Test other ISO 8601 Date Compliant Formats to verify they can be parsed
+        try {
+            callToTimestampFunction("TO_TIMESTAMP('2015-01-27T16:17:57+00:00')");
+            callToTimestampFunction("TO_TIMESTAMP('2015-01-27T16:17:57Z')");
+            callToTimestampFunction("TO_TIMESTAMP('2015-W05')");
+            callToTimestampFunction("TO_TIMESTAMP('2015-W05-2')");
+        } catch (Exception ex) {
+            fail("TO_TIMESTAMP Parse ISO8601 Time Failed due to:" + ex);
         }
     }
 
@@ -115,7 +162,7 @@ public class ToDateFunctionIT extends BaseHBaseManagedTimeIT {
 
         assertEquals(
                 -ONE_HOUR_IN_MILLIS,
-                callToDateFunction(customTimeZoneConn, "TO_DATE('1970-01-01 00:00:00')").getTime());
+                callToDateFunction(customTimeZoneConn, "TO_DATE('1970-01-01 00:00:00.000')").getTime());
     }
 
     @Test

@@ -44,12 +44,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class CsvBulkLoadToolIT {
 
@@ -119,11 +113,11 @@ public class CsvBulkLoadToolIT {
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals("Name 1", rs.getString(2));
-        assertEquals(DateUtil.parseDateTime("1970-01-01"), rs.getDate(3));
+        assertEquals(DateUtil.parseDate("1970-01-01"), rs.getDate(3));
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         assertEquals("Name 2", rs.getString(2));
-        assertEquals(DateUtil.parseDateTime("1970-01-02"), rs.getDate(3));
+        assertEquals(DateUtil.parseDate("1970-01-02"), rs.getDate(3));
         assertFalse(rs.next());
 
         rs.close();

@@ -38,7 +38,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.text.Format;
-import java.text.ParseException;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -55,7 +54,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     private static final Date D1 = toDate(DS1);
 
     private static Date toDate(String dateString) {
-        return DateUtil.parseDateTime(dateString);
+        return DateUtil.parseDate(dateString);
     }
 
     protected static void initGroupByRowKeyColumns(long ts) throws Exception {
