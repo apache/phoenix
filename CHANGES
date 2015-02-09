@@ -78,6 +78,8 @@ Release Notes - Phoenix - Version 3.3
     * [PHOENIX-1591] - Return all rows instead of no rows if IN clause subquery gets optimized out from semi-join and returns empty result
     * [PHOENIX-1600] - Scanner is left unclosed in MetaDataEndpointImpl#doDropTable()
     * [PHOENIX-1606] - Update JDBC version to match release version
+    * [PHOENIX-1610] - Incorrect subquery results caused by unpaired contextStack push/pop
+    * [PHOENIX-1616] - Creating a View with a case sensitive column name does not work
 
 
 Release Notes - Phoenix - Version 3.2
