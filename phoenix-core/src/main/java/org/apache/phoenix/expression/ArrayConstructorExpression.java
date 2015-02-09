@@ -166,4 +166,16 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
         }
         return t;
     }
+    
+    @Override
+    public String toString() {
+        StringBuilder buf = new StringBuilder(PArrayDataType.ARRAY_TYPE_SUFFIX + "[");
+        if (children.size()==0)
+            return buf.append("]").toString();
+        for (int i = 0; i < children.size() - 1; i++) {
+            buf.append(children.get(i) + ",");
+        }
+        buf.append(children.get(children.size()-1) + "]");
+        return buf.toString();
+    }
 }

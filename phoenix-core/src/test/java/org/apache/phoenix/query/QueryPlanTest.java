@@ -52,12 +52,12 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
 
                 "SELECT host FROM PTSDB WHERE inst IS NULL AND host IS NOT NULL AND date >= to_date('2013-01-01')",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [null,not null]\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY AND DATE >= '2013-01-01 00:00:00.000'",
+                "    SERVER FILTER BY FIRST KEY ONLY AND DATE >= DATE '2013-01-01 00:00:00.000'",
 
                 // Since inst IS NOT NULL is unbounded, we won't continue optimizing
                 "SELECT host FROM PTSDB WHERE inst IS NOT NULL AND host IS NULL AND date >= to_date('2013-01-01')",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [not null]\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL AND DATE >= '2013-01-01 00:00:00.000')",
+                "    SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL AND DATE >= DATE '2013-01-01 00:00:00.000')",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id = '000000000000002' AND x_integer = 2 AND a_integer < 5 ",
                 "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER ATABLE\n" + 

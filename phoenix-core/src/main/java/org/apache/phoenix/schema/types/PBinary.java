@@ -17,14 +17,14 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.Types;
+import java.text.Format;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
 import org.apache.phoenix.schema.SortOrder;
-
-import java.sql.Types;
-import java.text.Format;
 
 public class PBinary extends PDataType<byte[]> {
 
@@ -176,10 +176,15 @@ public class PBinary extends PDataType<byte[]> {
 
   @Override
   public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
-    if (formatter == null && b.length == 1) {
-      return Integer.toString(0xFF & b[0]);
+    if (length == 1) {
+      return Integer.toString(0xFF & b[offset]);
     }
     return PVarbinary.INSTANCE.toStringLiteral(b, offset, length, formatter);
+  }
+
+  @Override
+  public String toStringLiteral(Object o, Format formatter) {
+    return toStringLiteral((byte[])o, 0, ((byte[]) o).length, formatter);
   }
 
   @Override

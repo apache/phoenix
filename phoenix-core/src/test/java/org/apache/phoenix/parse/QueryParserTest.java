@@ -677,4 +677,80 @@ public class QueryParserTest {
                 new StringReader("select * from date_test where d in (to_date('2013-11-04 09:12:00'))"));
         parser.parseStatement();
     }
+    
+    @Test
+    public void testDateLiteral() throws Exception {
+        SQLParser parser = new SQLParser(
+                new StringReader(
+                        "select * from t where d = DATE '2013-11-04 09:12:00'"));
+        parser.parseStatement();
+    }
+
+    @Test
+    public void testTimeLiteral() throws Exception {
+        SQLParser parser = new SQLParser(
+                new StringReader(
+                        "select * from t where d = TIME '2013-11-04 09:12:00'"));
+        parser.parseStatement();
+    }
+
+
+    @Test
+    public void testTimestampLiteral() throws Exception {
+        SQLParser parser = new SQLParser(
+                new StringReader(
+                        "select * from t where d = TIMESTAMP '2013-11-04 09:12:00'"));
+        parser.parseStatement();
+    }
+    
+    @Test
+    public void testUnsignedDateLiteral() throws Exception {
+        SQLParser parser = new SQLParser(
+                new StringReader(
+                        "select * from t where d = UNSIGNED_DATE '2013-11-04 09:12:00'"));
+        parser.parseStatement();
+    }
+
+    @Test
+    public void testUnsignedTimeLiteral() throws Exception {
+        SQLParser parser = new SQLParser(
+                new StringReader(
+                        "select * from t where d = UNSIGNED_TIME '2013-11-04 09:12:00'"));
+        parser.parseStatement();
+    }
+
+
+    @Test
+    public void testUnsignedTimestampLiteral() throws Exception {
+        SQLParser parser = new SQLParser(
+                new StringReader(
+                        "select * from t where d = UNSIGNED_TIMESTAMP '2013-11-04 09:12:00'"));
+        parser.parseStatement();
+    }
+    
+    @Test
+    public void testUnknownLiteral() throws Exception {
+        SQLParser parser = new SQLParser(
+                new StringReader(
+                        "select * from t where d = FOO '2013-11-04 09:12:00'"));
+        try {
+            parser.parseStatement();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    @Test
+    public void testUnsupportedLiteral() throws Exception {
+        SQLParser parser = new SQLParser(
+                new StringReader(
+                        "select * from t where d = DECIMAL '2013-11-04 09:12:00'"));
+        try {
+            parser.parseStatement();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+        }
+    }
 }

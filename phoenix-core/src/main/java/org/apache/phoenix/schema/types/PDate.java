@@ -147,13 +147,13 @@ public class PDate extends PDataType<Date> {
   }
 
   @Override
-  public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
-    if (formatter == null || formatter == DateUtil.DEFAULT_DATE_FORMATTER) {
-      // If default formatter has not been overridden,
-      // use one that displays milliseconds.
-      formatter = DateUtil.DEFAULT_MS_DATE_FORMATTER;
-    }
-    return "'" + super.toStringLiteral(b, offset, length, formatter) + "'";
+  public String toStringLiteral(Object o, Format formatter) {
+      if (formatter == null) {
+          // If default formatter has not been overridden,
+          // use one that displays milliseconds.
+          formatter = DateUtil.DEFAULT_DATE_FORMATTER;
+        }
+        return "'" + super.toStringLiteral(o, formatter) + "'";
   }
 
   @Override
