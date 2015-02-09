@@ -17,14 +17,14 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.Types;
+import java.text.Format;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
-
-import java.sql.Types;
-import java.text.Format;
 
 public class PVarbinary extends PDataType<byte[]> {
 
@@ -148,19 +148,24 @@ public class PVarbinary extends PDataType<byte[]> {
 
   @Override
   public String toStringLiteral(byte[] b, int o, int length, Format formatter) {
-    if (formatter != null) {
-      return formatter.format(b);
-    }
     StringBuilder buf = new StringBuilder();
     buf.append('[');
-    for (int i = 0; i < b.length; i++) {
-      buf.append(0xFF & b[i]);
-      buf.append(',');
+    if (length > 0) {
+        for (int i = o; i < length; i++) {
+          buf.append(0xFF & b[i]);
+          buf.append(',');
+        }
+        buf.setLength(buf.length()-1);
     }
-    buf.setCharAt(buf.length() - 1, ']');
+    buf.append(']');
     return buf.toString();
   }
 
+  @Override
+  public String toStringLiteral(Object o, Format formatter) {
+      return toStringLiteral((byte[])o, 0, ((byte[]) o).length, formatter);
+  }
+  
   @Override
   public Object getSampleValue(Integer maxLength, Integer arrayLength) {
     int length = maxLength != null && maxLength > 0 ? maxLength : 1;

@@ -152,6 +152,12 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PTime;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PUnsignedDate;
+import org.apache.phoenix.schema.types.PUnsignedTime;
+import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 }
@@ -864,7 +870,9 @@ literal_or_bind returns [ParseNode ret]
 
 // Get a string, integer, double, date, boolean, or NULL value.
 literal returns [LiteralParseNode ret]
-    :   t=STRING_LITERAL { ret = factory.literal(t.getText()); }
+    :   t=STRING_LITERAL {
+            ret = factory.literal(t.getText()); 
+        }
     |   l=int_literal { ret = l; }
     |   l=long_literal { ret = l; }
     |   l=double_literal { ret = l; }
@@ -878,6 +886,13 @@ literal returns [LiteralParseNode ret]
     |   NULL {ret = factory.literal(null);}
     |   TRUE {ret = factory.literal(Boolean.TRUE);} 
     |   FALSE {ret = factory.literal(Boolean.FALSE);}
+    |   dt=identifier t=STRING_LITERAL { 
+            try {
+                ret = factory.literal(t.getText(), dt);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
     ;
     
 int_literal returns [LiteralParseNode ret]

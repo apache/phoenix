@@ -1091,10 +1091,14 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
 
   public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
     Object o = toObject(b, offset, length);
-    if (formatter != null) {
-      return formatter.format(o);
-    }
-    return o.toString();
+    return toStringLiteral(o, formatter);
+  }
+  
+  public String toStringLiteral(Object o, Format formatter) {
+      if (formatter != null) {
+          return formatter.format(o);
+        }
+        return o.toString();
   }
 
   private static final PhoenixArrayFactory DEFAULT_ARRAY_FACTORY = new PhoenixArrayFactory() {

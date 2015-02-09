@@ -48,6 +48,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ListMultimap;
@@ -467,6 +468,19 @@ public class ParseNodeFactory {
             value = expectedType.toObject(value, actualType);
         }
         return new LiteralParseNode(value);
+        /*
+        Object typedValue = expectedType.toObject(value.toString());
+        return new LiteralParseNode(typedValue);
+        */
+    }
+
+    public LiteralParseNode literal(String value, String sqlTypeName) throws SQLException {
+        PDataType expectedType = sqlTypeName == null ? null : PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(sqlTypeName));
+        if (expectedType == null || !expectedType.isCoercibleTo(PTimestamp.INSTANCE)) {
+            throw TypeMismatchException.newException(expectedType, PTimestamp.INSTANCE);
+        }
+        Object typedValue = expectedType.toObject(value);
+        return new LiteralParseNode(typedValue);
     }
 
     public LiteralParseNode coerce(LiteralParseNode literalNode, PDataType expectedType) throws SQLException {

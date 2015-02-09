@@ -127,11 +127,11 @@ public class PTime extends PDataType<Time> {
   }
 
   @Override
-  public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
+  public String toStringLiteral(Object o, Format formatter) {
       if (formatter == null) {
           formatter = DateUtil.DEFAULT_TIME_FORMATTER;
         }
-        return "'" + super.toStringLiteral(b, offset, length, formatter) + "'";
+        return "'" + super.toStringLiteral(o, formatter) + "'";
   }
 
   @Override

@@ -17,7 +17,11 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Preconditions;
+import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.text.Format;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
@@ -25,10 +29,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.NumberUtil;
 
-import java.math.BigDecimal;
-import java.sql.Timestamp;
-import java.sql.Types;
-import java.text.Format;
+import com.google.common.base.Preconditions;
 
 public class PDecimal extends PDataType<BigDecimal> {
 
@@ -387,6 +388,14 @@ public class PDecimal extends PDataType<BigDecimal> {
       return o.toPlainString();
     }
     return super.toStringLiteral(b, offset, length, formatter);
+  }
+
+  @Override
+  public String toStringLiteral(Object o, Format formatter) {
+      if (formatter == null) {
+          return ((BigDecimal)o).toPlainString();
+        }
+        return super.toStringLiteral(o, formatter);
   }
 
   @Override
