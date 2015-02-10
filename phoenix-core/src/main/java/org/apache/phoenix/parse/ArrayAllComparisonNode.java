@@ -25,12 +25,13 @@ import java.util.List;
  * The Expression a = ALL(b) where b is of type array is rewritten in this
  * node as ALL(a = b(n))
  */
-public class ArrayAllComparisonNode extends CompoundParseNode {
+public class ArrayAllComparisonNode extends ArrayAllAnyComparisonNode {
 
     ArrayAllComparisonNode(ParseNode rhs, ComparisonParseNode compareNode) {
         super(Arrays.<ParseNode>asList(rhs, compareNode));
     }
     
+    @Override
     public String getType() {
         return "ALL";
     }

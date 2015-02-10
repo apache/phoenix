@@ -322,7 +322,7 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
                     "    SERVER FILTER BY V1 = 'a'\n" +
                     "    SKIP-SCAN-JOIN TABLE 0\n" +
                     "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER _IDX_T \\[-32768,1\\] - \\[-32768,2\\]\n" +
-                    "            SERVER FILTER BY FIRST KEY ONLY AND K2 IN \\(3,4\\)\n" +
+                    "            SERVER FILTER BY FIRST KEY ONLY AND \"K2\" IN \\(3,4\\)\n" +
                     "    DYNAMIC SERVER FILTER BY \\(\"T_ID\", \"K1\", \"K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             assertTrue("Expected:\n" + expected + "\ndid not match\n" + actual, Pattern.matches(expected,actual));
             

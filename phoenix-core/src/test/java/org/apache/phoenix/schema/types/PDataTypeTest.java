@@ -1011,7 +1011,6 @@ public class PDataTypeTest {
                 byte[] bytes = Bytes.toBytesBinary(str);
                 Object o = PDecimal.INSTANCE.toObject(bytes);
                 assertNotNull(o);
-                //System.out.println(o.getClass() +" " + bytesToHex(bytes)+" " + o+" ");
             }
         }
     }
@@ -1746,4 +1745,11 @@ public class PDataTypeTest {
              coercibleToMap.toString());
     }
     
+    @Test
+    public void testIntVersusLong() {
+        long l = -1L;
+        int i = -1;
+        assertTrue(PLong.INSTANCE.compareTo(l, i, PInteger.INSTANCE)==0);
+        assertTrue(PInteger.INSTANCE.compareTo(i, l, PLong.INSTANCE)==0);
+    }
 }

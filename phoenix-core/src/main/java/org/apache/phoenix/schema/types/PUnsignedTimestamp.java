@@ -114,14 +114,11 @@ public class PUnsignedTimestamp extends PDataType<Timestamp> {
   }
 
   @Override
-  public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
-    java.sql.Timestamp value = (java.sql.Timestamp) toObject(b, offset, length);
-    if (formatter == null || formatter == DateUtil.DEFAULT_DATE_FORMATTER) {
-      // If default formatter has not been overridden,
-      // use one that displays milliseconds.
-      formatter = DateUtil.DEFAULT_MS_DATE_FORMATTER;
+  public String toStringLiteral(Object o, Format formatter) {
+    if (formatter == null) {
+      formatter = DateUtil.DEFAULT_TIMESTAMP_FORMATTER;
     }
-    return "'" + super.toStringLiteral(b, offset, length, formatter) + "." + value.getNanos() + "'";
+    return "'" + super.toStringLiteral(o, formatter) + "'";
   }
 
   @Override

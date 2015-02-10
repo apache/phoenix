@@ -20,6 +20,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 /**
  * 
  * Node representing the selection of all columns of a family (cf.*) in the SELECT clause of SQL
@@ -71,5 +73,11 @@ public class FamilyWildcardParseNode extends NamedParseNode {
 			return false;
 		return true;
 	}
+	
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        toSQL(buf);
+        buf.append(".*");
+    }
 }
 

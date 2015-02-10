@@ -144,6 +144,7 @@ import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
+import org.apache.phoenix.query.ConnectionQueryServices.Feature;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -331,9 +332,6 @@ public class MetaDataClient {
             table = connection.getMetaDataCache().getTable(new PTableKey(tenantId, fullTableName));
             tableTimestamp = table.getTimeStamp();
         } catch (TableNotFoundException e) {
-            System.err.println(e);
-            // TODO: Try again on services cache, as we may be looking for
-            // a global multi-tenant table
         }
         // Don't bother with server call: we can't possibly find a newer table
         if (table != null && !alwaysHitServer && (systemTable || tableTimestamp == clientTimeStamp - 1)) {
@@ -909,6 +907,16 @@ public class MetaDataClient {
         boolean retry = true;
         Short indexId = null;
         boolean allocateIndexId = false;
+        boolean isLocalIndex = statement.getIndexType() == IndexType.LOCAL;
+        int hbaseVersion = connection.getQueryServices().getLowestClusterHBaseVersion();
+        if (isLocalIndex) {
+            if (!connection.getQueryServices().getProps().getBoolean(QueryServices.ALLOW_LOCAL_INDEX_ATTRIB, QueryServicesOptions.DEFAULT_ALLOW_LOCAL_INDEX)) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNALLOWED_LOCAL_INDEXES).setTableName(indexTableName.getTableName()).build().buildException();
+            }
+            if (!connection.getQueryServices().supportsFeature(Feature.LOCAL_INDEX)) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_LOCAL_INDEXES).setTableName(indexTableName.getTableName()).build().buildException();
+            }
+        }
         while (true) {
             try {
                 ColumnResolver resolver = FromCompiler.getResolver(statement, connection);
@@ -920,7 +928,6 @@ public class MetaDataClient {
                         throw new SQLFeatureNotSupportedException("An index may only be created for a VIEW through a tenant-specific connection");
                     }
                 }
-                int hbaseVersion = connection.getQueryServices().getLowestClusterHBaseVersion();
                 if (!dataTable.isImmutableRows()) {
                     if (hbaseVersion < PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_MUTABLE_INDEXES).setTableName(indexTableName.getTableName()).build().buildException();
@@ -960,7 +967,7 @@ public class MetaDataClient {
                  * 1) for a local index, as all local indexes will reside in the same HBase table
                  * 2) for a view on an index.
                  */
-                if (statement.getIndexType() == IndexType.LOCAL || (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED)) {
+                if (isLocalIndex || (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED)) {
                     allocateIndexId = true;
                     // Next add index ID column
                     PDataType dataType = MetaDataUtil.getViewIndexIdDataType();
@@ -992,6 +999,12 @@ public class MetaDataClient {
                     }
                     unusedPkColumns.remove(expression);
                     
+                    // Go through parse node to get string as otherwise we
+                    // can lose information during compilation
+                    StringBuilder buf = new StringBuilder();
+                    parseNode.toSQL(resolver, buf);
+                    String expressionStr = buf.toString();
+                    
                     ColumnName colName = null;
                     ColumnRef colRef = expressionIndexCompiler.getColumnRef();
 					if (colRef!=null) { 
@@ -1003,13 +1016,13 @@ public class MetaDataClient {
 					else { 
 						// if this is an expression
 					    // TODO column names cannot have double quotes, remove this once this PHOENIX-1621 is fixed
-						String name = expression.toString().replaceAll("\"", "'");
+						String name = expressionStr.replaceAll("\"", "'");
                         colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, name));
 					}
 					indexedColumnNames.add(colName);
                 	PDataType dataType = IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, pair.getSecond()));
-                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), expression.isNullable(), expression.getMaxLength(), expression.getScale(), false, pair.getSecond(), expression.toString()));
+                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), expression.isNullable(), expression.getMaxLength(), expression.getScale(), false, pair.getSecond(), expressionStr));
                 }
 
                 // Next all the PK columns from the data table that aren't indexed

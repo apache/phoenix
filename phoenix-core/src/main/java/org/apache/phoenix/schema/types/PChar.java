@@ -17,16 +17,17 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Strings;
+import java.sql.Types;
+import java.text.Format;
+import java.util.Arrays;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.StringUtil;
 
-import java.sql.Types;
-import java.text.Format;
-import java.util.Arrays;
+import com.google.common.base.Strings;
 
 /**
  * Fixed length single byte characters
@@ -194,6 +195,11 @@ public class PChar extends PDataType<String> {
     @Override
     public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
       return PVarchar.INSTANCE.toStringLiteral(b, offset, length, formatter);
+    }
+
+    @Override
+    public String toStringLiteral(Object o, Format formatter) {
+      return PVarchar.INSTANCE.toStringLiteral(o, formatter);
     }
 
     @Override

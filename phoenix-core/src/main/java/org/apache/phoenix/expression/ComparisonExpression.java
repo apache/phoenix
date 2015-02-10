@@ -44,6 +44,7 @@ import org.apache.phoenix.schema.types.PUnsignedInt;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.collect.Lists;
@@ -57,15 +58,6 @@ import com.google.common.collect.Lists;
  */
 public class ComparisonExpression extends BaseCompoundExpression {
     private CompareOp op;
-    private static final String[] CompareOpString = new String[CompareOp.values().length];
-    static {
-        CompareOpString[CompareOp.EQUAL.ordinal()] = " = ";
-        CompareOpString[CompareOp.NOT_EQUAL.ordinal()] = " != ";
-        CompareOpString[CompareOp.GREATER.ordinal()] = " > ";
-        CompareOpString[CompareOp.LESS.ordinal()] = " < ";
-        CompareOpString[CompareOp.GREATER_OR_EQUAL.ordinal()] = " >= ";
-        CompareOpString[CompareOp.LESS_OR_EQUAL.ordinal()] = " <= ";
-    }
     
     private static void addEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr) throws SQLException {
         boolean isLHSNull = ExpressionUtil.isNull(lhs, ptr);
@@ -370,7 +362,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
     }
     
     public static String toString(CompareOp op, List<Expression> children) {
-        return (children.get(0) + CompareOpString[op.ordinal()] + children.get(1));
+        return (children.get(0) + " " + QueryUtil.toSQL(op) + " " + children.get(1));
     }
     
     @Override

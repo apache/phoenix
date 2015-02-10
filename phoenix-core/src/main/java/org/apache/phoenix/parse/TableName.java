@@ -60,7 +60,9 @@ public class TableName {
     
     @Override
     public String toString() {
-        return (schemaName == null ? "" : schemaName + QueryConstants.NAME_SEPARATOR)  + tableName;
+        return (schemaName == null ? "" : ((isSchemaNameCaseSensitive ? "\"" : "") + schemaName
+                + (isSchemaNameCaseSensitive ? "\"" : "") + QueryConstants.NAME_SEPARATOR))
+                + ((isTableNameCaseSensitive ? "\"" : "") + tableName + (isTableNameCaseSensitive ? "\"" : ""));
     }
     
 	@Override

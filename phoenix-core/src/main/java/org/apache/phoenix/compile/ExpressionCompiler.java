@@ -66,6 +66,8 @@ import org.apache.phoenix.expression.TimestampSubtractExpression;
 import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
+import org.apache.phoenix.expression.function.RoundDecimalExpression;
+import org.apache.phoenix.expression.function.RoundTimestampExpression;
 import org.apache.phoenix.parse.AddParseNode;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.ArithmeticParseNode;
@@ -534,6 +536,24 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         return true;
     }
 
+    // TODO: don't repeat this ugly cast logic (maybe use isCastable in the last else block.
+    private static Expression convertToRoundExpressionIfNeeded(PDataType fromDataType, PDataType targetDataType, List<Expression> expressions) throws SQLException {
+        Expression firstChildExpr = expressions.get(0);
+        if(fromDataType == targetDataType) {
+            return firstChildExpr;
+        } else if((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE || fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
+          PLong.INSTANCE)) {
+            return RoundDecimalExpression.create(expressions);
+        } else if((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE || fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
+          PDate.INSTANCE)) {
+            return RoundTimestampExpression.create(expressions);
+        } else if(fromDataType.isCastableTo(targetDataType)) {
+            return firstChildExpr;
+        } else {
+            throw TypeMismatchException.newException(fromDataType, targetDataType, firstChildExpr.toString());
+        }
+    }
+
     @Override
     public Expression visitLeave(CastParseNode node, List<Expression> children) throws SQLException {
         ParseNode childNode = node.getChildren().get(0);
@@ -553,7 +573,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
              * end up creating a RoundExpression. 
              */
             if (context.getResolver().getTables().get(0).getTable().getType() != PTableType.INDEX) {
-                expr =  CastParseNode.convertToRoundExpressionIfNeeded(fromDataType, targetDataType, children);
+                expr =  convertToRoundExpressionIfNeeded(fromDataType, targetDataType, children);
             }
         }
         return wrapGroupByExpression(CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), expr.getMaxLength()));  

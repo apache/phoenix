@@ -17,13 +17,13 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.Date;
+import java.sql.Types;
+import java.text.Format;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.DateUtil;
-
-import java.sql.Types;
-import java.sql.Date;
-import java.text.Format;
 
 public class PUnsignedDate extends PDataType<Date> {
 
@@ -109,14 +109,14 @@ public class PUnsignedDate extends PDataType<Date> {
   }
 
   @Override
-  public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
+  public String toStringLiteral(Object o, Format formatter) {
     // Can't delegate, as the super.toStringLiteral calls this.toBytes
     if (formatter == null || formatter == DateUtil.DEFAULT_DATE_FORMATTER) {
       // If default formatter has not been overridden,
       // use one that displays milliseconds.
       formatter = DateUtil.DEFAULT_MS_DATE_FORMATTER;
     }
-    return "'" + super.toStringLiteral(b, offset, length, formatter) + "'";
+    return "'" + super.toStringLiteral(o, formatter) + "'";
   }
 
   @Override

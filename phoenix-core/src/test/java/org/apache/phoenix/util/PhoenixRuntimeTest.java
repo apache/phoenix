@@ -20,6 +20,7 @@ package org.apache.phoenix.util;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -27,6 +28,7 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -34,7 +36,10 @@ import java.util.Properties;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.junit.Test;
 
@@ -153,6 +158,59 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
             }
         } catch (Exception e) {
             fail("Failed sql: " + sb.toString() + ExceptionUtils.getStackTrace(e));
+        }
+    }
+    
+    @Test
+    public void testGetTenantIdExpression() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        Expression e1 = PhoenixRuntime.getTenantIdExpression(conn, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
+        assertNull(e1);
+        Expression e2 = PhoenixRuntime.getTenantIdExpression(conn, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+        assertNotNull(e2);
+
+        Expression e3 = PhoenixRuntime.getTenantIdExpression(conn, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
+        assertNotNull(e3);
+        
+        conn.createStatement().execute("CREATE TABLE FOO (k VARCHAR PRIMARY KEY)");
+        Expression e4 = PhoenixRuntime.getTenantIdExpression(conn, "FOO");
+        assertNull(e4);
+        
+        conn.createStatement().execute("CREATE TABLE A.BAR (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) MULTI_TENANT=true");
+        Expression e5 = PhoenixRuntime.getTenantIdExpression(conn, "A.BAR");
+        assertNotNull(e5);
+
+        conn.createStatement().execute("CREATE INDEX I1 ON A.BAR (K2)");
+        Expression e5A = PhoenixRuntime.getTenantIdExpression(conn, "A.I1");
+        assertNotNull(e5A);
+        
+        conn.createStatement().execute("CREATE TABLE BAS (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) MULTI_TENANT=true, SALT_BUCKETS=3");
+        Expression e6 = PhoenixRuntime.getTenantIdExpression(conn, "BAS");
+        assertNotNull(e6);
+        
+        conn.createStatement().execute("CREATE INDEX I2 ON BAS (K2)");
+        Expression e6A = PhoenixRuntime.getTenantIdExpression(conn, "I2");
+        assertNotNull(e6A);
+        
+        try {
+            PhoenixRuntime.getTenantIdExpression(conn, "NOT.ATABLE");
+            fail();
+        } catch (TableNotFoundException e) {
+            // Expected
+        }
+        
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "t1");
+        Connection tsconn = DriverManager.getConnection(getUrl(), props);
+        tsconn.createStatement().execute("CREATE VIEW V(V1 VARCHAR) AS SELECT * FROM BAS");
+        Expression e7 = PhoenixRuntime.getTenantIdExpression(tsconn, "V");
+        assertNotNull(e7);
+        tsconn.createStatement().execute("CREATE LOCAL INDEX I3 ON V (V1)");
+        try {
+            PhoenixRuntime.getTenantIdExpression(tsconn, "I3");
+            fail();
+        } catch (SQLFeatureNotSupportedException e) {
+            // Expected
         }
     }
 }

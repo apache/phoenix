@@ -37,9 +37,9 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.math.BigDecimal;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.text.Format;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -60,11 +60,11 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.RowKeyValueAccessor;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.RowKeyValueAccessor;
-import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
@@ -79,12 +79,18 @@ import com.google.common.collect.ImmutableList;
 
 public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
+    private PhoenixPreparedStatement newPreparedStatement(PhoenixConnection pconn, String query) throws SQLException {
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        assertRoundtrip(query);
+        return pstmt;
+    }
+    
     @Test
     public void testSingleEqualFilter() throws SQLException {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and a_integer=0";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -101,7 +107,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         pconn.createStatement().execute("CREATE TABLE t (k bigint not null primary key, v varchar) SALT_BUCKETS=20");
         String query = "select * from t where k=" + 1;
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -122,7 +128,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         pconn.createStatement().execute("CREATE TABLE t (k varchar primary key, v varchar) SALT_BUCKETS=20");
         String query = "select * from t where k='a'";
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -143,7 +149,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         pconn.createStatement().execute("CREATE TABLE t (k bigint not null primary key, v varchar) SALT_BUCKETS=20");
         String query = "select * from t where k in (1,3)";
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -195,7 +201,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and a_string=b_string";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -212,7 +218,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,null) = 'foo'";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -229,7 +235,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         List<Object> binds = Arrays.<Object>asList(tenantId);
 
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         bindParams(pstmt, binds);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
@@ -253,7 +259,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and 0 >= a_integer";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
 
@@ -272,13 +278,12 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String dateStr = "2012-01-01 12:00:00";
         String query = "select * from atable where organization_id='" + tenantId + "' and a_date >= to_date('" + dateStr + "')";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
 
-        Format format = DateUtil.getDateParser(DateUtil.DEFAULT_DATE_FORMAT);
-        Object date = format.parseObject(dateStr);
+        Date date = DateUtil.parseDate(dateStr);
 
         assertEquals(
             singleKVFilter(constantComparison(
@@ -292,7 +297,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and x_decimal >= " + toNumberClause;
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -349,7 +354,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select * from atable where substr(entity_id,1,3)=?";
         List<Object> binds = Arrays.<Object>asList(keyPrefix);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         bindParams(pstmt, binds);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
@@ -375,7 +380,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select * from atable where entity_id=?";
         List<Object> binds = Arrays.<Object>asList(keyPrefix);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         bindParams(pstmt, binds);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
@@ -391,7 +396,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select * from atable where organization_id=? AND entity_id=?";
         List<Object> binds = Arrays.<Object>asList(tenantId,keyPrefix);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         bindParams(pstmt, binds);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
@@ -406,7 +411,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select * from atable where substr(entity_id,1,3)=?";
         List<Object> binds = Arrays.<Object>asList(keyPrefix);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         bindParams(pstmt, binds);
         QueryPlan plan = pstmt.optimizeQuery();
         // Degenerate b/c "foobar" is more than 3 characters
@@ -421,7 +426,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select * from atable where a_string=?";
         List<Object> binds = Arrays.<Object>asList(aString);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         bindParams(pstmt, binds);
         QueryPlan plan = pstmt.optimizeQuery();
         // Degenerate b/c a_string length is 100
@@ -436,7 +441,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select * from atable where organization_id=? and (substr(entity_id,1,3)=? or a_integer=?)";
         List<Object> binds = Arrays.<Object>asList(tenantId, keyPrefix, aInt);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         bindParams(pstmt, binds);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
@@ -465,7 +470,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and a_integer > 'foo'";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
 
         try {
             pstmt.optimizeQuery();
@@ -480,7 +485,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and a_integer=0 and 2=3";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         assertDegenerate(plan.getContext());
     }
@@ -490,7 +495,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and 2=3";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         assertDegenerate(plan.getContext());
     }
@@ -500,7 +505,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and 2<=2";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         assertNull(scan.getFilter());
@@ -515,7 +520,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and a_integer=0 and 2<3";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -537,7 +542,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and (a_integer=0 or 3!=3)";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -558,7 +563,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and (a_integer=0 or 3>2)";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -574,7 +579,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and a_string IN ('a','b')";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId);
@@ -599,7 +604,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = String.format("select * from %s where organization_id IN ('%s','%s','%s')",
                 ATABLE_NAME, tenantId1, tenantId3, tenantId2);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId1);
@@ -626,7 +631,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = String.format("select * from %s where organization_id='%s' OR organization_id='%s' OR organization_id='%s'",
                 ATABLE_NAME, tenantId1, tenantId3, tenantId2);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
 
@@ -654,7 +659,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = String.format("select * from %s where organization_id='%s' AND entity_id IN ('%s','%s')",
                 ATABLE_NAME, tenantId, entityId1, entityId2);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId + entityId1);
@@ -684,7 +689,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = String.format("select * from %s where organization_id IN ('%s','%s','%s') AND entity_id>='%s' AND entity_id<='%s'",
                 ATABLE_NAME, tenantId1, tenantId3, tenantId2, entityId1, entityId2);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -713,7 +718,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = String.format("select * from %s where organization_id IN ('%s','%s','%s') AND entity_id='%s'",
                 ATABLE_NAME, tenantId1, tenantId3, tenantId2, entityId);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -736,7 +741,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = String.format("select * from %s where organization_id IN ('%s','%s','%s') AND entity_id='%s'",
                 ATABLE_NAME, tenantId1, tenantId3, tenantId2, entityId);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId1), PVarchar.INSTANCE.toBytes(entityId));
@@ -766,7 +771,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = String.format("select * from %s where organization_id IN ('%s','%s') AND entity_id IN ('%s', '%s')",
                 ATABLE_NAME, tenantId1, tenantId2, entityId1, entityId2);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
 
@@ -790,7 +795,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = String.format("select * from %s where organization_id > '%s' AND organization_id < '%s'",
                 ATABLE_NAME, tenantId1, tenantId2);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
 
@@ -811,7 +816,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String query = String.format("select * from %s where organization_id IN ('%s','%s','%s') AND entity_id IN ('%s', '%s')",
                 ATABLE_NAME, tenantId1, tenantId3, tenantId2, entityId1, entityId2);
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId1), PVarchar.INSTANCE.toBytes(entityId1));
@@ -826,7 +831,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and a_integer between 0 and 10";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -848,7 +853,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         String tenantId = "000000000000001";
         String query = "select * from atable where organization_id='" + tenantId + "' and a_integer not between 0 and 10";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -876,7 +881,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
         String query = "select * from tenant_filter_test where a_integer=0 and a_string='foo'";
         PhoenixConnection pconn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -908,7 +913,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
         String query = "select * from tenant_filter_test where a_integer=0 and a_string='foo'";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(tenantId), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
@@ -935,7 +940,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
     public void testScanCaching_Default() throws SQLException {
         String query = "select * from atable where a_integer=0";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         assertEquals(QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE, pstmt.getFetchSize());
@@ -946,7 +951,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
     public void testScanCaching_CustomFetchSizeOnStatement() throws SQLException {
         String query = "select * from atable where a_integer=0";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         final int FETCH_SIZE = 25;
         pstmt.setFetchSize(FETCH_SIZE);
         QueryPlan plan = pstmt.optimizeQuery();

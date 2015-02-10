@@ -293,7 +293,7 @@ private int getKeyValueCount(HTable table) throws IOException {
     int count = 0;
     for (Result res : results) {
       count += res.list().size();
-      System.out.println(count + ") " + res);
+      LOG.debug(count + ") " + res);
     }
     results.close();
 

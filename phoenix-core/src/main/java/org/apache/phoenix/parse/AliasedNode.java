@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.parse;
 
+import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.util.SchemaUtil;
 
 /**
@@ -43,6 +44,40 @@ public class AliasedNode {
 
     public ParseNode getNode() {
         return node;
+    }
+
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        node.toSQL(resolver, buf);
+        if (alias != null) {
+            buf.append(' ');
+            if (isCaseSensitve) buf.append('"');
+            buf.append(alias);
+            if (isCaseSensitve) buf.append('"');
+        }
+    }
+    
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + ((alias == null) ? 0 : alias.hashCode());
+        result = prime * result + ((node == null) ? 0 : node.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null) return false;
+        if (getClass() != obj.getClass()) return false;
+        AliasedNode other = (AliasedNode)obj;
+        if (alias == null) {
+            if (other.alias != null) return false;
+        } else if (!alias.equals(other.alias)) return false;
+        if (node == null) {
+            if (other.node != null) return false;
+        } else if (!node.equals(other.node)) return false;
+        return true;
     }
 
     public boolean isCaseSensitve() {

@@ -21,13 +21,13 @@ import java.sql.SQLException;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Preconditions;
@@ -188,5 +188,27 @@ public class ColumnDef {
 
 	public String getExpression() {
 		return expressionStr;
+	}
+	
+	@Override
+    public String toString() {
+	    StringBuilder buf = new StringBuilder(columnDefName.getColumnNode().toString());
+	    buf.append(' ');
+        buf.append(dataType.getSqlTypeName());
+        if (maxLength != null) {
+            buf.append('(');
+            buf.append(maxLength);
+            if (scale != null) {
+              buf.append(',');
+              buf.append(scale); // has both max length and scale. For ex- decimal(10,2)
+            }       
+            buf.append(')');
+       }
+        if (isArray) {
+            buf.append(' ');
+            buf.append(PDataType.ARRAY_TYPE_SUFFIX);
+            buf.append(' ');
+        }
+	    return buf.toString();
 	}
 }
