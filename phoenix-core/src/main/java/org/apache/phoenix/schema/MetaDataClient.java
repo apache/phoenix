@@ -332,9 +332,6 @@ public class MetaDataClient {
             table = connection.getMetaDataCache().getTable(new PTableKey(tenantId, fullTableName));
             tableTimestamp = table.getTimeStamp();
         } catch (TableNotFoundException e) {
-            System.err.println(e);
-            // TODO: Try again on services cache, as we may be looking for
-            // a global multi-tenant table
         }
         // Don't bother with server call: we can't possibly find a newer table
         if (table != null && !alwaysHitServer && (systemTable || tableTimestamp == clientTimeStamp - 1)) {
