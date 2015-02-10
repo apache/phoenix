@@ -1002,6 +1002,12 @@ public class MetaDataClient {
                     }
                     unusedPkColumns.remove(expression);
                     
+                    // Go through parse node to get string as otherwise we
+                    // can lose information during compilation
+                    StringBuilder buf = new StringBuilder();
+                    parseNode.toSQL(resolver, buf);
+                    String expressionStr = buf.toString();
+                    
                     ColumnName colName = null;
                     ColumnRef colRef = expressionIndexCompiler.getColumnRef();
 					if (colRef!=null) { 
@@ -1013,13 +1019,13 @@ public class MetaDataClient {
 					else { 
 						// if this is an expression
 					    // TODO column names cannot have double quotes, remove this once this PHOENIX-1621 is fixed
-						String name = expression.toString().replaceAll("\"", "'");
+						String name = expressionStr.replaceAll("\"", "'");
                         colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, name));
 					}
 					indexedColumnNames.add(colName);
                 	PDataType dataType = IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, pair.getSecond()));
-                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), expression.isNullable(), expression.getMaxLength(), expression.getScale(), false, pair.getSecond(), expression.toString()));
+                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), expression.isNullable(), expression.getMaxLength(), expression.getScale(), false, pair.getSecond(), expressionStr));
                 }
 
                 // Next all the PK columns from the data table that aren't indexed

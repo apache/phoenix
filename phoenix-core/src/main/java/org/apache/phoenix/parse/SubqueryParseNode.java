@@ -19,6 +19,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 
 /**
@@ -78,4 +80,10 @@ public class SubqueryParseNode extends TerminalParseNode {
 		return true;
 	}
     
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        buf.append('(');
+        select.toSQL(resolver, buf);
+        buf.append(')');
+    }    
 }

@@ -19,6 +19,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 
 /**
@@ -77,6 +79,55 @@ public class JoinTableNode extends TableNode {
     @Override
     public <T> T accept(TableNodeVisitor<T> visitor) throws SQLException {
         return visitor.visit(this);
+    }
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        buf.append(lhs);
+        buf.append(' ');
+        if (onNode == null) {
+            buf.append(',');
+            buf.append(rhs);
+        } else {
+            buf.append(type);
+            buf.append(" JOIN ");
+            buf.append(rhs);
+            buf.append(" ON (");
+            onNode.toSQL(resolver, buf);
+            buf.append(')');
+        }
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + ((lhs == null) ? 0 : lhs.hashCode());
+        result = prime * result + ((onNode == null) ? 0 : onNode.hashCode());
+        result = prime * result + ((rhs == null) ? 0 : rhs.hashCode());
+        result = prime * result + (singleValueOnly ? 1231 : 1237);
+        result = prime * result + ((type == null) ? 0 : type.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null) return false;
+        if (getClass() != obj.getClass()) return false;
+        JoinTableNode other = (JoinTableNode)obj;
+        if (lhs == null) {
+            if (other.lhs != null) return false;
+        } else if (!lhs.equals(other.lhs)) return false;
+        if (onNode == null) {
+            if (other.onNode != null) return false;
+        } else if (!onNode.equals(other.onNode)) return false;
+        if (rhs == null) {
+            if (other.rhs != null) return false;
+        } else if (!rhs.equals(other.rhs)) return false;
+        if (singleValueOnly != other.singleValueOnly) return false;
+        if (type != other.type) return false;
+        return true;
     }
 }
 

@@ -31,6 +31,12 @@ import java.util.List;
  * @since 0.1
  */
 public class MultiplyParseNode extends ArithmeticParseNode {
+    public static final String OPERATOR = "*";
+
+    @Override
+    public String getOperator() {
+        return OPERATOR;
+    }
 
     MultiplyParseNode(List<ParseNode> children) {
         super(children);

@@ -59,5 +59,9 @@ public class NamedNode {
         NamedNode other = (NamedNode)obj;
         return name.equals(other.name);
     }
-
+    
+    @Override
+    public String toString() {
+        return (isCaseSensitive ? "\"" : "" ) + name + (isCaseSensitive ? "\"" : "" );
+    }
 }

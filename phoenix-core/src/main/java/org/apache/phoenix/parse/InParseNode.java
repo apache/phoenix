@@ -21,6 +21,8 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 
 /**
@@ -81,4 +83,13 @@ public class InParseNode extends BinaryParseNode {
 			return false;
 		return true;
 	}
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        getChildren().get(0).toSQL(resolver, buf);
+        if (negate) buf.append(" NOT");
+        buf.append(" IN (");
+        getChildren().get(1).toSQL(resolver, buf);
+        buf.append(')');
+    }
 }

@@ -21,6 +21,8 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 
 /**
@@ -43,5 +45,12 @@ public class NotParseNode extends UnaryParseNode {
             l = acceptChildren(visitor);
         }
         return visitor.visitLeave(this, l);
+    }
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        List<ParseNode> children = getChildren();
+        buf.append(" NOT ");
+        children.get(0).toSQL(resolver, buf);
     }
 }

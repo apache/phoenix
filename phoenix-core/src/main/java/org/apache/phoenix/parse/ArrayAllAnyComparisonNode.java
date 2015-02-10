@@ -17,37 +17,33 @@
  */
 package org.apache.phoenix.parse;
 
-import java.sql.SQLException;
-import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.util.QueryUtil;
 
+public abstract class ArrayAllAnyComparisonNode extends CompoundParseNode {
 
-/**
- * 
- * Node representing modulus in a SQL expression
- *
- * 
- * @since 0.1
- */
-public class ModulusParseNode extends ArithmeticParseNode {
-    public static final String OPERATOR = "%";
-
-    @Override
-    public String getOperator() {
-        return OPERATOR;
-    }
-
-    ModulusParseNode(List<ParseNode> children) {
+    public ArrayAllAnyComparisonNode(List<ParseNode> children) {
         super(children);
     }
 
+    public abstract String getType();
+
     @Override
-    public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
-        List<T> l = Collections.emptyList();
-        if (visitor.visitEnter(this)) {
-            l = acceptChildren(visitor);
-        }
-        return visitor.visitLeave(this, l);
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        List<ParseNode> children = getChildren();
+        ParseNode rhs = children.get(0);
+        ComparisonParseNode comp = (ComparisonParseNode)children.get(1);
+        ParseNode lhs = comp.getLHS();
+        CompareOp op = comp.getFilterOp();
+        buf.append(' ');
+        lhs.toSQL(resolver, buf);
+        buf.append(" " + QueryUtil.toSQL(op) + " ");
+        buf.append(getType());
+        buf.append('(');
+        rhs.toSQL(resolver, buf);
+        buf.append(')');
     }
 }

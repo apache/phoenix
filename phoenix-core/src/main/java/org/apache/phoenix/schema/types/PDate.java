@@ -26,6 +26,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.StringUtil;
 
 public class PDate extends PDataType<Date> {
 
@@ -150,10 +151,10 @@ public class PDate extends PDataType<Date> {
   public String toStringLiteral(Object o, Format formatter) {
       if (formatter == null) {
           // If default formatter has not been overridden,
-          // use one that displays milliseconds.
+          // use default one.
           formatter = DateUtil.DEFAULT_DATE_FORMATTER;
         }
-        return "'" + super.toStringLiteral(o, formatter) + "'";
+        return "'" + StringUtil.escapeStringConstant(super.toStringLiteral(o, formatter)) + "'";
   }
 
   @Override

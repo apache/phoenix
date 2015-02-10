@@ -31,6 +31,13 @@ import java.util.List;
  * @since 0.1
  */
 public class SubtractParseNode extends ArithmeticParseNode {
+    public static final String OPERATOR = "-";
+
+    @Override
+    public String getOperator() {
+        return OPERATOR;
+    }
+
     SubtractParseNode(List<ParseNode> children) {
         super(children);
     }
