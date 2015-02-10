@@ -41,22 +41,22 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
     private static final int NUM_MILLIS_IN_DAY = 86400000;
 
     @Test
-    public void testImmutableIndexCreationAndUpdate() throws Exception {
+    public void testImmutableIndexCreateAndUpdate() throws Exception {
         helpTestCreateAndUpdate(false, false);
     }
 
     @Test
-    public void testImmutableLocalIndexCreationAndUpdate() throws Exception {
+    public void testImmutableLocalIndexCreateAndUpdate() throws Exception {
         helpTestCreateAndUpdate(false, true);
     }
 
     @Test
-    public void testMutableIndexCreationAndUpdate() throws Exception {
+    public void testMutableIndexCreateAndUpdate() throws Exception {
         helpTestCreateAndUpdate(true, false);
     }
 
     @Test
-    public void testMutableLocalIndexCreationAndUpdate() throws Exception {
+    public void testMutableLocalIndexCreateAndUpdate() throws Exception {
         helpTestCreateAndUpdate(true, true);
     }
 
