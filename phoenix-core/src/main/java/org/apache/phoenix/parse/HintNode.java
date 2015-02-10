@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.collect.ImmutableMap;
 
@@ -194,5 +195,40 @@ public class HintNode {
      */
     public boolean hasHint(Hint hint) {
         return hints.containsKey(hint);
+    }
+    
+    @Override
+    public String toString() {
+        if (hints.isEmpty()) {
+            return StringUtil.EMPTY_STRING;
+        }
+        StringBuilder buf = new StringBuilder("/*+ ");
+        for (Map.Entry<Hint, String> entry : hints.entrySet()) {
+            buf.append(entry.getKey());
+            buf.append(entry.getValue());
+            buf.append(' ');
+        }
+        buf.append("*/ ");
+        return buf.toString();
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + ((hints == null) ? 0 : hints.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null) return false;
+        if (getClass() != obj.getClass()) return false;
+        HintNode other = (HintNode)obj;
+        if (hints == null) {
+            if (other.hints != null) return false;
+        } else if (!hints.equals(other.hints)) return false;
+        return true;
     }
 }

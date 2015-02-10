@@ -453,8 +453,11 @@ public class IndexUtil {
         };
         ColumnResolver indexResolver = FromCompiler.getResolver(indexTableRef);
         StatementContext context = new StatementContext(statement, indexResolver);
-        Expression whereClause = WhereCompiler.compile(context, whereNode);
-        return QueryUtil.getViewStatement(index.getSchemaName().getString(), index.getTableName().getString(), whereClause);
+        // Compile to ensure validity
+        WhereCompiler.compile(context, whereNode);
+        StringBuilder buf = new StringBuilder();
+        whereNode.toSQL(indexResolver, buf);
+        return QueryUtil.getViewStatement(index.getSchemaName().getString(), index.getTableName().getString(), buf.toString());
     }
     
     public static void wrapResultUsingOffset(final ObserverContext<RegionCoprocessorEnvironment> c,

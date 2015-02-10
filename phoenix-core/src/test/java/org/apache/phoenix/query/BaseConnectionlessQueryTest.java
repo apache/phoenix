@@ -32,17 +32,23 @@ import static org.apache.phoenix.util.TestUtil.PTSDB3_NAME;
 import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.parse.BindableStatement;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -146,4 +152,21 @@ public class BaseConnectionlessQueryTest extends BaseTest {
         }
     }
 
+    protected static void assertRoundtrip(String sql) throws SQLException {
+        SQLParser parser = new SQLParser(sql);
+        BindableStatement stmt = null;
+        stmt = parser.parseStatement();
+        if (stmt.getOperation() != Operation.QUERY) {
+            return;
+        }
+        String newSQL = stmt.toString();
+        SQLParser newParser = new SQLParser(newSQL);
+        BindableStatement newStmt = null;
+        try {
+            newStmt = newParser.parseStatement();
+        } catch (SQLException e) {
+            fail("Unable to parse new:\n" + newSQL);
+        }
+        assertEquals("Expected equality:\n" + sql + "\n" + newSQL, stmt, newStmt);
+    }
 }

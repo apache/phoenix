@@ -21,6 +21,8 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 
 /**
@@ -85,4 +87,14 @@ public class LikeParseNode extends BinaryParseNode {
 			return false;
 		return true;
 	}
+
+    
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        List<ParseNode> children = getChildren();
+        children.get(0).toSQL(resolver, buf);
+        if (negate) buf.append(" NOT");
+        buf.append(" " + (likeType == LikeType.CASE_SENSITIVE ? "LIKE" : "ILIKE") + " ");
+        children.get(1).toSQL(resolver, buf);
+    }
 }

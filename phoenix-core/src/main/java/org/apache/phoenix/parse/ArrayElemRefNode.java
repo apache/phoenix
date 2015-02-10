@@ -21,6 +21,8 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 public class ArrayElemRefNode extends CompoundParseNode {
 
     public ArrayElemRefNode(List<ParseNode> parseNode) {
@@ -34,5 +36,14 @@ public class ArrayElemRefNode extends CompoundParseNode {
             l = acceptChildren(visitor);
         }
         return visitor.visitLeave(this, l);
+    }
+    
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        List<ParseNode> children = getChildren();
+        children.get(0).toSQL(resolver, buf);
+        buf.append('[');
+        children.get(1).toSQL(resolver, buf);
+        buf.append(']');
     }
 }

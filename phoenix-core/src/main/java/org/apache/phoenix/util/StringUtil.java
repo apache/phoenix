@@ -19,6 +19,7 @@ package org.apache.phoenix.util;
 
 import java.util.Arrays;
 
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.UndecodableByteException;
 import org.apache.phoenix.schema.SortOrder;
@@ -325,5 +326,9 @@ public class StringUtil {
         if (toIndex > length) {
             throw new ArrayIndexOutOfBoundsException(toIndex);
         }
+    }
+
+    public static String escapeStringConstant(String pattern) {
+        return StringEscapeUtils.escapeSql(pattern); // Need to escape double quotes
     }   
 }

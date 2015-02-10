@@ -68,11 +68,6 @@ public abstract class CompoundParseNode extends ParseNode {
     }
 
     @Override
-    public String toString() {
-        return this.getClass().getName() + children.toString();
-    }
-    
-    @Override
 	public int hashCode() {
 		final int prime = 31;
 		int result = 1;

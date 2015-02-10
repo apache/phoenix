@@ -19,7 +19,6 @@ package org.apache.phoenix.parse;
 
 import java.lang.reflect.Constructor;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -52,6 +51,7 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 /**
@@ -391,12 +391,22 @@ public class ParseNodeFactory {
     public FunctionParseNode function(String name, List<ParseNode> valueNodes,
             List<ParseNode> columnNodes, boolean isAscending) {
 
-        List<ParseNode> children = new ArrayList<ParseNode>();
-        children.addAll(columnNodes);
-        children.add(new LiteralParseNode(Boolean.valueOf(isAscending)));
-        children.addAll(valueNodes);
+        List<ParseNode> args = Lists.newArrayListWithExpectedSize(columnNodes.size() + valueNodes.size() + 1);
+        args.addAll(columnNodes);
+        args.add(new LiteralParseNode(Boolean.valueOf(isAscending)));
+        args.addAll(valueNodes);
 
-        return function(name, children);
+        BuiltInFunctionInfo info = getInfo(name, args);
+        Constructor<? extends FunctionParseNode> ctor = info.getNodeCtor();
+        if (ctor == null) {
+            return new AggregateFunctionWithinGroupParseNode(name, args, info);
+        } else {
+            try {
+                return ctor.newInstance(name, args, info);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     public HintNode hint(String hint) {
@@ -561,8 +571,12 @@ public class ParseNodeFactory {
     	return new ArrayConstructorNode(upsertStmtArray);
     }
 
-    public MultiplyParseNode negate(ParseNode child) {
-        return new MultiplyParseNode(Arrays.asList(child,this.literal(-1)));
+    public ParseNode negate(ParseNode child) {
+        // Prevents reparsing of -1 from becoming 1*-1 and 1*1*-1 with each re-parsing
+        if (LiteralParseNode.ONE.equals(child)) {
+            return LiteralParseNode.MINUS_ONE;
+        }
+        return new MultiplyParseNode(Arrays.asList(child,LiteralParseNode.MINUS_ONE));
     }
 
     public NotEqualParseNode notEqual(ParseNode lhs, ParseNode rhs) {
@@ -587,10 +601,6 @@ public class ParseNodeFactory {
         return new OrderByNode(expression, nullsLast, orderAscending);
     }
 
-
-    public OuterJoinParseNode outer(ParseNode node) {
-        return new OuterJoinParseNode(node);
-    }
 
     public SelectStatement select(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
             List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {

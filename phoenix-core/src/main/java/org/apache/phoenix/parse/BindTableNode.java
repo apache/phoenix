@@ -19,6 +19,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 
 /**
@@ -39,5 +41,11 @@ public class BindTableNode extends ConcreteTableNode {
         return visitor.visit(this);
     }
 
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        buf.append(this.getName().toString());
+        if (this.getAlias() != null) buf.append(" " + this.getAlias());
+        buf.append(' ');
+    }
 }
 

@@ -20,6 +20,8 @@ package org.apache.phoenix.parse;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 
 
@@ -47,4 +49,13 @@ public abstract class ParseNode {
     public String getAlias() {
         return null;
     }
+    
+    @Override
+    public final String toString() {
+        StringBuilder buf = new StringBuilder();
+        toSQL(null, buf);
+        return buf.toString();
+    }
+    
+    public abstract void toSQL(ColumnResolver resolver, StringBuilder buf);
 }

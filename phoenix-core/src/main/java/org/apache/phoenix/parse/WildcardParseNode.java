@@ -19,6 +19,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 
 /**
@@ -42,11 +44,6 @@ public class WildcardParseNode extends TerminalParseNode {
     @Override
     public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
         return visitor.visit(this);
-    }
-
-    @Override
-    public String toString() {
-        return NAME;
     }
 
     public boolean isRewrite() {
@@ -73,6 +70,13 @@ public class WildcardParseNode extends TerminalParseNode {
 		if (isRewrite != other.isRewrite)
 			return false;
 		return true;
-	}    
+	}
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        buf.append(' ');
+        buf.append(NAME);
+        buf.append(' ');
+    }    
     
 }

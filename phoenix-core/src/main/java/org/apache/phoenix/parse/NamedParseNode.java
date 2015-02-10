@@ -18,6 +18,7 @@
 package org.apache.phoenix.parse;
 
 
+
 /**
  * 
  * Abstract node representing named nodes such as binds and column expressions in SQL
@@ -48,11 +49,6 @@ public abstract class NamedParseNode extends TerminalParseNode{
         return namedNode.isCaseSensitive();
     }
     
-    @Override
-    public String toString() {
-        return getName();
-    }
-
 	@Override
 	public int hashCode() {
 		final int prime = 31;
@@ -78,4 +74,15 @@ public abstract class NamedParseNode extends TerminalParseNode{
 			return false;
 		return true;
 	}
+
+    
+    public void toSQL(StringBuilder buf) {
+        if (isCaseSensitive()) {
+            buf.append('"');
+            buf.append(getName());
+            buf.append('"');
+        } else {
+            buf.append(getName());
+        }
+    }
 }

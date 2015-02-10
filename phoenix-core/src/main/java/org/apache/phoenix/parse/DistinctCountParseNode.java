@@ -20,6 +20,7 @@ package org.apache.phoenix.parse;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
@@ -40,5 +41,20 @@ public class DistinctCountParseNode extends DelegateConstantToCountParseNode {
     public FunctionExpression create(List<Expression> children, StatementContext context)
             throws SQLException {
         return new DistinctCountAggregateFunction(children, getDelegateFunction(children, context));
+    }
+    
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        buf.append(' ');
+        buf.append("COUNT(DISTINCT ");
+        List<ParseNode> children = getChildren();
+        if (!children.isEmpty()) {
+            for (ParseNode child : children) {
+                child.toSQL(resolver, buf);
+                buf.append(',');
+            }
+            buf.setLength(buf.length()-1);
+        }
+        buf.append(')');
     }
 }
