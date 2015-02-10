@@ -451,6 +451,6 @@ public class ViewIT extends BaseViewIT {
         String queryPlan = QueryUtil.getExplainPlan(rs);
         assertEquals(
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER I1 [1,100] - [2,109]\n" + 
-                "    SERVER FILTER BY (S2 = 'bas' AND \"S1\" = 'foo')", queryPlan);
+                "    SERVER FILTER BY (\"S2\" = 'bas' AND \"S1\" = 'foo')", queryPlan);
     }
 }
