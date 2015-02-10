@@ -521,8 +521,7 @@ public class PhoenixHBaseLoaderIT {
         Iterator<Tuple> iterator = pigServer.openIterator("A");
         int recordsRead = 0;
         while (iterator.hasNext()) {
-            Tuple tuple = iterator.next();
-            System.out.println(" the field value is "+tuple.get(1));
+            iterator.next();
             recordsRead++;
         }
         assertEquals(rows/2, recordsRead);

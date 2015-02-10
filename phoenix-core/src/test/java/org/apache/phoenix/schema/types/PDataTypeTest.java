@@ -1011,7 +1011,6 @@ public class PDataTypeTest {
                 byte[] bytes = Bytes.toBytesBinary(str);
                 Object o = PDecimal.INSTANCE.toObject(bytes);
                 assertNotNull(o);
-                //System.out.println(o.getClass() +" " + bytesToHex(bytes)+" " + o+" ");
             }
         }
     }
