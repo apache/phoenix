@@ -1,3 +1,135 @@
+Release Notes - Phoenix - Version 4.3
+
+** New Feature
+    * [PHOENIX-1399] - Support cross joins and comma-separated table list
+    * [PHOENIX-1454] - Map Reduce over Phoenix tables
+    * [PHOENIX-1552] - Add sandbox environment for trying out Phoenix
+    * [PHOENIX-1559] - Allow specifying auto-commit mode in the connection URL or connection properties
+    * [PHOENIX-1578] - Support explicit storage of null values
+
+** Improvement
+    * [PHOENIX-1127] - Cannot load Timestamp(6) in CSV bulk loader
+    * [PHOENIX-1142] - Improve CsvBulkLoadTool to parse different Date formats
+    * [PHOENIX-1300] - Allow sub-queries to choose different execution path other than hash-join
+    * [PHOENIX-1409] - Allow ALTER TABLE <table> SET command to update HTableDescriptor and HColumnDescriptor properties
+    * [PHOENIX-1467] - Upgrade to 4.12 Junit and update tests by removing @Category annotation
+    * [PHOENIX-1582] - Support TimeOut in JDBC
+    * [PHOENIX-1594] - Using KeyOnlyFilter for simple query of select count(1) from <table>
+
+** Task
+    * [PHOENIX-514] - Support functional indexes
+    * [PHOENIX-653] - Support ANSI-standard date literals from SQL 2003
+    * [PHOENIX-688] - Add to_time and to_timestamp built-in functions
+    * [PHOENIX-910] - Filter should override hasFilterRow() when filterRow() is overridden
+    * [PHOENIX-1167] - Improve join capabilities
+    * [PHOENIX-1393] - Add test cases for sub-queries in UPSERT and DELETE statement
+
+** Sub-task
+    * [PHOENIX-1179] - Support many-to-many joins
+    * [PHOENIX-1445] - Add unit test for stats not being maintained correctly through splits
+    * [PHOENIX-1496] - Further reduce work in StatsCollector
+    * [PHOENIX-1514] - Break up PDataType Enum
+    * [PHOENIX-1554] - Update join documentation based on many-to-many support
+    * [PHOENIX-1557] - Add hint to force sort merge join
+    * [PHOENIX-1558] - Document map-reduce integration
+
+** Bug
+    * [PHOENIX-1233] - Detected both log4j-over-slf4j.jar AND slf4j-log4j12.jar on the class path, preempting StackOverflowError
+    * [PHOENIX-1248] - CsvBulkLoadTool is failing with IAE when local index specified for --index-table parameter
+    * [PHOENIX-1331] - DropIndexDuringUpsertIT.testWriteFailureDropIndex times out
+    * [PHOENIX-1336] - Exception when select from local index:Cache of region boundaries are out of date
+    * [PHOENIX-1346] - Base exception gets wrapped as incompatible jar exception
+    * [PHOENIX-1362] - Min/max aggregate query on CHAR and BINARY types always return null
+    * [PHOENIX-1373] - Ctrl-C out of sqlline causes terminal to be useless
+    * [PHOENIX-1380] - Potential null dereference in PerformanceLog#getFileOutputStream()
+    * [PHOENIX-1394] - getColumnDisplaySize() method returns incorrect value for varchar columns
+    * [PHOENIX-1395] - ResultSpooler spill files are left behind in /tmp folder
+    * [PHOENIX-1396] - Avoid unnecessary ResultSpooler.bin files creation/deletion every time SpoolingResultIterator is used 
+    * [PHOENIX-1397] - RVC combined with OR on first row key column results in NPE
+    * [PHOENIX-1400] - Copy small attribute in ScanUtil
+    * [PHOENIX-1401] - SYSTEM.SEQUENCE table is not pre-split as expected
+    * [PHOENIX-1402] - Don't recalculate stats on split
+    * [PHOENIX-1403] - Race condition can cause ConnectionQueryServicesImpl to be re-initialized
+    * [PHOENIX-1404] - PhoenixResultSet.setFetchSize throws SQLFeatureNotSupportedException
+    * [PHOENIX-1405] - Problem referencing lower-case column names with Phoenix / Pig / Spark
+    * [PHOENIX-1406] - Use preCompact hook instead of preCompactScannerOpen for stats collection
+    * [PHOENIX-1407] - PhoenixStatement.getFetchSize() appears to never be used
+    * [PHOENIX-1408] - Don't disable table before modifying HTable metadata
+    * [PHOENIX-1413] - Add Phoenix coprocessors with configurable priority
+    * [PHOENIX-1416] - Given a schema name, DatabaseMetadata.getTables and getColumns calls erroneously match tables without schema 
+    * [PHOENIX-1418] - Optionally display number of parallel chunks in explain plan
+    * [PHOENIX-1420] - DatabaseMetaData.getschemas returns incorrect column order
+    * [PHOENIX-1424] - Drop cascade field should be optional
+    * [PHOENIX-1427] - Reduce work in StatsCollector
+    * [PHOENIX-1429] - Cancel queued threads when limit reached
+    * [PHOENIX-1431] - DELETE using Subqueries
+    * [PHOENIX-1432] - Run limit query that has only leading PK column filter serially
+    * [PHOENIX-1434] - Stats are not maintained correctly through splits
+    * [PHOENIX-1436] - the choice of index by phoneix is not correct where do querying
+    * [PHOENIX-1442] - Alter Index double normalize Index Table Name
+    * [PHOENIX-1446] - Add/fix logging for LIMIT optimization
+    * [PHOENIX-1447] - Increase guidepost width default to take into account FAST_DIFF compression
+    * [PHOENIX-1448] - Fix resource leak when work rejected by thread executor
+    * [PHOENIX-1449] - Fix potential NPE in delete
+    * [PHOENIX-1451] - Queries with limit against tenant views is broken
+    * [PHOENIX-1456] - Incorrect query results caused by reusing buffers in SpoolingResultIterator
+    * [PHOENIX-1460] - Identify known/possible set of Phoenix table properties
+    * [PHOENIX-1463] - phoenix.query.timeoutMs doesn't work as expected
+    * [PHOENIX-1466] - Prevent multiple scans when query run serially
+    * [PHOENIX-1469] - Binary columns do not work correctly for indexing
+    * [PHOENIX-1470] - KEEP_DELETED_CELLS interface changed in HBase 0.98.8
+    * [PHOENIX-1472] - SaltingUtil calculates wrong salt key for Integer.MIN_VALUE hash code
+    * [PHOENIX-1474] - NPE when RVC between combined with key part comparison
+    * [PHOENIX-1476] - Immediately open scanner for parallel queries
+    * [PHOENIX-1477] - Phoenix 4.0  -> 4.2 upgrade doesn't work 
+    * [PHOENIX-1480] - Incorrect query results may occur when VIEW uses indexes from physical table
+    * [PHOENIX-1483] - Support mixed client versions against newer server version
+    * [PHOENIX-1484] - Index creation failed due to specifying DEFAULT_COLUMN_FAMILY option
+    * [PHOENIX-1485] - Date columns should be displayed without timezone offset
+    * [PHOENIX-1486] - Fix SpooledTmpFileDeleteIT by having it use a different directory for spooling files.
+    * [PHOENIX-1498] - Turn KEEP_DELETED_CELLS off by default
+    * [PHOENIX-1500] - Disallow mutations and queries using PhoenixPreparedStatement.executeQuery() and executeUpdate() respectively.
+    * [PHOENIX-1503] - Compilation on Mac OS fails on maven-assembly-plugin
+    * [PHOENIX-1511] - Invalidate stats row even if not running stats due to phoenix.stats.minUpdateFrequency
+    * [PHOENIX-1516] - Add RAND() built-in function
+    * [PHOENIX-1532] - Phoenix tarball assembly does not include server jar
+    * [PHOENIX-1533] - Last key part not taken into child/parent optimization
+    * [PHOENIX-1535] - Secondary local index casues Undefined column error with queries involving joins
+    * [PHOENIX-1536] - Make use of SplitTransaction to split local index region from 0.98.9 onwards
+    * [PHOENIX-1537] - Prevent tests from hanging in some environments
+    * [PHOENIX-1545] - Add org.iq80.snappy reference to client poms
+    * [PHOENIX-1549] - CSV loader doesn't use configured date format for loading dates
+    * [PHOENIX-1551] - Upgrading from Phoenix 4.0.x to 4.2.2 and throw can't find SYSTEM.STATS
+    * [PHOENIX-1560] - Join between global index and data table if INDEX hint used
+    * [PHOENIX-1562] - NPE in ServerCacheClient
+    * [PHOENIX-1570] - Data missing when using local index
+    * [PHOENIX-1573] - Set reuseForks back to true for integration tests
+    * [PHOENIX-1575] - Identical sql type values for UNSIGNED_TIMESTAMP and UNSIGNED_DATE
+    * [PHOENIX-1576] - Refactor property-related code to reside in ConnectionQueryServicesImpl
+    * [PHOENIX-1581] - Client cache not updated after issuing ALTER TABLE statements for setting phoenix table properties
+    * [PHOENIX-1587] - Error deserializing empty array (which represents null)
+    * [PHOENIX-1591] - Return all rows instead of no rows if IN clause subquery gets optimized out from semi-join and returns empty result
+    * [PHOENIX-1596] - Turning tracing on causes region servers to crash
+    * [PHOENIX-1600] - Scanner is left unclosed in MetaDataEndpointImpl#doDropTable()
+    * [PHOENIX-1601] - Performance.py script not working in binary distribution
+    * [PHOENIX-1605] - Update pom to latest stable sqlline release
+    * [PHOENIX-1606] - Update JDBC version to match release version
+    * [PHOENIX-1610] - Incorrect subquery results caused by unpaired contextStack push/pop
+    * [PHOENIX-1612] - Phoenix can't be used from an external jar in SQL tools
+    * [PHOENIX-1613] - Phoenix can't be used directly with SquirrelSQL
+    * [PHOENIX-1616] - Creating a View with a case sensitive column name does not work
+    * [PHOENIX-1620] - Add API for getting tenant ID from an HBase row of a Phoenix table
+    * [PHOENIX-1641] - Make the upgrade for SYSTEM.CATALOG and SYSTEM.SEQUENCE work for 4.x to 4.3
+    * [PHOENIX-1643] - Ensure index usage is backward compatible for 4.2 client against 4.3 server
+    * [PHOENIX-1644] - Check for min HBase version before creating local index and provide means of disabling usage
+    * [PHOENIX-1645] - Wrong execution plan generated for indexed query which leads to slow performance
+    * [PHOENIX-1646] - Views and functional index expressions may lose information when stringified
+    * [PHOENIX-1649] - Remove System.out/System.err debugging messages
+    * [PHOENIX-1650] - Possible resource leak in upsert select query
+
+** Test
+    * [PHOENIX-1509] - Investigate changing default encoding to PREFIX_encoding instead of FAST_DIFF
+
 Release Notes - Phoenix - Version 4.2
 
 ** New Features and Sub-task

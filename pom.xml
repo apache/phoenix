@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.3.0-SNAPSHOT</version>
+  <version>4.3.0</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -189,6 +189,7 @@
               <exclude>**/resources/*.Driver</exclude>
               <exclude>**/META-INF/**</exclude>
               <exclude>**/*.properties</exclude>
+              <exclude>**/*.proto</exclude>
               <exclude>**/*.versionsBackup</exclude>
               <!-- exclude docs -->
               <exclude>docs/**</exclude>
