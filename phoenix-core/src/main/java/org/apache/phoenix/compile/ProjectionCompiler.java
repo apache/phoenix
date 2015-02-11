@@ -72,6 +72,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
@@ -166,22 +167,33 @@ public class ProjectionCompiler {
         PhoenixConnection conn = context.getConnection();
         PName tenantId = conn.getTenantId();
         String tableName = index.getParentName().getString();
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(tenantId, tableName));
-        int tableOffset = table.getBucketNum() == null ? 0 : 1;
-        int minTablePKOffset = getMinPKOffset(table, tenantId);
+        PTable dataTable = null;
+        try {
+        	dataTable = conn.getMetaDataCache().getTable(new PTableKey(tenantId, tableName));
+        } catch (TableNotFoundException e) {
+            if (tenantId != null) { 
+            	// Check with null tenantId 
+            	dataTable = conn.getMetaDataCache().getTable(new PTableKey(null, tableName));
+            }
+            else {
+            	throw e;
+            }
+        }
+        int tableOffset = dataTable.getBucketNum() == null ? 0 : 1;
+        int minTablePKOffset = getMinPKOffset(dataTable, tenantId);
         int minIndexPKOffset = getMinPKOffset(index, tenantId);
-        if (index.getColumns().size()-minIndexPKOffset != table.getColumns().size()-minTablePKOffset) {
+        if (index.getColumns().size()-minIndexPKOffset != dataTable.getColumns().size()-minTablePKOffset) {
             // We'll end up not using this by the optimizer, so just throw
             throw new ColumnNotFoundException(WildcardParseNode.INSTANCE.toString());
         }
-        for (int i = tableOffset, j = tableOffset; i < table.getColumns().size(); i++) {
-            PColumn column = table.getColumns().get(i);
+        for (int i = tableOffset, j = tableOffset; i < dataTable.getColumns().size(); i++) {
+            PColumn column = dataTable.getColumns().get(i);
             // Skip tenant ID column (which may not be the first column, but is the first PK column)
             if (SchemaUtil.isPKColumn(column) && j++ < minTablePKOffset) {
                 tableOffset++;
                 continue;
             }
-            PColumn tableColumn = table.getColumns().get(i);
+            PColumn tableColumn = dataTable.getColumns().get(i);
             String indexColName = IndexUtil.getIndexColumnName(tableColumn);
             PColumn indexColumn = index.getColumn(indexColName);
             ColumnRef ref = new ColumnRef(tableRef,indexColumn.getPosition());
@@ -200,7 +212,7 @@ public class ProjectionCompiler {
             // appear as a column in an index
             projectedExpressions.add(expression);
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
-            ExpressionProjector projector = new ExpressionProjector(colName, tableRef.getTableAlias() == null ? table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive);
+            ExpressionProjector projector = new ExpressionProjector(colName, tableRef.getTableAlias() == null ? dataTable.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive);
             projectedColumns.add(projector);
         }
     }

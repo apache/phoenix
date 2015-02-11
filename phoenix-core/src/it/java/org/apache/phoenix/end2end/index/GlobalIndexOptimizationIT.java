@@ -105,7 +105,7 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             conn1.commit();
             createIndex(TestUtil.DEFAULT_INDEX_TABLE_NAME, TestUtil.DEFAULT_DATA_TABLE_NAME, "v1");
             
-            String query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ t_id, k1, k2, k3, V1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1='a'";
+            String query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1='a'";
             ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             String expected = 
