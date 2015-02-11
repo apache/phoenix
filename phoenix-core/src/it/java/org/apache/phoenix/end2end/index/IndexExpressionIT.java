@@ -749,7 +749,6 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
         }
     }    
     
-    /////////////////////////// LOCAL INDEX /////////////////////////////////////////////
     @Test
     public void testSelectColOnlyInDataTableImmutableIndex() throws Exception {
         helpTestSelectColOnlyInDataTable(false, false);
@@ -883,6 +882,73 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
     private static void assertIndexExists(Connection conn, boolean exists) throws SQLException {
         ResultSet rs = conn.getMetaData().getIndexInfo(null, null, "T", false, false);
         assertEquals(exists, rs.next());
+    }
+    
+    public void helpTestDropCoveredColumn(boolean mutable, boolean local) throws Exception {
+        String query;
+        ResultSet rs;
+        PreparedStatement stmt;
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+
+        // make sure that the tables are empty, but reachable
+        conn.createStatement().execute(
+          "CREATE TABLE " + DATA_TABLE_FULL_NAME
+              + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR, v3 VARCHAR)");
+        query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertFalse(rs.next());
+
+        conn.createStatement().execute(
+          "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) include (v2, v3)");
+        conn.createStatement().execute(
+            "CREATE LOCAL INDEX " + LOCAL_INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) include (v2, v3)");
+        query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertFalse(rs.next());
+        query = "SELECT * FROM " + LOCAL_INDEX_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertFalse(rs.next());
+
+        // load some data into the table
+        stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?,?)");
+        stmt.setString(1, "a");
+        stmt.setString(2, "x");
+        stmt.setString(3, "1");
+        stmt.setString(4, "j");
+        stmt.execute();
+        conn.commit();
+
+        assertIndexExists(conn,true);
+        conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " DROP COLUMN v2");
+        // TODO: verify meta data that we get back to confirm our column was dropped
+        assertIndexExists(conn,true);
+
+        query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("a",rs.getString(1));
+        assertEquals("x",rs.getString(2));
+        assertEquals("j",rs.getString(3));
+        assertFalse(rs.next());
+
+        // load some data into the table
+        stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
+        stmt.setString(1, "a");
+        stmt.setString(2, "y");
+        stmt.setString(3, "k");
+        stmt.execute();
+        conn.commit();
+
+        query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("a",rs.getString(1));
+        assertEquals("y",rs.getString(2));
+        assertEquals("k",rs.getString(3));
+        assertFalse(rs.next());
     }
 
 }
