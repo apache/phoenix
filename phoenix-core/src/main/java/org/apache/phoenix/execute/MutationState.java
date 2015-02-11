@@ -107,17 +107,6 @@ public class MutationState implements SQLCloseable {
         throwIfTooBig();
     }
     
-    private MutationState(List<Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>>> entries, long sizeOffset, long maxSize, PhoenixConnection connection) {
-        this.maxSize = maxSize;
-        this.connection = connection;
-        this.sizeOffset = sizeOffset;
-        for (Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>> entry : entries) {
-            numRows += entry.getValue().size();
-            this.mutations.put(entry.getKey(), entry.getValue());
-        }
-        throwIfTooBig();
-    }
-    
     private void throwIfTooBig() {
         if (numRows > maxSize) {
             // TODO: throw SQLException ?
@@ -513,9 +502,8 @@ public class MutationState implements SQLCloseable {
     	private Map<PColumn,byte[]> columnValues;
     	private Set<Integer> orderOfStatementsInConnection;
     	
-    	public RowMutationState(@NotNull Map<PColumn,byte[]> columnValues, @NotNull Integer orderOfStatementInConnection) {
+    	public RowMutationState(@NotNull Map<PColumn,byte[]> columnValues, int orderOfStatementInConnection) {
     		Preconditions.checkNotNull(columnValues);
-    		Preconditions.checkNotNull(orderOfStatementInConnection);
     		
     		this.columnValues = columnValues;
     		this.orderOfStatementsInConnection = Sets.newHashSet(orderOfStatementInConnection);
