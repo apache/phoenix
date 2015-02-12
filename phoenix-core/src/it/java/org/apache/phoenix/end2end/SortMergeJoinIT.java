@@ -2029,6 +2029,20 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                             + "GROUP BY t1.TID, t1.A, t2.A");
             upsertStmt.execute();
             conn.commit();            
+
+            rs = statement.executeQuery("SELECT * FROM " + joinTable);
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "1");
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getInt(3), 2);
+            assertEquals(rs.getInt(4), 2);
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "1");
+            assertEquals(rs.getInt(2), 2);
+            assertEquals(rs.getInt(3), 1);
+            assertEquals(rs.getInt(4), 2);
+
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }
