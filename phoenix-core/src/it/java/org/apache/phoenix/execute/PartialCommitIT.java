@@ -58,6 +58,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class PartialCommitIT {
@@ -75,7 +76,7 @@ public class PartialCommitIT {
     public static void setupCluster() throws Exception {
       Configuration conf = TEST_UTIL.getConfiguration();
       setUpConfigForMiniCluster(conf);
-      conf.setClass("hbase.coprocessor.region.classes", BuggyRegionObserver.class, RegionObserver.class);
+      conf.setClass("hbase.coprocessor.region.classes", FailingRegionObserver.class, RegionObserver.class);
       conf.setBoolean("hbase.coprocessor.abortonerror", false);
       // disable version checking, so we can test against whatever version of HBase happens to be
       // installed (right now, its generally going to be SNAPSHOT versions).
@@ -101,6 +102,7 @@ public class PartialCommitIT {
             Statement sta = con.createStatement();
             sta.execute("create table a_success_table (k varchar primary key)");
             sta.execute("create table b_failure_table (k varchar primary key)");
+            sta.execute("create table c_success_table (k varchar primary key)");
         }
     }
     
@@ -110,27 +112,34 @@ public class PartialCommitIT {
     }
     
     @Test
-    public void blah() throws Exception {
+    public void testPartialCommit() throws Exception {
         try (Connection con = driver.connect(url, new Properties())) {
             con.setAutoCommit(false);
             Statement sta = con.createStatement();
-            sta.execute("upsert into a_success_table (k) values ('a')");
-            sta.execute("upsert into b_failure_table (k) values ('boom!')");
+            sta.execute("upsert into a_success_table (k) values ('a')"); // 0 -- this will be committed
+            sta.execute("select * from b_failure_table"); // 1 -- this is ok
+            sta.execute("upsert into b_failure_table (k) values ('boom!')"); // 2 -- failed by FailingRegionObserver
+            sta.execute("upsert into c_success_table (k) values ('a')"); // 3 -- table name after b_failure_table, so expected to fail (commits are ordered by table name in MutationState.mutations)
+            sta.execute("upsert into a_success_table (k) values ('a')"); // 4 -- this will be committed
             try {
                 con.commit();
                 fail("Expected upsert into b_failure_table to have failed the commit");
             } catch (SQLException sqle) {
                 assertEquals(CommitException.class, sqle.getClass());
                 Set<Integer> failures = ((CommitException)sqle).getFailures();
-                assertEquals(1, failures.size());
-                assertEquals(new Integer(1), failures.iterator().next());
+                assertEquals(2, failures.size());
+                assertEquals(Sets.newHashSet(new Integer(2), new Integer(3)), failures);
             }
             
             // TODO: assert actual partial save by selecting from tables
         }
     }
     
-    public static class BuggyRegionObserver extends SimpleRegionObserver {
+    /**
+     * 
+     * @author elevine
+     */
+    public static class FailingRegionObserver extends SimpleRegionObserver {
         @Override
         public void prePut(final ObserverContext<RegionCoprocessorEnvironment> c, final Put put, final WALEdit edit,
                 final Durability durability) {
