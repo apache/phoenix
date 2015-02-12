@@ -58,6 +58,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -128,12 +129,12 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private PMetaData metaData;
     private final PName tenantId;
     private final String datePattern;
-    
+    private int statementExecutionsCount;
     private boolean isClosed = false;
     private Sampler<?> sampler;
     private boolean readOnly = false;
-    private Map<String, String> customTracingAnnotations = emptyMap(); 
- 
+    private Map<String, String> customTracingAnnotations = emptyMap();
+    
     static {
         Tracing.addTraceMetricsSource();
     }
@@ -420,6 +421,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
                 return null;
             }
         }, Tracing.withTracing(this, "committing mutations"));
+        statementExecutionsCount = 0;
     }
 
     @Override
@@ -450,7 +452,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public Statement createStatement() throws SQLException {
-        PhoenixStatement statement = new PhoenixStatement(this, statements.size());
+        PhoenixStatement statement = new PhoenixStatement(this);
         statements.add(statement);
         return statement;
     }
@@ -574,7 +576,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public PreparedStatement prepareStatement(String sql) throws SQLException {
-        PhoenixPreparedStatement statement = new PhoenixPreparedStatement(this, sql, statements.size());
+        PhoenixPreparedStatement statement = new PhoenixPreparedStatement(this, sql);
         statements.add(statement);
         return statement;
     }
@@ -620,6 +622,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     @Override
     public void rollback() throws SQLException {
         mutationState.rollback(this);
+        statementExecutionsCount = 0;
     }
 
     @Override
@@ -770,4 +773,14 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     public KeyValueBuilder getKeyValueBuilder() {
         return this.services.getKeyValueBuilder();
     }
+    
+    /**
+     * Used to track executions of {@link Statement}s and {@link PreparedStatement}s that were created from this connection before
+     * commit or rollback. 0-based. Used to associate partial save errors with SQL statements
+     * invoked by users.
+     * @see CommitException
+     */
+    public int getAndIncrementStatementExecutionsCount() {
+		return statementExecutionsCount++;
+	}
 }

@@ -148,11 +148,11 @@ public class DeleteCompiler {
                     }
                     table.newKey(ptr, values);
                 }
-                mutations.put(ptr, new RowMutationState(PRow.DELETE_MARKER, statement.getOrderInConnection()));
+                mutations.put(ptr, new RowMutationState(PRow.DELETE_MARKER, statement.getConnection().getAndIncrementStatementExecutionsCount()));
                 if (indexTableRef != null) {
                     ImmutableBytesPtr indexPtr = new ImmutableBytesPtr(); // allocate new as this is a key in a Map
                     rs.getCurrentRow().getKey(indexPtr);
-                    indexMutations.put(indexPtr, new RowMutationState(PRow.DELETE_MARKER, statement.getOrderInConnection()));
+                    indexMutations.put(indexPtr, new RowMutationState(PRow.DELETE_MARKER, statement.getConnection().getAndIncrementStatementExecutionsCount()));
                 }
                 if (mutations.size() > maxSize) {
                     throw new IllegalArgumentException("MutationState size of " + mutations.size() + " is bigger than max allowed size of " + maxSize);
@@ -200,7 +200,7 @@ public class DeleteCompiler {
         
         @Override
         protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException {
-            PhoenixStatement statement = new PhoenixStatement(connection, context.getStatement().getOrderInConnection());
+            PhoenixStatement statement = new PhoenixStatement(connection);
             return deleteRows(statement, targetTableRef, indexTableRef, iterator, projector, sourceTableRef);
         }
         
@@ -432,7 +432,7 @@ public class DeleteCompiler {
                         Iterator<KeyRange> iterator = ranges.getPointLookupKeyIterator(); 
                         Map<ImmutableBytesPtr,RowMutationState> mutation = Maps.newHashMapWithExpectedSize(ranges.getPointLookupCount());
                         while (iterator.hasNext()) {
-                            mutation.put(new ImmutableBytesPtr(iterator.next().getLowerRange()), new RowMutationState(PRow.DELETE_MARKER, statement.getOrderInConnection()));
+                            mutation.put(new ImmutableBytesPtr(iterator.next().getLowerRange()), new RowMutationState(PRow.DELETE_MARKER, statement.getConnection().getAndIncrementStatementExecutionsCount()));
                         }
                         return new MutationState(tableRef, mutation, 0, maxSize, connection);
                     }

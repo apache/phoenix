@@ -115,7 +115,7 @@ public class UpsertCompiler {
         }
         ImmutableBytesPtr ptr = new ImmutableBytesPtr();
         table.newKey(ptr, pkValues);
-        mutation.put(ptr, new RowMutationState(columnValues, statement.getOrderInConnection()));
+        mutation.put(ptr, new RowMutationState(columnValues, statement.getConnection().getAndIncrementStatementExecutionsCount()));
     }
 
     private static MutationState upsertSelect(PhoenixStatement statement, 
@@ -190,7 +190,7 @@ public class UpsertCompiler {
             if (context.getSequenceManager().getSequenceCount() > 0) {
                 throw new IllegalStateException("Cannot pipeline upsert when sequence is referenced");
             }
-            PhoenixStatement statement = new PhoenixStatement(connection, context.getStatement().getOrderInConnection());
+            PhoenixStatement statement = new PhoenixStatement(connection);
             // Clone the row projector as it's not thread safe and would be used simultaneously by
             // multiple threads otherwise.
             return upsertSelect(statement, tableRef, projector.cloneIfNecessary(), iterator, columnIndexes, pkSlotIndexes);

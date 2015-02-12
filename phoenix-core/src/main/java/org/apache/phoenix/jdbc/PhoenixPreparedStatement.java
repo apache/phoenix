@@ -80,12 +80,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     private final String query;
 
     public PhoenixPreparedStatement(PhoenixConnection connection, PhoenixStatementParser parser) throws SQLException, IOException {
-    	this(connection, parser, ORDER_IN_CONNECTION_UNDEFINED);
-    }
-    
-    public PhoenixPreparedStatement(PhoenixConnection connection, PhoenixStatementParser parser, int orderInConnection) throws SQLException,
-            IOException {
-        super(connection, orderInConnection);
+        super(connection);
         this.statement = parser.nextStatement(new ExecutableNodeFactory());
         if (this.statement == null) { throw new EOFException(); }
         this.query = null; // TODO: add toString on SQLStatement
@@ -95,11 +90,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     }
     
     public PhoenixPreparedStatement(PhoenixConnection connection, String query) throws SQLException {
-    	this(connection, query, ORDER_IN_CONNECTION_UNDEFINED);
-    }
-
-    public PhoenixPreparedStatement(PhoenixConnection connection, String query, int orderInConnection) throws SQLException {
-        super(connection, orderInConnection);
+        super(connection);
         this.query = query;
         this.statement = parseStatement(query);
         this.parameterCount = statement.getBindCount();
@@ -108,7 +99,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     }
 
     public PhoenixPreparedStatement(PhoenixPreparedStatement statement) throws SQLException {
-        super(statement.connection, statement.getOrderInConnection());
+        super(statement.connection);
         this.query = statement.query;
         this.statement = statement.statement;
         this.parameterCount = statement.parameters.size();

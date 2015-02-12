@@ -60,7 +60,6 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.BatchUpdateExecution;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
@@ -190,23 +189,10 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     private int maxRows;
     private int fetchSize = -1;
     private int queryTimeout;
-    /**
-     * The order this statement was created on a PhoenixConnection. 0-based. This is only tracked for statements
-     * created via a Connection. Used to associate partial save errors with SQL statements
-     * invoked by users. This is going to be undefined (value of -1) for most queries, metadata operations and 
-     * internally-created statements, such as those used for index maintenance, etc.
-     * @see CommitException
-     */
-    private int orderInConnection = ORDER_IN_CONNECTION_UNDEFINED;
     
     public PhoenixStatement(PhoenixConnection connection) {
-    	this(connection, ORDER_IN_CONNECTION_UNDEFINED);
-    }
-    
-    public PhoenixStatement(PhoenixConnection connection, int orderInConnection) {
         this.connection = connection;
         this.queryTimeout = getDefaultQueryTimeout();
-        this.orderInConnection = orderInConnection;
     }
     
     private int getDefaultQueryTimeout() {
@@ -939,7 +925,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     @Override
     public void addBatch(String sql) throws SQLException {
-        batch.add(new PhoenixPreparedStatement(connection, sql, getOrderInConnection()));
+        batch.add(new PhoenixPreparedStatement(connection, sql));
     }
 
     @Override
@@ -1327,8 +1313,4 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     private void setLastQueryPlan(QueryPlan lastQueryPlan) {
         this.lastQueryPlan = lastQueryPlan;
     }
-    
-    public int getOrderInConnection() {
-		return orderInConnection;
-	}
 }

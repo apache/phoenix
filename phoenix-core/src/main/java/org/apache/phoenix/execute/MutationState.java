@@ -22,11 +22,13 @@ import static com.google.common.collect.Sets.newHashSet;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -84,7 +86,11 @@ public class MutationState implements SQLCloseable {
     private PhoenixConnection connection;
     private final long maxSize;
     private final ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
-    private final Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations = Maps.newHashMapWithExpectedSize(3); // TODO: Sizing?
+    /**
+     * Use {@link TreeMap} for {@link #mutations} below to enforce a deterministic ordering for easier testing of partial failures.
+     * @see PartialCommitIT
+     */
+    private final Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations = Maps.newTreeMap(new TableRefComparator());
     private long sizeOffset;
     private int numRows = 0;
 
@@ -523,6 +529,16 @@ public class MutationState implements SQLCloseable {
     	
     	public Set<Integer> getOrderOfStatementsInConnection() {
 			return orderOfStatementsInConnection;
+		}
+    }
+
+    /**
+     * Used for the ordering of {@link MutationState#mutations} map.
+     */
+    private static class TableRefComparator implements Comparator<TableRef> {
+		@Override
+		public int compare(TableRef tr1, TableRef tr2) {
+			return tr1.getTable().getPhysicalName().getString().compareTo(tr2.getTable().getPhysicalName().getString());
 		}
     }
 }

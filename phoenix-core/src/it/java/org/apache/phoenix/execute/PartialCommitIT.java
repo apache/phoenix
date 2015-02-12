@@ -71,7 +71,6 @@ public class PartialCommitIT {
         props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, 10);
     }
     
-    
     @BeforeClass
     public static void setupCluster() throws Exception {
       Configuration conf = TEST_UTIL.getConfiguration();
@@ -100,8 +99,8 @@ public class PartialCommitIT {
         try (Connection con = driver.connect(url, new Properties())) {
             con.setAutoCommit(false);
             Statement sta = con.createStatement();
-            sta.execute("create table success_table (k varchar primary key)");
-            sta.execute("create table failure_table (k varchar primary key)");
+            sta.execute("create table a_success_table (k varchar primary key)");
+            sta.execute("create table b_failure_table (k varchar primary key)");
         }
     }
     
@@ -115,16 +114,16 @@ public class PartialCommitIT {
         try (Connection con = driver.connect(url, new Properties())) {
             con.setAutoCommit(false);
             Statement sta = con.createStatement();
-            sta.execute("upsert into success_table (k) values ('a')");
-            sta.execute("upsert into failure_table (k) values ('boom!')");
+            sta.execute("upsert into a_success_table (k) values ('a')");
+            sta.execute("upsert into b_failure_table (k) values ('boom!')");
             try {
                 con.commit();
-                fail("Expected upsert into failure_table to have failed the commit");
+                fail("Expected upsert into b_failure_table to have failed the commit");
             } catch (SQLException sqle) {
                 assertEquals(CommitException.class, sqle.getClass());
                 Set<Integer> failures = ((CommitException)sqle).getFailures();
                 assertEquals(1, failures.size());
-                //assertEquals(new Integer(1), failures.iterator().next());
+                assertEquals(new Integer(1), failures.iterator().next());
             }
             
             // TODO: assert actual partial save by selecting from tables
@@ -136,7 +135,7 @@ public class PartialCommitIT {
         public void prePut(final ObserverContext<RegionCoprocessorEnvironment> c, final Put put, final WALEdit edit,
                 final Durability durability) {
             String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
-            if (tableName.equalsIgnoreCase("failure_table")) {
+            if (tableName.equalsIgnoreCase("b_failure_table")) {
                 throw new RuntimeException(new IOException("boom!"));
             }
         }
