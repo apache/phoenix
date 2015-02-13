@@ -329,7 +329,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             "CREATE LOCAL INDEX " + LOCAL_INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) include (v2, v3)");
         rs = conn.createStatement().executeQuery(dataTableQuery);
         assertFalse(rs.next());
-        String indexTableQuery = "SELECT * FROM " + LOCAL_INDEX_TABLE_FULL_NAME;
+        String indexTableQuery = "SELECT * FROM " + INDEX_TABLE_NAME;
         rs = conn.createStatement().executeQuery(indexTableQuery);
         assertFalse(rs.next());
         String localIndexTableQuery = "SELECT * FROM " + LOCAL_INDEX_TABLE_FULL_NAME;
