@@ -140,6 +140,8 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
             if (!"hbase".equals(locationURI.getScheme())) {
                 throw new IOException(String.format("Location must use the hbase protocol, hbase://tableName[/columnList]. Supplied location=%s",location));
             }
+
+            PhoenixConfigurationUtil.loadHBaseConfiguration(job);
             config = job.getConfiguration();
             config.set(HConstants.ZOOKEEPER_QUORUM, server);
             String tableName = locationURI.getAuthority();

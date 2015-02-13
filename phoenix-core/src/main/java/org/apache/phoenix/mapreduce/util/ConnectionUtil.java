@@ -20,6 +20,8 @@ package org.apache.phoenix.mapreduce.util;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
@@ -42,6 +44,13 @@ public class ConnectionUtil {
     public static Connection getConnection(final Configuration configuration) throws SQLException {
         Preconditions.checkNotNull(configuration);
         final Properties props = new Properties();
+        Iterator<Map.Entry<String, String>> iterator = configuration.iterator();
+        if(iterator != null) {
+            while (iterator.hasNext()) {
+                Map.Entry<String, String> entry = iterator.next();
+                props.setProperty(entry.getKey(), entry.getValue());
+            }
+        }
         final Connection conn = DriverManager.getConnection(QueryUtil.getUrl(configuration.get(HConstants.ZOOKEEPER_QUORUM)), props);
         return conn;
     }
