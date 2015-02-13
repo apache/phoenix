@@ -13,8 +13,6 @@ import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_TABLE;
 import static org.apache.phoenix.util.TestUtil.MUTABLE_INDEX_DATA_TABLE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.analyzeTable;
-import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -28,13 +26,11 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -1120,32 +1116,40 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
         assertFalse(rs.next());
     }
     
-    private void testUpdatableViewIndex(boolean mutable, boolean local, Integer saltBuckets) throws Exception {
+    @Test
+    public void testUpdatableViewWithIndex() throws Exception {
+        helpTestUpdatableViewIndex(false);
+    }
+    
+    @Test
+    public void testUpdatableViewWithLocalIndex() throws Exception {
+        helpTestUpdatableViewIndex(true);
+    }
+       
+    private void helpTestUpdatableViewIndex(boolean local) throws Exception {
     	Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))" + (saltBuckets == null ? "" : (" SALT_BUCKETS="+saltBuckets));
+        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))";
         conn.createStatement().execute(ddl);
         ddl = "CREATE VIEW v AS SELECT * FROM t WHERE k1 = 1";
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("UPSERT INTO v(k2,s1,s2,k3) VALUES(120,'foo0','bar0',50.0)");
         conn.createStatement().execute("UPSERT INTO v(k2,s1,s2,k3) VALUES(121,'foo1','bar1',51.0)");
         conn.commit();
-               
         
         ResultSet rs;
-        if (local) {
-            conn.createStatement().execute("CREATE LOCAL INDEX i1 on v(k1+k2+k3)");
-        } else {
-            conn.createStatement().execute("CREATE INDEX i1 on v(k1+k2+k3) include (s)");
-        }
-        conn.createStatement().execute("UPSERT INTO v(k2,s1,s2,k3) VALUES(120,'foo1','bar1',50.0)");
+        conn.createStatement().execute("CREATE " + (local ? "LOCAL" : "") + " INDEX i1 on v(k1+k2+k3) include (s1, s2)");
+        conn.createStatement().execute("UPSERT INTO v(k2,s1,s2,k3) VALUES(120,'foo2','bar2',50.0)");
         conn.commit();
 
-        analyzeTable(conn, "v");        
-        List<KeyRange> splits = getAllSplits(conn, "i1");
-        // More guideposts with salted, since it's already pre-split at salt buckets
-        assertEquals(saltBuckets == null ? 6 : 8, splits.size());
-        
-        String query = "SELECT k1, k2, k3, s1, s2 FROM v WHERE 	k1+k2+k3 = 172.0";
+        String query = "SELECT k1, k2, k3, s1, s2 FROM v WHERE 	k1+k2+k3 = 173.0";
+        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        String queryPlan = QueryUtil.getExplainPlan(rs);
+        if (local) {
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T [-32768,173]\n" + "CLIENT MERGE SORT",
+                    queryPlan);
+        } else {
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + Short.MIN_VALUE + ",173]", queryPlan);
+        }
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
@@ -1154,58 +1158,61 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
         assertEquals("foo1", rs.getString(4));
         assertEquals("bar1", rs.getString(5));
         assertFalse(rs.next());
+
+        conn.createStatement().execute("CREATE " + (local ? "LOCAL" : "") + " INDEX i2 on v(s1||'_'||s2)");
+        
+        query = "SELECT k1, k2, s1||'_'||s2 FROM v WHERE (s1||'_'||s2)='foo2_bar2'";
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        String queryPlan = QueryUtil.getExplainPlan(rs);
         if (local) {
-            assertEquals("CLIENT PARALLEL 3-WAY RANGE SCAN OVER _LOCAL_IDX_T [-32768,51]\n"
-                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                    + "CLIENT MERGE SORT",
-                queryPlan);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T [" + (Short.MIN_VALUE + 1)
+                    + ",'foo2_bar2']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
+                    QueryUtil.getExplainPlan(rs));
         } else {
-            assertEquals(saltBuckets == null
-                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + Short.MIN_VALUE + ",51]"
-                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER _IDX_T [0," + Short.MIN_VALUE + ",51]\nCLIENT MERGE SORT",
-                            queryPlan);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + (Short.MIN_VALUE + 1) + ",'foo2_bar2']\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
         }
-
-        if (local) {
-            conn.createStatement().execute("CREATE LOCAL INDEX i2 on v(s1||'_'||s2)");
-        } else {
-            conn.createStatement().execute("CREATE INDEX i2 on v(s1||'_'||s2)");
-        }
-        
-        // new index hasn't been analyzed yet
-        splits = getAllSplits(conn, "i2");
-        assertEquals(saltBuckets == null ? 1 : 3, splits.size());
-        
-        // analyze table should analyze all view data
-        analyzeTable(conn, "t");        
-        splits = getAllSplits(conn, "i2");
-        assertEquals(saltBuckets == null ? 6 : 8, splits.size());
-
-        
-        query = "SELECT k1, k2, s1, s2 FROM v WHERE s1||'_'||s2 = 'foo0_bar0'";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(120, rs.getInt(2));
-        assertEquals("foo0", rs.getString(3));
-        assertEquals("bar0", rs.getString(4));
+        assertEquals("foo2_bar2", rs.getString(3));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testViewUsesTableIndex() throws Exception {
+        ResultSet rs;
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))";
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute("CREATE INDEX i1 ON t(k3+k2) INCLUDE(s1, s2)");
+        conn.createStatement().execute("CREATE INDEX i2 ON t(k3+k2, s2)");
+        
+        ddl = "CREATE VIEW v AS SELECT * FROM t WHERE s1 = 'foo'";
+        conn.createStatement().execute(ddl);
+        String[] s1Values = {"foo","bar"};
+        for (int i = 0; i < 10; i++) {
+            conn.createStatement().execute("UPSERT INTO t VALUES(" + (i % 4) + "," + (i+100) + "," + (i > 5 ? 2 : 1) + ",'" + s1Values[i%2] + "','bas')");
+        }
+        conn.commit();
+        
+        rs = conn.createStatement().executeQuery("SELECT count(*) FROM v");
+        assertTrue(rs.next());
+        assertEquals(5, rs.getLong(1));
+        assertFalse(rs.next());
+
+        conn.createStatement().execute("CREATE INDEX vi1 on v(k2)");
+        
+        String query = "SELECT k2+k3 FROM v WHERE k2 IN (100,109) AND k3 IN (1,2) AND s2='bas'";
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals(101, rs.getInt(1));
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        if (local) {
-            assertEquals("CLIENT PARALLEL 3-WAY RANGE SCAN OVER _LOCAL_IDX_T [" + (Short.MIN_VALUE+1) + ",'foo']\n"
-                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                    + "CLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
-        } else {
-            assertEquals(saltBuckets == null
-                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + (Short.MIN_VALUE+1) + ",'foo']\n"
-                            + "    SERVER FILTER BY FIRST KEY ONLY"
-                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER _IDX_T [0," + (Short.MIN_VALUE+1) + ",'foo']\n"
-                                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                                    + "CLIENT MERGE SORT",
-                            QueryUtil.getExplainPlan(rs));
-        }
+        String queryPlan = QueryUtil.getExplainPlan(rs);
+        assertEquals(
+                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER I1 [1,100] - [2,109]\n" + 
+                "    SERVER FILTER BY (\"S2\" = 'bas' AND \"S1\" = 'foo')", queryPlan);
     }
 
 }
