@@ -29,8 +29,10 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -831,53 +833,58 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(false);
-
-        // make sure that the tables are empty, but reachable
-        conn.createStatement().execute(
-          "CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-        query = "SELECT * FROM t" ;
-        rs = conn.createStatement().executeQuery(query);
-        assertFalse(rs.next());
-        String indexName = "it_" + (mutable ? "m" : "im") + "_" + (local ? "l" : "h");
-        conn.createStatement().execute("CREATE " + ( local ? "LOCAL" : "") + " INDEX " + indexName + " ON t (v1 || '_' || v2)");
-
-        query = "SELECT * FROM t";
-        rs = conn.createStatement().executeQuery(query);
-        assertFalse(rs.next());
-
-        // load some data into the table
-        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?,?)");
-        stmt.setString(1, "a");
-        stmt.setString(2, "x");
-        stmt.setString(3, "1");
-        stmt.execute();
-        conn.commit();
-
-        assertIndexExists(conn,true);
-        conn.createStatement().execute("ALTER TABLE t DROP COLUMN v1");
-        assertIndexExists(conn,false);
-
-        query = "SELECT * FROM t";
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals("a",rs.getString(1));
-        assertEquals("1",rs.getString(2));
-        assertFalse(rs.next());
-
-        // load some data into the table
-        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?)");
-        stmt.setString(1, "a");
-        stmt.setString(2, "2");
-        stmt.execute();
-        conn.commit();
-
-        query = "SELECT * FROM t";
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals("a",rs.getString(1));
-        assertEquals("2",rs.getString(2));
-        assertFalse(rs.next());
+        try {
+	        conn.setAutoCommit(false);
+	
+	        // make sure that the tables are empty, but reachable
+	        conn.createStatement().execute(
+	          "CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+	        query = "SELECT * FROM t" ;
+	        rs = conn.createStatement().executeQuery(query);
+	        assertFalse(rs.next());
+	        String indexName = "it_" + (mutable ? "m" : "im") + "_" + (local ? "l" : "h");
+	        conn.createStatement().execute("CREATE " + ( local ? "LOCAL" : "") + " INDEX " + indexName + " ON t (v1 || '_' || v2)");
+	
+	        query = "SELECT * FROM t";
+	        rs = conn.createStatement().executeQuery(query);
+	        assertFalse(rs.next());
+	
+	        // load some data into the table
+	        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?,?)");
+	        stmt.setString(1, "a");
+	        stmt.setString(2, "x");
+	        stmt.setString(3, "1");
+	        stmt.execute();
+	        conn.commit();
+	
+	        assertIndexExists(conn,true);
+	        conn.createStatement().execute("ALTER TABLE t DROP COLUMN v1");
+	        assertIndexExists(conn,false);
+	
+	        query = "SELECT * FROM t";
+	        rs = conn.createStatement().executeQuery(query);
+	        assertTrue(rs.next());
+	        assertEquals("a",rs.getString(1));
+	        assertEquals("1",rs.getString(2));
+	        assertFalse(rs.next());
+	
+	        // load some data into the table
+	        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?)");
+	        stmt.setString(1, "a");
+	        stmt.setString(2, "2");
+	        stmt.execute();
+	        conn.commit();
+	
+	        query = "SELECT * FROM t";
+	        rs = conn.createStatement().executeQuery(query);
+	        assertTrue(rs.next());
+	        assertEquals("a",rs.getString(1));
+	        assertEquals("2",rs.getString(2));
+	        assertFalse(rs.next());
+        }
+        finally {
+        	conn.close();
+        }
     }
     
     private static void assertIndexExists(Connection conn, boolean exists) throws SQLException {
@@ -911,82 +918,87 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(false);
-
-        // make sure that the tables are empty, but reachable
-        conn.createStatement().execute(
-          "CREATE TABLE t"
-              + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR, v3 VARCHAR)");
-        String dataTableQuery = "SELECT * FROM t";
-        rs = conn.createStatement().executeQuery(dataTableQuery);
-        assertFalse(rs.next());
-
-        String indexName = "it_" + (mutable ? "m" : "im") + "_" + (local ? "l" : "h");
-        conn.createStatement().execute("CREATE " + ( local ? "LOCAL" : "") + " INDEX " + indexName + " ON t (k || '_' || v1) include (v2, v3)");
-        String indexTableQuery = "SELECT * FROM " + indexName;
-        rs = conn.createStatement().executeQuery(indexTableQuery);
-        assertFalse(rs.next());
-
-        // load some data into the table
-        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?,?,?)");
-        stmt.setString(1, "a");
-        stmt.setString(2, "x");
-        stmt.setString(3, "1");
-        stmt.setString(4, "j");
-        stmt.execute();
-        conn.commit();
-
-        assertIndexExists(conn,true);
-        conn.createStatement().execute("ALTER TABLE t DROP COLUMN v2");
-        assertIndexExists(conn,true);
-
-        // verify data table rows
-        rs = conn.createStatement().executeQuery(dataTableQuery);
-        assertTrue(rs.next());
-        assertEquals("a",rs.getString(1));
-        assertEquals("x",rs.getString(2));
-        assertEquals("j",rs.getString(3));
-        assertFalse(rs.next());
-        
-        // verify index table rows
-        rs = conn.createStatement().executeQuery(indexTableQuery);
-        assertTrue(rs.next());
-        assertEquals("a_x",rs.getString(1));
-        assertEquals("a",rs.getString(2));
-        assertEquals("j",rs.getString(3));
-        assertFalse(rs.next());
-
-        // add another row
-        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?,?)");
-        stmt.setString(1, "b");
-        stmt.setString(2, "y");
-        stmt.setString(3, "k");
-        stmt.execute();
-        conn.commit();
-
-        // verify data table rows
-        rs = conn.createStatement().executeQuery(dataTableQuery);
-        assertTrue(rs.next());
-        assertEquals("a",rs.getString(1));
-        assertEquals("x",rs.getString(2));
-        assertEquals("j",rs.getString(3));
-        assertTrue(rs.next());
-        assertEquals("b",rs.getString(1));
-        assertEquals("y",rs.getString(2));
-        assertEquals("k",rs.getString(3));
-        assertFalse(rs.next());
-        
-        // verify index table rows
-        rs = conn.createStatement().executeQuery(indexTableQuery);
-        assertTrue(rs.next());
-        assertEquals("a_x",rs.getString(1));
-        assertEquals("a",rs.getString(2));
-        assertEquals("j",rs.getString(3));
-        assertTrue(rs.next());
-        assertEquals("b_y",rs.getString(1));
-        assertEquals("b",rs.getString(2));
-        assertEquals("k",rs.getString(3));
-        assertFalse(rs.next());
+        try {
+	        conn.setAutoCommit(false);
+	
+	        // make sure that the tables are empty, but reachable
+	        conn.createStatement().execute(
+	          "CREATE TABLE t"
+	              + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR, v3 VARCHAR)");
+	        String dataTableQuery = "SELECT * FROM t";
+	        rs = conn.createStatement().executeQuery(dataTableQuery);
+	        assertFalse(rs.next());
+	
+	        String indexName = "it_" + (mutable ? "m" : "im") + "_" + (local ? "l" : "h");
+	        conn.createStatement().execute("CREATE " + ( local ? "LOCAL" : "") + " INDEX " + indexName + " ON t (k || '_' || v1) include (v2, v3)");
+	        String indexTableQuery = "SELECT * FROM " + indexName;
+	        rs = conn.createStatement().executeQuery(indexTableQuery);
+	        assertFalse(rs.next());
+	
+	        // load some data into the table
+	        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?,?,?)");
+	        stmt.setString(1, "a");
+	        stmt.setString(2, "x");
+	        stmt.setString(3, "1");
+	        stmt.setString(4, "j");
+	        stmt.execute();
+	        conn.commit();
+	
+	        assertIndexExists(conn,true);
+	        conn.createStatement().execute("ALTER TABLE t DROP COLUMN v2");
+	        assertIndexExists(conn,true);
+	
+	        // verify data table rows
+	        rs = conn.createStatement().executeQuery(dataTableQuery);
+	        assertTrue(rs.next());
+	        assertEquals("a",rs.getString(1));
+	        assertEquals("x",rs.getString(2));
+	        assertEquals("j",rs.getString(3));
+	        assertFalse(rs.next());
+	        
+	        // verify index table rows
+	        rs = conn.createStatement().executeQuery(indexTableQuery);
+	        assertTrue(rs.next());
+	        assertEquals("a_x",rs.getString(1));
+	        assertEquals("a",rs.getString(2));
+	        assertEquals("j",rs.getString(3));
+	        assertFalse(rs.next());
+	
+	        // add another row
+	        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?,?)");
+	        stmt.setString(1, "b");
+	        stmt.setString(2, "y");
+	        stmt.setString(3, "k");
+	        stmt.execute();
+	        conn.commit();
+	
+	        // verify data table rows
+	        rs = conn.createStatement().executeQuery(dataTableQuery);
+	        assertTrue(rs.next());
+	        assertEquals("a",rs.getString(1));
+	        assertEquals("x",rs.getString(2));
+	        assertEquals("j",rs.getString(3));
+	        assertTrue(rs.next());
+	        assertEquals("b",rs.getString(1));
+	        assertEquals("y",rs.getString(2));
+	        assertEquals("k",rs.getString(3));
+	        assertFalse(rs.next());
+	        
+	        // verify index table rows
+	        rs = conn.createStatement().executeQuery(indexTableQuery);
+	        assertTrue(rs.next());
+	        assertEquals("a_x",rs.getString(1));
+	        assertEquals("a",rs.getString(2));
+	        assertEquals("j",rs.getString(3));
+	        assertTrue(rs.next());
+	        assertEquals("b_y",rs.getString(1));
+	        assertEquals("b",rs.getString(2));
+	        assertEquals("k",rs.getString(3));
+	        assertFalse(rs.next());
+        }
+        finally {
+        	conn.close();
+        }
     }
     
     @Test
@@ -1015,105 +1027,110 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(false);
-
-        // make sure that the tables are empty, but reachable
-        conn.createStatement().execute(
-          "CREATE TABLE t"
-              + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-        String dataTableQuery = "SELECT * FROM t";
-        rs = conn.createStatement().executeQuery(dataTableQuery);
-        assertFalse(rs.next());
-
-        String indexName = "IT_" + (mutable ? "M" : "IM") + "_" + (local ? "L" : "H");
-        conn.createStatement().execute("CREATE " + ( local ? "LOCAL" : "") + " INDEX " + indexName + " ON t (v1 || '_' || v2)");
-        String indexTableQuery = "SELECT * FROM " + indexName;
-        rs = conn.createStatement().executeQuery(indexTableQuery);
-        assertFalse(rs.next());
-
-        // load some data into the table
-        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?,?)");
-        stmt.setString(1, "a");
-        stmt.setString(2, "x");
-        stmt.setString(3, "1");
-        stmt.execute();
-        conn.commit();
-
-        assertIndexExists(conn,true);
-        conn.createStatement().execute("ALTER TABLE t ADD v3 VARCHAR, k2 DECIMAL PRIMARY KEY");
-        rs = conn.getMetaData().getPrimaryKeys("", "", "T");
-        assertTrue(rs.next());
-        assertEquals("K",rs.getString("COLUMN_NAME"));
-        assertEquals(1, rs.getShort("KEY_SEQ"));
-        assertTrue(rs.next());
-        assertEquals("K2",rs.getString("COLUMN_NAME"));
-        assertEquals(2, rs.getShort("KEY_SEQ"));
-
-        rs = conn.getMetaData().getPrimaryKeys("", "", indexName);
-        assertTrue(rs.next());
-        assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "(V1 || '_' || V2)",rs.getString("COLUMN_NAME"));
-        int offset = local ? 1 : 0;
-        assertEquals(offset+1, rs.getShort("KEY_SEQ"));
-        assertTrue(rs.next());
-        assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K",rs.getString("COLUMN_NAME"));
-        assertEquals(offset+2, rs.getShort("KEY_SEQ"));
-        assertTrue(rs.next());
-        assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K2",rs.getString("COLUMN_NAME"));
-        assertEquals(offset+3, rs.getShort("KEY_SEQ"));
-
-        // verify data table rows
-        rs = conn.createStatement().executeQuery(dataTableQuery);
-        assertTrue(rs.next());
-        assertEquals("a",rs.getString(1));
-        assertEquals("x",rs.getString(2));
-        assertEquals("1",rs.getString(3));
-        assertNull(rs.getBigDecimal(4));
-        assertFalse(rs.next());
-        
-        // verify index table rows
-        rs = conn.createStatement().executeQuery(indexTableQuery);
-        assertTrue(rs.next());
-        assertEquals("x_1",rs.getString(1));
-        assertEquals("a",rs.getString(2));
-        assertNull(rs.getBigDecimal(3));
-        assertFalse(rs.next());
-
-        // load some data into the table
-        stmt = conn.prepareStatement("UPSERT INTO t(K,K2,V1,V2) VALUES(?,?,?,?)");
-        stmt.setString(1, "b");
-        stmt.setBigDecimal(2, BigDecimal.valueOf(2));
-        stmt.setString(3, "y");
-        stmt.setString(4, "2");
-        stmt.execute();
-        conn.commit();
-
-        // verify data table rows
-        rs = conn.createStatement().executeQuery(dataTableQuery);
-        assertTrue(rs.next());
-        assertEquals("a",rs.getString(1));
-        assertEquals("x",rs.getString(2));
-        assertEquals("1",rs.getString(3));
-        assertNull(rs.getString(4));
-        assertNull(rs.getBigDecimal(5));
-        assertTrue(rs.next());
-        assertEquals("b",rs.getString(1));
-        assertEquals("y",rs.getString(2));
-        assertEquals("2",rs.getString(3));
-        assertNull(rs.getString(4));
-        assertEquals(BigDecimal.valueOf(2),rs.getBigDecimal(5));
-        assertFalse(rs.next());
-        
-        // verify index table rows
-        rs = conn.createStatement().executeQuery(indexTableQuery);
-        assertTrue(rs.next());
-        assertEquals("x_1",rs.getString(1));
-        assertEquals("a",rs.getString(2));
-        assertNull(rs.getBigDecimal(3));
-        assertTrue(rs.next());
-        assertEquals("y_2",rs.getString(1));
-        assertEquals("b",rs.getString(2));
-        assertEquals(BigDecimal.valueOf(2),rs.getBigDecimal(3));
-        assertFalse(rs.next());
+        try {
+	        conn.setAutoCommit(false);
+	
+	        // make sure that the tables are empty, but reachable
+	        conn.createStatement().execute(
+	          "CREATE TABLE t"
+	              + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+	        String dataTableQuery = "SELECT * FROM t";
+	        rs = conn.createStatement().executeQuery(dataTableQuery);
+	        assertFalse(rs.next());
+	
+	        String indexName = "IT_" + (mutable ? "M" : "IM") + "_" + (local ? "L" : "H");
+	        conn.createStatement().execute("CREATE " + ( local ? "LOCAL" : "") + " INDEX " + indexName + " ON t (v1 || '_' || v2)");
+	        String indexTableQuery = "SELECT * FROM " + indexName;
+	        rs = conn.createStatement().executeQuery(indexTableQuery);
+	        assertFalse(rs.next());
+	
+	        // load some data into the table
+	        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?,?)");
+	        stmt.setString(1, "a");
+	        stmt.setString(2, "x");
+	        stmt.setString(3, "1");
+	        stmt.execute();
+	        conn.commit();
+	
+	        assertIndexExists(conn,true);
+	        conn.createStatement().execute("ALTER TABLE t ADD v3 VARCHAR, k2 DECIMAL PRIMARY KEY");
+	        rs = conn.getMetaData().getPrimaryKeys("", "", "T");
+	        assertTrue(rs.next());
+	        assertEquals("K",rs.getString("COLUMN_NAME"));
+	        assertEquals(1, rs.getShort("KEY_SEQ"));
+	        assertTrue(rs.next());
+	        assertEquals("K2",rs.getString("COLUMN_NAME"));
+	        assertEquals(2, rs.getShort("KEY_SEQ"));
+	
+	        rs = conn.getMetaData().getPrimaryKeys("", "", indexName);
+	        assertTrue(rs.next());
+	        assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "(V1 || '_' || V2)",rs.getString("COLUMN_NAME"));
+	        int offset = local ? 1 : 0;
+	        assertEquals(offset+1, rs.getShort("KEY_SEQ"));
+	        assertTrue(rs.next());
+	        assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K",rs.getString("COLUMN_NAME"));
+	        assertEquals(offset+2, rs.getShort("KEY_SEQ"));
+	        assertTrue(rs.next());
+	        assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K2",rs.getString("COLUMN_NAME"));
+	        assertEquals(offset+3, rs.getShort("KEY_SEQ"));
+	
+	        // verify data table rows
+	        rs = conn.createStatement().executeQuery(dataTableQuery);
+	        assertTrue(rs.next());
+	        assertEquals("a",rs.getString(1));
+	        assertEquals("x",rs.getString(2));
+	        assertEquals("1",rs.getString(3));
+	        assertNull(rs.getBigDecimal(4));
+	        assertFalse(rs.next());
+	        
+	        // verify index table rows
+	        rs = conn.createStatement().executeQuery(indexTableQuery);
+	        assertTrue(rs.next());
+	        assertEquals("x_1",rs.getString(1));
+	        assertEquals("a",rs.getString(2));
+	        assertNull(rs.getBigDecimal(3));
+	        assertFalse(rs.next());
+	
+	        // load some data into the table
+	        stmt = conn.prepareStatement("UPSERT INTO t(K,K2,V1,V2) VALUES(?,?,?,?)");
+	        stmt.setString(1, "b");
+	        stmt.setBigDecimal(2, BigDecimal.valueOf(2));
+	        stmt.setString(3, "y");
+	        stmt.setString(4, "2");
+	        stmt.execute();
+	        conn.commit();
+	
+	        // verify data table rows
+	        rs = conn.createStatement().executeQuery(dataTableQuery);
+	        assertTrue(rs.next());
+	        assertEquals("a",rs.getString(1));
+	        assertEquals("x",rs.getString(2));
+	        assertEquals("1",rs.getString(3));
+	        assertNull(rs.getString(4));
+	        assertNull(rs.getBigDecimal(5));
+	        assertTrue(rs.next());
+	        assertEquals("b",rs.getString(1));
+	        assertEquals("y",rs.getString(2));
+	        assertEquals("2",rs.getString(3));
+	        assertNull(rs.getString(4));
+	        assertEquals(BigDecimal.valueOf(2),rs.getBigDecimal(5));
+	        assertFalse(rs.next());
+	        
+	        // verify index table rows
+	        rs = conn.createStatement().executeQuery(indexTableQuery);
+	        assertTrue(rs.next());
+	        assertEquals("x_1",rs.getString(1));
+	        assertEquals("a",rs.getString(2));
+	        assertNull(rs.getBigDecimal(3));
+	        assertTrue(rs.next());
+	        assertEquals("y_2",rs.getString(1));
+	        assertEquals("b",rs.getString(2));
+	        assertEquals(BigDecimal.valueOf(2),rs.getBigDecimal(3));
+	        assertFalse(rs.next());
+        }
+        finally {
+        	conn.close();
+        }
     }
     
     @Test
@@ -1128,105 +1145,120 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
        
     private void helpTestUpdatableViewIndex(boolean local) throws Exception {
     	Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))";
-        conn.createStatement().execute(ddl);
-        ddl = "CREATE VIEW v AS SELECT * FROM t WHERE k1 = 1";
-        conn.createStatement().execute(ddl);
-        conn.createStatement().execute("UPSERT INTO v(k2,s1,s2,k3) VALUES(120,'foo0','bar0',50.0)");
-        conn.createStatement().execute("UPSERT INTO v(k2,s1,s2,k3) VALUES(121,'foo1','bar1',51.0)");
-        conn.commit();
-        
-        ResultSet rs;
-        conn.createStatement().execute("CREATE " + (local ? "LOCAL" : "") + " INDEX i1 on v(k1+k2+k3) include (s1, s2)");
-        conn.createStatement().execute("UPSERT INTO v(k2,s1,s2,k3) VALUES(120,'foo2','bar2',50.0)");
-        conn.commit();
-
-        String query = "SELECT k1, k2, k3, s1, s2 FROM v WHERE 	k1+k2+k3 = 173.0";
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        String queryPlan = QueryUtil.getExplainPlan(rs);
-        if (local) {
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T [-32768,173]\n" + "CLIENT MERGE SORT",
-                    queryPlan);
-        } else {
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + Short.MIN_VALUE + ",173]", queryPlan);
+    	try {
+	        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))";
+	        conn.createStatement().execute(ddl);
+	        ddl = "CREATE VIEW v AS SELECT * FROM t WHERE k1 = 1";
+	        conn.createStatement().execute(ddl);
+	        conn.createStatement().execute("UPSERT INTO v(k2,s1,s2,k3) VALUES(120,'foo0','bar0',50.0)");
+	        conn.createStatement().execute("UPSERT INTO v(k2,s1,s2,k3) VALUES(121,'foo1','bar1',51.0)");
+	        conn.commit();
+	        
+	        ResultSet rs;
+	        conn.createStatement().execute("CREATE " + (local ? "LOCAL" : "") + " INDEX i1 on v(k1+k2+k3) include (s1, s2)");
+	        conn.createStatement().execute("UPSERT INTO v(k2,s1,s2,k3) VALUES(120,'foo2','bar2',50.0)");
+	        conn.commit();
+	
+	        String query = "SELECT k1, k2, k3, s1, s2 FROM v WHERE 	k1+k2+k3 = 173.0";
+	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+	        String queryPlan = QueryUtil.getExplainPlan(rs);
+	        if (local) {
+	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T [-32768,173]\n" + "CLIENT MERGE SORT",
+	                    queryPlan);
+	        } else {
+	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + Short.MIN_VALUE + ",173]", queryPlan);
+	        }
+	        rs = conn.createStatement().executeQuery(query);
+	        assertTrue(rs.next());
+	        assertEquals(1, rs.getInt(1));
+	        assertEquals(121, rs.getInt(2));
+	        assertTrue(BigDecimal.valueOf(51.0).compareTo(rs.getBigDecimal(3))==0);
+	        assertEquals("foo1", rs.getString(4));
+	        assertEquals("bar1", rs.getString(5));
+	        assertFalse(rs.next());
+	
+	        conn.createStatement().execute("CREATE " + (local ? "LOCAL" : "") + " INDEX i2 on v(s1||'_'||s2)");
+	        
+	        query = "SELECT k1, k2, s1||'_'||s2 FROM v WHERE (s1||'_'||s2)='foo2_bar2'";
+	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+	        if (local) {
+	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T [" + (Short.MIN_VALUE + 1)
+	                    + ",'foo2_bar2']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
+	                    QueryUtil.getExplainPlan(rs));
+	        } else {
+	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + (Short.MIN_VALUE + 1) + ",'foo2_bar2']\n"
+	                    + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
+	        }
+	        rs = conn.createStatement().executeQuery(query);
+	        assertTrue(rs.next());
+	        assertEquals(1, rs.getInt(1));
+	        assertEquals(120, rs.getInt(2));
+	        assertEquals("foo2_bar2", rs.getString(3));
+	        assertFalse(rs.next());
+    	}
+        finally {
+        	conn.close();
         }
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt(1));
-        assertEquals(121, rs.getInt(2));
-        assertTrue(BigDecimal.valueOf(51.0).compareTo(rs.getBigDecimal(3))==0);
-        assertEquals("foo1", rs.getString(4));
-        assertEquals("bar1", rs.getString(5));
-        assertFalse(rs.next());
-
-        conn.createStatement().execute("CREATE " + (local ? "LOCAL" : "") + " INDEX i2 on v(s1||'_'||s2)");
-        
-        query = "SELECT k1, k2, s1||'_'||s2 FROM v WHERE (s1||'_'||s2)='foo2_bar2'";
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        if (local) {
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T [" + (Short.MIN_VALUE + 1)
-                    + ",'foo2_bar2']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-                    QueryUtil.getExplainPlan(rs));
-        } else {
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + (Short.MIN_VALUE + 1) + ",'foo2_bar2']\n"
-                    + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
-        }
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt(1));
-        assertEquals(120, rs.getInt(2));
-        assertEquals("foo2_bar2", rs.getString(3));
-        assertFalse(rs.next());
     }
     
     @Test
     public void testViewUsesTableIndex() throws Exception {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))";
-        conn.createStatement().execute(ddl);
-        conn.createStatement().execute("CREATE INDEX i1 ON t(k3+k2) INCLUDE(s1, s2)");
-        conn.createStatement().execute("CREATE INDEX i2 ON t(k3+k2, s2)");
-        
-        ddl = "CREATE VIEW v AS SELECT * FROM t WHERE s1 = 'foo'";
-        conn.createStatement().execute(ddl);
-        String[] s1Values = {"foo","bar"};
-        for (int i = 0; i < 10; i++) {
-            conn.createStatement().execute("UPSERT INTO t VALUES(" + (i % 4) + "," + (i+100) + "," + (i > 5 ? 2 : 1) + ",'" + s1Values[i%2] + "','bas')");
+	        try {
+	        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))";
+	        conn.createStatement().execute(ddl);
+	        conn.createStatement().execute("CREATE INDEX i1 ON t(k3+k2) INCLUDE(s1, s2)");
+	        conn.createStatement().execute("CREATE INDEX i2 ON t(k3+k2, s2)");
+	        
+	        ddl = "CREATE VIEW v AS SELECT * FROM t WHERE s1 = 'foo'";
+	        conn.createStatement().execute(ddl);
+	        String[] s1Values = {"foo","bar"};
+	        for (int i = 0; i < 10; i++) {
+	            conn.createStatement().execute("UPSERT INTO t VALUES(" + (i % 4) + "," + (i+100) + "," + (i > 5 ? 2 : 1) + ",'" + s1Values[i%2] + "','bas')");
+	        }
+	        conn.commit();
+	        
+	        rs = conn.createStatement().executeQuery("SELECT count(*) FROM v");
+	        assertTrue(rs.next());
+	        assertEquals(5, rs.getLong(1));
+	        assertFalse(rs.next());
+	
+	        conn.createStatement().execute("CREATE INDEX vi1 on v(k2)");
+	        
+	        String query = "SELECT k2+k3 FROM v WHERE k2 IN (100,109) AND k3 IN (1,2) AND s2='bas'";
+	        rs = conn.createStatement().executeQuery(query);
+	        assertTrue(rs.next());
+	        assertEquals(101, rs.getInt(1));
+	        assertFalse(rs.next());
+	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+	        String queryPlan = QueryUtil.getExplainPlan(rs);
+	        assertEquals(
+	                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER I1 [1,100] - [2,109]\n" + 
+	                "    SERVER FILTER BY (\"S2\" = 'bas' AND \"S1\" = 'foo')", queryPlan);
         }
-        conn.commit();
-        
-        rs = conn.createStatement().executeQuery("SELECT count(*) FROM v");
-        assertTrue(rs.next());
-        assertEquals(5, rs.getLong(1));
-        assertFalse(rs.next());
-
-        conn.createStatement().execute("CREATE INDEX vi1 on v(k2)");
-        
-        String query = "SELECT k2+k3 FROM v WHERE k2 IN (100,109) AND k3 IN (1,2) AND s2='bas'";
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals(101, rs.getInt(1));
-        assertFalse(rs.next());
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        String queryPlan = QueryUtil.getExplainPlan(rs);
-        assertEquals(
-                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER I1 [1,100] - [2,109]\n" + 
-                "    SERVER FILTER BY (\"S2\" = 'bas' AND \"S1\" = 'foo')", queryPlan);
+        finally {
+        	conn.close();
+        }
     }
     
-    @Test
-    public void testExpressionThrowsException() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY, k2 INTEGER)";
-        conn.createStatement().execute(ddl);
-        ddl = "CREATE INDEX i on t(k1/k2)";
-        conn.createStatement().execute(ddl);
-        conn.createStatement().execute("UPSERT INTO T VALUES(1,1)");
-        conn.commit();
-        //divide by zero should fail
-        conn.createStatement().execute("UPSERT INTO T VALUES(1,0)");
-        conn.commit(); 
-    }
+	@Test
+	public void testExpressionThrowsException() throws Exception {
+		Connection conn = DriverManager.getConnection(getUrl());
+		String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY, k2 INTEGER)";
+		try {
+			conn.createStatement().execute(ddl);
+			ddl = "CREATE INDEX i on t(k1/k2)";
+			conn.createStatement().execute(ddl);
+			// upsert should succeed
+			conn.createStatement().execute("UPSERT INTO T VALUES(1,1)");
+			conn.commit();
+			// divide by zero should fail
+			conn.createStatement().execute("UPSERT INTO T VALUES(1,0)");
+			conn.commit();
+			fail();
+		} catch (CommitException e) {
+		}
+	}
 
 }

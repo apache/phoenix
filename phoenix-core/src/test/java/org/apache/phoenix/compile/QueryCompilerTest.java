@@ -1547,5 +1547,23 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             stmt.close();
         }
     }
+    
+    @Test 
+    public void testDivideByZeroExpressionIndex() throws Exception {
+        String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY)";
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement stmt = null;
+        try {
+            stmt = conn.createStatement();
+            stmt.execute(ddl);
+            stmt.execute("CREATE INDEX i ON t (k1/0)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DIVIDE_BY_ZERO.getErrorCode(), e.getErrorCode());
+        }
+        finally {
+            stmt.close();
+        }
+    }
 
 }
