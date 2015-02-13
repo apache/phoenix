@@ -779,8 +779,13 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
      * commit or rollback. 0-based. Used to associate partial save errors with SQL statements
      * invoked by users.
      * @see CommitException
+     * @see #incrementStatementExecutionCount()
      */
-    public int getAndIncrementStatementExecutionsCount() {
-		return statementExecutionsCount++;
+    public int getStatementExecutionsCount() {
+		return statementExecutionsCount;
 	}
+    
+    public void incrementStatementExecutionCount() {
+        statementExecutionsCount++;
+    }
 }

@@ -115,7 +115,7 @@ public class UpsertCompiler {
         }
         ImmutableBytesPtr ptr = new ImmutableBytesPtr();
         table.newKey(ptr, pkValues);
-        mutation.put(ptr, new RowMutationState(columnValues, statement.getConnection().getAndIncrementStatementExecutionsCount()));
+        mutation.put(ptr, new RowMutationState(columnValues, statement.getConnection().getStatementExecutionsCount()));
     }
 
     private static MutationState upsertSelect(PhoenixStatement statement, 
