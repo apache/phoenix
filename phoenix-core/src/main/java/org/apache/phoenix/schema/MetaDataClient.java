@@ -993,6 +993,9 @@ public class MetaDataClient {
                     if (expression.getDeterminism() != Determinism.ALWAYS) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
                     }
+                    if (expression.isStateless()) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
+                    }
                     // true for any constant (including a view constant), as we don't need these in the index
                     if (expression.isStateless()) {
                         continue;

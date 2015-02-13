@@ -1493,5 +1493,59 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         assertTrue(scan.getFilter() instanceof FirstKeyOnlyFilter);
         assertEquals(1, scan.getFamilyMap().size());
     }
+    
+    @Test 
+    public void testNonDeterministicExpressionIndex() throws Exception {
+        String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY)";
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement stmt = null;
+        try {
+            stmt = conn.createStatement();
+            stmt.execute(ddl);
+            stmt.execute("CREATE INDEX i ON t (RAND())");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
+        }
+        finally {
+            stmt.close();
+        }
+    }
+    
+    @Test 
+    public void testStatelessExpressionIndex() throws Exception {
+        String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY)";
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement stmt = null;
+        try {
+            stmt = conn.createStatement();
+            stmt.execute(ddl);
+            stmt.execute("CREATE INDEX i ON t (SUM())");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
+        }
+        finally {
+            stmt.close();
+        }
+    }
+    
+    @Test 
+    public void testAggregateExpressionIndex() throws Exception {
+        String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY)";
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement stmt = null;
+        try {
+            stmt = conn.createStatement();
+            stmt.execute(ddl);
+            stmt.execute("CREATE INDEX i ON t (SUM(k1))");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
+        }
+        finally {
+            stmt.close();
+        }
+    }
 
 }

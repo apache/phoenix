@@ -1214,5 +1214,19 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER I1 [1,100] - [2,109]\n" + 
                 "    SERVER FILTER BY (\"S2\" = 'bas' AND \"S1\" = 'foo')", queryPlan);
     }
+    
+    @Test
+    public void testExpressionThrowsException() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY, k2 INTEGER)";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE INDEX i on t(k1/k2)";
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute("UPSERT INTO T VALUES(1,1)");
+        conn.commit();
+        //divide by zero should fail
+        conn.createStatement().execute("UPSERT INTO T VALUES(1,0)");
+        conn.commit(); 
+    }
 
 }
