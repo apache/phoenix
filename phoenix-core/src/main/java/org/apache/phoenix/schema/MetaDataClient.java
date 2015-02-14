@@ -435,6 +435,9 @@ public class MetaDataClient {
                 boolean containsAllReqdCols = true;
                 // Ensure that all indexed columns from index on physical table
                 // exist in the view too (since view columns may be removed)
+                // TODO 
+                // IndexExpressionIT.testViewUsesTableIndex() fails because k3+k2 does not exist in view, 
+                // for columns that represent expression, should we just check if the columns required to evaluate the expression are present in the view ?
                 List<PColumn> pkColumns = index.getPKColumns();
                 for (int i = index.getBucketNum() == null ? 0 : 1; i < pkColumns.size(); i++) {
                     try {

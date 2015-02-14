@@ -1226,7 +1226,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 	
 	        conn.createStatement().execute("CREATE INDEX vi1 on v(k2)");
 	        
-	        String query = "SELECT k2+k3 FROM v WHERE k2 IN (100,109) AND k3 IN (1,2) AND s2='bas'";
+	        String query = "SELECT k3+k2 FROM v WHERE k2 IN (100,109) AND k3 IN (1,2) AND s2='bas'";
 	        rs = conn.createStatement().executeQuery(query);
 	        assertTrue(rs.next());
 	        assertEquals(101, rs.getInt(1));

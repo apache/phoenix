@@ -1520,7 +1520,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             stmt = conn.createStatement();
             stmt.execute(ddl);
-            stmt.execute("CREATE INDEX i ON t (SUM())");
+            stmt.execute("CREATE INDEX i ON t (2)");
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
