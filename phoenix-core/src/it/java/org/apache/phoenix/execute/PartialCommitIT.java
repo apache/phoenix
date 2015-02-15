@@ -33,7 +33,6 @@ import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.SQLException;
@@ -48,7 +47,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -73,8 +71,9 @@ import com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 public class PartialCommitIT {
     
+    private static final String TABLE_NAME_TO_FAIL = "b_failure_table".toUpperCase();
     private static final byte[] ROW_TO_FAIL = Bytes.toBytes("fail me");
-    private static final String UPSERT_TO_FAIL = "upsert into b_failure_table values ('" + Bytes.toString(ROW_TO_FAIL) + "', 'boom!')";
+    private static final String UPSERT_TO_FAIL = "upsert into " + TABLE_NAME_TO_FAIL + " values ('" + Bytes.toString(ROW_TO_FAIL) + "', 'boom!')";
     private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
     private static String url;
     private static Driver driver;
@@ -151,7 +150,7 @@ public class PartialCommitIT {
     public void testDeleteFailure() {
         testPartialCommit(newArrayList("upsert into a_success_table values ('a', 'a')", 
                                        "delete from b_failure_table where k='z'", 
-                                       "upsert into a_success_table values ('a', 'a')"), 
+                                       "upsert into a_success_table values ('b', 'b')"), 
                                        1, singleton(new Integer(1)), true);
     }
     
@@ -212,10 +211,9 @@ public class PartialCommitIT {
     
     public static class FailingRegionObserver extends SimpleRegionObserver {
         @Override
-        public void prePut(final ObserverContext<RegionCoprocessorEnvironment> c, final Put put, final WALEdit edit,
+        public void prePut(ObserverContext<RegionCoprocessorEnvironment> c, Put put, WALEdit edit,
                 final Durability durability) throws HBaseIOException {
-            String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
-            if (tableName.equalsIgnoreCase("b_failure_table") && Bytes.equals(ROW_TO_FAIL, put.getRow())) {
+            if (shouldFailUpsert(c, put) || shouldFailDelete(c, put)) {
                 // throwing anything other than instances of IOException result
                 // in this coprocessor being unloaded
                 // DoNotRetryIOException tells HBase not to retry this mutation
@@ -224,13 +222,16 @@ public class PartialCommitIT {
             }
         }
         
-        @Override
-        public void preDelete(ObserverContext<RegionCoprocessorEnvironment> c, Delete delete, WALEdit edit,
-                Durability durability) throws IOException {
+        private static boolean shouldFailUpsert(ObserverContext<RegionCoprocessorEnvironment> c, Put put) {
             String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
-            if (tableName.equalsIgnoreCase("b_failure_table")) {
-                throw new DoNotRetryIOException();
-            }
+            return TABLE_NAME_TO_FAIL.equals(tableName) && Bytes.equals(ROW_TO_FAIL, put.getRow());
+        }
+        
+        private static boolean shouldFailDelete(ObserverContext<RegionCoprocessorEnvironment> c, Put put) {
+            String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+            return TABLE_NAME_TO_FAIL.equals(tableName) &&  
+                   // Phoenix deletes are sent as Puts with empty values
+                   put.getFamilyCellMap().firstEntry().getValue().get(0).getValueLength() == 0; 
         }
     }
 }
