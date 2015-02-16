@@ -21,7 +21,6 @@ import java.sql.SQLException;
 import java.util.Set;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 
 import com.google.common.collect.ImmutableSet;
 
@@ -36,8 +35,17 @@ public class CommitException extends SQLException {
 
     /**
      * Returns indexes of UPSERT and DELETE statements that have failed. Indexes returned
-     * correspond to each failed statement's order of creation within a {@link PhoenixConnection}.
-     * @see PhoenixStatement#getOrderInConnection()
+     * correspond to each failed statement's order of creation within a {@link PhoenixConnection} up to
+     * commit/rollback.
+     * <p>
+     * Statements whose index is returned in this set correspond to one or more HBase mutations that have failed.
+     * <p>
+     * Statement indexes are maintained correctly for connections that mutate and query 
+     * <b>data</b> (DELETE, UPSERT and SELECT) only. Statement (and their subsequent failure) order
+     * is undefined for connections that execute metadata operations due to the fact that Phoenix rolls
+     * back connections after metadata mutations.
+     * 
+     * @see PhoenixConnection#getStatementExecutionsCount()
      */
     public Set<Integer> getFailures() {
     	return failures;

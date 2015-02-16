@@ -74,6 +74,7 @@ public class PartialCommitIT {
     private static final String TABLE_NAME_TO_FAIL = "b_failure_table".toUpperCase();
     private static final byte[] ROW_TO_FAIL = Bytes.toBytes("fail me");
     private static final String UPSERT_TO_FAIL = "upsert into " + TABLE_NAME_TO_FAIL + " values ('" + Bytes.toString(ROW_TO_FAIL) + "', 'boom!')";
+    private static final String DELETE_TO_FAIL = "delete from " + TABLE_NAME_TO_FAIL + "  where k='z'";
     private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
     private static String url;
     private static Driver driver;
@@ -149,13 +150,13 @@ public class PartialCommitIT {
     @Test
     public void testDeleteFailure() {
         testPartialCommit(newArrayList("upsert into a_success_table values ('a', 'a')", 
-                                       "delete from b_failure_table where k='z'", 
+                                       DELETE_TO_FAIL,
                                        "upsert into a_success_table values ('b', 'b')"), 
                                        1, singleton(new Integer(1)), true);
     }
     
     /**
-     * {@link MutationState} keeps mutations ordered by table name.
+     * {@link MutationState} keeps mutations ordered lexicographically by table name.
      */
     @Test
     public void testOrderOfMutationsIsPredicatable() {
@@ -170,13 +171,10 @@ public class PartialCommitIT {
         testPartialCommit(newArrayList("upsert into a_success_table values ('a', 'a')", 
                                        "upsert into a_success_table select k from c_success_table",
                                        "delete from a_success_table",
+                                       DELETE_TO_FAIL,
                                        "select * from a_success_table", 
-                                       "create table z (c varchar primary key)", 
-                                       "create view v as select * from z",
-                                       "update statistics a_success_table",
-                                       "explain select * from a_success_table",
                                        UPSERT_TO_FAIL), 
-                                       1, singleton(new Integer(1)), true);
+                                       2, newHashSet(new Integer(3), new Integer(5)), true);
     }
     
     private void testPartialCommit(List<String> statements, int failureCount, Set<Integer> orderOfFailedStatements, boolean willFail) {
