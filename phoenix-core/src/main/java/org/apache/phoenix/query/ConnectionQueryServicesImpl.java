@@ -1197,10 +1197,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (tableType == PTableType.INDEX) { // Index on view
             // Physical index table created up front for multi tenant
             // TODO: if viewIndexId is Short.MIN_VALUE, then we don't need to attempt to create it
-            if (physicalTableName != null && !MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) {
+            if (physicalTableName != null) {
                 if (localIndexTable) {
                     ensureLocalIndexTableCreated(tableName, tableProps, families, splits, MetaDataUtil.getClientTimeStamp(m));
-                } else {
+                } else if (!MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) {
                     ensureViewIndexTableCreated(tenantIdBytes.length == 0 ? null : PNameFactory.newName(tenantIdBytes), physicalTableName, MetaDataUtil.getClientTimeStamp(m));
                 }
             }
@@ -1224,7 +1224,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 familiesPlusDefault.add(new Pair<byte[],Map<String,Object>>(defaultCF,Collections.<String,Object>emptyMap()));
             }
             ensureViewIndexTableCreated(tableName, tableProps, familiesPlusDefault, MetaDataUtil.isSalted(m, kvBuilder, ptr) ? splits : null, MetaDataUtil.getClientTimeStamp(m));
-            ensureLocalIndexTableCreated(MetaDataUtil.getLocalIndexPhysicalName(tableName), tableProps, familiesPlusDefault, splits);
         }
 
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
@@ -1848,8 +1847,32 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 // any new columns we've added.
                                 long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
                                 
-                                // We know that we always need to add the STORE_NULLS column for 4.3 release
-                                String columnsToAdd = PhoenixDatabaseMetaData.STORE_NULLS + " " + PBoolean.INSTANCE.getSqlTypeName();
+                                String columnsToAdd = "";
+                                if(currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0) {
+                                    // We know that we always need to add the STORE_NULLS column for 4.3 release
+                                    columnsToAdd = PhoenixDatabaseMetaData.STORE_NULLS + " " + PBoolean.INSTANCE.getSqlTypeName();
+                                    HBaseAdmin admin = null;
+                                    try {
+                                        admin = getAdmin();
+                                        HTableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
+                                        for (HTableDescriptor table : localIndexTables) {
+                                            if (table.getValue(MetaDataUtil.PARENT_TABLE_KEY) == null
+                                                    && table.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME) != null) {
+                                                table.setValue(MetaDataUtil.PARENT_TABLE_KEY,
+                                                    MetaDataUtil.getUserTableName(table
+                                                        .getNameAsString()));
+                                                // Explicitly disable, modify and enable the table to ensure co-location of data
+                                                // and index regions. If we just modify the table descriptor when online schema
+                                                // change enabled may reopen the region in same region server instead of following data region.
+                                                admin.disableTable(table.getTableName());
+                                                admin.modifyTable(table.getTableName(), table);
+                                                admin.enableTable(table.getTableName());
+                                            }
+                                        }
+                                    } finally {
+                                        if (admin != null) admin.close();
+                                    }
+                                }
                                 
                                 // If the server side schema is before MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0 then
                                 // we need to add INDEX_TYPE and INDEX_DISABLE_TIMESTAMP columns too. 
