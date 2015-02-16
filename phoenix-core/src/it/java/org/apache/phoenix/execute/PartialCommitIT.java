@@ -35,6 +35,7 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Driver;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collections;
@@ -66,6 +67,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
@@ -120,7 +122,7 @@ public class PartialCommitIT {
         try (Connection con = driver.connect(url, new Properties())) {
             con.setAutoCommit(false);
             Statement sta = con.createStatement();
-            for (String table : newHashSet("a_success_table", "b_failure_table", "c_success_table")) {
+            for (String table : newHashSet("a_success_table", TABLE_NAME_TO_FAIL, "c_success_table")) {
                 sta.execute("upsert into " + table + " values ('z', 'z')");
                 sta.execute("upsert into " + table + " values ('zz', 'zz')");
                 sta.execute("upsert into " + table + " values ('zzz', 'zzz')");
@@ -136,23 +138,30 @@ public class PartialCommitIT {
     
     @Test
     public void testNoFailure() {
-        testPartialCommit(singletonList("upsert into a_success_table values ('a', 'a')"), 0, Collections.<Integer>emptySet(), false);
+        testPartialCommit(singletonList("upsert into a_success_table values ('testNoFailure', 'a')"), 0, Collections.<Integer>emptySet(), false,
+                                        singletonList("select count(*) from a_success_table where k='testNoFailure'"), singletonList(new Integer(1)));
     }
     
     @Test
     public void testUpsertFailure() {
-        testPartialCommit(newArrayList("upsert into a_success_table values ('a', 'a')", 
+        testPartialCommit(newArrayList("upsert into a_success_table values ('testUpsertFailure1', 'a')", 
                                        UPSERT_TO_FAIL, 
-                                       "upsert into a_success_table values ('a', 'a')"), 
-                                       1, singleton(new Integer(1)), true);
+                                       "upsert into a_success_table values ('testUpsertFailure2', 'b')"), 
+                                       1, singleton(new Integer(1)), true,
+                                       newArrayList("select count(*) from a_success_table where k like 'testUpsertFailure_'",
+                                                    "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = '" + ROW_TO_FAIL + "'"), 
+                                       newArrayList(new Integer(2), new Integer(0)));
     }
     
     @Test
     public void testDeleteFailure() {
-        testPartialCommit(newArrayList("upsert into a_success_table values ('a', 'a')", 
+        testPartialCommit(newArrayList("upsert into a_success_table values ('testDeleteFailure1', 'a')", 
                                        DELETE_TO_FAIL,
-                                       "upsert into a_success_table values ('b', 'b')"), 
-                                       1, singleton(new Integer(1)), true);
+                                       "upsert into a_success_table values ('testDeleteFailure2', 'b')"), 
+                                       1, singleton(new Integer(1)), true,
+                                       newArrayList("select count(*) from a_success_table where k like 'testDeleteFailure_'",
+                                                    "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = 'z'"), 
+                                       newArrayList(new Integer(2), new Integer(1)));
     }
     
     /**
@@ -160,24 +169,34 @@ public class PartialCommitIT {
      */
     @Test
     public void testOrderOfMutationsIsPredicatable() {
-        testPartialCommit(newArrayList("upsert into c_success_table values ('c', 'c')", // will fail because c_success_table is after b_failure_table by table sort order
+        testPartialCommit(newArrayList("upsert into c_success_table values ('testOrderOfMutationsIsPredicatable', 'c')", // will fail because c_success_table is after b_failure_table by table sort order
                                        UPSERT_TO_FAIL, 
-                                       "upsert into a_success_table values ('a', 'a')"), // will succeed because a_success_table is before b_failure_table by table sort order
-                                       2, newHashSet(new Integer(1), new Integer(0)), true);
+                                       "upsert into a_success_table values ('testOrderOfMutationsIsPredicatable', 'a')"), // will succeed because a_success_table is before b_failure_table by table sort order
+                                       2, newHashSet(new Integer(1), new Integer(0)), true,
+                                       newArrayList("select count(*) from c_success_table where k='testOrderOfMutationsIsPredicatable'",
+                                                    "select count(*) from a_success_table where k='testOrderOfMutationsIsPredicatable'",
+                                                    "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = '" + ROW_TO_FAIL + "'"), 
+                                       newArrayList(new Integer(0), new Integer(1), new Integer(0)));
     }
     
     @Test
     public void checkThatAllStatementTypesMaintainOrderInConnection() {
-        testPartialCommit(newArrayList("upsert into a_success_table values ('a', 'a')", 
-                                       "upsert into a_success_table select k from c_success_table",
-                                       "delete from a_success_table",
+        testPartialCommit(newArrayList("upsert into a_success_table values ('k', 'checkThatAllStatementTypesMaintainOrderInConnection')", 
+                                       "upsert into a_success_table select k, c from c_success_table",
                                        DELETE_TO_FAIL,
                                        "select * from a_success_table", 
                                        UPSERT_TO_FAIL), 
-                                       2, newHashSet(new Integer(3), new Integer(5)), true);
+                                       2, newHashSet(new Integer(2), new Integer(4)), true,
+                                       newArrayList("select count(*) from a_success_table where k='testOrderOfMutationsIsPredicatable' or k like 'z%'", // rows left: zz, zzz, checkThatAllStatementTypesMaintainOrderInConnection
+                                                    "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = '" + ROW_TO_FAIL + "'",
+                                                    "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = 'z'"), 
+                                       newArrayList(new Integer(4), new Integer(0), new Integer(1)));
     }
     
-    private void testPartialCommit(List<String> statements, int failureCount, Set<Integer> orderOfFailedStatements, boolean willFail) {
+    private void testPartialCommit(List<String> statements, int failureCount, Set<Integer> orderOfFailedStatements, boolean willFail,
+                                   List<String> countStatementsForVerification, List<Integer> expectedCountsForVerification) {
+        Preconditions.checkArgument(countStatementsForVerification.size() == expectedCountsForVerification.size());
+        
         try (Connection con = driver.connect(url, new Properties())) {
             con.setAutoCommit(false);
             Statement sta = con.createStatement();
@@ -201,7 +220,15 @@ public class PartialCommitIT {
                 assertEquals(orderOfFailedStatements, failures);
             }
             
-            // TODO: assert actual partial save by selecting from tables
+            // verify data in HBase
+            for (int i = 0; i < countStatementsForVerification.size(); i++) {
+                String countStatement = countStatementsForVerification.get(i);
+                ResultSet rs = sta.executeQuery(countStatement);
+                if (!rs.next()) {
+                    fail("Expected a single row from count query");
+                }
+                assertEquals(expectedCountsForVerification.get(i).intValue(), rs.getInt(1));
+            }
         } catch (SQLException e) {
             fail(e.toString());
         }
