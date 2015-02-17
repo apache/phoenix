@@ -1016,10 +1016,6 @@ public class MetaDataClient {
                     if (expression.isStateless()) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
                     }
-                    // true for any constant (including a view constant), as we don't need these in the index
-                    if (expression.isStateless()) {
-                        continue;
-                    }
                     unusedPkColumns.remove(expression);
                     
                     // Go through parse node to get string as otherwise we
