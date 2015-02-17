@@ -433,17 +433,34 @@ public class MetaDataClient {
         for (PTable index : indexes) {
             if (index.getViewIndexId() == null) {
                 boolean containsAllReqdCols = true;
-                // Ensure that all indexed columns from index on physical table
+                // Ensure that all columns required from index on physical table
                 // exist in the view too (since view columns may be removed)
-                // TODO 
-                // IndexExpressionIT.testViewUsesTableIndex() fails because k3+k2 does not exist in view, 
-                // for columns that represent expression, should we just check if the columns required to evaluate the expression are present in the view ?
-                List<PColumn> pkColumns = index.getPKColumns();
-                for (int i = index.getBucketNum() == null ? 0 : 1; i < pkColumns.size(); i++) {
+                IndexMaintainer indexMaintainer = index.getIndexMaintainer(physicalTable, connection);
+                // check that the columns required for the index pk (not including the pk columns of the data table)
+                // are present in the view
+                Set<ColumnReference> indexColRefs = indexMaintainer.getIndexedColumns();
+                for (ColumnReference colRef : indexColRefs) {
+                    try {
+                        byte[] cf= colRef.getFamily();
+                        byte[] cq= colRef.getQualifier();
+                        if (cf!=null) {
+                            table.getColumnFamily(cf).getColumn(cq);
+                        }
+                        else {
+                            table.getColumn( Bytes.toString(cq));
+                        }
+                    } catch (ColumnNotFoundException e) { // Ignore this index and continue with others
+                        containsAllReqdCols = false;
+                        break;
+                    }
+                }
+                // check that pk columns of the data table (which are also present in the index pk) are present in the view
+                List<PColumn> pkColumns = physicalTable.getPKColumns();
+                for (int i = physicalTable.getBucketNum() == null ? 0 : 1; i < pkColumns.size(); i++) {
                     try {
                         PColumn pkColumn = pkColumns.get(i);
-                        IndexUtil.getDataColumn(table, pkColumn.getName().getString());
-                    } catch (IllegalArgumentException e) { // Ignore this index and continue with others
+                        table.getColumn(pkColumn.getName().getString());
+                    } catch (ColumnNotFoundException e) { // Ignore this index and continue with others
                         containsAllReqdCols = false;
                         break;
                     }

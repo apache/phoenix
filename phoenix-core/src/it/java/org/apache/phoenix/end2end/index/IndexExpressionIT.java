@@ -29,7 +29,6 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.CommitException;
@@ -1205,41 +1204,48 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
     public void testViewUsesTableIndex() throws Exception {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
-	        try {
-	        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))";
-	        conn.createStatement().execute(ddl);
-	        conn.createStatement().execute("CREATE INDEX i1 ON t(k3+k2) INCLUDE(s1, s2)");
-	        conn.createStatement().execute("CREATE INDEX i2 ON t(k3+k2, s2)");
-	        
-	        ddl = "CREATE VIEW v AS SELECT * FROM t WHERE s1 = 'foo'";
-	        conn.createStatement().execute(ddl);
-	        String[] s1Values = {"foo","bar"};
-	        for (int i = 0; i < 10; i++) {
-	            conn.createStatement().execute("UPSERT INTO t VALUES(" + (i % 4) + "," + (i+100) + "," + (i > 5 ? 2 : 1) + ",'" + s1Values[i%2] + "','bas')");
-	        }
-	        conn.commit();
-	        
-	        rs = conn.createStatement().executeQuery("SELECT count(*) FROM v");
-	        assertTrue(rs.next());
-	        assertEquals(5, rs.getLong(1));
-	        assertFalse(rs.next());
-	
-	        conn.createStatement().execute("CREATE INDEX vi1 on v(k2)");
-	        
-	        String query = "SELECT k3+k2 FROM v WHERE k2 IN (100,109) AND k3 IN (1,2) AND s2='bas'";
-	        rs = conn.createStatement().executeQuery(query);
-	        assertTrue(rs.next());
-	        assertEquals(101, rs.getInt(1));
-	        assertFalse(rs.next());
-	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-	        String queryPlan = QueryUtil.getExplainPlan(rs);
-	        assertEquals(
-	                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER I1 [1,100] - [2,109]\n" + 
-	                "    SERVER FILTER BY (\"S2\" = 'bas' AND \"S1\" = 'foo')", queryPlan);
-        }
-        finally {
-        	conn.close();
-        }
+        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, s1 VARCHAR, s2 VARCHAR, s3 VARCHAR, s4 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute("CREATE INDEX i1 ON t(k2, s2, s3, s1)");
+        conn.createStatement().execute("CREATE INDEX i2 ON t(k2, s2||'_'||s3, s1, s4)");
+        
+        ddl = "CREATE VIEW v AS SELECT * FROM t WHERE s1 = 'foo'";
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute("UPSERT INTO t VALUES(1,1,'foo','abc','cab')");
+        conn.createStatement().execute("UPSERT INTO t VALUES(2,2,'bar','xyz','zyx')");
+        conn.commit();
+        
+        rs = conn.createStatement().executeQuery("SELECT count(*) FROM v");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        conn.createStatement().execute("CREATE INDEX vi1 on v(k2)");
+
+        //i2 should be used since it contains s3||'_'||s4 i
+        String query = "SELECT s2||'_'||s3 FROM v WHERE k2=1 AND (s2||'_'||s3)='abc_cab'";
+        rs = conn.createStatement(  ).executeQuery("EXPLAIN " + query);
+        String queryPlan = QueryUtil.getExplainPlan(rs);
+        assertEquals(
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER I2 [1,'abc_cab','foo']\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY", queryPlan);
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("abc_cab", rs.getString(1));
+        assertFalse(rs.next());
+        
+        conn.createStatement().execute("ALTER VIEW v DROP COLUMN s4");
+        conn.createStatement().execute("CREATE INDEX vi2 on v(k2)");
+        //i2 cannot be used since s4 has been dropped from the view, so i1 will be used 
+        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        queryPlan = QueryUtil.getExplainPlan(rs);
+        assertEquals(
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER I1 [1]\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY AND ((\"S2\" || '_' || \"S3\") = 'abc_cab' AND \"S1\" = 'foo')", queryPlan);
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("abc_cab", rs.getString(1));
+        assertFalse(rs.next());    
     }
     
 	@Test
