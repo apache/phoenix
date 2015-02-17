@@ -233,7 +233,7 @@ public class PartialCommitIT {
                     fail("Expected no statements to fail");
                 }
                 assertEquals(CommitException.class, sqle.getClass());
-                Set<Integer> failures = ((CommitException)sqle).getFailures();
+                Set<Integer> failures = ((CommitException)sqle).getUncommittedStatementIndexes();
                 assertEquals(failureCount, failures.size());
                 assertEquals(orderOfFailedStatements, failures);
             }

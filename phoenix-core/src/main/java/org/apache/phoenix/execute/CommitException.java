@@ -47,7 +47,7 @@ public class CommitException extends SQLException {
      * 
      * @see PhoenixConnection#getStatementExecutionCounter()
      */
-    public Set<Integer> getFailures() {
+    public Set<Integer> getUncommittedStatementIndexes() {
     	return failures;
     }
 }
