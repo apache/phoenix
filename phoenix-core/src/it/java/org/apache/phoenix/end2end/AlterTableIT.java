@@ -308,7 +308,6 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     @Test
     public void testDropCoveredColumn() throws Exception {
-        String query;
         ResultSet rs;
         PreparedStatement stmt;
 
@@ -320,19 +319,21 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn.createStatement().execute(
           "CREATE TABLE " + DATA_TABLE_FULL_NAME
               + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR, v3 VARCHAR)");
-        query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
-        rs = conn.createStatement().executeQuery(query);
+        String dataTableQuery = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(dataTableQuery);
         assertFalse(rs.next());
 
         conn.createStatement().execute(
           "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) include (v2, v3)");
         conn.createStatement().execute(
             "CREATE LOCAL INDEX " + LOCAL_INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) include (v2, v3)");
-        query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
-        rs = conn.createStatement().executeQuery(query);
+        rs = conn.createStatement().executeQuery(dataTableQuery);
         assertFalse(rs.next());
-        query = "SELECT * FROM " + LOCAL_INDEX_TABLE_FULL_NAME;
-        rs = conn.createStatement().executeQuery(query);
+        String indexTableQuery = "SELECT * FROM " + INDEX_TABLE_NAME;
+        rs = conn.createStatement().executeQuery(indexTableQuery);
+        assertFalse(rs.next());
+        String localIndexTableQuery = "SELECT * FROM " + LOCAL_INDEX_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(localIndexTableQuery);
         assertFalse(rs.next());
 
         // load some data into the table
@@ -346,14 +347,29 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 
         assertIndexExists(conn,true);
         conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " DROP COLUMN v2");
-        // TODO: verify meta data that we get back to confirm our column was dropped
         assertIndexExists(conn,true);
 
-        query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
-        rs = conn.createStatement().executeQuery(query);
+        // verify data table rows
+        rs = conn.createStatement().executeQuery(dataTableQuery);
         assertTrue(rs.next());
         assertEquals("a",rs.getString(1));
         assertEquals("x",rs.getString(2));
+        assertEquals("j",rs.getString(3));
+        assertFalse(rs.next());
+        
+        // verify index table rows
+        rs = conn.createStatement().executeQuery(indexTableQuery);
+        assertTrue(rs.next());
+        assertEquals("x",rs.getString(1));
+        assertEquals("a",rs.getString(2));
+        assertEquals("j",rs.getString(3));
+        assertFalse(rs.next());
+        
+        // verify local index table rows
+        rs = conn.createStatement().executeQuery(localIndexTableQuery);
+        assertTrue(rs.next());
+        assertEquals("x",rs.getString(1));
+        assertEquals("a",rs.getString(2));
         assertEquals("j",rs.getString(3));
         assertFalse(rs.next());
 
@@ -365,11 +381,27 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         stmt.execute();
         conn.commit();
 
-        query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
-        rs = conn.createStatement().executeQuery(query);
+        // verify data table rows
+        rs = conn.createStatement().executeQuery(dataTableQuery);
         assertTrue(rs.next());
         assertEquals("a",rs.getString(1));
         assertEquals("y",rs.getString(2));
+        assertEquals("k",rs.getString(3));
+        assertFalse(rs.next());
+        
+        // verify index table rows
+        rs = conn.createStatement().executeQuery(indexTableQuery);
+        assertTrue(rs.next());
+        assertEquals("y",rs.getString(1));
+        assertEquals("a",rs.getString(2));
+        assertEquals("k",rs.getString(3));
+        assertFalse(rs.next());
+        
+        // verify local index table rows
+        rs = conn.createStatement().executeQuery(localIndexTableQuery);
+        assertTrue(rs.next());
+        assertEquals("y",rs.getString(1));
+        assertEquals("a",rs.getString(2));
         assertEquals("k",rs.getString(3));
         assertFalse(rs.next());
     }
@@ -426,8 +458,6 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K2",rs.getString("COLUMN_NAME"));
         assertEquals(3, rs.getShort("KEY_SEQ"));
-
-        assertIndexExists(conn,true);
 
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);

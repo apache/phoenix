@@ -692,10 +692,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 indexFields[pos] = dataRowKeySchema.getField(i);
             } 
         }
-        Iterator<Expression> expressionSetItr = indexedExpressions.iterator();
+        Iterator<Expression> expressionItr = indexedExpressions.iterator();
         for (Field indexField : indexFields) {
             if (indexField == null) { // Add field for kv column in index
-                final PDataType dataType = expressionSetItr.next().getDataType();
+                final PDataType dataType = expressionItr.next().getDataType();
                 builder.addField(new PDatum() {
 
                     @Override

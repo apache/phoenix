@@ -61,7 +61,6 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
@@ -1414,12 +1413,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                     for (PTable index : table.getIndexes()) {
                                         try {
                                             IndexMaintainer indexMaintainer = index.getIndexMaintainer(table, connection);
-                                            // get the columns required to create the index 
+                                            // get the columns required for the index pk
                                             Set<ColumnReference> indexColumns = indexMaintainer.getIndexedColumns();
                                             byte[] indexKey =
                                                     SchemaUtil.getTableKey(tenantId, index
                                                             .getSchemaName().getBytes(), index.getTableName().getBytes());
-                                            // If index requires this column, then drop it
+                                            // If index requires this column for its pk, then drop it
                                             if (indexColumns.contains(new ColumnReference(columnToDelete.getFamilyName().getBytes(), columnToDelete.getName().getBytes()))) {
                                                 // Since we're dropping the index, lock it to ensure
                                                 // that a change in index state doesn't

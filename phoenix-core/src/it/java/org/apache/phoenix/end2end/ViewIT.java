@@ -109,6 +109,11 @@ public class ViewIT extends BaseViewIT {
     }
     
     @Test
+    public void testNonSaltedUpdatableViewWithLocalIndex() throws Exception {
+        testUpdatableViewWithIndex(null, true);
+    }
+    
+    @Test
     public void testUpdatableOnUpdatableView() throws Exception {
         testUpdatableView(null);
         Connection conn = DriverManager.getConnection(getUrl());
