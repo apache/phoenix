@@ -21,6 +21,7 @@ import static com.google.common.collect.Sets.newHashSet;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -152,13 +153,10 @@ public class MutationState implements SQLCloseable {
                             Map<PColumn,byte[]> newRow = rowEntry.getValue().getColumnValues();
                             // if new row is PRow.DELETE_MARKER, it means delete, and we don't need to merge it with existing row. 
                             if (newRow != PRow.DELETE_MARKER) {
-                                // Replace existing column values with new column values
-                                for (Map.Entry<PColumn,byte[]> valueEntry : newRow.entrySet()) {
-                                	existingRowMutationState.getColumnValues().put(valueEntry.getKey(), valueEntry.getValue());
-                                }
-                                existingRowMutationState.getOrderOfStatementsInConnection().addAll(rowEntry.getValue().getOrderOfStatementsInConnection());
+                                // Merge existing column values with new column values
+                                existingRowMutationState.join(rowEntry.getValue());
                                 // Now that the existing row has been merged with the new row, replace it back
-                                // again (since it was replaced with the new one above).
+                                // again (since it was merged with the new one above).
                                 existingRows.put(rowEntry.getKey(), existingRowMutationState);
                             }
                         }
@@ -450,7 +448,7 @@ public class MutationState implements SQLCloseable {
                             }
                             e = inferredE;
                         }
-                        sqlE = new CommitException(e, getOrderOfUncommittedStatements());
+                        sqlE = new CommitException(e, getUncommittedSattementIndexes());
                     } finally {
                         try {
                             hTable.close();
@@ -490,7 +488,7 @@ public class MutationState implements SQLCloseable {
         numRows = 0;
     }
     
-    private Set<Integer> getOrderOfUncommittedStatements() {
+    private Set<Integer> getUncommittedSattementIndexes() {
     	Set<Integer> result = newHashSet();
     	for (Map<ImmutableBytesPtr, RowMutationState> rowMutations : mutations.values()) {
     		for (RowMutationState rowMutationState : rowMutations.values()) {
@@ -505,31 +503,38 @@ public class MutationState implements SQLCloseable {
     }
     
     public static class RowMutationState {
-    	private Map<PColumn,byte[]> columnValues;
-    	private Set<Integer> orderOfStatementsInConnection;
-    	
-    	public RowMutationState(@NotNull Map<PColumn,byte[]> columnValues, int orderOfStatementInConnection) {
-    		Preconditions.checkNotNull(columnValues);
-    		
-    		this.columnValues = columnValues;
-    		this.orderOfStatementsInConnection = Sets.newHashSet(orderOfStatementInConnection);
-    	}
-    	
-    	public RowMutationState(@NotNull Map<PColumn,byte[]> columnValues, @NotNull Set<Integer> orderOfStatementsInConnection) {
-    		Preconditions.checkNotNull(columnValues);
-    		Preconditions.checkNotNull(orderOfStatementsInConnection);
-    		
-    		this.columnValues = columnValues;
-    		this.orderOfStatementsInConnection = orderOfStatementsInConnection;
-    	}
-    	
-    	public Map<PColumn, byte[]> getColumnValues() {
-			return columnValues;
-		}
-    	
-    	public Set<Integer> getOrderOfStatementsInConnection() {
-			return orderOfStatementsInConnection;
-		}
+        private Map<PColumn,byte[]> columnValues;
+        private Set<Integer> orderOfStatementsInConnection;
+
+        public RowMutationState(@NotNull Map<PColumn,byte[]> columnValues, int orderOfStatementInConnection) {
+            Preconditions.checkNotNull(columnValues);
+
+            this.columnValues = columnValues;
+            this.orderOfStatementsInConnection = Sets.newHashSet(orderOfStatementInConnection);
+        }
+
+        public RowMutationState(@NotNull Map<PColumn,byte[]> columnValues, @NotNull Set<Integer> orderOfStatementsInConnection) {
+            Preconditions.checkNotNull(columnValues);
+            Preconditions.checkNotNull(orderOfStatementsInConnection);
+            
+            this.columnValues = columnValues;
+            this.orderOfStatementsInConnection = orderOfStatementsInConnection;
+        }
+
+        Map<PColumn, byte[]> getColumnValues() {
+            return columnValues;
+        }
+
+        Set<Integer> getOrderOfStatementsInConnection() {
+            return orderOfStatementsInConnection;
+        }
+        
+        void join(RowMutationState newRow) {
+            for (Map.Entry<PColumn,byte[]> valueEntry : newRow.getColumnValues().entrySet()) {
+                getColumnValues().put(valueEntry.getKey(), valueEntry.getValue());
+            }
+            getOrderOfStatementsInConnection().addAll(newRow.getOrderOfStatementsInConnection());
+        }
     }
 
     /**

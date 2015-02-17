@@ -45,7 +45,7 @@ public class CommitException extends SQLException {
      * is undefined for connections that execute metadata operations due to the fact that Phoenix rolls
      * back connections after metadata mutations.
      * 
-     * @see PhoenixConnection#getStatementExecutionsCount()
+     * @see PhoenixConnection#getStatementExecutionCounter()
      */
     public Set<Integer> getFailures() {
     	return failures;

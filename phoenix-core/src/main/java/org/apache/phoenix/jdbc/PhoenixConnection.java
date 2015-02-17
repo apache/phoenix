@@ -129,7 +129,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private PMetaData metaData;
     private final PName tenantId;
     private final String datePattern;
-    private int statementExecutionsCount;
+    private int statementExecutionCounter;
     private boolean isClosed = false;
     private Sampler<?> sampler;
     private boolean readOnly = false;
@@ -149,17 +149,20 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache());
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
+        this.statementExecutionCounter = connection.statementExecutionCounter;
     }
     
     public PhoenixConnection(PhoenixConnection connection, long scn) throws SQLException {
         this(connection.getQueryServices(), connection, scn);
         this.sampler = connection.sampler;
+        this.statementExecutionCounter = connection.statementExecutionCounter;
     }
     
     public PhoenixConnection(ConnectionQueryServices services, PhoenixConnection connection, long scn) throws SQLException {
         this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.getMetaDataCache());
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
+        this.statementExecutionCounter = connection.statementExecutionCounter;
     }
     
     public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData) throws SQLException {
@@ -421,7 +424,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
                 return null;
             }
         }, Tracing.withTracing(this, "committing mutations"));
-        statementExecutionsCount = 0;
+        statementExecutionCounter = 0;
     }
 
     @Override
@@ -622,7 +625,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     @Override
     public void rollback() throws SQLException {
         mutationState.rollback(this);
-        statementExecutionsCount = 0;
+        statementExecutionCounter = 0;
     }
 
     @Override
@@ -779,13 +782,13 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
      * commit or rollback. 0-based. Used to associate partial save errors with SQL statements
      * invoked by users.
      * @see CommitException
-     * @see #incrementStatementExecutionCount()
+     * @see #incrementStatementExecutionCounter()
      */
-    public int getStatementExecutionsCount() {
-		return statementExecutionsCount;
+    public int getStatementExecutionCounter() {
+		return statementExecutionCounter;
 	}
     
-    public void incrementStatementExecutionCount() {
-        statementExecutionsCount++;
+    public void incrementStatementExecutionCounter() {
+        statementExecutionCounter++;
     }
 }

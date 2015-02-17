@@ -76,6 +76,7 @@ public class PartialCommitIT {
     private static final String TABLE_NAME_TO_FAIL = "b_failure_table".toUpperCase();
     private static final byte[] ROW_TO_FAIL = Bytes.toBytes("fail me");
     private static final String UPSERT_TO_FAIL = "upsert into " + TABLE_NAME_TO_FAIL + " values ('" + Bytes.toString(ROW_TO_FAIL) + "', 'boom!')";
+    private static final String UPSERT_SELECT_TO_FAIL = "upsert into " + TABLE_NAME_TO_FAIL + " select k, c from a_success_table";
     private static final String DELETE_TO_FAIL = "delete from " + TABLE_NAME_TO_FAIL + "  where k='z'";
     private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
     private static String url;
@@ -149,7 +150,24 @@ public class PartialCommitIT {
                                        "upsert into a_success_table values ('testUpsertFailure2', 'b')"), 
                                        1, singleton(new Integer(1)), true,
                                        newArrayList("select count(*) from a_success_table where k like 'testUpsertFailure_'",
-                                                    "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = '" + ROW_TO_FAIL + "'"), 
+                                                    "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = '" + Bytes.toString(ROW_TO_FAIL) + "'"), 
+                                       newArrayList(new Integer(2), new Integer(0)));
+    }
+    
+    @Test
+    public void testUpsertSelectFailure() throws SQLException {
+        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, 100);
+
+        try (Connection con = driver.connect(url, new Properties())) {
+            con.createStatement().execute("upsert into a_success_table values ('" + Bytes.toString(ROW_TO_FAIL) + "', 'boom!')");
+            con.commit();
+        }
+        
+        testPartialCommit(newArrayList("upsert into a_success_table values ('testUpsertSelectFailure', 'a')", 
+                                       UPSERT_SELECT_TO_FAIL), 
+                                       1, singleton(new Integer(1)), true,
+                                       newArrayList("select count(*) from a_success_table where k in ('testUpsertSelectFailure', '" + Bytes.toString(ROW_TO_FAIL) + "')",
+                                                    "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = '" + Bytes.toString(ROW_TO_FAIL) + "'"), 
                                        newArrayList(new Integer(2), new Integer(0)));
     }
     
@@ -175,7 +193,7 @@ public class PartialCommitIT {
                                        2, newHashSet(new Integer(1), new Integer(0)), true,
                                        newArrayList("select count(*) from c_success_table where k='testOrderOfMutationsIsPredicatable'",
                                                     "select count(*) from a_success_table where k='testOrderOfMutationsIsPredicatable'",
-                                                    "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = '" + ROW_TO_FAIL + "'"), 
+                                                    "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = '" + Bytes.toString(ROW_TO_FAIL) + "'"), 
                                        newArrayList(new Integer(0), new Integer(1), new Integer(0)));
     }
     
@@ -208,7 +226,7 @@ public class PartialCommitIT {
                 if (willFail) {
                     fail("Expected at least one statement in the list to fail");
                 } else {
-                    assertEquals(0, con.unwrap(PhoenixConnection.class).getStatementExecutionsCount()); // should have been reset to 0 in commit()
+                    assertEquals(0, con.unwrap(PhoenixConnection.class).getStatementExecutionCounter()); // should have been reset to 0 in commit()
                 }
             } catch (SQLException sqle) {
                 if (!willFail) {
