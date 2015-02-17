@@ -433,7 +433,7 @@ public class MetaDataClient {
         for (PTable index : indexes) {
             if (index.getViewIndexId() == null) {
                 boolean containsAllReqdCols = true;
-                // Ensure that all columns required from index on physical table
+                // Ensure that all columns required to create index
                 // exist in the view too (since view columns may be removed)
                 IndexMaintainer indexMaintainer = index.getIndexMaintainer(physicalTable, connection);
                 // check that the columns required for the index pk (not including the pk columns of the data table)
