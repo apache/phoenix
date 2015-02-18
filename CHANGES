@@ -71,15 +71,21 @@ Release Notes - Phoenix - Version 3.3
     * [PHOENIX-1503] - Compilation on Mac OS fails on maven-assembly-plugin
     * [PHOENIX-1511] - Invalidate stats row even if not running stats due to phoenix.stats.minUpdateFrequency
     * [PHOENIX-1533] - Last key part not taken into child/parent optimization
+    * [PHOENIX-1545] - Add org.iq80.snappy reference to client poms
     * [PHOENIX-1560] - Join between global index and data table if INDEX hint used
     * [PHOENIX-1575] - Identical sql type values for UNSIGNED_TIMESTAMP and UNSIGNED_DATE
     * [PHOENIX-1581] - Client cache not updated after issuing ALTER TABLE statements for setting phoenix table properties
     * [PHOENIX-1587] - Error deserializing empty array (which represents null)
+    * [PHOENIX-1588] - TableNotFoundException when optimizing "SELECT * FROM a tenant-specific table"
     * [PHOENIX-1591] - Return all rows instead of no rows if IN clause subquery gets optimized out from semi-join and returns empty result
     * [PHOENIX-1600] - Scanner is left unclosed in MetaDataEndpointImpl#doDropTable()
+    * [PHOENIX-1605] - Update pom to latest stable sqlline release
     * [PHOENIX-1606] - Update JDBC version to match release version
     * [PHOENIX-1610] - Incorrect subquery results caused by unpaired contextStack push/pop
     * [PHOENIX-1616] - Creating a View with a case sensitive column name does not work
+    * [PHOENIX-1654] - Incorrect group-by keys from ClientAggregatePlan
+    * [PHOENIX-1667] - Update sqlline to 1.1.8
+    * [PHOENIX-1669] - Views are not always properly updated with physical table indexes when cached
 
 
 Release Notes - Phoenix - Version 3.2
