@@ -108,6 +108,7 @@ Release Notes - Phoenix - Version 4.3
     * [PHOENIX-1576] - Refactor property-related code to reside in ConnectionQueryServicesImpl
     * [PHOENIX-1581] - Client cache not updated after issuing ALTER TABLE statements for setting phoenix table properties
     * [PHOENIX-1587] - Error deserializing empty array (which represents null)
+    * [PHOENIX-1588] - TableNotFoundException when optimizing "SELECT * FROM a tenant-specific table"
     * [PHOENIX-1591] - Return all rows instead of no rows if IN clause subquery gets optimized out from semi-join and returns empty result
     * [PHOENIX-1596] - Turning tracing on causes region servers to crash
     * [PHOENIX-1600] - Scanner is left unclosed in MetaDataEndpointImpl#doDropTable()
@@ -119,6 +120,7 @@ Release Notes - Phoenix - Version 4.3
     * [PHOENIX-1613] - Phoenix can't be used directly with SquirrelSQL
     * [PHOENIX-1616] - Creating a View with a case sensitive column name does not work
     * [PHOENIX-1620] - Add API for getting tenant ID from an HBase row of a Phoenix table
+    * [PHOENIX-1634] - LocalIndexSplitter prevents region from auto split
     * [PHOENIX-1641] - Make the upgrade for SYSTEM.CATALOG and SYSTEM.SEQUENCE work for 4.x to 4.3
     * [PHOENIX-1643] - Ensure index usage is backward compatible for 4.2 client against 4.3 server
     * [PHOENIX-1644] - Check for min HBase version before creating local index and provide means of disabling usage
@@ -126,6 +128,9 @@ Release Notes - Phoenix - Version 4.3
     * [PHOENIX-1646] - Views and functional index expressions may lose information when stringified
     * [PHOENIX-1649] - Remove System.out/System.err debugging messages
     * [PHOENIX-1650] - Possible resource leak in upsert select query
+    * [PHOENIX-1654] - Incorrect group-by keys from ClientAggregatePlan
+    * [PHOENIX-1667] - Update sqlline to 1.1.8
+    * [PHOENIX-1669] - Views are not always properly updated with physical table indexes when cached
 
 ** Test
     * [PHOENIX-1509] - Investigate changing default encoding to PREFIX_encoding instead of FAST_DIFF
