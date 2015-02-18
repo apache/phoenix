@@ -21,7 +21,6 @@ package org.apache.phoenix.execute;
 
 import static com.google.common.collect.Lists.newArrayList;
 import static com.google.common.collect.Sets.newHashSet;
-import static java.util.Collections.singleton;
 import static java.util.Collections.singletonList;
 import static org.apache.phoenix.query.BaseTest.initAndRegisterDriver;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
@@ -30,6 +29,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.apache.phoenix.util.TestUtil.LOCALHOST;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -38,11 +38,9 @@ import java.sql.Driver;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -139,7 +137,7 @@ public class PartialCommitIT {
     
     @Test
     public void testNoFailure() {
-        testPartialCommit(singletonList("upsert into a_success_table values ('testNoFailure', 'a')"), 0, Collections.<Integer>emptySet(), false,
+        testPartialCommit(singletonList("upsert into a_success_table values ('testNoFailure', 'a')"), 0, new int[0], false,
                                         singletonList("select count(*) from a_success_table where k='testNoFailure'"), singletonList(new Integer(1)));
     }
     
@@ -148,7 +146,7 @@ public class PartialCommitIT {
         testPartialCommit(newArrayList("upsert into a_success_table values ('testUpsertFailure1', 'a')", 
                                        UPSERT_TO_FAIL, 
                                        "upsert into a_success_table values ('testUpsertFailure2', 'b')"), 
-                                       1, singleton(new Integer(1)), true,
+                                       1, new int[]{1}, true,
                                        newArrayList("select count(*) from a_success_table where k like 'testUpsertFailure_'",
                                                     "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = '" + Bytes.toString(ROW_TO_FAIL) + "'"), 
                                        newArrayList(new Integer(2), new Integer(0)));
@@ -165,7 +163,7 @@ public class PartialCommitIT {
         
         testPartialCommit(newArrayList("upsert into a_success_table values ('testUpsertSelectFailure', 'a')", 
                                        UPSERT_SELECT_TO_FAIL), 
-                                       1, singleton(new Integer(1)), true,
+                                       1, new int[]{1}, true,
                                        newArrayList("select count(*) from a_success_table where k in ('testUpsertSelectFailure', '" + Bytes.toString(ROW_TO_FAIL) + "')",
                                                     "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = '" + Bytes.toString(ROW_TO_FAIL) + "'"), 
                                        newArrayList(new Integer(2), new Integer(0)));
@@ -176,7 +174,7 @@ public class PartialCommitIT {
         testPartialCommit(newArrayList("upsert into a_success_table values ('testDeleteFailure1', 'a')", 
                                        DELETE_TO_FAIL,
                                        "upsert into a_success_table values ('testDeleteFailure2', 'b')"), 
-                                       1, singleton(new Integer(1)), true,
+                                       1, new int[]{1}, true,
                                        newArrayList("select count(*) from a_success_table where k like 'testDeleteFailure_'",
                                                     "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = 'z'"), 
                                        newArrayList(new Integer(2), new Integer(1)));
@@ -190,7 +188,7 @@ public class PartialCommitIT {
         testPartialCommit(newArrayList("upsert into c_success_table values ('testOrderOfMutationsIsPredicatable', 'c')", // will fail because c_success_table is after b_failure_table by table sort order
                                        UPSERT_TO_FAIL, 
                                        "upsert into a_success_table values ('testOrderOfMutationsIsPredicatable', 'a')"), // will succeed because a_success_table is before b_failure_table by table sort order
-                                       2, newHashSet(new Integer(1), new Integer(0)), true,
+                                       2, new int[]{0,1}, true,
                                        newArrayList("select count(*) from c_success_table where k='testOrderOfMutationsIsPredicatable'",
                                                     "select count(*) from a_success_table where k='testOrderOfMutationsIsPredicatable'",
                                                     "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = '" + Bytes.toString(ROW_TO_FAIL) + "'"), 
@@ -204,14 +202,14 @@ public class PartialCommitIT {
                                        DELETE_TO_FAIL,
                                        "select * from a_success_table", 
                                        UPSERT_TO_FAIL), 
-                                       2, newHashSet(new Integer(2), new Integer(4)), true,
+                                       2, new int[]{2,4}, true,
                                        newArrayList("select count(*) from a_success_table where k='testOrderOfMutationsIsPredicatable' or k like 'z%'", // rows left: zz, zzz, checkThatAllStatementTypesMaintainOrderInConnection
                                                     "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = '" + ROW_TO_FAIL + "'",
                                                     "select count(*) from " + TABLE_NAME_TO_FAIL + " where k = 'z'"), 
                                        newArrayList(new Integer(4), new Integer(0), new Integer(1)));
     }
     
-    private void testPartialCommit(List<String> statements, int failureCount, Set<Integer> orderOfFailedStatements, boolean willFail,
+    private void testPartialCommit(List<String> statements, int failureCount, int[] expectedUncommittedStatementIndexes, boolean willFail,
                                    List<String> countStatementsForVerification, List<Integer> expectedCountsForVerification) {
         Preconditions.checkArgument(countStatementsForVerification.size() == expectedCountsForVerification.size());
         
@@ -233,9 +231,9 @@ public class PartialCommitIT {
                     fail("Expected no statements to fail");
                 }
                 assertEquals(CommitException.class, sqle.getClass());
-                Set<Integer> failures = ((CommitException)sqle).getUncommittedStatementIndexes();
-                assertEquals(failureCount, failures.size());
-                assertEquals(orderOfFailedStatements, failures);
+                int[] uncommittedStatementIndexes = ((CommitException)sqle).getUncommittedStatementIndexes();
+                assertEquals(failureCount, uncommittedStatementIndexes.length);
+                assertArrayEquals(expectedUncommittedStatementIndexes, uncommittedStatementIndexes);
             }
             
             // verify data in HBase

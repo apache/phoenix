@@ -17,18 +17,15 @@
  */
 package org.apache.phoenix.execute;
 
-import static com.google.common.collect.Sets.newHashSet;
-
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.Collection;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.Cell;
@@ -71,7 +68,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.sun.istack.NotNull;
 
 /**
@@ -488,11 +484,11 @@ public class MutationState implements SQLCloseable {
         numRows = 0;
     }
     
-    private Set<Integer> getUncommittedSattementIndexes() {
-    	Set<Integer> result = newHashSet();
+    private int[] getUncommittedSattementIndexes() {
+    	int[] result = new int[0];
     	for (Map<ImmutableBytesPtr, RowMutationState> rowMutations : mutations.values()) {
     		for (RowMutationState rowMutationState : rowMutations.values()) {
-    			result.addAll(rowMutationState.getOrderOfStatementsInConnection());
+    			result = joinSortedIntArrays(result, rowMutationState.getStatementIndexes());
     		}
     	}
     	return result;
@@ -502,39 +498,51 @@ public class MutationState implements SQLCloseable {
     public void close() throws SQLException {
     }
     
+    public static int[] joinSortedIntArrays(int[] a, int[] b) {
+        int[] result = new int[a.length + b.length];
+        int i = 0, j = 0, k = 0, current;
+        while (i < a.length && j < b.length) {
+            current = a[i] < b[j] ? a[i++] : b[j++];
+            for ( ; i < a.length && a[i] == current; i++);
+            for ( ; j < b.length && b[j] == current; j++);
+            result[k++] = current;
+        }
+        while (i < a.length) {
+            for (current = a[i++] ; i < a.length && a[i] == current; i++);
+            result[k++] = current;
+        }
+        while (j < b.length) {
+            for (current = b[j++] ; j < b.length && b[j] == current; j++);
+            result[k++] = current;
+        }
+        return Arrays.copyOf(result, k);
+    }
+    
     public static class RowMutationState {
         private Map<PColumn,byte[]> columnValues;
-        private Set<Integer> orderOfStatementsInConnection;
+        private int[] statementIndexes;
 
-        public RowMutationState(@NotNull Map<PColumn,byte[]> columnValues, int orderOfStatementInConnection) {
+        public RowMutationState(@NotNull Map<PColumn,byte[]> columnValues, int statementIndex) {
             Preconditions.checkNotNull(columnValues);
 
             this.columnValues = columnValues;
-            this.orderOfStatementsInConnection = Sets.newHashSet(orderOfStatementInConnection);
-        }
-
-        public RowMutationState(@NotNull Map<PColumn,byte[]> columnValues, @NotNull Set<Integer> orderOfStatementsInConnection) {
-            Preconditions.checkNotNull(columnValues);
-            Preconditions.checkNotNull(orderOfStatementsInConnection);
-            
-            this.columnValues = columnValues;
-            this.orderOfStatementsInConnection = orderOfStatementsInConnection;
+            this.statementIndexes = new int[] {statementIndex};
         }
 
         Map<PColumn, byte[]> getColumnValues() {
             return columnValues;
         }
 
-        Set<Integer> getOrderOfStatementsInConnection() {
-            return orderOfStatementsInConnection;
+        int[] getStatementIndexes() {
+            return statementIndexes;
         }
         
         void join(RowMutationState newRow) {
-            for (Map.Entry<PColumn,byte[]> valueEntry : newRow.getColumnValues().entrySet()) {
-                getColumnValues().put(valueEntry.getKey(), valueEntry.getValue());
-            }
-            getOrderOfStatementsInConnection().addAll(newRow.getOrderOfStatementsInConnection());
+            getColumnValues().putAll(newRow.getColumnValues());
+            statementIndexes = joinSortedIntArrays(statementIndexes, newRow.getStatementIndexes());
         }
+        
+
     }
 
     /**

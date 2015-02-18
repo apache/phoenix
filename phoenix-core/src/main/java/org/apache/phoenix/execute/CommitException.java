@@ -18,19 +18,16 @@
 package org.apache.phoenix.execute;
 
 import java.sql.SQLException;
-import java.util.Set;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
 
-import com.google.common.collect.ImmutableSet;
-
 public class CommitException extends SQLException {
     private static final long serialVersionUID = 2L;
-    private final Set<Integer> failures;
+    private final int[] uncommittedStatementIndexes;
 
-    public CommitException(Exception e, Set<Integer> failures) {
+    public CommitException(Exception e, int[] uncommittedStatementIndexes) {
         super(e);
-        this.failures = ImmutableSet.copyOf(failures);
+        this.uncommittedStatementIndexes = uncommittedStatementIndexes;
     }
 
     /**
@@ -47,7 +44,7 @@ public class CommitException extends SQLException {
      * 
      * @see PhoenixConnection#getStatementExecutionCounter()
      */
-    public Set<Integer> getUncommittedStatementIndexes() {
-    	return failures;
+    public int[] getUncommittedStatementIndexes() {
+    	return uncommittedStatementIndexes;
     }
 }
