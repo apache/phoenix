@@ -1220,8 +1220,6 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
         assertEquals(1, rs.getLong(1));
         assertFalse(rs.next());
         
-        conn.createStatement().execute("CREATE INDEX vi1 on v(k2)");
-
         //i2 should be used since it contains s3||'_'||s4 i
         String query = "SELECT s2||'_'||s3 FROM v WHERE k2=1 AND (s2||'_'||s3)='abc_cab'";
         rs = conn.createStatement(  ).executeQuery("EXPLAIN " + query);
@@ -1235,7 +1233,6 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
         assertFalse(rs.next());
         
         conn.createStatement().execute("ALTER VIEW v DROP COLUMN s4");
-        conn.createStatement().execute("CREATE INDEX vi2 on v(k2)");
         //i2 cannot be used since s4 has been dropped from the view, so i1 will be used 
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         queryPlan = QueryUtil.getExplainPlan(rs);
