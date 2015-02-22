@@ -78,14 +78,16 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
         // Run through the scanner using internal nextRaw method
         region.startRegionOperation();
         try {
-            boolean hasMore;
-            do {
-                List<Cell> results = Lists.newArrayList();
-                // Results are potentially returned even when the return value of s.next is false
-                // since this is an indication of whether or not there are more values after the
-                // ones returned
-                hasMore = scanner.nextRaw(results);
-            } while (hasMore);
+            synchronized (scanner) {
+                boolean hasMore;
+                do {
+                    List<Cell> results = Lists.newArrayList();
+                    // Results are potentially returned even when the return value of s.next is
+                    // false since this is an indication of whether or not there are more values
+                    // after the ones returned
+                    hasMore = scanner.nextRaw(results);
+                } while (hasMore);
+            }
         } finally {
             try {
                 scanner.close();
