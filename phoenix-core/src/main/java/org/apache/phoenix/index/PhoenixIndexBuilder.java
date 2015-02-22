@@ -67,14 +67,16 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
         MultiVersionConsistencyControl.setThreadReadPoint(scanner.getMvccReadPoint());
         region.startRegionOperation();
         try {
-            boolean hasMore;
-            do {
-                List<KeyValue> results = Lists.newArrayList();
-                // Results are potentially returned even when the return value of s.next is false
-                // since this is an indication of whether or not there are more values after the
-                // ones returned
-                hasMore = scanner.nextRaw(results, null);
-            } while (hasMore);
+            synchronized (scanner) {
+                boolean hasMore;
+                do {
+                    List<KeyValue> results = Lists.newArrayList();
+                    // Results are potentially returned even when the return value of s.next is
+                    // false since this is an indication of whether or not there are more values
+                    // after the ones returned
+                    hasMore = scanner.nextRaw(results, null);
+                } while (hasMore);
+            }
         } finally {
             try {
                 scanner.close();

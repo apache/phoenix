@@ -200,107 +200,125 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         MultiVersionConsistencyControl.setThreadReadPoint(innerScanner.getMvccReadPoint());
         region.startRegionOperation();
         try {
-            do {
-                List<KeyValue> results = new ArrayList<KeyValue>();
-                // Results are potentially returned even when the return value of s.next is false
-                // since this is an indication of whether or not there are more values after the
-                // ones returned
-                hasMore = innerScanner.nextRaw(results, null);
-                if(stats != null) {
-                    stats.collectStatistics(results);
-                }
-                if (!results.isEmpty()) {
-                	rowCount++;
-                    result.setKeyValues(results);
-                    try {
-                        if (isDelete) {
-                            @SuppressWarnings("deprecation") // FIXME: Remove when unintentionally deprecated method is fixed (HBASE-7870).
-                            // FIXME: the version of the Delete constructor without the lock args was introduced
-                            // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version
-                            // of the client.
-                            Delete delete = new Delete(results.get(0).getRow(),ts,null);
-                            mutations.add(new Pair<Mutation,Integer>(delete,null));
-                        } else if (isUpsert) {
-                            Arrays.fill(values, null);
-                            int i = 0;
-                            List<PColumn> projectedColumns = projectedTable.getColumns();
-                            for (; i < projectedTable.getPKColumns().size(); i++) {
-                                Expression expression = selectExpressions.get(i);
-                                if (expression.evaluate(result, ptr)) {
-                                    values[i] = ptr.copyBytes();
-                                    // If SortOrder from expression in SELECT doesn't match the
-                                    // column being projected into then invert the bits.
-                                    if (expression.getSortOrder() != projectedColumns.get(i).getSortOrder()) {
-                                        SortOrder.invert(values[i], 0, values[i], 0, values[i].length);
-                                    }
-                                }
-                            }
-                            projectedTable.newKey(ptr, values);
-                            PRow row = projectedTable.newRow(kvBuilder, ts, ptr);
-                            for (; i < projectedColumns.size(); i++) {
-                                Expression expression = selectExpressions.get(i);
-                                if (expression.evaluate(result, ptr)) {
-                                    PColumn column = projectedColumns.get(i);
-                                    Object value = expression.getDataType().toObject(ptr, column.getSortOrder());
-                                    // We are guaranteed that the two column will have the same type.
-                                    if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(),
-                                            expression.getMaxLength(),  expression.getScale(), 
-                                            column.getMaxLength(), column.getScale())) {
-                                        throw new ValueTypeIncompatibleException(column.getDataType(),
-                                                column.getMaxLength(), column.getScale());
-                                    }
-                                    column.getDataType().coerceBytes(ptr, value, expression.getDataType(),
-                                            expression.getMaxLength(), expression.getScale(), expression.getSortOrder(), 
-                                            column.getMaxLength(), column.getScale(), column.getSortOrder());
-                                    byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                                    row.setValue(column, bytes);
-                                }
-                            }
-                            for (Mutation mutation : row.toRowMutations()) {
-                                mutations.add(new Pair<Mutation,Integer>(mutation,null));
-                            }
-                        } else if (deleteCF != null && deleteCQ != null) {
-                            // No need to search for delete column, since we project only it
-                            // if no empty key value is being set
-                            if (emptyCF == null || result.getValue(deleteCF, deleteCQ) != null) {
-                                Delete delete = new Delete(results.get(0).getRow());
-                                delete.deleteColumns(deleteCF,  deleteCQ, ts);
-                                mutations.add(new Pair<Mutation,Integer>(delete,null));
-                            }
-                        }
-                        if (emptyCF != null) {
-                            /*
-                             * If we've specified an emptyCF, then we need to insert an empty
-                             * key value "retroactively" for any key value that is visible at
-                             * the timestamp that the DDL was issued. Key values that are not
-                             * visible at this timestamp will not ever be projected up to
-                             * scans past this timestamp, so don't need to be considered.
-                             * We insert one empty key value per row per timestamp.
-                             */
-                            Set<Long> timeStamps = Sets.newHashSetWithExpectedSize(results.size());
-                            for (KeyValue kv : results) {
-                                long kvts = kv.getTimestamp();
-                                if (!timeStamps.contains(kvts)) {
-                                    Put put = new Put(kv.getRow());
-                                    put.add(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts, ByteUtil.EMPTY_BYTE_ARRAY);
-                                    mutations.add(new Pair<Mutation,Integer>(put,null));
-                                }
-                            }
-                        }
-                        // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
-                        if (!mutations.isEmpty() && batchSize > 0 && mutations.size() % batchSize == 0) {
-                            commitBatch(region,mutations, indexUUID);
-                            mutations.clear();
-                        }
-                    } catch (ConstraintViolationException e) {
-                        // Log and ignore in count
-                        logger.error("Failed to create row in " + region.getRegionNameAsString() + " with values " + SchemaUtil.toString(values), e);
-                        continue;
+            synchronized (innerScanner) {
+                do {
+                    List<KeyValue> results = new ArrayList<KeyValue>();
+                    // Results are potentially returned even when the return value of s.next is
+                    // false since this is an indication of whether or not there are more values
+                    // after the ones returned
+                    hasMore = innerScanner.nextRaw(results, null);
+                    if (stats != null) {
+                        stats.collectStatistics(results);
                     }
-                    aggregators.aggregate(rowAggregators, result);
-                    hasAny = true;
-                }
-            } while (hasMore);
+                    if (!results.isEmpty()) {
+                        rowCount++;
+                        result.setKeyValues(results);
+                        try {
+                            if (isDelete) {
+                                // FIXME: Remove when unintentionally deprecated method is fixed
+                                // (HBASE-7870)
+                                @SuppressWarnings("deprecation") 
+                                // FIXME: the version of the Delete constructor without the lock
+                                // args was introduced in 0.94.4, thus if we try to use it here we
+                                // can no longer use the 0.94.2 version of the client.
+                                Delete delete = new Delete(results.get(0).getRow(),ts,null);
+                                mutations.add(new Pair<Mutation,Integer>(delete,null));
+                            } else if (isUpsert) {
+                                Arrays.fill(values, null);
+                                int i = 0;
+                                List<PColumn> projectedColumns = projectedTable.getColumns();
+                                for (; i < projectedTable.getPKColumns().size(); i++) {
+                                    Expression expression = selectExpressions.get(i);
+                                    if (expression.evaluate(result, ptr)) {
+                                        values[i] = ptr.copyBytes();
+                                        // If SortOrder from expression in SELECT doesn't match the
+                                        // column being projected into then invert the bits.
+                                        if (expression.getSortOrder() !=
+                                                projectedColumns.get(i).getSortOrder()) {
+                                            SortOrder.invert(values[i], 0, values[i], 0,
+                                                values[i].length);
+                                        }
+                                    }
+                                }
+                                projectedTable.newKey(ptr, values);
+                                PRow row = projectedTable.newRow(kvBuilder, ts, ptr);
+                                for (; i < projectedColumns.size(); i++) {
+                                    Expression expression = selectExpressions.get(i);
+                                    if (expression.evaluate(result, ptr)) {
+                                        PColumn column = projectedColumns.get(i);
+                                        Object value = expression.getDataType().toObject(ptr,
+                                            column.getSortOrder());
+                                        // We are guaranteed that the two column will have the same
+                                        // type.
+                                        if (!column.getDataType().isSizeCompatible(ptr, value,
+                                                column.getDataType(), expression.getMaxLength(),
+                                                expression.getScale(), column.getMaxLength(),
+                                                column.getScale())) {
+                                            throw new ValueTypeIncompatibleException(
+                                                column.getDataType(), column.getMaxLength(),
+                                                column.getScale());
+                                        }
+                                        column.getDataType().coerceBytes(ptr, value,
+                                            expression.getDataType(), expression.getMaxLength(),
+                                            expression.getScale(), expression.getSortOrder(), 
+                                            column.getMaxLength(), column.getScale(),
+                                            column.getSortOrder());
+                                        byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                                        row.setValue(column, bytes);
+                                    }
+                                }
+                                for (Mutation mutation : row.toRowMutations()) {
+                                    mutations.add(new Pair<Mutation,Integer>(mutation,null));
+                                }
+                            } else if (deleteCF != null && deleteCQ != null) {
+                                // No need to search for delete column, since we project only it
+                                // if no empty key value is being set
+                                if (emptyCF == null ||
+                                        result.getValue(deleteCF, deleteCQ) != null) {
+                                    Delete delete = new Delete(results.get(0).getRow());
+                                    delete.deleteColumns(deleteCF,  deleteCQ, ts);
+                                    mutations.add(new Pair<Mutation,Integer>(delete,null));
+                                }
+                            }
+                            if (emptyCF != null) {
+                                /*
+                                 * If we've specified an emptyCF, then we need to insert an empty
+                                 * key value "retroactively" for any key value that is visible at
+                                 * the timestamp that the DDL was issued. Key values that are not
+                                 * visible at this timestamp will not ever be projected up to
+                                 * scans past this timestamp, so don't need to be considered.
+                                 * We insert one empty key value per row per timestamp.
+                                 */
+                                Set<Long> timeStamps =
+                                    Sets.newHashSetWithExpectedSize(results.size());
+                                for (KeyValue kv : results) {
+                                    long kvts = kv.getTimestamp();
+                                    if (!timeStamps.contains(kvts)) {
+                                        Put put = new Put(kv.getRow());
+                                        put.add(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts,
+                                            ByteUtil.EMPTY_BYTE_ARRAY);
+                                        mutations.add(new Pair<Mutation,Integer>(put,null));
+                                    }
+                                }
+                            }
+                            // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
+                            if (!mutations.isEmpty() && batchSize > 0 &&
+                                    mutations.size() % batchSize == 0) {
+                                commitBatch(region,mutations, indexUUID);
+                                mutations.clear();
+                            }
+                        } catch (ConstraintViolationException e) {
+                            // Log and ignore in count
+                            logger.error("Failed to create row in " +
+                                region.getRegionNameAsString() + " with values " +
+                                SchemaUtil.toString(values), e);
+                            continue;
+                        }
+                        aggregators.aggregate(rowAggregators, result);
+                        hasAny = true;
+                    }
+                } while (hasMore);
+            }
         } finally {
             try {
                 if (stats != null) {

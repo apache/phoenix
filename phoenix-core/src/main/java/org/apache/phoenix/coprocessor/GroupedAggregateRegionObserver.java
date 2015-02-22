@@ -332,7 +332,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
      * @param limit TODO
      */
     private RegionScanner scanUnordered(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
-            final RegionScanner s, final List<Expression> expressions,
+            final RegionScanner scanner, final List<Expression> expressions,
             final ServerAggregators aggregators, long limit) throws IOException {
         if (logger.isDebugEnabled()) {
             logger.debug("Grouped aggregation over unordered rows with scan " + scan
@@ -366,31 +366,33 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             }
 
             HRegion region = c.getEnvironment().getRegion();
-            MultiVersionConsistencyControl.setThreadReadPoint(s.getMvccReadPoint());
+            MultiVersionConsistencyControl.setThreadReadPoint(scanner.getMvccReadPoint());
             region.startRegionOperation();
             try {
-                do {
-                    List<KeyValue> results = new ArrayList<KeyValue>();
-                    // Results are potentially returned even when the return
-                    // value of s.next is false
-                    // since this is an indication of whether or not there are
-                    // more values after the
-                    // ones returned
-                    hasMore = s.nextRaw(results, null);
-                    if (!results.isEmpty()) {
-                        result.setKeyValues(results);
-                        ImmutableBytesWritable key =
+                synchronized (scanner) {
+                    do {
+                        List<KeyValue> results = new ArrayList<KeyValue>();
+                        // Results are potentially returned even when the return
+                        // value of s.next is false
+                        // since this is an indication of whether or not there are
+                        // more values after the
+                        // ones returned
+                        hasMore = scanner.nextRaw(results, null);
+                        if (!results.isEmpty()) {
+                            result.setKeyValues(results);
+                            ImmutableBytesWritable key =
                                 TupleUtil.getConcatenatedValue(result, expressions);
-                        Aggregator[] rowAggregators = groupByCache.cache(key);
-                        // Aggregate values here
-                        aggregators.aggregate(rowAggregators, result);
-                    }
-                } while (hasMore && groupByCache.size() < limit);
+                            Aggregator[] rowAggregators = groupByCache.cache(key);
+                            // Aggregate values here
+                            aggregators.aggregate(rowAggregators, result);
+                        }
+                    } while (hasMore && groupByCache.size() < limit);
+                }
             } finally {
                 region.closeRegionOperation();
             }
 
-            RegionScanner regionScanner = groupByCache.getScanner(s);
+            RegionScanner regionScanner = groupByCache.getScanner(scanner);
 
             // Do not sort here, but sort back on the client instead
             // The reason is that if the scan ever extends beyond a region
@@ -411,7 +413,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
      * @param limit TODO
      */
     private RegionScanner scanOrdered(final ObserverContext<RegionCoprocessorEnvironment> c,
-            Scan scan, final RegionScanner s, final List<Expression> expressions,
+            Scan scan, final RegionScanner scanner, final List<Expression> expressions,
             final ServerAggregators aggregators, final long limit) {
 
         if (logger.isDebugEnabled()) {
@@ -424,12 +426,12 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
 
             @Override
             public HRegionInfo getRegionInfo() {
-                return s.getRegionInfo();
+                return scanner.getRegionInfo();
             }
 
             @Override
             public void close() throws IOException {
-                s.close();
+                scanner.close();
             }
 
             @Override
@@ -444,35 +446,37 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 // start of a new row. Otherwise, we have to wait until an agg
                 int countOffset = rowAggregators.length == 0 ? 1 : 0;
                 HRegion region = c.getEnvironment().getRegion();
-                MultiVersionConsistencyControl.setThreadReadPoint(s.getMvccReadPoint());
+                MultiVersionConsistencyControl.setThreadReadPoint(scanner.getMvccReadPoint());
                 region.startRegionOperation();
                 try {
-                    do {
-                        List<KeyValue> kvs = new ArrayList<KeyValue>();
-                        // Results are potentially returned even when the return
-                        // value of s.next is false
-                        // since this is an indication of whether or not there
-                        // are more values after the
-                        // ones returned
-                        hasMore = s.nextRaw(kvs, null);
-                        if (!kvs.isEmpty()) {
-                            result.setKeyValues(kvs);
-                            key = TupleUtil.getConcatenatedValue(result, expressions);
-                            aggBoundary = currentKey != null && currentKey.compareTo(key) != 0;
-                            if (!aggBoundary) {
-                                aggregators.aggregate(rowAggregators, result);
-                                if (logger.isDebugEnabled()) {
-                                    logger.debug("Row passed filters: " + kvs
+                    synchronized (scanner) {
+                        do {
+                            List<KeyValue> kvs = new ArrayList<KeyValue>();
+                            // Results are potentially returned even when the return
+                            // value of s.next is false
+                            // since this is an indication of whether or not there
+                            // are more values after the
+                            // ones returned
+                            hasMore = scanner.nextRaw(kvs, null);
+                            if (!kvs.isEmpty()) {
+                                result.setKeyValues(kvs);
+                                key = TupleUtil.getConcatenatedValue(result, expressions);
+                                aggBoundary = currentKey != null && currentKey.compareTo(key) != 0;
+                                if (!aggBoundary) {
+                                    aggregators.aggregate(rowAggregators, result);
+                                    if (logger.isDebugEnabled()) {
+                                        logger.debug("Row passed filters: " + kvs
                                             + ", aggregated values: "
                                             + Arrays.asList(rowAggregators));
+                                    }
+                                    currentKey = key;
                                 }
-                                currentKey = key;
                             }
-                        }
-                        atLimit = rowCount + countOffset >= limit;
-                        // Do rowCount + 1 b/c we don't have to wait for a complete
-                        // row in the case of a DISTINCT with a LIMIT
-                    } while (hasMore && !aggBoundary && !atLimit);
+                            atLimit = rowCount + countOffset >= limit;
+                            // Do rowCount + 1 b/c we don't have to wait for a complete
+                            // row in the case of a DISTINCT with a LIMIT
+                        } while (hasMore && !aggBoundary && !atLimit);
+                    }
                 } finally {
                     region.closeRegionOperation();
                 }
