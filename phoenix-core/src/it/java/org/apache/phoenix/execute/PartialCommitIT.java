@@ -38,6 +38,7 @@ import java.sql.Driver;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -56,8 +57,10 @@ import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.Indexer;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
@@ -213,7 +216,7 @@ public class PartialCommitIT {
                                    List<String> countStatementsForVerification, List<Integer> expectedCountsForVerification) {
         Preconditions.checkArgument(countStatementsForVerification.size() == expectedCountsForVerification.size());
         
-        try (Connection con = driver.connect(url, new Properties())) {
+        try (Connection con = getConnectionWithTableOrderPreservingMutationState()) {
             con.setAutoCommit(false);
             Statement sta = con.createStatement();
             for (String statement : statements) {
@@ -250,6 +253,14 @@ public class PartialCommitIT {
         }
     }
     
+    private PhoenixConnection getConnectionWithTableOrderPreservingMutationState() throws SQLException {
+        Connection con = driver.connect(url, new Properties());
+        PhoenixConnection phxCon = new PhoenixConnection(con.unwrap(PhoenixConnection.class));
+        Map<TableRef,Map<ImmutableBytesPtr,MutationState.RowMutationState>> mutations = Maps.newTreeMap(new TableRefComparator());
+        phxCon.getMutationState().setMutationsTestOnly(mutations);
+        return phxCon;
+    }
+    
     public static class FailingRegionObserver extends SimpleRegionObserver {
         @Override
         public void prePut(ObserverContext<RegionCoprocessorEnvironment> c, Put put, WALEdit edit,
@@ -273,6 +284,16 @@ public class PartialCommitIT {
             return TABLE_NAME_TO_FAIL.equals(tableName) &&  
                    // Phoenix deletes are sent as Puts with empty values
                    put.getFamilyCellMap().firstEntry().getValue().get(0).getValueLength() == 0; 
+        }
+    }
+    
+    /**
+     * Used for ordering {@link MutationState#mutations} map.
+     */
+    private static class TableRefComparator implements Comparator<TableRef> {
+        @Override
+        public int compare(TableRef tr1, TableRef tr2) {
+            return tr1.getTable().getPhysicalName().getString().compareTo(tr2.getTable().getPhysicalName().getString());
         }
     }
 }

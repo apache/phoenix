@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -87,7 +86,7 @@ public class MutationState implements SQLCloseable {
      * Use {@link TreeMap} for {@link #mutations} below to enforce a deterministic ordering for easier testing of partial failures.
      * @see PartialCommitIT
      */
-    private final Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations = Maps.newTreeMap(new TableRefComparator());
+    private Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations = Maps.newHashMapWithExpectedSize(3); // TODO: Sizing?
     private long sizeOffset;
     private int numRows = 0;
 
@@ -498,6 +497,10 @@ public class MutationState implements SQLCloseable {
     public void close() throws SQLException {
     }
     
+    void setMutationsTestOnly(Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations) {
+        this.mutations = mutations;
+    }
+    
     public static int[] joinSortedIntArrays(int[] a, int[] b) {
         int[] result = new int[a.length + b.length];
         int i = 0, j = 0, k = 0, current;
@@ -543,15 +546,5 @@ public class MutationState implements SQLCloseable {
         }
         
 
-    }
-
-    /**
-     * Used for the ordering of {@link MutationState#mutations} map.
-     */
-    private static class TableRefComparator implements Comparator<TableRef> {
-		@Override
-		public int compare(TableRef tr1, TableRef tr2) {
-			return tr1.getTable().getPhysicalName().getString().compareTo(tr2.getTable().getPhysicalName().getString());
-		}
     }
 }

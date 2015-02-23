@@ -122,7 +122,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final Properties info;
     private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
     private final Map<PDataType<?>, Format> formatters = new HashMap<>();
-    private final MutationState mutationState;
+    private MutationState mutationState;
     private final int mutateBatchSize;
     private final Long scn;
     private boolean isAutoCommit = false;
