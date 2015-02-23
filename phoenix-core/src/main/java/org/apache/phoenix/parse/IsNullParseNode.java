@@ -21,6 +21,8 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 
 /**
@@ -72,4 +74,12 @@ public class IsNullParseNode extends UnaryParseNode {
 			return false;
 		return true;
 	}
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        getChildren().get(0).toSQL(resolver, buf);
+        buf.append(" IS");
+        if (negate) buf.append(" NOT");
+        buf.append(" NULL ");
+    }
 }

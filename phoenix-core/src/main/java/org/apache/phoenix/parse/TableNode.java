@@ -19,6 +19,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 
 /**
@@ -39,6 +41,14 @@ public abstract class TableNode {
         return alias;
     }
 
+    @Override
+    public final String toString() {
+        StringBuilder buf = new StringBuilder();
+        toSQL(null,buf);
+        return buf.toString();
+    }
+
     public abstract <T> T accept(TableNodeVisitor<T> visitor) throws SQLException;
+    public abstract void toSQL(ColumnResolver resolver, StringBuilder buf);
 }
 

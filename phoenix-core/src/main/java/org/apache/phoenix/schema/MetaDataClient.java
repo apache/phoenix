@@ -144,6 +144,7 @@ import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
+import org.apache.phoenix.query.ConnectionQueryServices.Feature;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -331,9 +332,6 @@ public class MetaDataClient {
             table = connection.getMetaDataCache().getTable(new PTableKey(tenantId, fullTableName));
             tableTimestamp = table.getTimeStamp();
         } catch (TableNotFoundException e) {
-            System.err.println(e);
-            // TODO: Try again on services cache, as we may be looking for
-            // a global multi-tenant table
         }
         // Don't bother with server call: we can't possibly find a newer table
         if (table != null && !alwaysHitServer && (systemTable || tableTimestamp == clientTimeStamp - 1)) {
@@ -362,8 +360,7 @@ public class MetaDataClient {
                 // Otherwise, a tenant would be required to create a VIEW first
                 // which is not really necessary unless you want to filter or add
                 // columns
-                addIndexesFromPhysicalTable(result);
-                connection.addTable(result.getTable());
+                addTableToCache(result);
                 return result;
             } else {
                 // if (result.getMutationCode() == MutationCode.NEWER_TABLE_FOUND) {
@@ -371,16 +368,20 @@ public class MetaDataClient {
                 // Since we disallow creation or modification of a table earlier than the latest
                 // timestamp, we can handle this such that we don't ask the
                 // server again.
-                // If table was not found at the current time stamp and we have one cached, remove it.
-                // Otherwise, we're up to date, so there's nothing to do.
                 if (table != null) {
+                    // Ensures that table in result is set to table found in our cache.
                     result.setTable(table);
                     if (code == MutationCode.TABLE_ALREADY_EXISTS) {
+                        // Although this table is up-to-date, the parent table may not be.
+                        // In this case, we update the parent table which may in turn pull
+                        // in indexes to add to this table.
                         if (addIndexesFromPhysicalTable(result)) {
                             connection.addTable(result.getTable());
                         }
                         return result;
                     }
+                    // If table was not found at the current time stamp and we have one cached, remove it.
+                    // Otherwise, we're up to date, so there's nothing to do.
                     if (code == MutationCode.TABLE_NOT_FOUND && tryCount + 1 == maxTryCount) {
                         connection.removeTable(tenantId, fullTableName, table.getParentName() == null ? null : table.getParentName().getString(), table.getTimeStamp());
                     }
@@ -435,14 +436,34 @@ public class MetaDataClient {
         for (PTable index : indexes) {
             if (index.getViewIndexId() == null) {
                 boolean containsAllReqdCols = true;
-                // Ensure that all indexed columns from index on physical table
+                // Ensure that all columns required to create index
                 // exist in the view too (since view columns may be removed)
-                List<PColumn> pkColumns = index.getPKColumns();
-                for (int i = index.getBucketNum() == null ? 0 : 1; i < pkColumns.size(); i++) {
+                IndexMaintainer indexMaintainer = index.getIndexMaintainer(physicalTable, connection);
+                // check that the columns required for the index pk (not including the pk columns of the data table)
+                // are present in the view
+                Set<ColumnReference> indexColRefs = indexMaintainer.getIndexedColumns();
+                for (ColumnReference colRef : indexColRefs) {
+                    try {
+                        byte[] cf= colRef.getFamily();
+                        byte[] cq= colRef.getQualifier();
+                        if (cf!=null) {
+                            table.getColumnFamily(cf).getColumn(cq);
+                        }
+                        else {
+                            table.getColumn( Bytes.toString(cq));
+                        }
+                    } catch (ColumnNotFoundException e) { // Ignore this index and continue with others
+                        containsAllReqdCols = false;
+                        break;
+                    }
+                }
+                // check that pk columns of the data table (which are also present in the index pk) are present in the view
+                List<PColumn> pkColumns = physicalTable.getPKColumns();
+                for (int i = physicalTable.getBucketNum() == null ? 0 : 1; i < pkColumns.size(); i++) {
                     try {
                         PColumn pkColumn = pkColumns.get(i);
-                        IndexUtil.getDataColumn(table, pkColumn.getName().getString());
-                    } catch (IllegalArgumentException e) { // Ignore this index and continue with others
+                        table.getColumn(pkColumn.getName().getString());
+                    } catch (ColumnNotFoundException e) { // Ignore this index and continue with others
                         containsAllReqdCols = false;
                         break;
                     }
@@ -909,6 +930,16 @@ public class MetaDataClient {
         boolean retry = true;
         Short indexId = null;
         boolean allocateIndexId = false;
+        boolean isLocalIndex = statement.getIndexType() == IndexType.LOCAL;
+        int hbaseVersion = connection.getQueryServices().getLowestClusterHBaseVersion();
+        if (isLocalIndex) {
+            if (!connection.getQueryServices().getProps().getBoolean(QueryServices.ALLOW_LOCAL_INDEX_ATTRIB, QueryServicesOptions.DEFAULT_ALLOW_LOCAL_INDEX)) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNALLOWED_LOCAL_INDEXES).setTableName(indexTableName.getTableName()).build().buildException();
+            }
+            if (!connection.getQueryServices().supportsFeature(Feature.LOCAL_INDEX)) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_LOCAL_INDEXES).setTableName(indexTableName.getTableName()).build().buildException();
+            }
+        }
         while (true) {
             try {
                 ColumnResolver resolver = FromCompiler.getResolver(statement, connection);
@@ -920,7 +951,6 @@ public class MetaDataClient {
                         throw new SQLFeatureNotSupportedException("An index may only be created for a VIEW through a tenant-specific connection");
                     }
                 }
-                int hbaseVersion = connection.getQueryServices().getLowestClusterHBaseVersion();
                 if (!dataTable.isImmutableRows()) {
                     if (hbaseVersion < PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_MUTABLE_INDEXES).setTableName(indexTableName.getTableName()).build().buildException();
@@ -960,7 +990,7 @@ public class MetaDataClient {
                  * 1) for a local index, as all local indexes will reside in the same HBase table
                  * 2) for a view on an index.
                  */
-                if (statement.getIndexType() == IndexType.LOCAL || (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED)) {
+                if (isLocalIndex || (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED)) {
                     allocateIndexId = true;
                     // Next add index ID column
                     PDataType dataType = MetaDataUtil.getViewIndexIdDataType();
@@ -986,11 +1016,16 @@ public class MetaDataClient {
                     if (expression.getDeterminism() != Determinism.ALWAYS) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
                     }
-                    // true for any constant (including a view constant), as we don't need these in the index
                     if (expression.isStateless()) {
-                        continue;
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
                     }
                     unusedPkColumns.remove(expression);
+                    
+                    // Go through parse node to get string as otherwise we
+                    // can lose information during compilation
+                    StringBuilder buf = new StringBuilder();
+                    parseNode.toSQL(resolver, buf);
+                    String expressionStr = buf.toString();
                     
                     ColumnName colName = null;
                     ColumnRef colRef = expressionIndexCompiler.getColumnRef();
@@ -1003,13 +1038,13 @@ public class MetaDataClient {
 					else { 
 						// if this is an expression
 					    // TODO column names cannot have double quotes, remove this once this PHOENIX-1621 is fixed
-						String name = expression.toString().replaceAll("\"", "'");
+						String name = expressionStr.replaceAll("\"", "'");
                         colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, name));
 					}
 					indexedColumnNames.add(colName);
                 	PDataType dataType = IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
                     allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, pair.getSecond()));
-                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), expression.isNullable(), expression.getMaxLength(), expression.getScale(), false, pair.getSecond(), expression.toString()));
+                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), expression.isNullable(), expression.getMaxLength(), expression.getScale(), false, pair.getSecond(), expressionStr));
                 }
 
                 // Next all the PK columns from the data table that aren't indexed
@@ -1651,7 +1686,7 @@ public class MetaDataClient {
             MutationCode code = result.getMutationCode();
             switch(code) {
             case TABLE_ALREADY_EXISTS:
-                connection.addTable(result.getTable());
+                addTableToCache(result);
                 if (!statement.ifNotExists()) {
                     throw new TableAlreadyExistsException(schemaName, tableName, result.getTable());
                 }
@@ -1666,7 +1701,7 @@ public class MetaDataClient {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_TABLE)
                     .setSchemaName(schemaName).setTableName(tableName).build().buildException();
             case CONCURRENT_TABLE_MUTATION:
-                connection.addTable(result.getTable());
+                addTableToCache(result);
                 throw new ConcurrentTableMutationException(schemaName, tableName);
             default:
                 PName newSchemaName = PNameFactory.newName(schemaName);
@@ -1676,12 +1711,8 @@ public class MetaDataClient {
                         dataTableName == null ? null : newSchemaName, dataTableName == null ? null : PNameFactory.newName(dataTableName), Collections.<PTable>emptyList(), isImmutableRows,
                         physicalNames, defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, storeNulls, viewType,
                         indexId, indexType);
-                connection.addTable(table);
-                if (tableType == PTableType.VIEW) {
-                    // Set wasUpdated to true to force attempt to add
-                    // indexes from physical table to view.
-                    addIndexesFromPhysicalTable(new MetaDataMutationResult(code, result.getMutationTime(), table, true));
-                }
+                result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
+                addTableToCache(result);
                 return table;
             }
         } finally {
@@ -1926,12 +1957,13 @@ public class MetaDataClient {
         case COLUMN_NOT_FOUND:
             break;
         case CONCURRENT_TABLE_MUTATION:
-            connection.addTable(result.getTable());
+            addTableToCache(result);
             if (logger.isDebugEnabled()) {
                 logger.debug(LogUtil.addCustomAnnotations("CONCURRENT_TABLE_MUTATION for table " + SchemaUtil.getTableName(schemaName, tableName), connection));
             }
             throw new ConcurrentTableMutationException(schemaName, tableName);
         case NEWER_TABLE_FOUND:
+            // TODO: update cache?
 //            if (result.getTable() != null) {
 //                connection.addTable(result.getTable());
 //            }
@@ -2222,7 +2254,7 @@ public class MetaDataClient {
                 try {
                     MutationCode code = processMutationResult(schemaName, tableName, result);
                     if (code == MutationCode.COLUMN_ALREADY_EXISTS) {
-                        connection.addTable(result.getTable());
+                        addTableToCache(result);
                         if (!statement.ifNotExists()) {
                             throw new ColumnAlreadyExistsException(schemaName, tableName, SchemaUtil.findExistingColumn(result.getTable(), columns));
                         }
@@ -2461,7 +2493,7 @@ public class MetaDataClient {
                 try {
                     MutationCode code = processMutationResult(schemaName, tableName, result);
                     if (code == MutationCode.COLUMN_NOT_FOUND) {
-                        connection.addTable(result.getTable());
+                        addTableToCache(result);
                         if (!statement.ifExists()) {
                             throw new ColumnNotFoundException(schemaName, tableName, Bytes.toString(result.getFamilyName()), Bytes.toString(result.getColumnName()));
                         }
@@ -2571,7 +2603,7 @@ public class MetaDataClient {
             }
             if (code == MutationCode.TABLE_ALREADY_EXISTS) {
                 if (result.getTable() != null) { // To accommodate connection-less update of index state
-                    connection.addTable(result.getTable());
+                    addTableToCache(result);
                 }
             }
             if (newIndexState == PIndexState.BUILDING) {
@@ -2601,6 +2633,13 @@ public class MetaDataClient {
         }
     }
 
+    private PTable addTableToCache(MetaDataMutationResult result) throws SQLException {
+        addIndexesFromPhysicalTable(result);
+        PTable table = result.getTable();
+        connection.addTable(table);
+        return table;
+    }
+    
     private void throwIfAlteringViewPK(ColumnDef col, PTable table) throws SQLException {
         if (col != null && col.isPK() && table.getType() == PTableType.VIEW) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MODIFY_VIEW_PK)

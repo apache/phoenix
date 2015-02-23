@@ -188,7 +188,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "        SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "    CLIENT SORTED BY [\"item_id\"]\n" +
-                "CLIENT SORTED BY [I.0:NAME]",
+                "CLIENT SORTED BY [\"I.0:NAME\"]",
 
                 "SORT-MERGE-JOIN \\(LEFT\\) TABLES\n" +
                 "    SORT-MERGE-JOIN \\(LEFT\\) TABLES\n" +
@@ -197,9 +197,9 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "    AND\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[NAME, \"item_id\"\\]\n" +
+                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\"NAME\", \"item_id\"\\]\n" +
                 "        CLIENT MERGE SORT\n" +
-                "        CLIENT SORTED BY \\[\"item_id\", NAME\\]\n" +
+                "        CLIENT SORTED BY \\[\"item_id\", \"NAME\"\\]\n" +
                 "            PARALLEL ANTI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n" +
@@ -208,9 +208,9 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "AND\n" +
                 "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "        SERVER FILTER BY FIRST KEY ONLY\n" +
-                "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[NAME, \"item_id\"\\]\n" +
+                "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\"NAME\", \"item_id\"\\]\n" +
                 "    CLIENT MERGE SORT\n" +
-                "    CLIENT SORTED BY \\[\"item_id\", NAME\\]\n" +
+                "    CLIENT SORTED BY \\[\"item_id\", \"NAME\"\\]\n" +
                 "        PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
                 "            CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "                SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n" +
@@ -234,7 +234,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "            CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "                SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n" +
                 "            CLIENT MERGE SORT\n" +
-                "        AFTER-JOIN SERVER FILTER BY \\(I.0:NAME = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)",
+                "        AFTER-JOIN SERVER FILTER BY \\(\"I.0:NAME\" = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)",
                 }});
         testCases.add(new String[][] {
                 {
@@ -258,7 +258,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "        SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "    CLIENT SORTED BY [\"item_id\"]\n" +
-                "CLIENT SORTED BY [I.0:NAME]",
+                "CLIENT SORTED BY [\"I.0:NAME\"]",
 
                 "SORT-MERGE-JOIN \\(LEFT\\) TABLES\n" +
                 "    SORT-MERGE-JOIN \\(LEFT\\) TABLES\n" +
@@ -267,9 +267,9 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "    AND\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " \\[-32768\\]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[NAME, \"item_id\"\\]\n" +
+                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\"NAME\", \"item_id\"\\]\n" +
                 "        CLIENT MERGE SORT\n" +
-                "        CLIENT SORTED BY \\[\"item_id\", NAME\\]\n" +
+                "        CLIENT SORTED BY \\[\"item_id\", \"NAME\"\\]\n" +
                 "            PARALLEL ANTI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n" +
@@ -278,9 +278,9 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "AND\n" +
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " \\[-32768\\]\n" +
                 "        SERVER FILTER BY FIRST KEY ONLY\n" +
-                "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[NAME, \"item_id\"\\]\n" +
+                "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\"NAME\", \"item_id\"\\]\n" +
                 "    CLIENT MERGE SORT\n" +
-                "    CLIENT SORTED BY \\[\"item_id\", NAME\\]\n" +
+                "    CLIENT SORTED BY \\[\"item_id\", \"NAME\"\\]\n" +
                 "        PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
                 "            CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "                SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n" +
@@ -306,7 +306,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "                SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n" +
                 "            CLIENT MERGE SORT\n" +
                 "        DYNAMIC SERVER FILTER BY \"item_id\" IN \\(\"O.item_id\"\\)\n" +
-                "        AFTER-JOIN SERVER FILTER BY \\(I.0:NAME = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)",
+                "        AFTER-JOIN SERVER FILTER BY \\(\"I.0:NAME\" = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)",
                 }});
         return testCases;
     }    

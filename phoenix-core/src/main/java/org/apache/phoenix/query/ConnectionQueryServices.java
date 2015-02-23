@@ -101,7 +101,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      */
     public KeyValueBuilder getKeyValueBuilder();
     
-    public enum Feature {};
+    public enum Feature {LOCAL_INDEX};
     public boolean supportsFeature(Feature feature);
     
     public String getUserName();

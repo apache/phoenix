@@ -21,8 +21,9 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PTimestamp;
 
 /**
  * 
@@ -36,6 +37,8 @@ public class LiteralParseNode extends TerminalParseNode {
     public static final ParseNode NULL = new LiteralParseNode(null);
     public static final ParseNode ZERO = new LiteralParseNode(0);
     public static final ParseNode ONE = new LiteralParseNode(1);
+    public static final ParseNode MINUS_ONE = new LiteralParseNode(-1L);
+    public static final ParseNode TRUE = new LiteralParseNode(true);
     
     private final Object value;
     private final PDataType type;
@@ -76,11 +79,6 @@ public class LiteralParseNode extends TerminalParseNode {
         return type == null ? null : type.toBytes(value);
     }
     
-    @Override
-    public String toString() {
-        return type == PVarchar.INSTANCE ? ("'" + value.toString() + "'") : value == null ? "null" : value.toString();
-    }
-
 	@Override
 	public int hashCode() {
 		final int prime = 31;
@@ -99,6 +97,24 @@ public class LiteralParseNode extends TerminalParseNode {
 		if (getClass() != obj.getClass())
 			return false;
 		LiteralParseNode other = (LiteralParseNode) obj;
+		if (value == other.value) return true;
+		if (type == null) return false;
 		return type.isComparableTo(other.type) && type.compareTo(value, other.value, other.type) == 0;
 	}
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        if (value == null) {
+            buf.append(" null ");
+        } else {
+            // TODO: move into PDataType?
+            if (type.isCoercibleTo(PTimestamp.INSTANCE)) {
+                buf.append(type);
+                buf.append(' ');
+                buf.append(type.toStringLiteral(value, null));
+            } else {
+                buf.append(type.toStringLiteral(value, null));
+            }
+        }
+    }
 }

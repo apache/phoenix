@@ -19,6 +19,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 public class TableWildcardParseNode extends NamedParseNode {
     private final TableName tableName;
     private final boolean isRewrite;
@@ -75,5 +77,10 @@ public class TableWildcardParseNode extends NamedParseNode {
 		return true;
 	}
 
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        toSQL(buf);
+        buf.append(".*");
+    }
 }
 

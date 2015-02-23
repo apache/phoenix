@@ -21,6 +21,7 @@ import java.util.Map;
 
 import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
+import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.ArrayLengthFunction;
 import org.apache.phoenix.expression.function.CeilDateExpression;
@@ -40,7 +41,6 @@ import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
-import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.InvertFunction;
 import org.apache.phoenix.expression.function.LTrimFunction;
 import org.apache.phoenix.expression.function.LastValueFunction;
@@ -76,6 +76,8 @@ import org.apache.phoenix.expression.function.TimezoneOffsetFunction;
 import org.apache.phoenix.expression.function.ToCharFunction;
 import org.apache.phoenix.expression.function.ToDateFunction;
 import org.apache.phoenix.expression.function.ToNumberFunction;
+import org.apache.phoenix.expression.function.ToTimeFunction;
+import org.apache.phoenix.expression.function.ToTimestampFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.TruncFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
@@ -187,7 +189,11 @@ public enum ExpressionType {
     ModulusExpression(ModulusExpression.class),
     DistinctValueAggregateFunction(DistinctValueAggregateFunction.class),
     RegexpSplitFunctiond(RegexpSplitFunction.class),
-    RandomFunction(RandomFunction.class);
+    RandomFunction(RandomFunction.class),
+    ToTimeFunction(ToTimeFunction.class),
+    ToTimestampFunction(ToTimestampFunction.class),
+    ;
+    
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }

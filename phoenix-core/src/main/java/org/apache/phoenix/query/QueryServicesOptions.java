@@ -144,6 +144,7 @@ public class QueryServicesOptions {
      */
     public static final int DEFAULT_INDEX_MIN_PRIORITY = 1000;
     public static final int DEFAULT_INDEX_HANDLER_COUNT = 30;
+    public static final boolean DEFAULT_ALLOW_LOCAL_INDEX = true;
 
     public static final int DEFAULT_TRACING_PAGE_SIZE = 100;
     /**

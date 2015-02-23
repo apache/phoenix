@@ -71,10 +71,8 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
         List<PColumn> pkColumns = index.getPKColumns();
 		for (int i=indexPosOffset; i<pkColumns.size(); ++i) {
         	PColumn column = pkColumns.get(i);
-            if (column.getExpressionStr()==null) {
-                continue;
-            }
-            ParseNode expressionParseNode = SQLParser.parseCondition(column.getExpressionStr());
+        	String expressionStr = IndexUtil.getIndexColumnExpressionStr(column);
+            ParseNode expressionParseNode  = SQLParser.parseCondition(expressionStr);
             columnParseNodeVisitor.reset();
             expressionParseNode.accept(columnParseNodeVisitor);
             String colName = column.getName().getString();

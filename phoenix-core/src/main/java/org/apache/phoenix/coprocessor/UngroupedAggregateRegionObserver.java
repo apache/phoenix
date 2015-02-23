@@ -253,128 +253,152 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         final RegionScanner innerScanner = theScanner;
         region.startRegionOperation();
         try {
-            do {
-                List<Cell> results = new ArrayList<Cell>();
-                // Results are potentially returned even when the return value of s.next is false
-                // since this is an indication of whether or not there are more values after the
-                // ones returned
-                hasMore = innerScanner.nextRaw(results);
-                if(stats != null) {
-                    stats.collectStatistics(results);
-                }
-                
-                if (!results.isEmpty()) {
-                    rowCount++;
-                    result.setKeyValues(results);
-                    try {
-                        if (buildLocalIndex) {
-                            for (IndexMaintainer maintainer : indexMaintainers) {
-                                if (!results.isEmpty()) {
-                                    result.getKey(ptr);
-                                    ValueGetter valueGetter = maintainer.createGetterFromKeyValues(ImmutableBytesPtr.copyBytesIfNecessary(ptr),results);
-                                    Put put = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, c.getEnvironment().getRegion().getStartKey(), c.getEnvironment().getRegion().getEndKey());
-                                    indexMutations.add(put);
-                                }
-                            }
-                            result.setKeyValues(results);
-                        } else if (isDelete) {
-                            // FIXME: the version of the Delete constructor without the lock args was introduced
-                            // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version
-                            // of the client.
-                            Cell firstKV = results.get(0);
-                            Delete delete = new Delete(firstKV.getRowArray(), firstKV.getRowOffset(), 
-                                firstKV.getRowLength(),ts);
-                            mutations.add(delete);
-                        } else if (isUpsert) {
-                            Arrays.fill(values, null);
-                            int i = 0;
-                            List<PColumn> projectedColumns = projectedTable.getColumns();
-                            for (; i < projectedTable.getPKColumns().size(); i++) {
-                                Expression expression = selectExpressions.get(i);
-                                if (expression.evaluate(result, ptr)) {
-                                    values[i] = ptr.copyBytes();
-                                    // If SortOrder from expression in SELECT doesn't match the
-                                    // column being projected into then invert the bits.
-                                    if (expression.getSortOrder() != projectedColumns.get(i).getSortOrder()) {
-                                        SortOrder.invert(values[i], 0, values[i], 0, values[i].length);
-                                    }
-                                }
-                            }
-                            projectedTable.newKey(ptr, values);
-                            PRow row = projectedTable.newRow(kvBuilder, ts, ptr);
-                            for (; i < projectedColumns.size(); i++) {
-                                Expression expression = selectExpressions.get(i);
-                                if (expression.evaluate(result, ptr)) {
-                                    PColumn column = projectedColumns.get(i);
-                                    Object value = expression.getDataType().toObject(ptr, column.getSortOrder());
-                                    // We are guaranteed that the two column will have the same type.
-                                    if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(),
-                                            expression.getMaxLength(),  expression.getScale(), 
-                                            column.getMaxLength(), column.getScale())) {
-                                        throw new ValueTypeIncompatibleException(column.getDataType(),
-                                                column.getMaxLength(), column.getScale());
-                                    }
-                                    column.getDataType().coerceBytes(ptr, value, expression.getDataType(),
-                                            expression.getMaxLength(), expression.getScale(), expression.getSortOrder(), 
-                                            column.getMaxLength(), column.getScale(), column.getSortOrder());
-                                    byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                                    row.setValue(column, bytes);
-                                }
-                            }
-                            for (Mutation mutation : row.toRowMutations()) {
-                                mutations.add(mutation);
-                            }
-                            for (i = 0; i < selectExpressions.size(); i++) {
-                                selectExpressions.get(i).reset();
-                            }
-                        } else if (deleteCF != null && deleteCQ != null) {
-                            // No need to search for delete column, since we project only it
-                            // if no empty key value is being set
-                            if (emptyCF == null || result.getValue(deleteCF, deleteCQ) != null) {
-                                Delete delete = new Delete(results.get(0).getRowArray(), results.get(0).getRowOffset(), 
-                                  results.get(0).getRowLength());
-                                delete.deleteColumns(deleteCF,  deleteCQ, ts);
-                                mutations.add(delete);
-                            }
-                        }
-                        if (emptyCF != null) {
-                            /*
-                             * If we've specified an emptyCF, then we need to insert an empty
-                             * key value "retroactively" for any key value that is visible at
-                             * the timestamp that the DDL was issued. Key values that are not
-                             * visible at this timestamp will not ever be projected up to
-                             * scans past this timestamp, so don't need to be considered.
-                             * We insert one empty key value per row per timestamp.
-                             */
-                            Set<Long> timeStamps = Sets.newHashSetWithExpectedSize(results.size());
-                            for (Cell kv : results) {
-                                long kvts = kv.getTimestamp();
-                                if (!timeStamps.contains(kvts)) {
-                                    Put put = new Put(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
-                                    put.add(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts, ByteUtil.EMPTY_BYTE_ARRAY);
-                                    mutations.add(put);
-                                }
-                            }
-                        }
-                        // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
-                        if (!mutations.isEmpty() && batchSize > 0 && mutations.size() % batchSize == 0) {
-                            commitBatch(region, mutations, indexUUID);
-                            mutations.clear();
-                        }
-                        // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
-                        if (!indexMutations.isEmpty() && batchSize > 0 && indexMutations.size() % batchSize == 0) {
-                            commitIndexMutations(c, region, indexMutations);
-                        }
-
-                    } catch (ConstraintViolationException e) {
-                        // Log and ignore in count
-                        logger.error(LogUtil.addCustomAnnotations("Failed to create row in " + region.getRegionNameAsString() + " with values " + SchemaUtil.toString(values), ScanUtil.getCustomAnnotations(scan)), e);
-                        continue;
+            synchronized (innerScanner) {
+                do {
+                    List<Cell> results = new ArrayList<Cell>();
+                    // Results are potentially returned even when the return value of s.next is false
+                    // since this is an indication of whether or not there are more values after the
+                    // ones returned
+                    hasMore = innerScanner.nextRaw(results);
+                    if (stats != null) {
+                        stats.collectStatistics(results);
                     }
-                    aggregators.aggregate(rowAggregators, result);
-                    hasAny = true;
-                }
-            } while (hasMore);
+                    if (!results.isEmpty()) {
+                        rowCount++;
+                        result.setKeyValues(results);
+                        try {
+                            if (buildLocalIndex) {
+                                for (IndexMaintainer maintainer : indexMaintainers) {
+                                    if (!results.isEmpty()) {
+                                        result.getKey(ptr);
+                                        ValueGetter valueGetter =
+                                            maintainer.createGetterFromKeyValues(
+                                                ImmutableBytesPtr.copyBytesIfNecessary(ptr),
+                                                results);
+                                        Put put = maintainer.buildUpdateMutation(kvBuilder,
+                                            valueGetter, ptr, ts,
+                                            c.getEnvironment().getRegion().getStartKey(),
+                                            c.getEnvironment().getRegion().getEndKey());
+                                        indexMutations.add(put);
+                                    }
+                                }
+                                result.setKeyValues(results);
+                            } else if (isDelete) {
+                                // FIXME: the version of the Delete constructor without the lock
+                                // args was introduced in 0.94.4, thus if we try to use it here
+                                // we can no longer use the 0.94.2 version of the client.
+                              Cell firstKV = results.get(0);
+                              Delete delete = new Delete(firstKV.getRowArray(),
+                                  firstKV.getRowOffset(), firstKV.getRowLength(),ts);
+                              mutations.add(delete);
+                            } else if (isUpsert) {
+                                Arrays.fill(values, null);
+                                int i = 0;
+                                List<PColumn> projectedColumns = projectedTable.getColumns();
+                                for (; i < projectedTable.getPKColumns().size(); i++) {
+                                    Expression expression = selectExpressions.get(i);
+                                    if (expression.evaluate(result, ptr)) {
+                                        values[i] = ptr.copyBytes();
+                                        // If SortOrder from expression in SELECT doesn't match the
+                                        // column being projected into then invert the bits.
+                                        if (expression.getSortOrder() !=
+                                            projectedColumns.get(i).getSortOrder()) {
+                                            SortOrder.invert(values[i], 0, values[i], 0,
+                                                values[i].length);
+                                        }
+                                    }
+                                }
+                                projectedTable.newKey(ptr, values);
+                                PRow row = projectedTable.newRow(kvBuilder, ts, ptr);
+                                for (; i < projectedColumns.size(); i++) {
+                                    Expression expression = selectExpressions.get(i);
+                                    if (expression.evaluate(result, ptr)) {
+                                        PColumn column = projectedColumns.get(i);
+                                        Object value = expression.getDataType()
+                                            .toObject(ptr, column.getSortOrder());
+                                        // We are guaranteed that the two column will have the
+                                        // same type.
+                                        if (!column.getDataType().isSizeCompatible(ptr, value,
+                                                column.getDataType(), expression.getMaxLength(),
+                                                expression.getScale(), column.getMaxLength(),
+                                                column.getScale())) {
+                                            throw new ValueTypeIncompatibleException(
+                                                column.getDataType(), column.getMaxLength(),
+                                                column.getScale());
+                                        }
+                                        column.getDataType().coerceBytes(ptr, value,
+                                            expression.getDataType(), expression.getMaxLength(),
+                                            expression.getScale(), expression.getSortOrder(), 
+                                            column.getMaxLength(), column.getScale(),
+                                            column.getSortOrder());
+                                        byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                                        row.setValue(column, bytes);
+                                    }
+                                }
+                                for (Mutation mutation : row.toRowMutations()) {
+                                    mutations.add(mutation);
+                                }
+                                for (i = 0; i < selectExpressions.size(); i++) {
+                                    selectExpressions.get(i).reset();
+                                }
+                            } else if (deleteCF != null && deleteCQ != null) {
+                                // No need to search for delete column, since we project only it
+                                // if no empty key value is being set
+                                if (emptyCF == null ||
+                                        result.getValue(deleteCF, deleteCQ) != null) {
+                                    Delete delete = new Delete(results.get(0).getRowArray(),
+                                        results.get(0).getRowOffset(),
+                                        results.get(0).getRowLength());
+                                    delete.deleteColumns(deleteCF,  deleteCQ, ts);
+                                    mutations.add(delete);
+                                }
+                            }
+                            if (emptyCF != null) {
+                                /*
+                                 * If we've specified an emptyCF, then we need to insert an empty
+                                 * key value "retroactively" for any key value that is visible at
+                                 * the timestamp that the DDL was issued. Key values that are not
+                                 * visible at this timestamp will not ever be projected up to
+                                 * scans past this timestamp, so don't need to be considered.
+                                 * We insert one empty key value per row per timestamp.
+                                 */
+                                Set<Long> timeStamps =
+                                    Sets.newHashSetWithExpectedSize(results.size());
+                                for (Cell kv : results) {
+                                    long kvts = kv.getTimestamp();
+                                    if (!timeStamps.contains(kvts)) {
+                                        Put put = new Put(kv.getRowArray(), kv.getRowOffset(),
+                                            kv.getRowLength());
+                                        put.add(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts,
+                                            ByteUtil.EMPTY_BYTE_ARRAY);
+                                        mutations.add(put);
+                                    }
+                                }
+                            }
+                            // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
+                            if (!mutations.isEmpty() && batchSize > 0 &&
+                                    mutations.size() % batchSize == 0) {
+                                commitBatch(region, mutations, indexUUID);
+                                mutations.clear();
+                            }
+                            // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
+                            if (!indexMutations.isEmpty() && batchSize > 0 &&
+                                    indexMutations.size() % batchSize == 0) {
+                                commitIndexMutations(c, region, indexMutations);
+                            }
+                        } catch (ConstraintViolationException e) {
+                            // Log and ignore in count
+                            logger.error(LogUtil.addCustomAnnotations("Failed to create row in " +
+                                region.getRegionNameAsString() + " with values " +
+                                SchemaUtil.toString(values),
+                                ScanUtil.getCustomAnnotations(scan)), e);
+                            continue;
+                        }
+                        aggregators.aggregate(rowAggregators, result);
+                        hasAny = true;
+                    }
+                } while (hasMore);
+            }
         } finally {
             try {
                 if (stats != null) {

@@ -31,9 +31,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.http.annotation.Immutable;
-
-import com.google.common.collect.ImmutableSet;
-
+import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
@@ -41,11 +39,13 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.AggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.schema.ArgumentTypeMismatchException;
+import org.apache.phoenix.schema.ValueRangeExcpetion;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDataTypeFactory;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.ValueRangeExcpetion;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.collect.ImmutableSet;
 
 
 
@@ -81,18 +81,6 @@ public class FunctionParseNode extends CompoundParseNode {
             l = acceptChildren(visitor);
         }
         return visitor.visitLeave(this, l);
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder buf = new StringBuilder(name + "(");
-        for (ParseNode child : getChildren()) {
-            buf.append(child.toString());
-            buf.append(',');
-        }
-        buf.setLength(buf.length()-1);
-        buf.append(')');
-        return buf.toString();
     }
 
     public boolean isAggregate() {
@@ -459,4 +447,20 @@ public class FunctionParseNode extends CompoundParseNode {
 			return false;
 		return true;
 	}
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        buf.append(' ');
+        buf.append(name);
+        buf.append('(');
+        List<ParseNode> children = getChildren();
+        if (!children.isEmpty()) {
+            for (ParseNode child : children) {
+                child.toSQL(resolver, buf);
+                buf.append(',');
+            }
+            buf.setLength(buf.length()-1);
+        }
+        buf.append(')');
+    }
 }

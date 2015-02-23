@@ -282,9 +282,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int indexedExpressionCount = 0;
         for (int i = indexPosOffset; i<index.getPKColumns().size();i++) {
         	PColumn indexColumn = index.getPKColumns().get(i);
-        	if (!IndexUtil.isIndexColumn(indexColumn)) {
-                continue;
-            }
         	String indexColumnName = indexColumn.getName().getString();
             String dataFamilyName = IndexUtil.getDataColumnFamilyName(indexColumnName);
             String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
@@ -341,14 +338,12 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         IndexExpressionCompiler expressionIndexCompiler = new IndexExpressionCompiler(context);
         for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
             PColumn indexColumn = index.getPKColumns().get(i);
-            if (!IndexUtil.isIndexColumn(indexColumn)) {
-                continue;
-            }
             int indexPos = i - indexPosOffset;
             Expression expression = null;
             try {
                 expressionIndexCompiler.reset();
-                ParseNode parseNode  = SQLParser.parseCondition(indexColumn.getExpressionStr());
+                String expressionStr = IndexUtil.getIndexColumnExpressionStr(indexColumn);
+                ParseNode parseNode  = SQLParser.parseCondition(expressionStr);
                 expression = parseNode.accept(expressionIndexCompiler);
             } catch (SQLException e) {
                 throw new RuntimeException(e); // Impossible
@@ -697,10 +692,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 indexFields[pos] = dataRowKeySchema.getField(i);
             } 
         }
-        Iterator<Expression> expressionSetItr = indexedExpressions.iterator();
+        Iterator<Expression> expressionItr = indexedExpressions.iterator();
         for (Field indexField : indexFields) {
             if (indexField == null) { // Add field for kv column in index
-                final PDataType dataType = expressionSetItr.next().getDataType();
+                final PDataType dataType = expressionItr.next().getDataType();
                 builder.addField(new PDatum() {
 
                     @Override

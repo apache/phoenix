@@ -220,14 +220,15 @@ public class UpgradeUtil {
                     preSplitSequenceTable(conn, nSaltBuckets);
                     return true;
                 }
-                // We can detect upgrade from 4.2.0 -> 4.2.1 based on the timestamp of the table row
-                if (oldTable.getTimeStamp() == MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP-1) {
+                // If upgrading from 4.2.0, then we need this special case of pre-splitting the table.
+                // This is needed as a fix for https://issues.apache.org/jira/browse/PHOENIX-1401 
+                if (oldTable.getTimeStamp() == MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_2_0) {
                     byte[] oldSeqNum = PLong.INSTANCE.toBytes(oldTable.getSequenceNumber());
                     KeyValue seqNumKV = KeyValueUtil.newKeyValue(seqTableKey, 
                             PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                             PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES,
                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
-                            PLong.INSTANCE.toBytes(oldTable.getSequenceNumber()+1));
+                            PLong.INSTANCE.toBytes(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
                     Put seqNumPut = new Put(seqTableKey);
                     seqNumPut.add(seqNumKV);
                     // Increment TABLE_SEQ_NUM in checkAndPut as semaphore so that only single client
@@ -242,106 +243,111 @@ public class UpgradeUtil {
                 logger.info("SYSTEM.SEQUENCE table has already been upgraded");
                 return false;
             }
+            
+            // if the SYSTEM.SEQUENCE table is at 4.1.0 or before then we need to salt the table
+            // and pre-split it.
+            if (oldTable.getTimeStamp() <= MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0) {
+                int batchSizeBytes = 100 * 1024; // 100K chunks
+                int sizeBytes = 0;
+                List<Mutation> mutations =  Lists.newArrayListWithExpectedSize(10000);
 
-            int batchSizeBytes = 100 * 1024; // 100K chunks
-            int sizeBytes = 0;
-            List<Mutation> mutations =  Lists.newArrayListWithExpectedSize(10000);
-    
-            boolean success = false;
-            Scan scan = new Scan();
-            scan.setRaw(true);
-            scan.setMaxVersions(MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS);
-            HTableInterface seqTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
-            try {
-                boolean committed = false;
-                logger.info("Adding salt byte to all SYSTEM.SEQUENCE rows");
-                ResultScanner scanner = seqTable.getScanner(scan);
+                boolean success = false;
+                Scan scan = new Scan();
+                scan.setRaw(true);
+                scan.setMaxVersions(MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS);
+                HTableInterface seqTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
                 try {
-                    Result result;
-                     while ((result = scanner.next()) != null) {
-                        for (KeyValue keyValue : result.raw()) {
-                            KeyValue newKeyValue = addSaltByte(keyValue, nSaltBuckets);
-                            if (newKeyValue != null) {
-                                sizeBytes += newKeyValue.getLength();
-                                if (KeyValue.Type.codeToType(newKeyValue.getType()) == KeyValue.Type.Put) {
-                                    // Delete old value
-                                    byte[] buf = keyValue.getBuffer();
-                                    Delete delete = new Delete(keyValue.getRow());
-                                    KeyValue deleteKeyValue = new KeyValue(buf, keyValue.getRowOffset(), keyValue.getRowLength(),
-                                            buf, keyValue.getFamilyOffset(), keyValue.getFamilyLength(),
-                                            buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
-                                            keyValue.getTimestamp(), KeyValue.Type.Delete,
-                                            ByteUtil.EMPTY_BYTE_ARRAY,0,0);
-                                    delete.addDeleteMarker(deleteKeyValue);
-                                    mutations.add(delete);
-                                    sizeBytes += deleteKeyValue.getLength();
-                                    // Put new value
-                                    Put put = new Put(newKeyValue.getRow());
-                                    put.add(newKeyValue);
-                                    mutations.add(put);
-                                } else if (KeyValue.Type.codeToType(newKeyValue.getType()) == KeyValue.Type.Delete){
-                                    // Copy delete marker using new key so that it continues
-                                    // to delete the key value preceding it that will be updated
-                                    // as well.
-                                    Delete delete = new Delete(newKeyValue.getRow());
-                                    delete.addDeleteMarker(newKeyValue);
-                                    mutations.add(delete);
+                    boolean committed = false;
+                    logger.info("Adding salt byte to all SYSTEM.SEQUENCE rows");
+                    ResultScanner scanner = seqTable.getScanner(scan);
+                    try {
+                        Result result;
+                        while ((result = scanner.next()) != null) {
+                            for (KeyValue keyValue : result.raw()) {
+                                KeyValue newKeyValue = addSaltByte(keyValue, nSaltBuckets);
+                                if (newKeyValue != null) {
+                                    sizeBytes += newKeyValue.getLength();
+                                    if (KeyValue.Type.codeToType(newKeyValue.getType()) == KeyValue.Type.Put) {
+                                        // Delete old value
+                                        byte[] buf = keyValue.getBuffer();
+                                        Delete delete = new Delete(keyValue.getRow());
+                                        KeyValue deleteKeyValue = new KeyValue(buf, keyValue.getRowOffset(), keyValue.getRowLength(),
+                                                buf, keyValue.getFamilyOffset(), keyValue.getFamilyLength(),
+                                                buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
+                                                keyValue.getTimestamp(), KeyValue.Type.Delete,
+                                                ByteUtil.EMPTY_BYTE_ARRAY,0,0);
+                                        delete.addDeleteMarker(deleteKeyValue);
+                                        mutations.add(delete);
+                                        sizeBytes += deleteKeyValue.getLength();
+                                        // Put new value
+                                        Put put = new Put(newKeyValue.getRow());
+                                        put.add(newKeyValue);
+                                        mutations.add(put);
+                                    } else if (KeyValue.Type.codeToType(newKeyValue.getType()) == KeyValue.Type.Delete){
+                                        // Copy delete marker using new key so that it continues
+                                        // to delete the key value preceding it that will be updated
+                                        // as well.
+                                        Delete delete = new Delete(newKeyValue.getRow());
+                                        delete.addDeleteMarker(newKeyValue);
+                                        mutations.add(delete);
+                                    }
+                                }
+                                if (sizeBytes >= batchSizeBytes) {
+                                    logger.info("Committing bactch of SYSTEM.SEQUENCE rows");
+                                    seqTable.batch(mutations);
+                                    mutations.clear();
+                                    sizeBytes = 0;
+                                    committed = true;
                                 }
                             }
-                            if (sizeBytes >= batchSizeBytes) {
-                                logger.info("Committing bactch of SYSTEM.SEQUENCE rows");
-                                seqTable.batch(mutations);
-                                mutations.clear();
-                                sizeBytes = 0;
-                                committed = true;
+                        }
+                        if (!mutations.isEmpty()) {
+                            logger.info("Committing last bactch of SYSTEM.SEQUENCE rows");
+                            seqTable.batch(mutations);
+                        }
+                        preSplitSequenceTable(conn, nSaltBuckets);
+                        logger.info("Successfully completed upgrade of SYSTEM.SEQUENCE");
+                        success = true;
+                        return true;
+                    } catch (InterruptedException e) {
+                        throw ServerUtil.parseServerException(e);
+                    } finally {
+                        try {
+                            scanner.close();
+                        } finally {
+                            if (!success) {
+                                if (!committed) { // Try to recover by setting salting back to off, as we haven't successfully committed anything
+                                    // Don't use Delete here as we'd never be able to change it again at this timestamp.
+                                    KeyValue unsaltKV = KeyValueUtil.newKeyValue(seqTableKey, 
+                                            PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                            PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
+                                            PInteger.INSTANCE.toBytes(0));
+                                    Put unsaltPut = new Put(seqTableKey);
+                                    unsaltPut.add(unsaltKV);
+                                    try {
+                                        sysTable.put(unsaltPut);
+                                        success = true;
+                                    } finally {
+                                        if (!success) logger.error("SYSTEM.SEQUENCE TABLE LEFT IN CORRUPT STATE");
+                                    }
+                                } else { // We're screwed b/c we've already committed some salted sequences...
+                                    logger.error("SYSTEM.SEQUENCE TABLE LEFT IN CORRUPT STATE");
+                                }
                             }
                         }
                     }
-                    if (!mutations.isEmpty()) {
-                        logger.info("Committing last bactch of SYSTEM.SEQUENCE rows");
-                        seqTable.batch(mutations);
-                    }
-                    preSplitSequenceTable(conn, nSaltBuckets);
-                    logger.info("Successfully completed upgrade of SYSTEM.SEQUENCE");
-                    success = true;
-                    return true;
-                } catch (InterruptedException e) {
+                } catch (IOException e) {
                     throw ServerUtil.parseServerException(e);
                 } finally {
                     try {
-                        scanner.close();
-                    } finally {
-                        if (!success) {
-                            if (!committed) { // Try to recover by setting salting back to off, as we haven't successfully committed anything
-                                // Don't use Delete here as we'd never be able to change it again at this timestamp.
-                                KeyValue unsaltKV = KeyValueUtil.newKeyValue(seqTableKey, 
-                                        PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                                        PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES,
-                                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
-                                        PInteger.INSTANCE.toBytes(0));
-                                Put unsaltPut = new Put(seqTableKey);
-                                unsaltPut.add(unsaltKV);
-                                try {
-                                    sysTable.put(unsaltPut);
-                                    success = true;
-                                } finally {
-                                    if (!success) logger.error("SYSTEM.SEQUENCE TABLE LEFT IN CORRUPT STATE");
-                                }
-                            } else { // We're screwed b/c we've already committed some salted sequences...
-                                logger.error("SYSTEM.SEQUENCE TABLE LEFT IN CORRUPT STATE");
-                            }
-                        }
+                        seqTable.close();
+                    } catch (IOException e) {
+                        logger.warn("Exception during close",e);
                     }
                 }
-            } catch (IOException e) {
-                throw ServerUtil.parseServerException(e);
-            } finally {
-                try {
-                    seqTable.close();
-                } catch (IOException e) {
-                    logger.warn("Exception during close",e);
-                }
             }
+            return false;
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
         } finally {
@@ -351,6 +357,7 @@ public class UpgradeUtil {
                 logger.warn("Exception during close",e);
             }
         }
+        
     }
     
     @SuppressWarnings("deprecation")

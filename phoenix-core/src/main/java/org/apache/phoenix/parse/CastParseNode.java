@@ -21,16 +21,8 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.function.RoundDecimalExpression;
-import org.apache.phoenix.expression.function.RoundTimestampExpression;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.types.PUnsignedTimestamp;
-import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.SchemaUtil;
 
 /**
@@ -42,7 +34,6 @@ import org.apache.phoenix.util.SchemaUtil;
  *
  */
 public class CastParseNode extends UnaryParseNode {
-	
 	private final PDataType dt;
     private final Integer maxLength;
     private final Integer scale;
@@ -83,28 +74,6 @@ public class CastParseNode extends UnaryParseNode {
         return scale;
     }
 
-    // TODO: don't repeat this ugly cast logic (maybe use isCastable in the last else block.
-    public static Expression convertToRoundExpressionIfNeeded(PDataType fromDataType, PDataType targetDataType, List<Expression> expressions) throws SQLException {
-	    Expression firstChildExpr = expressions.get(0);
-	    if(fromDataType == targetDataType) {
-	        return firstChildExpr;
-//        } else if((fromDataType == PDataType.DATE || fromDataType == PDataType.UNSIGNED_DATE) && targetDataType.isCoercibleTo(PDataType.LONG)) {
-//            return firstChildExpr;
-//        } else if(fromDataType.isCoercibleTo(PDataType.LONG) && (targetDataType == PDataType.DATE || targetDataType == PDataType.UNSIGNED_DATE)) {
-//            return firstChildExpr;
-	    } else if((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE || fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
-          PLong.INSTANCE)) {
-	        return RoundDecimalExpression.create(expressions);
-	    } else if((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE || fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
-          PDate.INSTANCE)) {
-	        return RoundTimestampExpression.create(expressions);
-	    } else if(fromDataType.isCastableTo(targetDataType)) {
-	        return firstChildExpr;
-        } else {
-            throw TypeMismatchException.newException(fromDataType, targetDataType, firstChildExpr.toString());
-	    }
-	}
-
 	@Override
 	public int hashCode() {
 		final int prime = 31;
@@ -142,4 +111,29 @@ public class CastParseNode extends UnaryParseNode {
 			return false;
 		return true;
 	}
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        List<ParseNode> children = getChildren();
+        buf.append(" CAST(");
+        children.get(0).toSQL(resolver, buf);
+        buf.append(" AS ");
+        boolean isArray = dt.isArrayType();
+        PDataType type = isArray ? PDataType.arrayBaseType(dt) : dt;
+        buf.append(type.getSqlTypeName());
+        if (maxLength != null) {
+            buf.append('(');
+            buf.append(maxLength);
+            if (scale != null) {
+              buf.append(',');
+              buf.append(scale); // has both max length and scale. For ex- decimal(10,2)
+            }       
+            buf.append(')');
+       }
+        if (isArray) {
+            buf.append(' ');
+            buf.append(PDataType.ARRAY_TYPE_SUFFIX);
+            buf.append(' ');
+        }
+    }
 }

@@ -671,18 +671,22 @@ public class UpsertCompiler {
                     if (parallelIteratorFactory == null) {
                         return upsertSelect(statement, tableRef, projector, iterator, columnIndexes, pkSlotIndexes);
                     }
-                    parallelIteratorFactory.setRowProjector(projector);
-                    parallelIteratorFactory.setColumnIndexes(columnIndexes);
-                    parallelIteratorFactory.setPkSlotIndexes(pkSlotIndexes);
-                    Tuple tuple;
-                    long totalRowCount = 0;
-                    while ((tuple=iterator.next()) != null) {// Runs query
-                        Cell kv = tuple.getValue(0);
-                        totalRowCount += PLong.INSTANCE.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
+                    try {
+                        parallelIteratorFactory.setRowProjector(projector);
+                        parallelIteratorFactory.setColumnIndexes(columnIndexes);
+                        parallelIteratorFactory.setPkSlotIndexes(pkSlotIndexes);
+                        Tuple tuple;
+                        long totalRowCount = 0;
+                        while ((tuple=iterator.next()) != null) {// Runs query
+                            Cell kv = tuple.getValue(0);
+                            totalRowCount += PLong.INSTANCE.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
+                        }
+                        // Return total number of rows that have been updated. In the case of auto commit being off
+                        // the mutations will all be in the mutation state of the current connection.
+                        return new MutationState(maxSize, statement.getConnection(), totalRowCount);
+                    } finally {
+                        iterator.close();
                     }
-                    // Return total number of rows that have been updated. In the case of auto commit being off
-                    // the mutations will all be in the mutation state of the current connection.
-                    return new MutationState(maxSize, statement.getConnection(), totalRowCount);
                 }
 
                 @Override

@@ -20,6 +20,7 @@ package org.apache.phoenix.schema.types;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.text.Format;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -653,4 +654,20 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         return instantiatePhoenixArray(baseType, array);
     }
 
+    @Override
+    public String toStringLiteral(Object o, Format formatter) {
+        StringBuilder buf = new StringBuilder(PArrayDataType.ARRAY_TYPE_SUFFIX + "[");
+        PhoenixArray array = (PhoenixArray)o;
+        PDataType baseType = PDataType.arrayBaseType(this);
+        int len = array.getDimensions();
+        if (len != 0)  {
+            for (int i = 0; i < len; i++) {
+                buf.append(baseType.toStringLiteral(array.getElement(i), null));
+                buf.append(',');
+            }
+            buf.setLength(buf.length()-1);
+        }
+        buf.append(']');
+        return buf.toString();
+    }
 }

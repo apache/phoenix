@@ -17,12 +17,12 @@
  */
 package org.apache.phoenix.schema.types;
 
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.schema.SortOrder;
-
 import java.sql.Time;
 import java.sql.Types;
 import java.text.Format;
+
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.SortOrder;
 
 public class PUnsignedTime extends PDataType<Time> {
 
@@ -100,6 +100,11 @@ public class PUnsignedTime extends PDataType<Time> {
   @Override
   public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
     return PUnsignedDate.INSTANCE.toStringLiteral(b, offset, length, formatter);
+  }
+
+  @Override
+  public String toStringLiteral(Object o, Format formatter) {
+    return PUnsignedDate.INSTANCE.toStringLiteral(o, formatter);
   }
 
   @Override

@@ -21,6 +21,8 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 /**
  * 
  * Node representing a row value constructor in SQL.  
@@ -43,4 +45,18 @@ public class RowValueConstructorParseNode extends CompoundParseNode {
         return visitor.visitLeave(this, l);
     }
 
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        List<ParseNode> children = getChildren();
+        buf.append(' ');
+        buf.append('(');
+        if (!children.isEmpty()) {
+            for (ParseNode child : children) {
+                child.toSQL(resolver, buf);
+                buf.append(',');
+            }
+            buf.setLength(buf.length()-1);
+        }
+        buf.append(')');
+    }
 }

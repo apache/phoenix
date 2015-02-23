@@ -18,16 +18,13 @@
 package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
-import java.text.Format;
 import java.util.List;
-import java.util.TimeZone;
 
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.ToDateFunction;
-import org.apache.phoenix.util.DateUtil;
 
 
 public class ToDateParseNode extends FunctionParseNode {
@@ -38,21 +35,14 @@ public class ToDateParseNode extends FunctionParseNode {
 
     @Override
     public FunctionExpression create(List<Expression> children, StatementContext context) throws SQLException {
-        Format dateParser;
         String dateFormat = (String) ((LiteralExpression) children.get(1)).getValue();
         String timeZoneId = (String) ((LiteralExpression) children.get(2)).getValue();
-        TimeZone parserTimeZone = context.getDateFormatTimeZone();
         if (dateFormat == null) {
             dateFormat = context.getDateFormat();
         }
         if (timeZoneId == null) {
-            parserTimeZone = context.getDateFormatTimeZone();
-        } else if ("LOCAL".equalsIgnoreCase(timeZoneId)) {
-            parserTimeZone = TimeZone.getDefault();
-        } else {
-            parserTimeZone = TimeZone.getTimeZone(timeZoneId);
+            timeZoneId = context.getDateFormatTimeZone().getID();
         }
-        dateParser = DateUtil.getDateParser(dateFormat, parserTimeZone);
-        return new ToDateFunction(children, dateFormat, dateParser);
+        return new ToDateFunction(children, dateFormat, timeZoneId);
     }
 }

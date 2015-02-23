@@ -20,6 +20,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 public class SequenceValueParseNode extends TerminalParseNode {
     public enum Op {
@@ -89,4 +91,12 @@ public class SequenceValueParseNode extends TerminalParseNode {
 			return false;
 		return true;
 	}
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        buf.append(' ');
+        buf.append(op.getName());
+        buf.append(" VALUE FOR ");
+        buf.append(tableName);
+    }
 }

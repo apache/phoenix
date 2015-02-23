@@ -17,14 +17,14 @@
  */
 package org.apache.phoenix.schema.types;
 
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.util.DateUtil;
-
 import java.math.BigDecimal;
 import java.sql.Time;
 import java.sql.Types;
 import java.text.Format;
+
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.DateUtil;
 
 public class PTime extends PDataType<Time> {
 
@@ -77,6 +77,8 @@ public class PTime extends PDataType<Time> {
       return new java.sql.Time((Long) object);
     } else if (actualType == PDecimal.INSTANCE) {
       return new java.sql.Time(((BigDecimal) object).longValueExact());
+    } else if (actualType == PVarchar.INSTANCE) {
+      return DateUtil.parseTime((String) object);
     }
     return throwConstraintViolationException(actualType, this);
   }
@@ -125,9 +127,11 @@ public class PTime extends PDataType<Time> {
   }
 
   @Override
-  public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
-    // TODO: different default formatter for TIME?
-    return PDate.INSTANCE.toStringLiteral(b, offset, length, formatter);
+  public String toStringLiteral(Object o, Format formatter) {
+      if (formatter == null) {
+          formatter = DateUtil.DEFAULT_TIME_FORMATTER;
+        }
+        return "'" + super.toStringLiteral(o, formatter) + "'";
   }
 
   @Override
