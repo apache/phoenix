@@ -749,6 +749,24 @@ public class QueryParserTest {
     }
     
     @Test
+    public void testParseDateEquality() throws Exception {
+        SQLParser parser = new SQLParser(new StringReader(
+            "select a from b\n" +
+            "where date '2014-01-04' = date '2014-01-04'"
+            ));
+        parser.parseStatement();
+    }
+
+    @Test
+    public void testParseDateIn() throws Exception {
+        SQLParser parser = new SQLParser(new StringReader(
+            "select a from b\n" +
+            "where date '2014-01-04' in (date '2014-01-04')"
+            ));
+        parser.parseStatement();
+    }
+    
+    @Test
     public void testUnknownLiteral() throws Exception {
         String sql = (
                 (
