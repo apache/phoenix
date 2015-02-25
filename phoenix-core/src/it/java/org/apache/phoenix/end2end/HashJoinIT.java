@@ -41,6 +41,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
@@ -464,6 +465,21 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    DYNAMIC SERVER FILTER BY (COL0, COL1, COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))",
+                /*
+                 * testJoinWithSetMaxRows()
+                 *     statement.setMaxRows(4);
+                 *     SELECT order_id, i.name, quantity FROM joinItemTable i
+                 *     JOIN joinOrderTable o ON o.item_id = i.item_id;
+                 *     SELECT o.order_id, i.name, o.quantity FROM joinItemTable i
+                 *     JOIN (SELECT order_id, item_id, quantity FROM joinOrderTable) o
+                 *     ON o.item_id = i.item_id;
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "CLIENT 4 ROW LIMIT\n" +
+                "    PARALLEL INNER-JOIN TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    DYNAMIC SERVER FILTER BY \"item_id\" IN (\"O.item_id\")\n" +
+                "    JOIN-SCANNER 4 ROW LIMIT",
                 }});
         testCases.add(new String[][] {
                 {
@@ -831,6 +847,21 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    DYNAMIC SERVER FILTER BY (COL0, COL1, COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))",
+                /*
+                 * testJoinWithSetMaxRows()
+                 *     statement.setMaxRows(4);
+                 *     SELECT order_id, i.name, quantity FROM joinItemTable i
+                 *     JOIN joinOrderTable o ON o.item_id = i.item_id;
+                 *     SELECT o.order_id, i.name, o.quantity FROM joinItemTable i
+                 *     JOIN (SELECT order_id, item_id, quantity FROM joinOrderTable) o
+                 *     ON o.item_id = i.item_id;
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_SCHEMA + ".idx_item\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "CLIENT 4 ROW LIMIT\n" +
+                "    PARALLEL INNER-JOIN TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_SCHEMA + ".OrderTable\n" +
+                "    JOIN-SCANNER 4 ROW LIMIT",
                 }});
         testCases.add(new String[][] {
                 {
@@ -1221,6 +1252,23 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    DYNAMIC SERVER FILTER BY (COL0, COL1, COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))",
+                /*
+                 * testJoinWithSetMaxRows()
+                 *     statement.setMaxRows(4);
+                 *     SELECT order_id, i.name, quantity FROM joinItemTable i
+                 *     JOIN joinOrderTable o ON o.item_id = i.item_id;
+                 *     SELECT o.order_id, i.name, o.quantity FROM joinItemTable i
+                 *     JOIN (SELECT order_id, item_id, quantity FROM joinOrderTable) o
+                 *     ON o.item_id = i.item_id;
+                 */
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT 4 ROW LIMIT\n" +
+                "    PARALLEL INNER-JOIN TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    DYNAMIC SERVER FILTER BY \"item_id\" IN (\"O.item_id\")\n" +
+                "    JOIN-SCANNER 4 ROW LIMIT",
                 }});
         return testCases;
     }
@@ -3728,6 +3776,48 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 fail("Should have got SQLException.");
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.AMBIGUOUS_JOIN_CONDITION.getErrorCode(), e.getErrorCode());
+            }
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testJoinWithSetMaxRows() throws Exception {
+        String [] queries = new String[2];
+        queries[0] = "SELECT \"order_id\", i.name, quantity FROM " + JOIN_ITEM_TABLE_FULL_NAME + " i JOIN "
+                + JOIN_ORDER_TABLE_FULL_NAME + " o ON o.\"item_id\" = i.\"item_id\"";
+        queries[1] = "SELECT o.\"order_id\", i.name, o.quantity FROM " + JOIN_ITEM_TABLE_FULL_NAME + " i JOIN " 
+                + "(SELECT \"order_id\", \"item_id\", quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + ") o " 
+                + "ON o.\"item_id\" = i.\"item_id\"";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            for (String query : queries) {
+                Statement statement = conn.createStatement();
+                statement.setMaxRows(4);
+                ResultSet rs = statement.executeQuery(query);
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000001");
+                assertEquals(rs.getString(2), "T1");
+                assertEquals(rs.getInt(3), 1000);
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000003");
+                assertEquals(rs.getString(2), "T2");
+                assertEquals(rs.getInt(3), 3000);
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000005");
+                assertEquals(rs.getString(2), "T3");
+                assertEquals(rs.getInt(3), 5000);
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000002");
+                assertEquals(rs.getString(2), "T6");
+                assertEquals(rs.getInt(3), 2000);
+
+                assertFalse(rs.next());
+                
+                rs = statement.executeQuery("EXPLAIN " + query);
+                assertEquals(plans[25], QueryUtil.getExplainPlan(rs));
             }
         } finally {
             conn.close();

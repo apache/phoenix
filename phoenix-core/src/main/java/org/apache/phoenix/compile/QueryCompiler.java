@@ -277,8 +277,8 @@ public class QueryCompiler {
             QueryPlan plan = compileSingleQuery(context, query, binds, asSubquery, !asSubquery && joinTable.isAllLeftJoin());
             Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context, table);
             Integer limit = null;
-            if (query.getLimit() != null && !query.isAggregate() && !query.isDistinct() && query.getOrderBy().isEmpty()) {
-                limit = LimitCompiler.compile(context, query);
+            if (!query.isAggregate() && !query.isDistinct() && query.getOrderBy().isEmpty()) {
+                limit = plan.getLimit();
             }
             HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, joinExpressions, joinTypes, starJoinVector, tables, fieldPositions, postJoinFilterExpression, limit, forceProjection);
             return HashJoinPlan.create(joinTable.getStatement(), plan, joinInfo, subPlans);
@@ -333,8 +333,8 @@ public class QueryCompiler {
             QueryPlan rhsPlan = compileSingleQuery(context, rhs, binds, asSubquery, !asSubquery && type == JoinType.Right);
             Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context, rhsTable);
             Integer limit = null;
-            if (rhs.getLimit() != null && !rhs.isAggregate() && !rhs.isDistinct() && rhs.getOrderBy().isEmpty()) {
-                limit = LimitCompiler.compile(context, rhs);
+            if (!rhs.isAggregate() && !rhs.isDistinct() && rhs.getOrderBy().isEmpty()) {
+                limit = rhsPlan.getLimit();
             }
             HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, new List[] {joinExpressions}, new JoinType[] {type == JoinType.Right ? JoinType.Left : type}, new boolean[] {true}, new PTable[] {lhsTable}, new int[] {fieldPosition}, postJoinFilterExpression, limit, forceProjection);
             Pair<Expression, Expression> keyRangeExpressions = new Pair<Expression, Expression>(null, null);
@@ -429,16 +429,21 @@ public class QueryCompiler {
     }
 
     protected QueryPlan compileSubquery(SelectStatement subquery) throws SQLException {
-        subquery = SubselectRewriter.flatten(subquery, this.statement.getConnection());
-        ColumnResolver resolver = FromCompiler.getResolverForQuery(subquery, this.statement.getConnection());
+        PhoenixConnection connection = this.statement.getConnection();
+        subquery = SubselectRewriter.flatten(subquery, connection);
+        ColumnResolver resolver = FromCompiler.getResolverForQuery(subquery, connection);
         subquery = StatementNormalizer.normalize(subquery, resolver);
-        SelectStatement transformedSubquery = SubqueryRewriter.transform(subquery, resolver, this.statement.getConnection());
+        SelectStatement transformedSubquery = SubqueryRewriter.transform(subquery, resolver, connection);
         if (transformedSubquery != subquery) {
-            resolver = FromCompiler.getResolverForQuery(transformedSubquery, this.statement.getConnection());
+            resolver = FromCompiler.getResolverForQuery(transformedSubquery, connection);
             subquery = StatementNormalizer.normalize(transformedSubquery, resolver);
         }
+        int maxRows = this.statement.getMaxRows();
+        this.statement.setMaxRows(0); // overwrite maxRows to avoid its impact on inner queries.
         QueryPlan plan = new QueryCompiler(this.statement, subquery, resolver).compile();
-        return statement.getConnection().getQueryServices().getOptimizer().optimize(statement, plan);
+        plan = statement.getConnection().getQueryServices().getOptimizer().optimize(statement, plan);
+        this.statement.setMaxRows(maxRows); // restore maxRows.
+        return plan;
     }
 
     protected QueryPlan compileSingleQuery(StatementContext context, SelectStatement select, List<Object> binds, boolean asSubquery, boolean allowPageFilter) throws SQLException{
@@ -490,12 +495,14 @@ public class QueryCompiler {
         RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, asSubquery ? Collections.<PDatum>emptyList() : targetColumns);
 
         // Final step is to build the query plan
-        int maxRows = statement.getMaxRows();
-        if (maxRows > 0) {
-            if (limit != null) {
-                limit = Math.min(limit, maxRows);
-            } else {
-                limit = maxRows;
+        if (!asSubquery) {
+            int maxRows = statement.getMaxRows();
+            if (maxRows > 0) {
+                if (limit != null) {
+                    limit = Math.min(limit, maxRows);
+                } else {
+                    limit = maxRows;
+                }
             }
         }
 
