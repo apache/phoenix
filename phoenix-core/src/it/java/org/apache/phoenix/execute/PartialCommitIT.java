@@ -256,9 +256,12 @@ public class PartialCommitIT {
     private PhoenixConnection getConnectionWithTableOrderPreservingMutationState() throws SQLException {
         Connection con = driver.connect(url, new Properties());
         PhoenixConnection phxCon = new PhoenixConnection(con.unwrap(PhoenixConnection.class));
-        Map<TableRef,Map<ImmutableBytesPtr,MutationState.RowMutationState>> mutations = Maps.newTreeMap(new TableRefComparator());
-        phxCon.getMutationState().setMutationsTestOnly(mutations);
-        return phxCon;
+        final Map<TableRef,Map<ImmutableBytesPtr,MutationState.RowMutationState>> mutations = Maps.newTreeMap(new TableRefComparator());
+        return new PhoenixConnection(phxCon) {
+            protected MutationState newMutationState(int maxSize) {
+                return new MutationState(maxSize, this, mutations);
+            };
+        };
     }
     
     public static class FailingRegionObserver extends SimpleRegionObserver {

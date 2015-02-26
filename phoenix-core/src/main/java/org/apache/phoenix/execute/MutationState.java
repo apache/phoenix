@@ -25,7 +25,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -82,13 +81,18 @@ public class MutationState implements SQLCloseable {
     private PhoenixConnection connection;
     private final long maxSize;
     private final ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
-    /**
-     * Use {@link TreeMap} for {@link #mutations} below to enforce a deterministic ordering for easier testing of partial failures.
-     * @see PartialCommitIT
-     */
     private Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations = Maps.newHashMapWithExpectedSize(3); // TODO: Sizing?
     private long sizeOffset;
     private int numRows = 0;
+    
+    /**
+     * For tests to pass through a Map that maintains order
+     * @see PartialCommitIT
+     */
+    MutationState(int maxSize, PhoenixConnection connection, Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations) {
+        this(maxSize,connection);
+        this.mutations = mutations;
+    }
 
     public MutationState(int maxSize, PhoenixConnection connection) {
         this(maxSize,connection,0);
@@ -495,10 +499,6 @@ public class MutationState implements SQLCloseable {
     
     @Override
     public void close() throws SQLException {
-    }
-    
-    void setMutationsTestOnly(Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations) {
-        this.mutations = mutations;
     }
     
     public static int[] joinSortedIntArrays(int[] a, int[] b) {

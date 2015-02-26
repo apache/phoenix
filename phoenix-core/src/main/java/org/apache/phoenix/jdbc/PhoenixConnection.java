@@ -237,7 +237,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             }
             
         });
-        this.mutationState = new MutationState(maxSize, this);
+        this.mutationState = newMutationState(maxSize);
         this.services.addConnection(this);
 
         // setup tracing, if its enabled
@@ -365,6 +365,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return metaData;
     }
 
+    protected MutationState newMutationState(int maxSize) {
+        return new MutationState(maxSize, this); 
+    }
+    
     public MutationState getMutationState() {
         return mutationState;
     }
