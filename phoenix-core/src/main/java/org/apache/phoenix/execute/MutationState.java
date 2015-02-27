@@ -81,34 +81,28 @@ public class MutationState implements SQLCloseable {
     private PhoenixConnection connection;
     private final long maxSize;
     private final ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
-    private Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations = Maps.newHashMapWithExpectedSize(3); // TODO: Sizing?
+    private final Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations;
     private long sizeOffset;
     private int numRows = 0;
-    
-    /**
-     * For tests to pass through a Map that maintains order
-     * @see PartialCommitIT
-     */
-    MutationState(int maxSize, PhoenixConnection connection, Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations) {
-        this(maxSize,connection);
+
+    MutationState(long maxSize, PhoenixConnection connection, Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations) {
+        this.maxSize = maxSize;
+        this.connection = connection;
         this.mutations = mutations;
     }
 
-    public MutationState(int maxSize, PhoenixConnection connection) {
+    public MutationState(long maxSize, PhoenixConnection connection) {
         this(maxSize,connection,0);
     }
     
-    public MutationState(int maxSize, PhoenixConnection connection, long sizeOffset) {
-        this.maxSize = maxSize;
-        this.connection = connection;
+    public MutationState(long maxSize, PhoenixConnection connection, long sizeOffset) {
+        this(maxSize, connection, Maps.<TableRef, Map<ImmutableBytesPtr,RowMutationState>>newHashMapWithExpectedSize(connection.getMutateBatchSize()));
         this.sizeOffset = sizeOffset;
     }
     
     public MutationState(TableRef table, Map<ImmutableBytesPtr,RowMutationState> mutations, long sizeOffset, long maxSize, PhoenixConnection connection) {
-        this.maxSize = maxSize;
-        this.connection = connection;
+        this(maxSize, connection, sizeOffset);
         this.mutations.put(table, mutations);
-        this.sizeOffset = sizeOffset;
         this.numRows = mutations.size();
         throwIfTooBig();
     }
