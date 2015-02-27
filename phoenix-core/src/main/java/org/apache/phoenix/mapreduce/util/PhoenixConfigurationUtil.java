@@ -19,13 +19,18 @@ package org.apache.phoenix.mapreduce.util;
 
 import static org.apache.commons.lang.StringUtils.isNotEmpty;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -295,5 +300,17 @@ public final class PhoenixConfigurationUtil {
     public static String getOutputTableName(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(OUTPUT_TABLE_NAME);
+    }
+
+    public static void loadHBaseConfiguration(Job job) throws IOException {
+        // load hbase-site.xml
+        Configuration hbaseConf = HBaseConfiguration.create();
+        for (Map.Entry<String, String> entry : hbaseConf) {
+            if (job.getConfiguration().get(entry.getKey()) == null) {
+                job.getConfiguration().set(entry.getKey(), entry.getValue());
+            }
+        }
+        //In order to have phoenix working on a secured cluster
+        TableMapReduceUtil.initCredentials(job);
     }
 }
