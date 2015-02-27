@@ -19,7 +19,6 @@ package org.apache.phoenix.execute;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -62,11 +61,9 @@ import org.cloudera.htrace.TraceScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.sun.istack.NotNull;
 
 /**
  * 
@@ -81,29 +78,37 @@ public class MutationState implements SQLCloseable {
     private PhoenixConnection connection;
     private final long maxSize;
     private final ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
-    private final Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations;
+    private final Map<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> mutations = Maps.newHashMapWithExpectedSize(3); // TODO: Sizing?
     private long sizeOffset;
     private int numRows = 0;
 
-    MutationState(long maxSize, PhoenixConnection connection, Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations) {
-        this.maxSize = maxSize;
-        this.connection = connection;
-        this.mutations = mutations;
-    }
-
-    public MutationState(long maxSize, PhoenixConnection connection) {
+    public MutationState(int maxSize, PhoenixConnection connection) {
         this(maxSize,connection,0);
     }
     
-    public MutationState(long maxSize, PhoenixConnection connection, long sizeOffset) {
-        this(maxSize, connection, Maps.<TableRef, Map<ImmutableBytesPtr,RowMutationState>>newHashMapWithExpectedSize(connection.getMutateBatchSize()));
+    public MutationState(int maxSize, PhoenixConnection connection, long sizeOffset) {
+        this.maxSize = maxSize;
+        this.connection = connection;
         this.sizeOffset = sizeOffset;
     }
     
-    public MutationState(TableRef table, Map<ImmutableBytesPtr,RowMutationState> mutations, long sizeOffset, long maxSize, PhoenixConnection connection) {
-        this(maxSize, connection, sizeOffset);
+    public MutationState(TableRef table, Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutations, long sizeOffset, long maxSize, PhoenixConnection connection) {
+        this.maxSize = maxSize;
+        this.connection = connection;
         this.mutations.put(table, mutations);
+        this.sizeOffset = sizeOffset;
         this.numRows = mutations.size();
+        throwIfTooBig();
+    }
+    
+    private MutationState(List<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> entries, long sizeOffset, long maxSize, PhoenixConnection connection) {
+        this.maxSize = maxSize;
+        this.connection = connection;
+        this.sizeOffset = sizeOffset;
+        for (Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> entry : entries) {
+            numRows += entry.getValue().size();
+            this.mutations.put(entry.getKey(), entry.getValue());
+        }
         throwIfTooBig();
     }
     
@@ -129,28 +134,29 @@ public class MutationState implements SQLCloseable {
         }
         this.sizeOffset += newMutation.sizeOffset;
         // Merge newMutation with this one, keeping state from newMutation for any overlaps
-        for (Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>> entry : newMutation.mutations.entrySet()) {
+        for (Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> entry : newMutation.mutations.entrySet()) {
             // Replace existing entries for the table with new entries
             TableRef tableRef = entry.getKey();
             PTable table = tableRef.getTable();
             boolean isIndex = table.getType() == PTableType.INDEX;
-            Map<ImmutableBytesPtr,RowMutationState> existingRows = this.mutations.put(tableRef, entry.getValue());
+            Map<ImmutableBytesPtr,Map<PColumn,byte[]>> existingRows = this.mutations.put(tableRef, entry.getValue());
             if (existingRows != null) { // Rows for that table already exist
                 // Loop through new rows and replace existing with new
-                for (Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry : entry.getValue().entrySet()) {
+                for (Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry : entry.getValue().entrySet()) {
                     // Replace existing row with new row
-                	RowMutationState existingRowMutationState = existingRows.put(rowEntry.getKey(), rowEntry.getValue());
-                    if (existingRowMutationState != null) {
-                    	Map<PColumn,byte[]> existingValues = existingRowMutationState.getColumnValues();
+                    Map<PColumn,byte[]> existingValues = existingRows.put(rowEntry.getKey(), rowEntry.getValue());
+                    if (existingValues != null) {
                         if (existingValues != PRow.DELETE_MARKER) {
-                            Map<PColumn,byte[]> newRow = rowEntry.getValue().getColumnValues();
+                            Map<PColumn,byte[]> newRow = rowEntry.getValue();
                             // if new row is PRow.DELETE_MARKER, it means delete, and we don't need to merge it with existing row. 
                             if (newRow != PRow.DELETE_MARKER) {
-                                // Merge existing column values with new column values
-                                existingRowMutationState.join(rowEntry.getValue());
+                                // Replace existing column values with new column values
+                                for (Map.Entry<PColumn,byte[]> valueEntry : newRow.entrySet()) {
+                                    existingValues.put(valueEntry.getKey(), valueEntry.getValue());
+                                }
                                 // Now that the existing row has been merged with the new row, replace it back
-                                // again (since it was merged with the new one above).
-                                existingRows.put(rowEntry.getKey(), existingRowMutationState);
+                                // again (since it was replaced with the new one above).
+                                existingRows.put(rowEntry.getKey(), existingValues);
                             }
                         }
                     } else {
@@ -170,16 +176,16 @@ public class MutationState implements SQLCloseable {
         throwIfTooBig();
     }
     
-    private Iterator<Pair<byte[],List<Mutation>>> addRowMutations(final TableRef tableRef, final Map<ImmutableBytesPtr, RowMutationState> values, long timestamp, boolean includeMutableIndexes) {
+    private Iterator<Pair<byte[],List<Mutation>>> addRowMutations(final TableRef tableRef, final Map<ImmutableBytesPtr, Map<PColumn, byte[]>> values, long timestamp, boolean includeMutableIndexes) {
         final Iterator<PTable> indexes = // Only maintain tables with immutable rows through this client-side mechanism
                 (tableRef.getTable().isImmutableRows() || includeMutableIndexes) ? 
                         IndexMaintainer.nonDisabledIndexIterator(tableRef.getTable().getIndexes().iterator()) : 
                         Iterators.<PTable>emptyIterator();
         final List<Mutation> mutations = Lists.newArrayListWithExpectedSize(values.size());
         final List<Mutation> mutationsPertainingToIndex = indexes.hasNext() ? Lists.<Mutation>newArrayListWithExpectedSize(values.size()) : null;
-        Iterator<Map.Entry<ImmutableBytesPtr,RowMutationState>> iterator = values.entrySet().iterator();
+        Iterator<Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>>> iterator = values.entrySet().iterator();
         while (iterator.hasNext()) {
-            Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry = iterator.next();
+            Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry = iterator.next();
             ImmutableBytesPtr key = rowEntry.getKey();
             PRow row = tableRef.getTable().newRow(connection.getKeyValueBuilder(), timestamp, key);
             List<Mutation> rowMutations, rowMutationsPertainingToIndex;
@@ -191,7 +197,7 @@ public class MutationState implements SQLCloseable {
                 // delete rows).
                 rowMutationsPertainingToIndex = Collections.emptyList();
             } else {
-                for (Map.Entry<PColumn,byte[]> valueEntry : rowEntry.getValue().getColumnValues().entrySet()) {
+                for (Map.Entry<PColumn,byte[]> valueEntry : rowEntry.getValue().entrySet()) {
                     row.setValue(valueEntry.getKey(), valueEntry.getValue());
                 }
                 rowMutations = row.toRowMutations();
@@ -243,14 +249,14 @@ public class MutationState implements SQLCloseable {
     }
     
     public Iterator<Pair<byte[],List<Mutation>>> toMutations(final boolean includeMutableIndexes) {
-        final Iterator<Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>>> iterator = this.mutations.entrySet().iterator();
+        final Iterator<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> iterator = this.mutations.entrySet().iterator();
         if (!iterator.hasNext()) {
             return Iterators.emptyIterator();
         }
         Long scn = connection.getSCN();
         final long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
         return new Iterator<Pair<byte[],List<Mutation>>>() {
-            private Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>> current = iterator.next();
+            private Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> current = iterator.next();
             private Iterator<Pair<byte[],List<Mutation>>> innerIterator = init();
                     
             private Iterator<Pair<byte[],List<Mutation>>> init() {
@@ -291,7 +297,7 @@ public class MutationState implements SQLCloseable {
         Long scn = connection.getSCN();
         MetaDataClient client = new MetaDataClient(connection);
         long[] timeStamps = new long[this.mutations.size()];
-        for (Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>> entry : mutations.entrySet()) {
+        for (Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> entry : mutations.entrySet()) {
             TableRef tableRef = entry.getKey();
             long serverTimeStamp = tableRef.getTimeStamp();
             PTable table = tableRef.getTable();
@@ -306,15 +312,12 @@ public class MutationState implements SQLCloseable {
                         // TODO: use bitset?
                         table = result.getTable();
                         PColumn[] columns = new PColumn[table.getColumns().size()];
-                        for (Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry : entry.getValue().entrySet()) {
-                        	RowMutationState valueEntry = rowEntry.getValue();
-                            if (valueEntry != null) {
-                            	Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
-                            	if (colValues != PRow.DELETE_MARKER) {
-	                                for (PColumn column : colValues.keySet()) {
-	                                    columns[column.getPosition()] = column;
-	                                }
-                            	}
+                        for (Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry : entry.getValue().entrySet()) {
+                            Map<PColumn,byte[]> valueEntry = rowEntry.getValue();
+                            if (valueEntry != PRow.DELETE_MARKER) {
+                                for (PColumn column : valueEntry.keySet()) {
+                                    columns[column.getPosition()] = column;
+                                }
                             }
                         }
                         for (PColumn column : columns) {
@@ -354,14 +357,15 @@ public class MutationState implements SQLCloseable {
         int i = 0;
         byte[] tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
         long[] serverTimeStamps = validate();
-        Iterator<Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>>> iterator = this.mutations.entrySet().iterator();
+        Iterator<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> iterator = this.mutations.entrySet().iterator();
+        List<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> committedList = Lists.newArrayListWithCapacity(this.mutations.size());
 
         // add tracing for this operation
         TraceScope trace = Tracing.startNewSpan(connection, "Committing mutations to tables");
         Span span = trace.getSpan();
         while (iterator.hasNext()) {
-            Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>> entry = iterator.next();
-            Map<ImmutableBytesPtr,RowMutationState> valuesMap = entry.getValue();
+            Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> entry = iterator.next();
+            Map<ImmutableBytesPtr,Map<PColumn,byte[]>> valuesMap = entry.getValue();
             TableRef tableRef = entry.getKey();
             PTable table = tableRef.getTable();
             table.getIndexMaintainers(tempPtr, connection);
@@ -421,6 +425,7 @@ public class MutationState implements SQLCloseable {
                         child.stop();
                         shouldRetry = false;
                         if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Total time for batch call of  " + mutations.size() + " mutations into " + table.getName().getString() + ": " + (System.currentTimeMillis() - startTime) + " ms", connection));
+                        committedList.add(entry);
                     } catch (Exception e) {
                         SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);
                         if (inferredE != null) {
@@ -441,7 +446,9 @@ public class MutationState implements SQLCloseable {
                             }
                             e = inferredE;
                         }
-                        sqlE = new CommitException(e, getUncommittedSattementIndexes());
+                        // Throw to client with both what was committed so far and what is left to be committed.
+                        // That way, client can either undo what was done or try again with what was not done.
+                        sqlE = new CommitException(e, this, new MutationState(committedList, this.sizeOffset, this.maxSize, this.connection));
                     } finally {
                         try {
                             hTable.close();
@@ -481,64 +488,7 @@ public class MutationState implements SQLCloseable {
         numRows = 0;
     }
     
-    private int[] getUncommittedSattementIndexes() {
-    	int[] result = new int[0];
-    	for (Map<ImmutableBytesPtr, RowMutationState> rowMutations : mutations.values()) {
-    		for (RowMutationState rowMutationState : rowMutations.values()) {
-    			result = joinSortedIntArrays(result, rowMutationState.getStatementIndexes());
-    		}
-    	}
-    	return result;
-    }
-    
     @Override
     public void close() throws SQLException {
-    }
-    
-    public static int[] joinSortedIntArrays(int[] a, int[] b) {
-        int[] result = new int[a.length + b.length];
-        int i = 0, j = 0, k = 0, current;
-        while (i < a.length && j < b.length) {
-            current = a[i] < b[j] ? a[i++] : b[j++];
-            for ( ; i < a.length && a[i] == current; i++);
-            for ( ; j < b.length && b[j] == current; j++);
-            result[k++] = current;
-        }
-        while (i < a.length) {
-            for (current = a[i++] ; i < a.length && a[i] == current; i++);
-            result[k++] = current;
-        }
-        while (j < b.length) {
-            for (current = b[j++] ; j < b.length && b[j] == current; j++);
-            result[k++] = current;
-        }
-        return Arrays.copyOf(result, k);
-    }
-    
-    public static class RowMutationState {
-        private Map<PColumn,byte[]> columnValues;
-        private int[] statementIndexes;
-
-        public RowMutationState(@NotNull Map<PColumn,byte[]> columnValues, int statementIndex) {
-            Preconditions.checkNotNull(columnValues);
-
-            this.columnValues = columnValues;
-            this.statementIndexes = new int[] {statementIndex};
-        }
-
-        Map<PColumn, byte[]> getColumnValues() {
-            return columnValues;
-        }
-
-        int[] getStatementIndexes() {
-            return statementIndexes;
-        }
-        
-        void join(RowMutationState newRow) {
-            getColumnValues().putAll(newRow.getColumnValues());
-            statementIndexes = joinSortedIntArrays(statementIndexes, newRow.getStatementIndexes());
-        }
-        
-
     }
 }
