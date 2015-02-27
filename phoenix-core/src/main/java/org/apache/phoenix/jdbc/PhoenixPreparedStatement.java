@@ -54,8 +54,8 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.Sequence;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
 
@@ -79,8 +79,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     private final String query;
 
-    public PhoenixPreparedStatement(PhoenixConnection connection, PhoenixStatementParser parser) throws SQLException,
-            IOException {
+    public PhoenixPreparedStatement(PhoenixConnection connection, PhoenixStatementParser parser) throws SQLException, IOException {
         super(connection);
         this.statement = parser.nextStatement(new ExecutableNodeFactory());
         if (this.statement == null) { throw new EOFException(); }
@@ -89,7 +88,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         this.parameters = Arrays.asList(new Object[statement.getBindCount()]);
         Collections.fill(parameters, BindManager.UNBOUND_PARAMETER);
     }
-
+    
     public PhoenixPreparedStatement(PhoenixConnection connection, String query) throws SQLException {
         super(connection);
         this.query = query;
