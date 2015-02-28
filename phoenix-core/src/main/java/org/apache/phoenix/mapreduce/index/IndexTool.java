@@ -163,7 +163,7 @@ public class IndexTool extends Configured implements Tool {
             final String qDataTable = SchemaUtil.getTableName(schemaName, dataTable);
             final String qIndexTable = SchemaUtil.getTableName(schemaName, indexTable);
          
-            connection = ConnectionUtil.getConnection(configuration);
+            connection = ConnectionUtil.getInputConnection(configuration);
             if(!isValidIndexTable(connection, dataTable, indexTable)) {
                 throw new IllegalArgumentException(String.format(" %s is not an index table for %s ",qIndexTable,qDataTable));
             }
