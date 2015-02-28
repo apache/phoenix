@@ -46,7 +46,7 @@ public class PhoenixRecordWriter<T extends DBWritable>  extends RecordWriter<Nul
     private long numRecords = 0;
     
     public PhoenixRecordWriter(final Configuration configuration) throws SQLException {
-        this.conn = ConnectionUtil.getConnection(configuration);
+        this.conn = ConnectionUtil.getOutputConnection(configuration);
         this.batchSize = PhoenixConfigurationUtil.getBatchSize(configuration);
         final String upsertQuery = PhoenixConfigurationUtil.getUpsertStatement(configuration);
         this.statement = this.conn.prepareStatement(upsertQuery);
