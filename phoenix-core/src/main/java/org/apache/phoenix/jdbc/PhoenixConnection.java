@@ -93,6 +93,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.cloudera.htrace.Sampler;
+import org.cloudera.htrace.TraceScope;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
@@ -130,6 +131,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final String datePattern;
     private final String timePattern;
     private final String timestampPattern;
+    private TraceScope traceScope = null;
     
     private boolean isClosed = false;
     private Sampler<?> sampler;
@@ -257,6 +259,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return this.sampler;
     }
     
+    public void setSampler(Sampler<?> sampler) throws SQLException {
+        this.sampler = sampler;
+    }
+
     public Map<String, String> getCustomTracingAnnotations() {
         return customTracingAnnotations;
     }
@@ -408,6 +414,9 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         }
         try {
             try {
+                if (traceScope != null) {
+                    traceScope.close();
+                }
                 closeStatements();
             } finally {
                 services.removeConnection(this);
@@ -775,5 +784,13 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     public KeyValueBuilder getKeyValueBuilder() {
         return this.services.getKeyValueBuilder();
+    }
+
+    public TraceScope getTraceScope() {
+        return traceScope;
+    }
+
+    public void setTraceScope(TraceScope traceScope) {
+        this.traceScope = traceScope;
     }
 }

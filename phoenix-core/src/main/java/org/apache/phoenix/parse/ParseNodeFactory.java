@@ -325,6 +325,10 @@ public class ParseNodeFactory {
         return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state);
     }
 
+    public TraceStatement trace(boolean isTraceOn) {
+        return new TraceStatement(isTraceOn);
+    }
+
     public TableName table(String schemaName, String tableName) {
         return TableName.createNormalized(schemaName,tableName);
     }

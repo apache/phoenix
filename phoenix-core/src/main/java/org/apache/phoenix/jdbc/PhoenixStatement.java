@@ -55,6 +55,7 @@ import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.compile.SubqueryRewriter;
 import org.apache.phoenix.compile.SubselectRewriter;
+import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.BatchUpdateExecution;
@@ -93,6 +94,7 @@ import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
+import org.apache.phoenix.parse.TraceStatement;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UpsertStatement;
 import org.apache.phoenix.query.KeyRange;
@@ -124,6 +126,8 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ServerUtil;
+import org.cloudera.htrace.Sampler;
+import org.cloudera.htrace.TraceScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -690,6 +694,19 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
     }
     
+    private static class ExecutableTraceStatement extends TraceStatement implements CompilableStatement {
+
+        public ExecutableTraceStatement(boolean isTraceOn) {
+            super(isTraceOn);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            return new TraceQueryPlan(this, stmt);
+        }
+    }
+
     private static class ExecutableUpdateStatisticsStatement extends UpdateStatisticsStatement implements
             CompilableStatement {
         public ExecutableUpdateStatisticsStatement(NamedTableNode table, StatisticsCollectionScope scope) {
@@ -882,7 +899,12 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state) {
             return new ExecutableAlterIndexStatement(indexTableNode, dataTableName, ifExists, state);
         }
-        
+
+        @Override
+        public TraceStatement trace(boolean isTraceOn) {
+            return new ExecutableTraceStatement(isTraceOn);
+        }
+
         @Override
         public ExplainStatement explain(BindableStatement statement) {
             return new ExecutableExplainStatement(statement);
