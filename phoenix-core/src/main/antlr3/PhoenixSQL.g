@@ -33,6 +33,7 @@ tokens
     AS='as';
     OUTER='outer';
     ON='on';
+    OFF='off';
     IN='in';
     GROUP='group';
     HAVING='having';
@@ -107,6 +108,7 @@ tokens
     UPDATE='update';
     STATISTICS='statistics';    
     COLUMNS='columns';
+    TRACE='trace';
 }
 
 
@@ -160,6 +162,7 @@ import org.apache.phoenix.schema.types.PUnsignedTime;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
+import org.apache.phoenix.trace.util.Tracing;
 }
 
 @lexer::header {
@@ -365,6 +368,7 @@ non_select_node returns [BindableStatement ret]
     |   s=drop_index_node
     |   s=alter_index_node
     |   s=alter_table_node
+    |   s=trace_node
     |	s=create_sequence_node
     |	s=drop_sequence_node
     |   s=update_statistics_node
@@ -496,6 +500,12 @@ drop_index_node returns [DropIndexStatement ret]
 alter_index_node returns [AlterIndexStatement ret]
     : ALTER INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name s=(USABLE | UNUSABLE | REBUILD | DISABLE)
       {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText()))); }
+    ;
+
+// Parse a trace statement.
+trace_node returns [TraceStatement ret]
+    :   TRACE (flag = ON| flag = OFF)
+       {ret = factory.trace(Tracing.isTraceOn(flag.getText()));}
     ;
 
 // Parse an alter table statement.
