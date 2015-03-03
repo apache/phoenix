@@ -131,7 +131,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         HRegion dataRegion = null;
         byte[][] viewConstants = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
-        if (ScanUtil.isLocalIndex(scan)) {
+
+        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
+        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
+        if (ScanUtil.isLocalIndex(scan) || (j == null && p != null)) {
             if (dataColumns != null) {
                 tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
                 dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
@@ -140,12 +143,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
             innerScanner =
                     getWrappedScanner(c, innerScanner, offset, scan, dataColumns, tupleProjector, 
-                            dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, tempPtr);
+                            dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr);
         } 
 
-        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
-        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
-        if (p != null || j != null) {
+        if (j != null) {
             innerScanner =
                     new HashJoinRegionScanner(innerScanner, p, j, ScanUtil.getTenantId(scan),
                             c.getEnvironment());

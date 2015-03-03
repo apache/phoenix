@@ -27,7 +27,7 @@ public enum PTableType {
     TABLE("u", "TABLE"),
     VIEW("v", "VIEW"),
     INDEX("i", "INDEX"),
-    JOIN("j", "JOIN"),
+    PROJECTED("p", "PROJECTED"),
     SUBQUERY("q", "SUBQUERY"); 
 
     private final PName value;

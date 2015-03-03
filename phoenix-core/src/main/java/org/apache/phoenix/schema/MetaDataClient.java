@@ -764,7 +764,7 @@ public class MetaDataClient {
                 String tableName = getFullTableName(dataTableRef);
                 String query = "SELECT count(*) FROM " + tableName;
                 final QueryPlan plan = statement.compileQuery(query);
-                TableRef tableRef = plan.getContext().getResolver().getTables().get(0);
+                TableRef tableRef = plan.getTableRef();
                 // Set attribute on scan that UngroupedAggregateRegionObserver will switch on.
                 // We'll detect that this attribute was set the server-side and write the index
                 // rows per region as a result. The value of the attribute will be our persisted

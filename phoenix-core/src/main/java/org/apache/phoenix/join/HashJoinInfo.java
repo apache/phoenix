@@ -50,10 +50,9 @@ public class HashJoinInfo {
     private int[] fieldPositions;
     private Expression postJoinFilterExpression;
     private Integer limit;
-    private boolean forceProjection;
 
-    public HashJoinInfo(PTable joinedTable, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, PTable[] tables, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit, boolean forceProjection) {
-    	this(buildSchema(joinedTable), joinIds, joinExpressions, joinTypes, earlyEvaluation, buildSchemas(tables), fieldPositions, postJoinFilterExpression, limit, forceProjection);
+    public HashJoinInfo(PTable joinedTable, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, PTable[] tables, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit) {
+    	this(buildSchema(joinedTable), joinIds, joinExpressions, joinTypes, earlyEvaluation, buildSchemas(tables), fieldPositions, postJoinFilterExpression, limit);
     }
 
     private static KeyValueSchema[] buildSchemas(PTable[] tables) {
@@ -76,7 +75,7 @@ public class HashJoinInfo {
         return builder.build();
     }
 
-    private HashJoinInfo(KeyValueSchema joinedSchema, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, KeyValueSchema[] schemas, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit, boolean forceProjection) {
+    private HashJoinInfo(KeyValueSchema joinedSchema, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, KeyValueSchema[] schemas, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit) {
     	this.joinedSchema = joinedSchema;
     	this.joinIds = joinIds;
         this.joinExpressions = joinExpressions;
@@ -86,7 +85,6 @@ public class HashJoinInfo {
         this.fieldPositions = fieldPositions;
         this.postJoinFilterExpression = postJoinFilterExpression;
         this.limit = limit;
-        this.forceProjection = forceProjection;
     }
 
     public KeyValueSchema getJoinedSchema() {
@@ -124,15 +122,11 @@ public class HashJoinInfo {
     public Integer getLimit() {
         return limit;
     }
-
-    /*
-     * If the LHS table is a sub-select, we always do projection, since
-     * the ON expressions reference only projected columns.
-     */
+    
     public boolean forceProjection() {
-        return forceProjection;
+        return true;
     }
-
+ 
     public static void serializeHashJoinIntoScan(Scan scan, HashJoinInfo joinInfo) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try {
@@ -159,7 +153,7 @@ public class HashJoinInfo {
                 WritableUtils.writeVInt(output, -1);
             }
             WritableUtils.writeVInt(output, joinInfo.limit == null ? -1 : joinInfo.limit);
-            output.writeBoolean(joinInfo.forceProjection);
+            output.writeBoolean(true);
             scan.setAttribute(HASH_JOIN, stream.toByteArray());
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -216,17 +210,16 @@ public class HashJoinInfo {
                 postJoinFilterExpression.readFields(input);
             }
             int limit = -1;
-            boolean forceProjection = false;
             // Read these and ignore if we don't find them as they were not
             // present in Apache Phoenix 3.0.0 release. This allows a newer
             // 3.1 server to work with an older 3.0 client without force
             // both to be upgraded in lock step.
             try {
                 limit = WritableUtils.readVInt(input);
-                forceProjection = input.readBoolean();
+                input.readBoolean(); // discarded info in new versions
             } catch (EOFException ignore) {
             }
-            return new HashJoinInfo(joinedSchema, joinIds, joinExpressions, joinTypes, earlyEvaluation, schemas, fieldPositions, postJoinFilterExpression, limit >= 0 ? limit : null, forceProjection);
+            return new HashJoinInfo(joinedSchema, joinIds, joinExpressions, joinTypes, earlyEvaluation, schemas, fieldPositions, postJoinFilterExpression, limit >= 0 ? limit : null);
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {

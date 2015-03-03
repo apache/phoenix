@@ -619,7 +619,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                     pointRange(tenantId1),
                     pointRange(tenantId2),
                     pointRange(tenantId3))),
-                plan.getContext().getResolver().getTables().get(0).getTable().getRowKeySchema()),
+                plan.getTableRef().getTable().getRowKeySchema()),
             filter);
     }
 
@@ -642,7 +642,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                     pointRange(tenantId1),
                     pointRange(tenantId2),
                     pointRange(tenantId3))),
-                plan.getContext().getResolver().getTables().get(0).getTable().getRowKeySchema()),
+                plan.getTableRef().getTable().getRowKeySchema()),
             filter);
 
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId1);
@@ -705,7 +705,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                         true,
                         Bytes.toBytes(entityId2),
                         true))),
-                plan.getContext().getResolver().getTables().get(0).getTable().getRowKeySchema()),
+                plan.getTableRef().getTable().getRowKeySchema()),
             filter);
     }
     

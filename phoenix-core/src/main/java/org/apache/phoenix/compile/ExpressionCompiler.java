@@ -572,7 +572,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
              * indexed columns. Without this check present we wrongly and unnecessarily
              * end up creating a RoundExpression. 
              */
-            if (context.getResolver().getTables().get(0).getTable().getType() != PTableType.INDEX) {
+            if (context.getCurrentTable().getTable().getType() != PTableType.INDEX) {
                 expr =  convertToRoundExpressionIfNeeded(fromDataType, targetDataType, children);
             }
         }
