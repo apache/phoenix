@@ -113,14 +113,13 @@ public class QueryOptimizer {
         SelectStatement select = (SelectStatement)dataPlan.getStatement();
         // Exit early if we have a point lookup as we can't get better than that
         if (!useIndexes 
-                || select.isJoin() 
-                || dataPlan.getContext().getResolver().getTables().size() > 1
-                || select.getInnerSelectStatement() != null
                 || (dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan)) {
             return Collections.singletonList(dataPlan);
         }
-        PTable dataTable = dataPlan.getTableRef().getTable();
-        List<PTable>indexes = Lists.newArrayList(dataTable.getIndexes());
+        // For single query tuple projection, indexes are inherited from the original table to the projected
+        // table; otherwise not. So we pass projected table here, which is enough to tell if this is from a
+        // single query or a part of join query.
+        List<PTable>indexes = Lists.newArrayList(dataPlan.getContext().getResolver().getTables().get(0).getTable().getIndexes());
         if (indexes.isEmpty() || dataPlan.isDegenerate() || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX)) {
             return Collections.singletonList(dataPlan);
         }
@@ -138,7 +137,7 @@ public class QueryOptimizer {
             targetColumns = targetDatums;
         }
         
-        SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(select, dataPlan.getContext().getResolver());
+        SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(select, FromCompiler.getResolver(dataPlan.getTableRef()));
         List<QueryPlan> plans = Lists.newArrayListWithExpectedSize(1 + indexes.size());
         plans.add(dataPlan);
         QueryPlan hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns, parallelIteratorFactory, plans);
@@ -230,12 +229,14 @@ public class QueryOptimizer {
         TableNode table = FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName));
         SelectStatement indexSelect = FACTORY.select(select, table);
         ColumnResolver resolver = FromCompiler.getResolverForQuery(indexSelect, statement.getConnection());
+        // We will or will not do tuple projection according to the data plan.
+        boolean isProjected = dataPlan.getContext().getResolver().getTables().get(0).getTable().getType() == PTableType.PROJECTED;
         // Check index state of now potentially updated index table to make sure it's active
         if (PIndexState.ACTIVE.equals(resolver.getTables().get(0).getTable().getIndexState())) {
             try {
             	// translate nodes that match expressions that are indexed to the associated column parse node
                 indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, statement.getConnection()));
-                QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager());
+                QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected);
                 
                 QueryPlan plan = compiler.compile();
                 // If query doesn't have where clause and some of columns to project are missing
@@ -267,7 +268,7 @@ public class QueryOptimizer {
                 ParseNode where = dataSelect.getWhere();
                 if (isHinted && where != null) {
                     StatementContext context = new StatementContext(statement, resolver);
-                    WhereConditionRewriter whereRewriter = new WhereConditionRewriter(dataPlan.getContext().getResolver(), context);
+                    WhereConditionRewriter whereRewriter = new WhereConditionRewriter(FromCompiler.getResolver(dataPlan.getTableRef()), context);
                     where = where.accept(whereRewriter);
                     if (where != null) {
                         PTable dataTable = dataPlan.getTableRef().getTable();
@@ -301,7 +302,7 @@ public class QueryOptimizer {
                         query = SubqueryRewriter.transform(query, queryResolver, statement.getConnection());
                         queryResolver = FromCompiler.getResolverForQuery(query, statement.getConnection());
                         query = StatementNormalizer.normalize(query, queryResolver);
-                        QueryPlan plan = new QueryCompiler(statement, query, queryResolver).compile();
+                        QueryPlan plan = new QueryCompiler(statement, query, queryResolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected).compile();
                         return plan;
                     }
                 }

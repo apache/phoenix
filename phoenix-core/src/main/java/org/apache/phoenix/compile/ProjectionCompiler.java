@@ -62,6 +62,7 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ArgumentTypeMismatchException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -144,12 +145,21 @@ public class ProjectionCompiler {
             }
             ColumnRef ref = new ColumnRef(tableRef,i);
             String colName = ref.getColumn().getName().getString();
+            String tableAlias = tableRef.getTableAlias();
             if (resolveColumn) {
-                if (tableRef.getTableAlias() != null) {
-                    ref = resolver.resolveColumn(null, tableRef.getTableAlias(), colName);
-                } else {
-                    String schemaName = table.getSchemaName().getString();
-                    ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, table.getTableName().getString(), colName);
+                try {
+                    if (tableAlias != null) {
+                        ref = resolver.resolveColumn(null, tableAlias, colName);
+                    } else {
+                        String schemaName = table.getSchemaName().getString();
+                        ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, table.getTableName().getString(), colName);
+                    }
+                } catch (AmbiguousColumnException e) {
+                    if (column.getFamilyName() != null) {
+                        ref = resolver.resolveColumn(tableAlias != null ? tableAlias : table.getTableName().getString(), column.getFamilyName().getString(), colName);
+                    } else {
+                        throw e;
+                    }
                 }
             }
             Expression expression = ref.newColumnExpression();
@@ -219,12 +229,21 @@ public class ProjectionCompiler {
                 }
             }
             String colName = tableColumn.getName().getString();
+            String tableAlias = tableRef.getTableAlias();
             if (resolveColumn) {
-                if (tableRef.getTableAlias() != null) {
-                    ref = resolver.resolveColumn(null, tableRef.getTableAlias(), indexColName);
-                } else {
-                    String schemaName = index.getSchemaName().getString();
-                    ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, index.getTableName().getString(), indexColName);
+                try {
+                    if (tableAlias != null) {
+                        ref = resolver.resolveColumn(null, tableAlias, indexColName);
+                    } else {
+                        String schemaName = index.getSchemaName().getString();
+                        ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, index.getTableName().getString(), indexColName);
+                    }
+                } catch (AmbiguousColumnException e) {
+                    if (indexColumn.getFamilyName() != null) {
+                        ref = resolver.resolveColumn(tableAlias != null ? tableAlias : index.getTableName().getString(), indexColumn.getFamilyName().getString(), indexColName);
+                    } else {
+                        throw e;
+                    }
                 }
             }
             Expression expression = ref.newColumnExpression();
@@ -238,11 +257,14 @@ public class ProjectionCompiler {
         }
     }
     
-    private static void projectTableColumnFamily(StatementContext context, String cfName, TableRef tableRef, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns) throws SQLException {
+    private static void projectTableColumnFamily(StatementContext context, String cfName, TableRef tableRef, boolean resolveColumn, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns) throws SQLException {
         PTable table = tableRef.getTable();
         PColumnFamily pfamily = table.getColumnFamily(cfName);
         for (PColumn column : pfamily.getColumns()) {
             ColumnRef ref = new ColumnRef(tableRef, column.getPosition());
+            if (resolveColumn) {
+                ref = context.getResolver().resolveColumn(table.getTableName().getString(), cfName, column.getName().getString());
+            }
             Expression expression = ref.newColumnExpression();
             projectedExpressions.add(expression);
             String colName = column.getName().toString();
@@ -252,7 +274,7 @@ public class ProjectionCompiler {
         }
     }
 
-    private static void projectIndexColumnFamily(StatementContext context, String cfName, TableRef tableRef, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns) throws SQLException {
+    private static void projectIndexColumnFamily(StatementContext context, String cfName, TableRef tableRef, boolean resolveColumn, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns) throws SQLException {
         PTable index = tableRef.getTable();
         PhoenixConnection conn = context.getConnection();
         String tableName = index.getParentName().getString();
@@ -276,6 +298,9 @@ public class ProjectionCompiler {
                 } else {
                     throw e;
                 }
+            }
+            if (resolveColumn) {
+                ref = context.getResolver().resolveColumn(index.getTableName().getString(), indexColumn.getFamilyName() == null ? null : indexColumn.getFamilyName().getString(), indexColName);
             }
             Expression expression = ref.newColumnExpression();
             projectedExpressions.add(expression);
@@ -322,6 +347,7 @@ public class ProjectionCompiler {
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
+        boolean resolveColumn = !tableRef.equals(resolver.getTables().get(0));
         boolean isWildcard = false;
         Scan scan = context.getScan();
         int index = 0;
@@ -336,9 +362,9 @@ public class ProjectionCompiler {
                 }
                 isWildcard = true;
                 if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
-                	projectAllIndexColumns(context, tableRef, false, projectedExpressions, projectedColumns, targetColumns);
+                	projectAllIndexColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
                 } else {
-                    projectAllTableColumns(context, tableRef, false, projectedExpressions, projectedColumns, targetColumns);
+                    projectAllTableColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
                 }
             } else if (node instanceof TableWildcardParseNode) {
                 TableName tName = ((TableWildcardParseNode) node).getTableName();
@@ -362,9 +388,9 @@ public class ProjectionCompiler {
                 // columns are projected (which is currently true, but could change).
                 projectedFamilies.add(Bytes.toBytes(cfName));
                 if (tableRef.getTable().getType() == PTableType.INDEX && ((FamilyWildcardParseNode)node).isRewrite()) {
-                    projectIndexColumnFamily(context, cfName, tableRef, projectedExpressions, projectedColumns);
+                    projectIndexColumnFamily(context, cfName, tableRef, resolveColumn, projectedExpressions, projectedColumns);
                 } else {
-                    projectTableColumnFamily(context, cfName, tableRef, projectedExpressions, projectedColumns);
+                    projectTableColumnFamily(context, cfName, tableRef, resolveColumn, projectedExpressions, projectedColumns);
                 }
             } else {
                 Expression expression = node.accept(selectVisitor);
