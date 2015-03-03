@@ -217,6 +217,15 @@ public class PTableImpl implements PTable {
                 table.isMultiTenant(), table.getViewType(), table.getViewIndexId(), table.getTableStats());
     }
 
+    public static PTableImpl makePTable(PTable table, PTableStats stats) throws SQLException {
+        return new PTableImpl(
+                table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), table.getTimeStamp(), 
+                table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), getColumnsToClone(table), 
+                table.getParentSchemaName(), table.getParentTableName(), table.getIndexes(), table.isImmutableRows(),
+                table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(), table.isWALDisabled(),
+                table.isMultiTenant(), table.getViewType(), table.getViewIndexId(), stats);
+    }
+
     public static PTableImpl makePTable(PName tenantId, PName schemaName, PName tableName, PTableType type, PIndexState state, long timeStamp, long sequenceNumber,
             PName pkName, Integer bucketNum, List<PColumn> columns, PName dataSchemaName, PName dataTableName, List<PTable> indexes, boolean isImmutableRows,
             List<PName> physicalNames, PName defaultFamilyName, String viewExpression, boolean disableWAL, boolean multiTenant, ViewType viewType, Short viewIndexId) throws SQLException {

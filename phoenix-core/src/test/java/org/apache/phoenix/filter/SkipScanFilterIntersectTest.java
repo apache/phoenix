@@ -90,7 +90,8 @@ public class SkipScanFilterIntersectTest {
     @Parameters(name="{0} {4}")
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
-        // Causes increment of slot 2 to increment slot 1
+        // Both ranges in second slot are required b/c first slot contains range and upper/lower
+        // values differ in this slot position.
         testCases.addAll(foreach(
                 new KeyRange[][] {{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("e"), false),
@@ -107,10 +108,70 @@ public class SkipScanFilterIntersectTest {
                 new KeyRange[][] {{
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("j"), true, Bytes.toBytes("m"), false),
                     }, {
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
                     PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
                 }}));
+        // Only second range in second slot is required b/c though first slot contains range,
+        // upper/lower values do not differ in this slot position.
+        testCases.addAll(foreach(
+                new KeyRange[][] {{
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("e"), false),
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("j"), true, Bytes.toBytes("m"), false),
+                    }, {
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    }, {
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                }},
+                new int[] {1,1,1},
+                Bytes.toBytes("j3A"),
+                Bytes.toBytes("j4C"),
+                new KeyRange[][] {{
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("j"), true, Bytes.toBytes("m"), false),
+                    }, {
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    }, {
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                }}));
+        // Test case exercising repositioning multiple times (initially to slot #2 and then again
+        // to slot #4). Because there's a range for slot #4 and the lower/upper values are different,
+        // all slot #5 ranges are part of the intersection.
+        testCases.addAll(foreach(
+                new KeyRange[][] {{
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("d"), true, Bytes.toBytes("d"), true),
+                    }, {
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("j"), true, Bytes.toBytes("m"), false),
+                    }, {
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("C"), true),
+                    }, {
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("m"), true, Bytes.toBytes("u"), false),
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("z"), true, Bytes.toBytes("z"), true),
+                    }, {
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"), true),                        
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("D"), true, Bytes.toBytes("D"), true),
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("M"), true, Bytes.toBytes("M"), true),                        
+                    }
+                },
+                new int[] {1,1,1,1,1},
+                Bytes.toBytes("bkCpM"),
+                Bytes.toBytes("bkCtD"),
+                new KeyRange[][] {{
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    }, {
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("j"), true, Bytes.toBytes("m"), false),
+                    }, {
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("C"), true),
+                    }, {
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("m"), true, Bytes.toBytes("u"), false),
+                    }, {
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"), true),                        
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("D"), true, Bytes.toBytes("D"), true),
+                    PDataType.CHAR.getKeyRange(Bytes.toBytes("M"), true, Bytes.toBytes("M"), true),                        
+                    }
+                }));
         // Single matching in the first 2 slots.
         testCases.addAll(foreach(
                 new KeyRange[][] {{
