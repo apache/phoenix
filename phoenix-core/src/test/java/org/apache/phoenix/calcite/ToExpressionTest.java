@@ -1,54 +1,36 @@
 package org.apache.phoenix.calcite;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.SQLException;
 import java.util.Collections;
-import java.util.Set;
 
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexInputRef;
-import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.phoenix.calcite.PhoenixRel.Implementor;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
-import org.apache.phoenix.compile.GroupByCompiler;
-import org.apache.phoenix.compile.HavingCompiler;
-import org.apache.phoenix.compile.LimitCompiler;
-import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
-import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.junit.Test;
 
 
 public class ToExpressionTest extends BaseConnectionlessQueryTest {
-	
-	private static Expression compileExpression(PhoenixStatement statement, StatementContext context, String selectStmt) throws SQLException {
-		// Re-parse the WHERE clause as we don't store it any where
-        SelectStatement select = new SQLParser(selectStmt).parseQuery();
-        Expression where = WhereCompiler.compile(context, select, null, Collections.<SubqueryParseNode>emptySet());
-        return where;
-	}
 	
 	@Test
 	public void toExpressionTest() throws Exception {
@@ -59,8 +41,9 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
 		final PTable table = conn.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,"T"));
 		PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
 		String query = "SELECT * FROM T WHERE K2 = 'foo'";
-		QueryPlan plan = stmt.compileQuery(query);
-		Expression where = compileExpression(stmt, plan.getContext(), query);
+        SelectStatement select = new SQLParser(query).parseQuery();
+        ColumnResolver resolver = FromCompiler.getResolverForQuery(select, conn.unwrap(PhoenixConnection.class));
+        Expression where = WhereCompiler.compile(new StatementContext(stmt, resolver), select, null, Collections.<SubqueryParseNode>emptySet());
 		
 		JavaTypeFactoryImpl typeFactory = new JavaTypeFactoryImpl();
 		RexBuilder builder = new RexBuilder(typeFactory);

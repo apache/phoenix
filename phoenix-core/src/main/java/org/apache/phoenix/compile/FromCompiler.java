@@ -26,7 +26,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import com.google.common.base.Preconditions;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -327,7 +326,7 @@ public class FromCompiler {
         private final int tsAddition;
 
         private BaseColumnResolver(PhoenixConnection connection, int tsAddition) {
-            this.connection = Preconditions.checkNotNull(connection);
+            this.connection = connection;
             this.client = connection == null ? null : new MetaDataClient(connection);
             this.tsAddition = tsAddition;
         }

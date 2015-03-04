@@ -62,7 +62,7 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
     }
 
     static Expression stash(EnumerableRelImplementor implementor, Object o, Class clazz) {
-        ParameterExpression x = implementor.register(o, clazz);
+        ParameterExpression x = (ParameterExpression) implementor.stash(o, clazz);
         MethodCallExpression e =
             Expressions.call(implementor.getRootExpression(),
                 org.apache.calcite.util.BuiltInMethod.DATA_CONTEXT_GET.method,
