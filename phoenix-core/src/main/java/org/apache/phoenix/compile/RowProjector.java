@@ -101,9 +101,6 @@ public class RowProjector {
                 throw new ColumnNotFoundException(name);
             }
         }
-        if (index.size() > 1) {
-            throw new AmbiguousColumnException(name);
-        }
         
         return index.get(0);
     }
