@@ -101,7 +101,7 @@ public class ColumnRef {
                     displayName);
         }
         
-        if (table.getType() == PTableType.PROJECTED) {
+        if (table.getType() == PTableType.JOIN || table.getType() == PTableType.SUBQUERY) {
         	return new ProjectedColumnExpression(column, table, displayName);
         }
        

@@ -739,7 +739,7 @@ public class JoinCompiler {
                 }               
             }
             
-            PTable t = PTableImpl.makePTable(table.getTenantId(), PNameFactory.newName(PROJECTED_TABLE_SCHEMA), table.getName(), PTableType.PROJECTED,
+            PTable t = PTableImpl.makePTable(table.getTenantId(), PNameFactory.newName(PROJECTED_TABLE_SCHEMA), table.getName(), PTableType.JOIN,
                         table.getIndexState(), table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
                         retainPKColumns ? table.getBucketNum() : null, projectedColumns, table.getParentSchemaName(),
                         table.getParentTableName(), table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null, table.isWALDisabled(), table.isMultiTenant(), table.getViewType(), table.getViewIndexId(), table.getIndexType());
@@ -789,7 +789,7 @@ public class JoinCompiler {
                 projectedColumns.add(projectedColumn);
                 sourceExpressions.add(sourceExpression);
             }
-            PTable t = PTableImpl.makePTable(table.getTenantId(), PNameFactory.newName(PROJECTED_TABLE_SCHEMA), table.getName(), PTableType.PROJECTED,
+            PTable t = PTableImpl.makePTable(table.getTenantId(), PNameFactory.newName(PROJECTED_TABLE_SCHEMA), table.getName(), PTableType.JOIN,
                         table.getIndexState(), table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
                         null, projectedColumns, table.getParentSchemaName(),
                         table.getParentTableName(), table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null, table.isWALDisabled(), table.isMultiTenant(), table.getViewType(), table.getViewIndexId(), table.getIndexType());
